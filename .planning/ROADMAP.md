@@ -115,11 +115,11 @@ Plans:
   1. `llem run config.yaml` with `backend: vllm` and `runner: docker` completes without error and produces a valid ExperimentResult
   2. vLLM streaming output is collected correctly (P0 fix: CM-07)
   3. The container is launched with `--shm-size 8g` (P0 fix: CM-09)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19-01: vLLM P0 fixes — streaming broken (CM-07), shm-size missing (CM-09)
-- [ ] 19-02: vLLM end-to-end activation — wire vLLM backend through Docker runner, produce valid ExperimentResult
+- [ ] 19-01-PLAN.md — VLLMBackend class (ground-up rewrite, offline batch inference) + get_backend() registration (VLLM-01, VLLM-02)
+- [ ] 19-02-PLAN.md — Unit tests for VLLMBackend + shm-size verification (VLLM-01, VLLM-02, VLLM-03)
 
 ### Phase 19.1: vLLM Parameter Audit
 **Goal**: VLLMConfig exposes all energy-relevant vLLM parameters, validated against the upstream vLLM API — researchers can sweep vLLM-specific params like they do PyTorch params
