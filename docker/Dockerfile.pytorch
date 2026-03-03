@@ -27,4 +27,4 @@ RUN pip install --no-cache-dir ".[pytorch]" sentencepiece
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
-CMD ["python", "-m", "llenergymeasure.infra.container_entrypoint"]
+CMD ["python3", "-m", "llenergymeasure.infra.container_entrypoint"]
