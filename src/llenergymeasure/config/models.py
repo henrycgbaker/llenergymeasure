@@ -301,6 +301,13 @@ class ExperimentConfig(BaseModel):
         default="aienergyscore",
         description="Dataset name (built-in alias) or synthetic dataset config",
     )
+    dataset_order: Literal["interleaved", "grouped", "shuffled"] = Field(
+        default="interleaved",
+        description=(
+            "Prompt ordering: interleaved (round-robin by source, file order), "
+            "grouped (sorted by source), shuffled (seed-based random)"
+        ),
+    )
 
     # Hardware
     precision: Literal["fp32", "fp16", "bf16"] = Field(
