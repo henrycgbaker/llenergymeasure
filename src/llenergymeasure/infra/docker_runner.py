@@ -44,7 +44,7 @@ class DockerRunner:
         3. ``docker run --rm --gpus all -v {exchange_dir}:/run/llem``
                ``-e LLEM_CONFIG_PATH=/run/llem/{config_hash}_config.json``
                ``--shm-size 8g {image}``
-               ``python -m llenergymeasure.infra.container_entrypoint``
+               ``python3 -m llenergymeasure.infra.container_entrypoint``
         4. Read ``{config_hash}_result.json`` from exchange dir
         5. Clean up temp dir on success; preserve on failure with debug path logged
 
@@ -186,7 +186,7 @@ class DockerRunner:
         cmd.extend(
             [
                 self.image,
-                "python",
+                "python3",
                 "-m",
                 "llenergymeasure.infra.container_entrypoint",
             ]
