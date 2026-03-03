@@ -49,7 +49,7 @@ class DockerRunner:
         5. Clean up temp dir on success; preserve on failure with debug path logged
 
     Args:
-        image:   Docker image to run (e.g. ``"ghcr.io/llenergymeasure/vllm:1.19.0-cuda12"``).
+        image:   Docker image to run (e.g. ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:1.19.0-cuda12"``).
         timeout: Optional wall-clock timeout in seconds. None = no timeout.
         source:  Runner resolution source string (e.g. ``"yaml"``, ``"auto_detected"``).
                  Recorded in result effective_config for traceability.
