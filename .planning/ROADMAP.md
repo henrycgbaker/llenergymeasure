@@ -226,7 +226,7 @@ Phase 22 (SIGINT testing) runs before Phase 23 (docs) so documentation reflects 
 | 18. Docker Pre-flight | 1/1 | Complete   | 2026-02-28 |
 | 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
-| 19.2. vLLM Extended Params & Passthrough | 2/2 | Complete   | 2026-03-03 |
+| 19.2. vLLM Extended Params & Passthrough | 2/2 | Complete    | 2026-03-03 |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |
 | 22. Testing | 0/TBD | Not started | - |
