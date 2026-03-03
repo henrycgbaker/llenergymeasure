@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 19.1 of 23 in progress (vLLM Parameter Audit — Plan 01 complete)
-Next: Phase 19.1 Plan 02 (update test_vllm_backend.py for nested schema)
-Status: Phase 19.1 Plan 01 shipped (VLLMEngineConfig/VLLMSamplingConfig/VLLMConfig, sweep grammar fix, VLLM-04 satisfied)
-Last activity: 2026-03-03 — Phase 19.1 Plan 01 complete on gsd/phase-19.1-vllm-parameter-audit
+Phase: 19.1 of 23 complete (vLLM Parameter Audit — both plans done)
+Next: Phase 20 (next planned phase)
+Status: Phase 19.1 complete — VLLMBackend fully wired to nested VLLMEngineConfig/VLLMSamplingConfig, SSOT updated, 53 tests passing
+Last activity: 2026-03-03 — Phase 19.1 Plan 02 complete on gsd/phase-19.1-vllm-parameter-audit
 
 Progress: [████░░░░░░] 29%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 9
-- Average duration: 231s
-- Total execution time: 4106s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s)
+- Total plans completed (M3): 11
+- Average duration: 222s
+- Total execution time: 4834s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s)
 
 *Updated after each plan completion*
 
@@ -73,6 +73,9 @@ Progress: [████░░░░░░] 29%
 - [Phase 19.1-01]: Local _unflatten/_deep_merge helpers in grid.py avoid circular import with config.loader (loader imports grid, grid cannot import loader)
 - [Phase 19.1-01]: block_size validated via Literal[8, 16, 32] (not model_validator) — idiomatic Pydantic for discrete value sets
 - [Phase 19.1-01]: gpu_memory_utilization bounds: ge=0.0, lt=1.0 (strict less-than) — value of 1.0 would leave no headroom for model weights
+- [Phase 19.1-02]: dict-then-instantiate in _build_sampling_params() — single return point enables clean VLLMSamplingConfig override injection for both greedy and sampling paths
+- [Phase 19.1-02]: get_backend_capabilities() reads VLLMEngineConfig.model_fields (not VLLMConfig) — capability matrix reflects actual engine fields, not container fields
+- [Phase 19.1-02]: speculative_model + num_speculative_tokens → speculative_config dict — vLLM v0.6+ removed direct speculative_model kwarg
 
 ### Carried Items
 
@@ -87,5 +90,5 @@ Progress: [████░░░░░░] 29%
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 19.1-vllm-parameter-audit-19.1-01-PLAN.md (VLLMEngineConfig + VLLMSamplingConfig + sweep grammar fix, 4 files).
+Stopped at: Completed 19.1-vllm-parameter-audit-19.1-02-PLAN.md (VLLMBackend wiring + SSOT update + 53 tests, 3 files).
 Resume file: None
