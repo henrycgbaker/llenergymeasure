@@ -276,19 +276,37 @@ class VLLMBackend:
             "seed": config.random_seed,
         }
 
-        # Apply VLLMConfig fields if provided — only set non-None values
+        # Apply VLLMEngineConfig fields if provided — only set non-None values
         vllm_cfg = config.vllm
-        if vllm_cfg is not None:
-            if vllm_cfg.tensor_parallel_size is not None:
-                kwargs["tensor_parallel_size"] = vllm_cfg.tensor_parallel_size
-            if vllm_cfg.gpu_memory_utilization is not None:
-                kwargs["gpu_memory_utilization"] = vllm_cfg.gpu_memory_utilization
-            if vllm_cfg.max_num_seqs is not None:
-                kwargs["max_num_seqs"] = vllm_cfg.max_num_seqs
-            if vllm_cfg.enable_prefix_caching is not None:
-                kwargs["enable_prefix_caching"] = vllm_cfg.enable_prefix_caching
-            if vllm_cfg.quantization is not None:
-                kwargs["quantization"] = vllm_cfg.quantization
+        if vllm_cfg is not None and vllm_cfg.engine is not None:
+            engine = vllm_cfg.engine
+
+            # Helper: only set kwargs that are explicitly configured (None = use vLLM default)
+            def _set(k: str, v: Any) -> None:
+                if v is not None:
+                    kwargs[k] = v
+
+            _set("gpu_memory_utilization", engine.gpu_memory_utilization)
+            _set("swap_space", engine.swap_space)
+            _set("cpu_offload_gb", engine.cpu_offload_gb)
+            _set("block_size", engine.block_size)
+            _set("kv_cache_dtype", engine.kv_cache_dtype)
+            _set("enforce_eager", engine.enforce_eager)
+            _set("enable_chunked_prefill", engine.enable_chunked_prefill)
+            _set("max_num_seqs", engine.max_num_seqs)
+            _set("max_num_batched_tokens", engine.max_num_batched_tokens)
+            _set("max_model_len", engine.max_model_len)
+            _set("tensor_parallel_size", engine.tensor_parallel_size)
+            _set("pipeline_parallel_size", engine.pipeline_parallel_size)
+            _set("enable_prefix_caching", engine.enable_prefix_caching)
+            _set("quantization", engine.quantization)
+
+            if engine.speculative_model is not None:
+                # vLLM v0.6+ uses speculative_config dict, not direct speculative_model kwarg
+                kwargs["speculative_config"] = {
+                    "model": engine.speculative_model,
+                    "num_speculative_tokens": engine.num_speculative_tokens,
+                }
 
         return kwargs
 
@@ -325,24 +343,42 @@ class VLLMBackend:
         is_greedy = decoder.temperature == 0.0 or not decoder.do_sample
 
         if is_greedy:
-            return sampling_params_cls(
-                temperature=0.0,
-                max_tokens=config.max_output_tokens,
-            )
+            kwargs: dict[str, Any] = {
+                "temperature": 0.0,
+                "max_tokens": config.max_output_tokens,
+            }
+        else:
+            # Map top_k: our 0 sentinel → vLLM's -1 (disabled)
+            top_k = decoder.top_k if decoder.top_k != 0 else -1
 
-        # Map top_k: our 0 sentinel → vLLM's -1 (disabled)
-        top_k = decoder.top_k if decoder.top_k != 0 else -1
+            kwargs = {
+                "temperature": decoder.temperature,
+                "top_p": decoder.top_p,
+                "top_k": top_k,
+                "repetition_penalty": decoder.repetition_penalty,
+                "max_tokens": config.max_output_tokens,
+            }
 
-        kwargs: dict[str, Any] = {
-            "temperature": decoder.temperature,
-            "top_p": decoder.top_p,
-            "top_k": top_k,
-            "repetition_penalty": decoder.repetition_penalty,
-            "max_tokens": config.max_output_tokens,
-        }
+            if decoder.min_p is not None:
+                kwargs["min_p"] = decoder.min_p
 
-        if decoder.min_p is not None:
-            kwargs["min_p"] = decoder.min_p
+        # Apply vLLM-specific sampling overrides (VLLMSamplingConfig)
+        # These override universal params (e.g. max_tokens overrides config.max_output_tokens)
+        vllm_cfg = config.vllm
+        if vllm_cfg is not None and vllm_cfg.sampling is not None:
+            sampling = vllm_cfg.sampling
+            if sampling.max_tokens is not None:
+                kwargs["max_tokens"] = (
+                    sampling.max_tokens
+                )  # Override ExperimentConfig.max_output_tokens
+            if sampling.min_tokens is not None:
+                kwargs["min_tokens"] = sampling.min_tokens
+            if sampling.presence_penalty is not None:
+                kwargs["presence_penalty"] = sampling.presence_penalty
+            if sampling.frequency_penalty is not None:
+                kwargs["frequency_penalty"] = sampling.frequency_penalty
+            if sampling.ignore_eos is not None:
+                kwargs["ignore_eos"] = sampling.ignore_eos
 
         return sampling_params_cls(**kwargs)
 

@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T11:20:34.162Z"
+last_updated: "2026-03-03T17:53:43.893Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
+  total_phases: 6
+  completed_phases: 5
+  total_plans: 10
+  completed_plans: 10
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 19 — vLLM Backend Activation
+**Current focus:** Phase 19.1 — vLLM Parameter Audit
 
 ## Current Position
 
-Phase: 19 of 23 in progress (vLLM Backend Activation — Plan 02 complete)
-Next: Phase 20 (or remaining Phase 19 plans if any)
-Status: Phase 19 Plan 02 shipped (VLLMBackend unit tests, 42 tests, VLLM-01/02/03 verified)
-Last activity: 2026-02-28 — Phase 19 Plan 02 complete on gsd/phase-19-vllm-backend-activation
+Phase: 19.1 of 23 complete (vLLM Parameter Audit — both plans done)
+Next: Phase 20 (next planned phase)
+Status: Phase 19.1 complete — VLLMBackend fully wired to nested VLLMEngineConfig/VLLMSamplingConfig, SSOT updated, 53 tests passing
+Last activity: 2026-03-03 — Phase 19.1 Plan 02 complete on gsd/phase-19.1-vllm-parameter-audit
 
 Progress: [████░░░░░░] 29%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 8
-- Average duration: 235s
-- Total execution time: 3686s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s)
+- Total plans completed (M3): 11
+- Average duration: 222s
+- Total execution time: 4834s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s)
 
 *Updated after each plan completion*
 
@@ -69,6 +69,13 @@ Progress: [████░░░░░░] 29%
 - [Phase 19-01]: PyTorch takes priority over vLLM in detect_default_backend() — pytorch is the simpler, always-available default
 - [Phase 19-02]: Streaming source check targets API calls (stream=True, AsyncEngine) not docstring text — docstrings legitimately reference 'streaming' as context for CM-07
 - [Phase 19-02]: _FakeSamplingParams dataclass used over MagicMock — captures **kwargs cleanly for SamplingParams construction tests
+- [Phase 19.1-01]: Nested VLLMConfig (engine + sampling) replaces flat 5-field schema — mirrors vLLM's own LLM()/SamplingParams API separation
+- [Phase 19.1-01]: Local _unflatten/_deep_merge helpers in grid.py avoid circular import with config.loader (loader imports grid, grid cannot import loader)
+- [Phase 19.1-01]: block_size validated via Literal[8, 16, 32] (not model_validator) — idiomatic Pydantic for discrete value sets
+- [Phase 19.1-01]: gpu_memory_utilization bounds: ge=0.0, lt=1.0 (strict less-than) — value of 1.0 would leave no headroom for model weights
+- [Phase 19.1-02]: dict-then-instantiate in _build_sampling_params() — single return point enables clean VLLMSamplingConfig override injection for both greedy and sampling paths
+- [Phase 19.1-02]: get_backend_capabilities() reads VLLMEngineConfig.model_fields (not VLLMConfig) — capability matrix reflects actual engine fields, not container fields
+- [Phase 19.1-02]: speculative_model + num_speculative_tokens → speculative_config dict — vLLM v0.6+ removed direct speculative_model kwarg
 
 ### Carried Items
 
@@ -82,6 +89,6 @@ Progress: [████░░░░░░] 29%
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Completed 19-vllm-backend-activation-19-02-PLAN.md (VLLMBackend unit tests, 42 tests, 1 file).
+Last session: 2026-03-03
+Stopped at: Completed 19.1-vllm-parameter-audit-19.1-02-PLAN.md (VLLMBackend wiring + SSOT update + 53 tests, 3 files).
 Resume file: None

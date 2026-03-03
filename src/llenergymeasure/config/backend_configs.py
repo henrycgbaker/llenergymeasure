@@ -12,8 +12,13 @@ Usage in YAML:
 
     backend: vllm
     vllm:
-      tensor_parallel_size: 2
-      gpu_memory_utilization: 0.85
+      engine:
+        enforce_eager: false
+        gpu_memory_utilization: 0.9
+        kv_cache_dtype: fp8
+      sampling:
+        max_tokens: 512
+        presence_penalty: 0.0
 
     backend: tensorrt
     tensorrt:
@@ -206,40 +211,263 @@ class PyTorchConfig(BaseModel):
 
 
 # =============================================================================
-# vLLM Backend Configuration (M1 minimal)
+# vLLM Backend Configuration
 # =============================================================================
+
+
+class VLLMEngineConfig(BaseModel):
+    """vLLM engine-level configuration (vllm.LLM() constructor arguments).
+
+    All fields default to None — None means "use vLLM's own default".
+    These parameters are loaded once at model initialisation time.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    # -------------------------------------------------------------------------
+    # Memory management
+    # -------------------------------------------------------------------------
+
+    gpu_memory_utilization: float | None = Field(
+        default=None,
+        ge=0.0,
+        lt=1.0,
+        description=(
+            "GPU memory fraction for KV cache (None -> 0.9). Higher = more KV cache, less headroom."
+        ),
+    )
+    swap_space: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "CPU swap space in GiB for KV cache offloading (None -> 4). "
+            "Enables model weight offload to prevent OOM."
+        ),
+    )
+    cpu_offload_gb: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "CPU RAM in GiB to offload model weights to (None -> 0, disabled). "
+            "Reduces VRAM pressure at throughput cost."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # KV cache
+    # -------------------------------------------------------------------------
+
+    block_size: Literal[8, 16, 32] | None = Field(
+        default=None,
+        description=(
+            "KV cache block size in tokens (None -> 16). "
+            "Affects KV cache fragmentation and memory efficiency."
+        ),
+    )
+    kv_cache_dtype: Literal["auto", "fp8", "fp8_e5m2", "fp8_e4m3"] | None = Field(
+        default=None,
+        description=(
+            "KV cache storage dtype (None -> auto = model dtype). "
+            "fp8 variants halve KV cache VRAM on Ampere+."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Execution mode
+    # -------------------------------------------------------------------------
+
+    enforce_eager: bool | None = Field(
+        default=None,
+        description=(
+            "Disable CUDA graphs, always use eager mode (None -> False). "
+            "Eager mode: predictable latency, no graph compilation overhead."
+        ),
+    )
+    enable_chunked_prefill: bool | None = Field(
+        default=None,
+        description=(
+            "Chunk large prefills across multiple scheduler iterations (None -> False). "
+            "Affects scheduling latency and throughput."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Scheduler / batching
+    # -------------------------------------------------------------------------
+
+    max_num_seqs: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Max concurrent sequences per scheduler iteration (None -> 256). "
+            "Affects batch size and KV cache usage."
+        ),
+    )
+    max_num_batched_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Max tokens processed per scheduler iteration (None -> auto). "
+            "Controls per-step compute budget."
+        ),
+    )
+    max_model_len: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Max sequence length in tokens (input + output). "
+            "Overrides model config (None -> model default). Caps KV cache allocation."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Parallelism
+    # -------------------------------------------------------------------------
+
+    tensor_parallel_size: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Tensor parallel degree — number of GPUs to shard the model across (None -> 1)."
+        ),
+    )
+    pipeline_parallel_size: int | None = Field(
+        default=None,
+        ge=1,
+        description=("Pipeline parallel stages — memory per GPU changes with PP (None -> 1)."),
+    )
+
+    # -------------------------------------------------------------------------
+    # Prefix caching and quantization
+    # -------------------------------------------------------------------------
+
+    enable_prefix_caching: bool | None = Field(
+        default=None,
+        description="Automatic prefix caching for repeated shared prompts (None -> False).",
+    )
+    quantization: (
+        Literal["awq", "gptq", "fp8", "fp8_e5m2", "fp8_e4m3", "marlin", "bitsandbytes"] | None
+    ) = Field(
+        default=None,
+        description="Quantization method. Requires pre-quantized model checkpoint.",
+    )
+
+    # -------------------------------------------------------------------------
+    # Speculative decoding
+    # -------------------------------------------------------------------------
+
+    speculative_model: str | None = Field(
+        default=None,
+        description=(
+            "HF model name or path of draft model for speculative decoding (None -> disabled). "
+            "Requires num_speculative_tokens."
+        ),
+    )
+    num_speculative_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Tokens to draft per speculative step (None -> required if speculative_model is set)."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Cross-validators
+    # -------------------------------------------------------------------------
+
+    @model_validator(mode="after")
+    def validate_speculative(self) -> VLLMEngineConfig:
+        """speculative_model requires num_speculative_tokens to be set."""
+        if self.speculative_model is not None and self.num_speculative_tokens is None:
+            raise ValueError("speculative_model requires num_speculative_tokens to be set")
+        return self
+
+
+class VLLMSamplingConfig(BaseModel):
+    """vLLM sampling-level configuration (vllm.SamplingParams extensions).
+
+    Only vLLM-specific sampling parameters are included here.
+    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
+    live in DecoderConfig and are shared across all backends.
+
+    All fields default to None — None means "use vLLM's own default".
+    """
+
+    model_config = {"extra": "forbid"}
+
+    max_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Max output tokens. Overrides ExperimentConfig.max_output_tokens for vLLM sweeps "
+            "(None -> uses max_output_tokens). Use for backend-specific max_tokens sweeps."
+        ),
+    )
+    min_tokens: int | None = Field(
+        default=None,
+        ge=0,
+        description="Minimum output tokens before EOS is allowed (None -> 0, no minimum).",
+    )
+    presence_penalty: float | None = Field(
+        default=None,
+        ge=-2.0,
+        le=2.0,
+        description=(
+            "Presence penalty: penalises tokens that appear at all (None -> 0.0). "
+            "Affects generation diversity."
+        ),
+    )
+    frequency_penalty: float | None = Field(
+        default=None,
+        ge=-2.0,
+        le=2.0,
+        description=(
+            "Frequency penalty: penalises tokens proportional to frequency (None -> 0.0). "
+            "Affects repetition."
+        ),
+    )
+    ignore_eos: bool | None = Field(
+        default=None,
+        description=(
+            "Continue generating past EOS token (None -> False). "
+            "Forces max_tokens generation every time — affects total token count."
+        ),
+    )
 
 
 class VLLMConfig(BaseModel):
     """vLLM backend configuration.
 
-    All fields default to None — None means "use vLLM's own default".
-    vLLM uses continuous batching (max_num_seqs) rather than static batch_size.
+    Nested structure mirrors vLLM's own two-API separation:
+    - engine: vllm.LLM() constructor arguments (engine-level, loaded at model init)
+    - sampling: vllm.SamplingParams arguments (vLLM-specific extensions only)
 
-    M1 scope: fields used by the M1 vLLM backend implementation.
-    Phase 4.1 will audit and expand.
+    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
+    live in DecoderConfig and are shared across all backends.
+
+    Example YAML:
+        backend: vllm
+        vllm:
+          engine:
+            enforce_eager: false
+            gpu_memory_utilization: 0.9
+            kv_cache_dtype: fp8
+          sampling:
+            max_tokens: 512
+            presence_penalty: 0.0
     """
 
     model_config = {"extra": "forbid"}
 
-    max_num_seqs: int | None = Field(
-        default=None, ge=1, description="Max concurrent sequences per iteration (None -> 256)"
-    )
-    tensor_parallel_size: int | None = Field(
-        default=None, ge=1, description="Tensor parallel degree (None -> 1)"
-    )
-    gpu_memory_utilization: float | None = Field(
+    engine: VLLMEngineConfig | None = Field(
         default=None,
-        ge=0.1,
-        le=1.0,
-        description="GPU memory fraction for KV cache (None -> 0.9)",
+        description="Engine-level configuration: vllm.LLM() constructor args",
     )
-    enable_prefix_caching: bool | None = Field(
-        default=None, description="Automatic prefix caching for repeated prompts (None -> False)"
-    )
-    quantization: Literal["awq", "gptq", "fp8"] | None = Field(
+    sampling: VLLMSamplingConfig | None = Field(
         default=None,
-        description="Quantization method. Requires pre-quantized model.",
+        description=(
+            "Sampling-level configuration: vllm.SamplingParams extensions (vLLM-specific only)"
+        ),
     )
 
 

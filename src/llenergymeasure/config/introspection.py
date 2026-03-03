@@ -179,12 +179,26 @@ def get_params_from_model(
 def _get_custom_test_values() -> dict[str, list[Any]]:
     """Get custom test value overrides for params that need special handling.
 
-    Returns:
-        Empty dict — v2.0 minimal backend configs have no special overrides needed.
-        (v1.x entries removed: vllm.max_model_len, vllm.max_num_batched_tokens,
-        tensorrt.max_input_len — these fields no longer exist in v2.0 minimal configs.)
+    Returns known-invalid values for constrained fields — used by runtime
+    parameter tests to verify validation rejects out-of-range inputs.
+    One invalid value per constrained field (the simplest violation).
     """
-    return {}
+    return {
+        # VLLMEngineConfig: one known-invalid value per constrained field
+        "vllm.engine.gpu_memory_utilization": [1.5],  # ge=0.0, lt=1.0: 1.5 violates lt
+        "vllm.engine.swap_space": [-1.0],  # ge=0.0: negative violates ge
+        "vllm.engine.cpu_offload_gb": [-0.5],  # ge=0.0: negative violates ge
+        "vllm.engine.max_num_seqs": [0],  # ge=1: 0 violates ge
+        "vllm.engine.max_num_batched_tokens": [0],  # ge=1: 0 violates ge
+        "vllm.engine.max_model_len": [0],  # ge=1: 0 violates ge
+        "vllm.engine.tensor_parallel_size": [0],  # ge=1: 0 violates ge
+        "vllm.engine.pipeline_parallel_size": [0],  # ge=1: 0 violates ge
+        "vllm.engine.num_speculative_tokens": [0],  # ge=1: 0 violates ge
+        # VLLMSamplingConfig: one known-invalid value per constrained field
+        "vllm.sampling.max_tokens": [0],  # ge=1: 0 violates ge
+        "vllm.sampling.presence_penalty": [3.0],  # ge=-2.0, le=2.0: 3.0 violates le
+        "vllm.sampling.frequency_penalty": [-3.0],  # ge=-2.0, le=2.0: -3.0 violates ge
+    }
 
 
 def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
@@ -422,8 +436,8 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         "pytorch.bnb_4bit_use_double_quant": ["pytorch.load_in_4bit=None|False"],
         # cache_implementation contradicts use_cache=False
         "pytorch.cache_implementation": ["pytorch.use_cache=False"],
-        # vLLM: quantization method is exclusive (can only use one)
-        "vllm.quantization": [],  # Handled by Literal type constraint
+        # vLLM speculative decoding: speculative_model requires num_speculative_tokens
+        "vllm.engine.speculative_model": ["vllm.engine.num_speculative_tokens=None"],
         # TensorRT: quantization method is exclusive
         "tensorrt.quantization": [],  # Handled by Literal type constraint
     }
@@ -462,11 +476,29 @@ def get_backend_specific_params() -> dict[str, list[str]]:
             "pytorch.num_processes",
         ],
         "vllm": [
-            "vllm.max_num_seqs",
-            "vllm.tensor_parallel_size",
-            "vllm.gpu_memory_utilization",
-            "vllm.enable_prefix_caching",
-            "vllm.quantization",
+            # Engine-level params (vllm.LLM() constructor args)
+            "vllm.engine.gpu_memory_utilization",
+            "vllm.engine.swap_space",
+            "vllm.engine.cpu_offload_gb",
+            "vllm.engine.block_size",
+            "vllm.engine.kv_cache_dtype",
+            "vllm.engine.enforce_eager",
+            "vllm.engine.enable_chunked_prefill",
+            "vllm.engine.max_num_seqs",
+            "vllm.engine.max_num_batched_tokens",
+            "vllm.engine.max_model_len",
+            "vllm.engine.tensor_parallel_size",
+            "vllm.engine.pipeline_parallel_size",
+            "vllm.engine.enable_prefix_caching",
+            "vllm.engine.quantization",
+            "vllm.engine.speculative_model",
+            "vllm.engine.num_speculative_tokens",
+            # Sampling-level params (vllm.SamplingParams args, vLLM-specific only)
+            "vllm.sampling.max_tokens",
+            "vllm.sampling.min_tokens",
+            "vllm.sampling.presence_penalty",
+            "vllm.sampling.frequency_penalty",
+            "vllm.sampling.ignore_eos",
         ],
         "tensorrt": [
             "tensorrt.max_batch_size",
@@ -488,8 +520,8 @@ def get_special_test_models() -> dict[str, str]:
     """
     return {
         # vLLM quantization methods requiring pre-quantized models
-        "vllm.quantization=awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
-        "vllm.quantization=gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
+        "vllm.engine.quantization=awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
+        "vllm.engine.quantization=gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
         # TensorRT quantization methods requiring pre-quantized models
         "tensorrt.quantization=int4_awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
         "tensorrt.quantization=int4_gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
@@ -507,7 +539,7 @@ def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> 
     """
     # These features require Ampere (8.0) or newer GPUs
     ampere_required = [
-        "vllm.quantization=fp8",
+        "vllm.engine.quantization=fp8",
         "tensorrt.quantization=fp8",
         "pytorch.attn_implementation=flash_attention_2",
     ]
@@ -531,7 +563,7 @@ def get_param_skip_conditions() -> dict[str, str]:
     return {
         # Multi-GPU params - skip if single GPU
         "pytorch.num_processes>1": "Requires 2+ GPUs (data parallelism)",
-        "vllm.tensor_parallel_size>1": "Requires 2+ GPUs",
+        "vllm.engine.tensor_parallel_size>1": "Requires 2+ GPUs",
         "tensorrt.tp_size>1": "Requires 2+ GPUs",
         # Flash Attention 2 - requires flash-attn package
         "pytorch.attn_implementation=flash_attention_2": "Requires flash-attn package",
@@ -540,11 +572,11 @@ def get_param_skip_conditions() -> dict[str, str]:
         # torch.compile - may not work on all model architectures
         "pytorch.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
         # FP8 - Ampere or newer
-        "vllm.quantization=fp8": "Requires Ampere+ GPU",
+        "vllm.engine.quantization=fp8": "Requires Ampere+ GPU",
         "tensorrt.quantization=fp8": "Requires Ampere+ GPU",
         # Quantization - requires pre-quantized models (see get_special_test_models)
-        "vllm.quantization=awq": "Requires AWQ-quantized model",
-        "vllm.quantization=gptq": "Requires GPTQ-quantized model",
+        "vllm.engine.quantization=awq": "Requires AWQ-quantized model",
+        "vllm.engine.quantization=gptq": "Requires GPTQ-quantized model",
         # PyTorch optional dependencies
         "pytorch.load_in_4bit": "Requires compatible bitsandbytes version",
         "pytorch.load_in_8bit": "Requires compatible bitsandbytes version",
@@ -594,16 +626,17 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
     from llenergymeasure.config.backend_configs import (
         PyTorchConfig,
         TensorRTConfig,
-        VLLMConfig,
+        VLLMEngineConfig,
     )
 
     # Get field names for each backend
+    # VLLMConfig is nested: engine fields are in VLLMEngineConfig
     pytorch_fields = set(PyTorchConfig.model_fields.keys())
-    vllm_fields = set(VLLMConfig.model_fields.keys())
+    vllm_fields = set(VLLMEngineConfig.model_fields.keys())
     tensorrt_fields = set(TensorRTConfig.model_fields.keys())
 
     # Get quantization Literal values for vLLM and TensorRT
-    vllm_quant_field = VLLMConfig.model_fields.get("quantization")
+    vllm_quant_field = VLLMEngineConfig.model_fields.get("quantization")
     vllm_quant_options: list[str] = []
     if vllm_quant_field and vllm_quant_field.annotation:
         args = get_args(vllm_quant_field.annotation)

@@ -253,6 +253,46 @@ def format_preflight_summary(
 # =============================================================================
 
 
+def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
+    """Expand dotted keys into nested dicts. Non-dotted keys pass through.
+
+    Defined locally to avoid a circular import with config.loader (which itself
+    imports from this module). Identical semantics to loader._unflatten.
+
+    Example:
+        {"engine.block_size": 16} -> {"engine": {"block_size": 16}}
+        {"batch_size": 4}         -> {"batch_size": 4}
+    """
+    result: dict[str, Any] = {}
+    for key, value in flat.items():
+        if "." in key:
+            parts = key.split(".", 1)
+            if parts[0] not in result:
+                result[parts[0]] = {}
+            if isinstance(result[parts[0]], dict):
+                result[parts[0]][parts[1]] = value
+        else:
+            result[key] = value
+    return result
+
+
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge two dicts, with overlay taking precedence.
+
+    Defined locally to avoid a circular import with config.loader (which itself
+    imports from this module). Identical semantics to loader.deep_merge.
+    """
+    from copy import deepcopy
+
+    result = deepcopy(base)
+    for key, value in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = deepcopy(value)
+    return result
+
+
 def _extract_fixed(raw_study: dict[str, Any]) -> dict[str, Any]:
     """Return experiment-level fields from raw_study (all keys except study-only ones)."""
     return {k: v for k, v in raw_study.items() if k not in _STUDY_ONLY_KEYS}
@@ -343,8 +383,11 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
 
             for dim_key, value in zip(all_dim_keys, combo, strict=False):
                 if dim_key in backend_scoped:
-                    # Backend-scoped parameter: goes into config_dict[backend][param]
-                    config_dict.setdefault(backend, {})[dim_key] = value
+                    # Backend-scoped parameter: recursively unflatten to handle multi-level paths.
+                    # "engine.block_size" -> {"engine": {"block_size": value}}
+                    backend_dict = config_dict.get(backend, {})
+                    nested_update = _unflatten({dim_key: value})
+                    config_dict[backend] = _deep_merge(backend_dict, nested_update)
                 else:
                     # Universal parameter: goes at top level
                     config_dict[dim_key] = value
