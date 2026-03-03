@@ -157,7 +157,7 @@ class TestExpandGridSweep:
             "sweep": {
                 "precision": ["fp16", "bf16"],
                 "pytorch.batch_size": [1, 8],
-                "vllm.max_num_seqs": [64, 256],
+                "vllm.engine.max_num_seqs": [64, 256],
             },
         }
         valid, skipped = expand_grid(raw)
@@ -175,6 +175,7 @@ class TestExpandGridSweep:
             assert c.vllm is None
         for c in vllm_configs:
             assert c.pytorch is None
+            assert c.vllm.engine.max_num_seqs in (64, 256)
 
 
 # =============================================================================

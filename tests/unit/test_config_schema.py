@@ -139,12 +139,12 @@ def test_pytorch_section_with_wrong_backend_rejected():
 
 
 def test_vllm_section_with_pytorch_backend_rejected():
-    """vllm: section with backend='pytorch' raises ValidationError."""
+    """vllm: section with backend='pytorch' raises ValidationError (cross-validator)."""
     with pytest.raises(ValidationError, match=r"vllm.*config section provided.*backend"):
         ExperimentConfig(
             model="gpt2",
             backend="pytorch",
-            vllm={"max_num_seqs": 16},
+            vllm={"engine": {"max_num_seqs": 16}},
         )
 
 
