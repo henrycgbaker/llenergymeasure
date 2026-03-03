@@ -18,7 +18,7 @@ Requirements for M3. Each maps to roadmap phases.
 - [x] **DOCK-07**: Docker pre-flight validates NVIDIA Container Toolkit is installed
 - [x] **DOCK-08**: Docker pre-flight validates GPU visibility inside container (`nvidia-smi` test)
 - [x] **DOCK-09**: Docker pre-flight validates CUDA/driver version compatibility
-- [ ] **DOCK-10**: Official vLLM Docker image published to GHCR (`ghcr.io/llenergymeasure/vllm:{version}-cuda{major}`)
+- [x] **DOCK-10**: Official vLLM Docker image published to GHCR (`ghcr.io/llenergymeasure/vllm:{version}-cuda{major}`)
 - [x] **DOCK-11**: Container entrypoint calls `ExperimentOrchestrator` directly (library API, not CLI re-entry)
 
 ### vLLM Backend
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCK-07 | Phase 18 | Complete |
 | DOCK-08 | Phase 18 | Complete |
 | DOCK-09 | Phase 18 | Complete |
-| DOCK-10 | Phase 20 | Pending |
+| DOCK-10 | Phase 20 | Complete |
 | DOCK-11 | Phase 17 | Complete |
 | VLLM-01 | Phase 19 | Complete |
 | VLLM-02 | Phase 19 | Complete |
