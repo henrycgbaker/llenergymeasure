@@ -156,11 +156,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. `from llenergymeasure.datasets import aienergyscore` loads the built-in `.jsonl` dataset without error
   2. `peak_memory_mb` in ExperimentResult is documented with a precise definition of what it measures and when it is captured
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 21-01: aienergyscore dataset — create `aienergyscore.jsonl` and expose via datasets module
-- [ ] 21-02: peak_memory_mb semantics — confirm measurement point and document in code + result schema
+- [ ] 21-01-PLAN.md — Datasets module, aienergyscore.jsonl bundled file, loader wiring to both backends
+- [ ] 21-02-PLAN.md — Fix peak_memory_mb semantics (reset before measurement), add inference_memory_mb, document in code + design docs
 
 ### Phase 22: Documentation
 **Goal**: A researcher new to the tool can install it, run their first experiment, and configure Docker for vLLM without reading source code
@@ -204,7 +204,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
 | 20. Docker Image and CI | 2/2 | Complete   | 2026-03-03 |
-| 21. Measurement Carried Items | 0/TBD | Not started | - |
+| 21. Measurement Carried Items | 0/2 | Not started | - |
 | 22. Documentation | 0/TBD | Not started | - |
 | 23. Testing | 0/TBD | Not started | - |
 
