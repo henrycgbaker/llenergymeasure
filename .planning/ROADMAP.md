@@ -204,7 +204,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
 | 20. Docker Image and CI | 2/2 | Complete   | 2026-03-03 |
-| 21. Measurement Carried Items | 0/2 | Not started | - |
+| 21. Measurement Carried Items | 1/2 | In Progress|  |
 | 22. Documentation | 0/TBD | Not started | - |
 | 23. Testing | 0/TBD | Not started | - |
 

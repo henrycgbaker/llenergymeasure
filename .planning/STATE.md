@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 20 of 23 complete (Docker Image and CI — both plans done)
-Next: Phase 21 (Measurement Carried Items)
-Status: Phase 20 complete — greenfield Dockerfiles, GHCR registry fix, docker-publish.yml CI workflow
-Last activity: 2026-03-03 — Phase 20 complete on gsd/phase-20-docker-image-and-ci
+Phase: 21 of 23 in progress (Measurement Carried Items — plan 01 done)
+Next: Phase 21 plan 02 (peak_memory_mb semantics)
+Status: Phase 21 plan 01 complete — aienergyscore.jsonl dataset, datasets module, backend wiring, broken import fix
+Last activity: 2026-03-03 — Phase 21 plan 01 complete on gsd/phase-21-measurement-carried-items
 
-Progress: [████░░░░░░] 31%
+Progress: [████░░░░░░] 34%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 13
-- Average duration: 210s
-- Total execution time: 5582s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 60s + 62s + 308s + 126s)
+- Total plans completed (M3): 14
+- Average duration: 209s
+- Total execution time: 6044s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 60s + 62s + 308s + 126s + 462s)
 
 *Updated after each plan completion*
 
@@ -84,10 +84,13 @@ Progress: [████░░░░░░] 31%
 - [Phase 20-01]: ENTRYPOINT [] reset in Dockerfile.vllm — DockerRunner appends command after image name (CMD override), not after ENTRYPOINT; vllm/vllm-openai sets its own ENTRYPOINT to API server
 - [Phase 20-01]: --no-deps on .[vllm] pip install — avoids reinstalling vLLM/torch already present in base image
 - [Phase 20-01]: ghcr.io/henrycgbaker/llenergymeasure/ as GHCR namespace — corrects stale placeholder lacking the GitHub user prefix
+- [Phase 21-01]: AUTO_DETECT_COLUMNS and BUILTIN_DATASETS live in datasets/loader.py (not config/models) — config.models stays pure config, no dataset logic
+- [Phase 21-01]: FilePromptSource/HuggingFacePromptSource defined as dataclasses in dataset_loader.py — they were never in config.models, self-contained in the loader that uses them
+- [Phase 21-01]: AIEnergyScore/text_generation has single text column, no source field — grouped ordering falls back to file order (stable)
 
 ### Carried Items
 
-1. `aienergyscore.jsonl` built-in dataset — Phase 21 (MEAS-03)
+1. ~~`aienergyscore.jsonl` built-in dataset — Phase 21 (MEAS-03)~~ **DONE** (Phase 21 plan 01)
 2. `peak_memory_mb` semantics confirmation — Phase 21 (MEAS-04)
 3. Manual Ctrl+C SIGINT test on GPU hardware — Phase 23 (TEST-01)
 
@@ -98,5 +101,5 @@ Progress: [████░░░░░░] 31%
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed phase 20 (greenfield Dockerfiles + docker-publish.yml CI workflow).
+Stopped at: Completed phase 21 plan 01 (aienergyscore.jsonl dataset module + backend wiring).
 Resume file: None
