@@ -53,7 +53,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 16: GPU Memory Verification** - NVML residual memory check before each experiment dispatch in both local and Docker paths (completed 2026-02-27)
 - [x] **Phase 17: Docker Runner Infrastructure** - StudyRunner Docker dispatch path, config/result transfer via volume, per-backend runner configuration (completed 2026-02-28)
 - [x] **Phase 18: Docker Pre-flight** - NVIDIA Container Toolkit detection, GPU visibility validation, CUDA/driver compatibility check (completed 2026-02-28)
-- [ ] **Phase 19: vLLM Backend Activation** - Fix streaming and shm-size P0 bugs, activate vLLM backend end-to-end via Docker, container entrypoint
+- [x] **Phase 19: vLLM Backend Activation** - Fix streaming and shm-size P0 bugs, activate vLLM backend end-to-end via Docker, container entrypoint (completed 2026-02-28)
 - [ ] **Phase 19.1: vLLM Parameter Audit** - INSERTED — Research upstream vLLM API, expand VLLMConfig fields, wire energy-relevant params (ref: Phase 4.1 PyTorch audit)
 - [ ] **Phase 20: Docker Image and CI** - Official vLLM Docker image published to GHCR, CI publish on release tag
 - [ ] **Phase 21: Measurement Carried Items** - `aienergyscore.jsonl` built-in dataset, `peak_memory_mb` semantics confirmed and documented
@@ -115,11 +115,11 @@ Plans:
   1. `llem run config.yaml` with `backend: vllm` and `runner: docker` completes without error and produces a valid ExperimentResult
   2. vLLM streaming output is collected correctly (P0 fix: CM-07)
   3. The container is launched with `--shm-size 8g` (P0 fix: CM-09)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19-01: vLLM P0 fixes — streaming broken (CM-07), shm-size missing (CM-09)
-- [ ] 19-02: vLLM end-to-end activation — wire vLLM backend through Docker runner, produce valid ExperimentResult
+- [ ] 19-01-PLAN.md — VLLMBackend class (ground-up rewrite, offline batch inference) + get_backend() registration (VLLM-01, VLLM-02)
+- [ ] 19-02-PLAN.md — Unit tests for VLLMBackend + shm-size verification (VLLM-01, VLLM-02, VLLM-03)
 
 ### Phase 19.1: vLLM Parameter Audit
 **Goal**: VLLMConfig exposes all energy-relevant vLLM parameters, validated against the upstream vLLM API — researchers can sweep vLLM-specific params like they do PyTorch params
@@ -201,7 +201,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | 16. GPU Memory Verification | 1/1 | Merged (PR #24) | 2026-02-28 |
 | 17. Docker Runner Infrastructure | 4/4 | Complete    | 2026-02-28 |
 | 18. Docker Pre-flight | 1/1 | Complete   | 2026-02-28 |
-| 19. vLLM Backend Activation | 0/TBD | Not started | - |
+| 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
 | 19.1. vLLM Parameter Audit | 0/TBD | Not started | - |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |

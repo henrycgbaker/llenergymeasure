@@ -23,9 +23,9 @@ Requirements for M3. Each maps to roadmap phases.
 
 ### vLLM Backend
 
-- [ ] **VLLM-01**: vLLM inference backend activated and producing valid ExperimentResult via Docker
-- [ ] **VLLM-02**: P0 fix: vLLM streaming broken (CM-07 from .product/REQUIREMENTS.md)
-- [ ] **VLLM-03**: P0 fix: vLLM `--shm-size 8g` passed to container (CM-09 from .product/REQUIREMENTS.md)
+- [x] **VLLM-01**: vLLM inference backend activated and producing valid ExperimentResult via Docker
+- [x] **VLLM-02**: P0 fix: vLLM streaming broken (CM-07 from .product/REQUIREMENTS.md)
+- [x] **VLLM-03**: P0 fix: vLLM `--shm-size 8g` passed to container (CM-09 from .product/REQUIREMENTS.md)
 - [ ] **VLLM-04**: VLLMConfig fields audited against upstream vLLM API — all energy-relevant params exposed (enforce_eager, block_size, kv_cache_dtype, swap_space, dtype, speculative_model, etc.). Ref: Phase 4.1 PyTorch parameter audit pattern.
 
 ### Measurement Quality
@@ -98,9 +98,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCK-09 | Phase 18 | Complete |
 | DOCK-10 | Phase 20 | Pending |
 | DOCK-11 | Phase 17 | Complete |
-| VLLM-01 | Phase 19 | Pending |
-| VLLM-02 | Phase 19 | Pending |
-| VLLM-03 | Phase 19 | Pending |
+| VLLM-01 | Phase 19 | Complete |
+| VLLM-02 | Phase 19 | Complete |
+| VLLM-03 | Phase 19 | Complete |
 | VLLM-04 | Phase 19.1 | Pending |
 | MEAS-01 | Phase 16 | Complete |
 | MEAS-02 | Phase 16 | Complete |
