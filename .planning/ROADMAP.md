@@ -128,13 +128,13 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. VLLMConfig fields are audited against upstream vLLM `LLM()` and `SamplingParams` APIs
   2. All energy-relevant params are exposed (enforce_eager, block_size, kv_cache_dtype, swap_space, dtype, speculative_model, etc.)
-  3. Sweep grammar supports vLLM-scoped dotted notation (e.g. `vllm.gpu_memory_utilization: [0.8, 0.9]`)
+  3. Sweep grammar supports vLLM-scoped dotted notation (e.g. `vllm.engine.block_size: [8, 16, 32]`)
   4. SSOT introspection updated for vLLM fields (test values, constraint metadata)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19.1-01: Research vLLM upstream API — identify all energy-relevant params, defaults, constraints
-- [ ] 19.1-02: Expand VLLMConfig — add fields, wire through backend, update SSOT introspection
+- [ ] 19.1-01-PLAN.md — VLLMEngineConfig + VLLMSamplingConfig schema + sweep grammar fix for three-segment paths
+- [ ] 19.1-02-PLAN.md — VLLMBackend wiring for nested config + SSOT introspection update + test migration
 
 ### Phase 20: Docker Image and CI
 **Goal**: An official vLLM Docker image is published to GHCR and automatically updated on each release
@@ -193,7 +193,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22 → 23
+Phases execute in numeric order: 16 → 17 → 18 → 19 → 19.1 → 20 → 21 → 22 → 23
 Phase 21 can run in parallel with Phase 20 (no dependency between them).
 
 | Phase | Plans Complete | Status | Completed |
@@ -202,7 +202,7 @@ Phase 21 can run in parallel with Phase 20 (no dependency between them).
 | 17. Docker Runner Infrastructure | 4/4 | Complete    | 2026-02-28 |
 | 18. Docker Pre-flight | 1/1 | Complete   | 2026-02-28 |
 | 19. vLLM Backend Activation | 2/2 | Complete    | 2026-02-28 |
-| 19.1. vLLM Parameter Audit | 0/TBD | Not started | - |
+| 19.1. vLLM Parameter Audit | 0/2 | Not started | - |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |
 | 22. Documentation | 0/TBD | Not started | - |
