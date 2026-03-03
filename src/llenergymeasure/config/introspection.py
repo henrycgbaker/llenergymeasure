@@ -198,6 +198,14 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         "vllm.sampling.max_tokens": [0],  # ge=1: 0 violates ge
         "vllm.sampling.presence_penalty": [3.0],  # ge=-2.0, le=2.0: 3.0 violates le
         "vllm.sampling.frequency_penalty": [-3.0],  # ge=-2.0, le=2.0: -3.0 violates ge
+        # VLLMEngineConfig: Phase 19.2 new fields
+        "vllm.engine.offload_num_in_group": [0],  # ge=1: 0 violates ge
+        "vllm.engine.kv_cache_memory_bytes": [0],  # ge=1: 0 violates ge
+        # VLLMSamplingConfig: Phase 19.2 new field
+        "vllm.sampling.n": [0],  # ge=1: 0 violates ge
+        # VLLMBeamSearchConfig: Phase 19.2 new model
+        "vllm.beam_search.beam_width": [0],  # ge=1: 0 violates ge
+        "vllm.beam_search.max_tokens": [0],  # ge=1: 0 violates ge
     }
 
 
@@ -438,6 +446,12 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         "pytorch.cache_implementation": ["pytorch.use_cache=False"],
         # vLLM speculative decoding: speculative_model requires num_speculative_tokens
         "vllm.engine.speculative_model": ["vllm.engine.num_speculative_tokens=None"],
+        # vLLM kv_cache_memory_bytes vs gpu_memory_utilization
+        "vllm.engine.kv_cache_memory_bytes": ["vllm.engine.gpu_memory_utilization"],
+        "vllm.engine.gpu_memory_utilization": ["vllm.engine.kv_cache_memory_bytes"],
+        # vLLM beam_search vs sampling sections (cross-section mutual exclusion)
+        "vllm.beam_search": ["vllm.sampling"],
+        "vllm.sampling": ["vllm.beam_search"],
         # TensorRT: quantization method is exclusive
         "tensorrt.quantization": [],  # Handled by Literal type constraint
     }
@@ -493,12 +507,37 @@ def get_backend_specific_params() -> dict[str, list[str]]:
             "vllm.engine.quantization",
             "vllm.engine.speculative_model",
             "vllm.engine.num_speculative_tokens",
+            # Engine-level Phase 19.2 additions
+            "vllm.engine.offload_group_size",
+            "vllm.engine.offload_num_in_group",
+            "vllm.engine.offload_prefetch_step",
+            "vllm.engine.offload_params",
+            "vllm.engine.disable_custom_all_reduce",
+            "vllm.engine.kv_cache_memory_bytes",
+            "vllm.engine.compilation_config",
+            # Attention sub-model
+            "vllm.engine.attention.backend",
+            "vllm.engine.attention.flash_attn_version",
+            "vllm.engine.attention.flash_attn_max_num_splits_for_cuda_graph",
+            "vllm.engine.attention.use_prefill_decode_attention",
+            "vllm.engine.attention.use_prefill_query_quantization",
+            "vllm.engine.attention.use_cudnn_prefill",
+            "vllm.engine.attention.disable_flashinfer_prefill",
+            "vllm.engine.attention.disable_flashinfer_q_quantization",
+            "vllm.engine.attention.use_trtllm_attention",
+            "vllm.engine.attention.use_trtllm_ragged_deepseek_prefill",
             # Sampling-level params (vllm.SamplingParams args, vLLM-specific only)
             "vllm.sampling.max_tokens",
             "vllm.sampling.min_tokens",
             "vllm.sampling.presence_penalty",
             "vllm.sampling.frequency_penalty",
             "vllm.sampling.ignore_eos",
+            "vllm.sampling.n",
+            # Beam search section (all 4 fields)
+            "vllm.beam_search.beam_width",
+            "vllm.beam_search.length_penalty",
+            "vllm.beam_search.early_stopping",
+            "vllm.beam_search.max_tokens",
         ],
         "tensorrt": [
             "tensorrt.max_batch_size",
@@ -716,12 +755,12 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
         },
         "beam_search": {
             "pytorch": "num_beams" in pytorch_fields,
-            "vllm": False,  # vLLM best_of removed in v1
+            "vllm": True,  # VLLMBeamSearchConfig added in Phase 19.2
             "tensorrt": False,
         },
         "speculative_decoding": {
             "pytorch": "prompt_lookup_num_tokens" in pytorch_fields,
-            "vllm": False,  # vLLM speculative in VLLMConfig (not minimal v2.0)
+            "vllm": "speculative_model" in vllm_fields,  # Phase 19.1 added speculative_model
             "tensorrt": False,
         },
         "static_kv_cache": {
