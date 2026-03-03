@@ -1,65 +1,30 @@
 # syntax=docker/dockerfile:1
-# =============================================================================
-# PyTorch Backend: HuggingFace Transformers + Accelerate
-# =============================================================================
-# Default backend using PyTorch 2.5.x with HuggingFace ecosystem
+# ============================================================
+# PyTorch backend — llenergymeasure on top of official PyTorch image
+# ============================================================
+# Extends pytorch/pytorch with llenergymeasure installed.
+# CUDA and PyTorch compatibility is guaranteed by the upstream image.
 #
 # Usage:
-#   docker build -f docker/Dockerfile.pytorch \
-#     --build-arg BASE_IMAGE=llenergymeasure-base:latest \
-#     -t llenergymeasure:pytorch .
-# =============================================================================
+#   docker build -f docker/Dockerfile.pytorch -t llenergymeasure-pytorch .
+#
+# Version pin policy: update PYTORCH_VERSION on each milestone release.
+# Must be compatible with pyproject.toml torch>=2.5 constraint.
+# ============================================================
+ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 
-ARG BASE_IMAGE=llenergymeasure-base:latest
+FROM pytorch/pytorch:${PYTORCH_VERSION}
 
-# ============================================================================
-# Stage 1: Builder - Install dependencies
-# ============================================================================
-FROM ${BASE_IMAGE} AS builder
+WORKDIR /app
 
-WORKDIR /build
-
-# Install PyTorch 2.5.x with CUDA 12.4 (matches base image)
-RUN pip install --no-cache-dir \
-    torch==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cu124
-
-# Copy project files
-COPY pyproject.toml poetry.lock* README.md ./
+# Install llenergymeasure with pytorch extras from source (no PyPI yet).
+# sentencepiece needed for Llama/Qwen tokenisers.
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
-
-# Install the package with PyTorch backend extras (torch already installed)
-# Also install sentencepiece for Llama/Qwen tokenizers
 RUN pip install --no-cache-dir ".[pytorch]" sentencepiece
 
-# ============================================================================
-# Stage 2: Runtime - Minimal production image
-# ============================================================================
-FROM ${BASE_IMAGE} AS runtime
+# HuggingFace cache — writable for non-root users
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
-
-# Use entrypoint with PUID/PGID support
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["lem", "--help"]
-
-# ============================================================================
-# Stage 3: Dev - For development with source mounting
-# ============================================================================
-FROM ${BASE_IMAGE} AS dev
-
-# Install PyTorch (same as builder)
-RUN pip install --no-cache-dir \
-    torch==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cu124
-
-# Copy project files and install with pytorch + dev extras
-# (deps cached, source can be mounted at runtime for editable install)
-COPY pyproject.toml poetry.lock* README.md ./
-COPY src/ ./src/
-RUN pip install --no-cache-dir ".[pytorch,dev]" sentencepiece
-
-# Source can be mounted at runtime; run `pip install -e ".[pytorch,dev]"` for editable
-ENTRYPOINT []
-CMD ["/bin/bash"]
+CMD ["python", "-m", "llenergymeasure.infra.container_entrypoint"]
