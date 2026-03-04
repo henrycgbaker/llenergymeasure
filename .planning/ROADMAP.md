@@ -173,11 +173,11 @@ Plans:
   3. GitHub releases page shows clean 0.x version history (v0.1.0 through v0.8.0)
   4. Release workflow builds with uv and attaches artifacts on version tags
   5. Docker publish workflow is properly integrated (not removed ad-hoc)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 21.1-01: uv migration — CI workflows, uv.lock, pyproject.toml config, release workflow
-- [ ] 21.1-02: version reset — pyproject.toml, __init__.py, CLAUDE.md references
+- [ ] 21.1-01-PLAN.md — uv lockfile + CI migration + version reset + Dockerfile COPY fix
+- [ ] 21.1-02-PLAN.md — Release workflow with CI gate + Docker publish reusable workflow
 
 ### Phase 22: Testing and CI
 **Goal**: Test suite and CI pipeline are reviewed, gaps identified, and the testing strategy is fit-for-purpose for a multi-backend Docker-based measurement tool
@@ -230,7 +230,7 @@ Phase 22 (Testing/CI) before Phase 23 (Docs) — testing informs documentation.
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |
-| 21.1. CI & Versioning Scaffold | 0/TBD | Not started | - |
+| 21.1. CI & Versioning Scaffold | 0/2 | Not started | - |
 | 22. Testing and CI | 0/TBD | Not started | - |
 | 23. Documentation | 0/TBD | Not started | - |
 
