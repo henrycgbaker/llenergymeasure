@@ -300,6 +300,10 @@ class PyTorchBackend:
             if pt.max_memory is not None:
                 kwargs["max_memory"] = pt.max_memory
 
+        # PyTorch extra="allow" passthrough: forward unknown fields to from_pretrained()
+        if pt is not None and pt.model_extra:
+            kwargs.update(pt.model_extra)
+
         # passthrough_kwargs merged LAST so researcher can override any default
         # This is the core of the P0 fix: these kwargs are now actually used
         if config.passthrough_kwargs:

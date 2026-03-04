@@ -28,7 +28,7 @@ Usage in YAML:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -46,9 +46,10 @@ class PyTorchConfig(BaseModel):
 
     Fields cover the complete researcher-useful parameter space for
     AutoModelForCausalLM.from_pretrained() and model.generate().
+    Unknown fields are forwarded to HuggingFace/transformers APIs via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     # -------------------------------------------------------------------------
     # Batching
@@ -215,14 +216,67 @@ class PyTorchConfig(BaseModel):
 # =============================================================================
 
 
+class VLLMAttentionConfig(BaseModel):
+    """vLLM attention implementation configuration.
+
+    Nested under VLLMEngineConfig.attention. Mirrors vLLM's AttentionConfig.
+    All fields default to None — None means "use vLLM's own default".
+    Uses extra="allow" for forward compatibility with new vLLM attention options.
+    """
+
+    model_config = {"extra": "allow"}
+
+    backend: str | None = Field(
+        default=None,
+        description="Attention backend: flash_attn, flashinfer, etc. (None -> auto).",
+    )
+    flash_attn_version: int | None = Field(
+        default=None,
+        description="Flash attention version (None -> auto).",
+    )
+    flash_attn_max_num_splits_for_cuda_graph: int | None = Field(
+        default=None,
+        description="Max splits for CUDA graph with flash attention (None -> auto).",
+    )
+    use_prefill_decode_attention: bool | None = Field(
+        default=None,
+        description="Use prefill-decode attention (None -> True).",
+    )
+    use_prefill_query_quantization: bool | None = Field(
+        default=None,
+        description="Quantize queries during prefill (None -> False).",
+    )
+    use_cudnn_prefill: bool | None = Field(
+        default=None,
+        description="Use cuDNN for prefill (None -> False).",
+    )
+    disable_flashinfer_prefill: bool | None = Field(
+        default=None,
+        description="Disable FlashInfer for prefill (None -> False).",
+    )
+    disable_flashinfer_q_quantization: bool | None = Field(
+        default=None,
+        description="Disable FlashInfer query quantization (None -> False).",
+    )
+    use_trtllm_attention: bool | None = Field(
+        default=None,
+        description="Use TensorRT-LLM attention backend (None -> False).",
+    )
+    use_trtllm_ragged_deepseek_prefill: bool | None = Field(
+        default=None,
+        description="Use TRT-LLM ragged DeepSeek prefill (None -> False).",
+    )
+
+
 class VLLMEngineConfig(BaseModel):
     """vLLM engine-level configuration (vllm.LLM() constructor arguments).
 
     All fields default to None — None means "use vLLM's own default".
     These parameters are loaded once at model initialisation time.
+    Unknown fields are forwarded to vllm.LLM() via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     # -------------------------------------------------------------------------
     # Memory management
@@ -372,6 +426,73 @@ class VLLMEngineConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
+    # CPU offload
+    # -------------------------------------------------------------------------
+
+    offload_group_size: int | None = Field(
+        default=None,
+        ge=0,
+        description="Groups of layers for CPU offloading (None -> 0).",
+    )
+    offload_num_in_group: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of layers offloaded per group (None -> 1).",
+    )
+    offload_prefetch_step: int | None = Field(
+        default=None,
+        ge=0,
+        description="Prefetch steps ahead for CPU offload (None -> 1).",
+    )
+    offload_params: list[str] | None = Field(
+        default=None,
+        description="Specific parameter names to offload to CPU (None -> all eligible).",
+    )
+
+    # -------------------------------------------------------------------------
+    # Multi-GPU
+    # -------------------------------------------------------------------------
+
+    disable_custom_all_reduce: bool | None = Field(
+        default=None,
+        description="Disable custom all-reduce for multi-GPU (None -> False).",
+    )
+
+    # -------------------------------------------------------------------------
+    # KV cache (absolute)
+    # -------------------------------------------------------------------------
+
+    kv_cache_memory_bytes: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Absolute KV cache size in bytes (None -> use gpu_memory_utilization). "
+            "Mutually exclusive with gpu_memory_utilization."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Compilation
+    # -------------------------------------------------------------------------
+
+    compilation_config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Full passthrough to vLLM CompilationConfig (~30 fields). "
+            "No validation — passed directly."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Attention
+    # -------------------------------------------------------------------------
+
+    attention: VLLMAttentionConfig | None = Field(
+        default=None,
+        description="Attention implementation configuration.",
+    )
+
+    # -------------------------------------------------------------------------
     # Cross-validators
     # -------------------------------------------------------------------------
 
@@ -380,6 +501,16 @@ class VLLMEngineConfig(BaseModel):
         """speculative_model requires num_speculative_tokens to be set."""
         if self.speculative_model is not None and self.num_speculative_tokens is None:
             raise ValueError("speculative_model requires num_speculative_tokens to be set")
+        return self
+
+    @model_validator(mode="after")
+    def validate_kv_cache_memory(self) -> VLLMEngineConfig:
+        """kv_cache_memory_bytes and gpu_memory_utilization are mutually exclusive."""
+        if self.kv_cache_memory_bytes is not None and self.gpu_memory_utilization is not None:
+            raise ValueError(
+                "kv_cache_memory_bytes and gpu_memory_utilization are mutually exclusive. "
+                "Use one or the other to control KV cache memory."
+            )
         return self
 
 
@@ -391,9 +522,10 @@ class VLLMSamplingConfig(BaseModel):
     live in DecoderConfig and are shared across all backends.
 
     All fields default to None — None means "use vLLM's own default".
+    Unknown fields are forwarded to vllm.SamplingParams() via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     max_tokens: int | None = Field(
         default=None,
@@ -433,6 +565,42 @@ class VLLMSamplingConfig(BaseModel):
             "Forces max_tokens generation every time — affects total token count."
         ),
     )
+    n: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of output sequences per prompt (None -> 1).",
+    )
+
+
+class VLLMBeamSearchConfig(BaseModel):
+    """vLLM beam search configuration.
+
+    When set, the backend uses BeamSearchParams instead of SamplingParams.
+    Nested under VLLMConfig.beam_search.
+    All fields default to None — None means "use vLLM's own default".
+    Uses extra="allow" for forward compatibility with new vLLM beam search options.
+    """
+
+    model_config = {"extra": "allow"}
+
+    beam_width: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of beams (ge=1).",
+    )
+    length_penalty: float | None = Field(
+        default=None,
+        description="Length penalty: >1 favours shorter, <1 longer (None -> 1.0).",
+    )
+    early_stopping: bool | None = Field(
+        default=None,
+        description="Stop when beam_width complete sequences found (None -> False).",
+    )
+    max_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description="Max output tokens for beam search (None -> max_output_tokens).",
+    )
 
 
 class VLLMConfig(BaseModel):
@@ -457,7 +625,7 @@ class VLLMConfig(BaseModel):
             presence_penalty: 0.0
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     engine: VLLMEngineConfig | None = Field(
         default=None,
@@ -469,6 +637,23 @@ class VLLMConfig(BaseModel):
             "Sampling-level configuration: vllm.SamplingParams extensions (vLLM-specific only)"
         ),
     )
+    beam_search: VLLMBeamSearchConfig | None = Field(
+        default=None,
+        description=(
+            "Beam search configuration. When set, uses BeamSearchParams instead of SamplingParams. "
+            "Mutually exclusive with sampling section."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_beam_search_exclusive(self) -> VLLMConfig:
+        """beam_search and sampling sections are mutually exclusive."""
+        if self.beam_search is not None and self.sampling is not None:
+            raise ValueError(
+                "Cannot use both beam_search and sampling sections simultaneously. "
+                "beam_search uses BeamSearchParams; sampling uses SamplingParams."
+            )
+        return self
 
 
 # =============================================================================
@@ -484,9 +669,10 @@ class TensorRTConfig(BaseModel):
 
     M1 scope: fields used by the M1 TensorRT backend implementation.
     Phase 4.1 will audit and expand.
+    Unknown fields are forwarded to TensorRT-LLM APIs via extra="allow".
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "allow"}
 
     max_batch_size: int | None = Field(
         default=None, ge=1, description="Max batch size (compile-time constant, None -> 8)"
