@@ -30,3 +30,7 @@ venv/
 emissions.csv
 .state
 results
+
+# Project workflow (local only)
+.planning/
+.product/
