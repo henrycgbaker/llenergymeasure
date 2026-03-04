@@ -112,3 +112,13 @@ addopts = "-v --tb=short -m \"not gpu\""
 markers = [
     "gpu: marks tests as requiring GPU hardware (deselect with '-m \"not gpu\"')",
 ]
+
+# ---------------------------------------------------------------------------
+# uv configuration
+# ---------------------------------------------------------------------------
+[tool.uv]
+# tensorrt-llm uses NVIDIA private index with git-URL transitive deps
+# that uv cannot resolve. Excluded until M4 (TensorRT-LLM milestone).
+override-dependencies = [
+    "tensorrt-llm ; python_version < '0'",
+]
