@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com/ "tenso
     && pip install --no-cache-dir "onnx==1.16.0" "cuda-python==12.4.0"
 
 # Copy project files
-COPY pyproject.toml poetry.lock* README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 
 # Install the package with tensorrt extras (--no-deps to avoid torch conflict)
@@ -86,7 +86,7 @@ RUN pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com/ "tenso
 
 # Copy project files and install with tensorrt + dev extras
 # (--no-deps to avoid torch conflict, then install remaining deps)
-COPY pyproject.toml poetry.lock* README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir --no-deps ".[tensorrt]" \
     && pip install --no-cache-dir \
