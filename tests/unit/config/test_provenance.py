@@ -294,14 +294,14 @@ class TestCompareDicts:
     def test_detects_new_keys_in_overlay(self):
         base = {"a": 1}
         overlay = {"a": 1, "new_key": "value"}
-        changed, unchanged = compare_dicts(base, overlay)
+        changed, _unchanged = compare_dicts(base, overlay)
         assert "new_key" in changed
         assert changed["new_key"] == "value"
 
     def test_unchanged_keys_preserved(self):
         base = {"a": 1, "b": 2, "c": 3}
         overlay = {"a": 99, "b": 2, "c": 3}
-        changed, unchanged = compare_dicts(base, overlay)
+        _changed, unchanged = compare_dicts(base, overlay)
         assert set(unchanged.keys()) == {"b", "c"}
 
     def test_empty_dicts(self):
@@ -313,6 +313,6 @@ class TestCompareDicts:
         """None values in overlay are not treated as overrides (per implementation)."""
         base = {"a": 1}
         overlay = {"a": None}
-        changed, unchanged = compare_dicts(base, overlay)
+        changed, _unchanged = compare_dicts(base, overlay)
         # None is falsy — implementation skips None overlays
         assert "a" not in changed
