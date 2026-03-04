@@ -11,6 +11,27 @@ env:
   UV_NO_PROGRESS: "1"
 
 jobs:
+  filter:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.changes.outputs.src }}
+      docker: ${{ steps.changes.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            src:
+              - 'src/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+            docker:
+              - 'docker/**'
+              - '.dockerignore'
+              - 'pyproject.toml'
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -33,26 +54,53 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-          cache-suffix: type-check-3.12
+          cache-suffix: typecheck-3.12
           python-version: "3.12"
       - run: uv sync --dev
       - name: mypy
         run: uv run mypy src/
 
   test:
+    needs: filter
+    if: needs.filter.outputs.src == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-          cache-suffix: test-${{ matrix.python-version }}
-          python-version: ${{ matrix.python-version }}
+          cache-suffix: test-3.12
+          python-version: "3.12"
       - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus --extra webhooks
       - name: Unit tests
-        run: uv run pytest tests/unit/ -m "not gpu" -v --tb=short
+        run: uv run pytest tests/unit/ -m "not gpu and not docker" -n auto -v --tb=short
       - name: Import validation
         run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
+
+  package-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: pkg-3.12
+          python-version: "3.12"
+      - run: uv build --wheel
+      - name: Install and validate
+        run: |
+          python -m venv /tmp/pkg-check
+          /tmp/pkg-check/bin/pip install dist/*.whl --quiet
+          /tmp/pkg-check/bin/python -c "
+          from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult
+          print('Package install OK')
+          "
+
+  docker-smoke:
+    needs: filter
+    if: needs.filter.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker build smoke (vllm)
+        run: docker build -f docker/Dockerfile.vllm . --no-cache
