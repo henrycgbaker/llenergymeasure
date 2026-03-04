@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
@@ -127,7 +127,7 @@ def _load_jsonl(
     Raises:
         ValueError: If fewer than n prompts are available.
     """
-    records: list[dict] = []
+    records: list[dict[str, Any]] = []
 
     with path.open(encoding="utf-8") as f:
         for raw_line in f:
