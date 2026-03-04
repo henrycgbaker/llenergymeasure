@@ -57,7 +57,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 19.1: vLLM Parameter Audit** - INSERTED — Research upstream vLLM API, expand VLLMConfig fields, wire energy-relevant params (ref: Phase 4.1 PyTorch audit) (completed 2026-03-03)
 - [ ] **Phase 20: Docker Image and CI** - Official vLLM Docker image published to GHCR, CI publish on release tag
 - [ ] **Phase 21: Measurement Carried Items** - `aienergyscore.jsonl` built-in dataset, `peak_memory_mb` semantics confirmed and documented
-- [ ] **Phase 21.1: CI & Versioning Scaffold** - INSERTED — Migrate CI to uv, reset version scheme to 0.x, revert docker-publish removal, improve release workflow
+- [x] **Phase 21.1: CI & Versioning Scaffold** - INSERTED — Migrate CI to uv, reset version scheme to 0.x, revert docker-publish removal, improve release workflow (completed 2026-03-04)
 - [ ] **Phase 22: Testing and CI** - Test strategy review, CI pipeline improvements, Docker path SIGINT verification, coverage analysis
 - [ ] **Phase 23: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference
 
@@ -230,7 +230,7 @@ Phase 22 (Testing/CI) before Phase 23 (Docs) — testing informs documentation.
 | 19.1. vLLM Parameter Audit | 2/2 | Complete    | 2026-03-03 |
 | 20. Docker Image and CI | 0/TBD | Not started | - |
 | 21. Measurement Carried Items | 0/TBD | Not started | - |
-| 21.1. CI & Versioning Scaffold | 1/2 | In Progress|  |
+| 21.1. CI & Versioning Scaffold | 2/2 | Complete    | 2026-03-04 |
 | 22. Testing and CI | 0/TBD | Not started | - |
 | 23. Documentation | 0/TBD | Not started | - |
 
