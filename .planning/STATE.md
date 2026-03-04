@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 22 (Testing and CI) — Plan 02 complete
-Next: Phase 22, Plan 03
-Status: Phase 22-02 complete — Tier 1 CI rewritten (path filter, Docker smoke, package validation, 3.12 only); Tier 2 GPU CI created (push-to-main trigger, HF cache, replay upload).
-Last activity: 2026-03-04 — Phase 22-02 executed
+Phase: 22 (Testing and CI) — Plan 03 complete
+Next: Phase 22, Plan 04 (if any) or next phase
+Status: Phase 22-03 complete — 83 new unit tests for 4 zero-coverage active modules (cli/experiment.py, config/backend_detection.py, config/docker_detection.py, config/provenance.py). Suite: 859 tests passing.
+Last activity: 2026-03-04 — Phase 22-03 executed
 
-Progress: [█████░░░░░] 43%
+Progress: [██████░░░░] 57%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 15
-- Average duration: 216s
-- Total execution time: 5647s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s)
+- Total plans completed (M3): 16
+- Average duration: 213s
+- Total execution time: 6128s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s)
 
 *Updated after each plan completion*
 
@@ -87,6 +87,9 @@ Progress: [█████░░░░░] 43%
 - [Phase 22-02]: Tier 1 test job skips on docs-only changes via dorny/paths-filter; package-validation runs always (packaging bugs from any change)
 - [Phase 22-02]: Tier 2 GPU CI triggers on push to main only (post-merge); no -n auto — GPU tests must run serially; --extra vllm excluded (requires Docker runtime)
 - [Phase 22-02]: HF cache keyed on tests/fixtures/model_list.txt hash with restore-keys fallback
+- [Phase 22-03]: cli/experiment.py is dead v1.x code with deleted imports (F821 suppressed) — inject missing names via monkeypatch.setattr(module, name, value, raising=False) for testability
+- [Phase 22-03]: backend_detection.py uses direct try/import — patch builtins.__import__ with side_effect that raises for target package name
+- [Phase 22-03]: ensure_env_file imported inside function body — patch at definition site (llenergymeasure.config.env_setup), not at experiment module level
 
 ### Carried Items
 
@@ -101,5 +104,5 @@ Progress: [█████░░░░░] 43%
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Completed 22-02-PLAN.md (CI rewrite: Tier 1 path filter + package validation + Docker smoke; Tier 2 GPU CI, 2 tasks, 3 files).
+Stopped at: Completed 22-03-PLAN.md (83 new unit tests for 4 zero-coverage modules, 2 tasks, 4 files).
 Resume file: None
