@@ -70,41 +70,30 @@ def test_detect_default_backend_returns_pytorch():
     assert detect_default_backend() == "pytorch"
 
 
-def test_detect_default_backend_raises_when_no_backends(monkeypatch):
+def test_detect_default_backend_raises_when_no_backends():
     """detect_default_backend raises BackendError when no backends are installed."""
-    original_find_spec = importlib.util.find_spec
+    from unittest.mock import patch
 
-    def mock_find_spec(name, *args, **kwargs):
-        if name == "transformers":
-            return None
-        return original_find_spec(name, *args, **kwargs)
-
-    monkeypatch.setattr(importlib.util, "find_spec", mock_find_spec)
-
-    # Re-import inside the test to pick up the monkeypatched find_spec
     import llenergymeasure.core.backends as backends_mod
     from llenergymeasure.exceptions import BackendError
 
-    with pytest.raises(BackendError, match="No inference backend"):
-        backends_mod.detect_default_backend()
+    # Patch find_spec inside the backends module so all backend checks return None
+    with patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None):
+        with pytest.raises(BackendError, match="No inference backend"):
+            backends_mod.detect_default_backend()
 
 
-def test_detect_default_backend_error_message_has_install_hint(monkeypatch):
+def test_detect_default_backend_error_message_has_install_hint():
     """Error message from detect_default_backend includes install hint."""
-    original_find_spec = importlib.util.find_spec
-
-    def mock_find_spec(name, *args, **kwargs):
-        if name == "transformers":
-            return None
-        return original_find_spec(name, *args, **kwargs)
-
-    monkeypatch.setattr(importlib.util, "find_spec", mock_find_spec)
+    from unittest.mock import patch
 
     import llenergymeasure.core.backends as backends_mod
     from llenergymeasure.exceptions import BackendError
 
-    with pytest.raises(BackendError, match="pip install"):
-        backends_mod.detect_default_backend()
+    # Patch find_spec inside the backends module so all backend checks return None
+    with patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None):
+        with pytest.raises(BackendError, match="pip install"):
+            backends_mod.detect_default_backend()
 
 
 # =============================================================================
