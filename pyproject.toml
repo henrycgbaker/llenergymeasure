@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llenergymeasure"
-version = "1.18.0"
+version = "0.8.0"
 description = "LLenergyMeasure - LLM inference efficiency measurement framework"
 authors = [
     {name = "henrycgbaker", email = "henry.c.g.baker@gmail.com"},
