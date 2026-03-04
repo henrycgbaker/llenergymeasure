@@ -2,26 +2,59 @@
 
 Provides utilities for loading prompts from HuggingFace datasets,
 with support for built-in curated datasets and custom user datasets.
+
+Note: FilePromptSource, HuggingFacePromptSource, and PromptSourceConfig are
+defined here as lightweight dataclasses. They were originally planned for
+config.models but are maintained here for backward compatibility.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from llenergymeasure.config.models import (
-    AUTO_DETECT_COLUMNS,
-    BUILTIN_DATASETS,
-    FilePromptSource,
-    HuggingFacePromptSource,
-    PromptSourceConfig,
-)
+from llenergymeasure.datasets.loader import AUTO_DETECT_COLUMNS, BUILTIN_DATASETS
 from llenergymeasure.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     from datasets import Dataset
+
+
+# ---------------------------------------------------------------------------
+# Source configuration types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FilePromptSource:
+    """Prompt source backed by a local file (one prompt per line)."""
+
+    path: str | Path
+
+
+@dataclass
+class HuggingFacePromptSource:
+    """Prompt source backed by a HuggingFace dataset."""
+
+    dataset: str
+    split: str = "train"
+    subset: str | None = None
+    column: str | None = None
+    shuffle: bool = False
+    seed: int = 42
+    sample_size: int | None = None
+
+
+# Union type alias for prompt sources
+PromptSourceConfig = FilePromptSource | HuggingFacePromptSource
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def load_prompts_from_source(source: PromptSourceConfig) -> list[str]:
@@ -200,10 +233,10 @@ def _extract_from_conversation(messages: list[Any]) -> str | None:
     return None
 
 
-def list_builtin_datasets() -> dict[str, dict[str, str]]:
+def list_builtin_datasets() -> dict[str, Any]:
     """List available built-in dataset aliases.
 
     Returns:
-        Dictionary of alias -> dataset info.
+        Dictionary of alias -> path mapping.
     """
-    return BUILTIN_DATASETS.copy()
+    return dict(BUILTIN_DATASETS)

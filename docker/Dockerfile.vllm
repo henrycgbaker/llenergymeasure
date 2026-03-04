@@ -1,73 +1,38 @@
 # syntax=docker/dockerfile:1
-# =============================================================================
-# vLLM Backend: High-performance inference with PagedAttention
-# =============================================================================
-# vLLM backend with continuous batching and tensor parallelism support
+# ============================================================
+# vLLM backend — llenergymeasure on top of official vLLM image
+# ============================================================
+# Extends vllm/vllm-openai with llenergymeasure installed.
+# CUDA and vLLM compatibility is guaranteed by the upstream image.
 #
 # Usage:
-#   docker build -f docker/Dockerfile.vllm \
-#     --build-arg BASE_IMAGE=llenergymeasure-base:latest \
-#     -t llenergymeasure:vllm .
+#   docker build -f docker/Dockerfile.vllm -t llenergymeasure-vllm .
 #
-# Note: vLLM installs its own PyTorch version (2.8+), which differs from
-# the pytorch backend (2.5.x). This is intentional for compatibility.
-# =============================================================================
+# Version pin policy: update VLLM_VERSION on each milestone release.
+# Must be compatible with pyproject.toml vllm>=0.6 constraint.
+# ============================================================
+ARG VLLM_VERSION=v0.7.3
 
-ARG BASE_IMAGE=llenergymeasure-base:latest
+FROM vllm/vllm-openai:${VLLM_VERSION}
 
-# ============================================================================
-# Stage 1: Builder - Install vLLM and dependencies
-# ============================================================================
-FROM ${BASE_IMAGE} AS builder
-
-WORKDIR /build
-
-# Install vLLM (brings its own compatible PyTorch)
-# Pin version for reproducibility - update as needed
-RUN pip install --no-cache-dir vllm>=0.6.0
-
-# Copy project files
-COPY pyproject.toml poetry.lock* README.md ./
-COPY src/ ./src/
-
-# Install the package with vllm extras (--no-deps to avoid torch conflict)
-# Then install remaining dependencies for HuggingFace compatibility
-# Includes: peft (LoRA), sentencepiece (Llama/Qwen tokenizers), safetensors (model loading)
-RUN pip install --no-cache-dir --no-deps ".[vllm]" \
-    && pip install --no-cache-dir \
-        pydantic loguru typer codecarbon nvidia-ml-py datasets schedule python-dotenv \
-        transformers accelerate huggingface_hub sentencepiece peft safetensors bitsandbytes calflops
-
-# ============================================================================
-# Stage 2: Runtime - Minimal production image
-# ============================================================================
-FROM ${BASE_IMAGE} AS runtime
-
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
-
-# Use entrypoint with PUID/PGID support
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["lem", "--help"]
-
-# ============================================================================
-# Stage 3: Dev - For development with source mounting
-# ============================================================================
-FROM ${BASE_IMAGE} AS dev
-
-# Install vLLM (brings its own PyTorch)
-RUN pip install --no-cache-dir vllm>=0.6.0
-
-# Copy project files and install with vllm + pytorch + dev extras
-# (--no-deps to avoid torch conflict, then install remaining deps)
-COPY pyproject.toml poetry.lock* README.md ./
-COPY src/ ./src/
-RUN pip install --no-cache-dir --no-deps ".[vllm]" \
-    && pip install --no-cache-dir \
-        pydantic loguru typer codecarbon nvidia-ml-py datasets schedule python-dotenv \
-        transformers accelerate huggingface_hub sentencepiece peft safetensors bitsandbytes calflops \
-        pytest pytest-cov ruff mypy pre-commit commitizen
-
-# Source can be mounted at runtime for editable install
+# Reset upstream ENTRYPOINT — vLLM sets ENTRYPOINT to its API server,
+# which conflicts with DockerRunner's command override pattern.
 ENTRYPOINT []
-CMD ["/bin/bash"]
+
+WORKDIR /app
+
+# Install llenergymeasure from source (no PyPI yet).
+# --no-deps on the package itself avoids re-installing vLLM/torch.
+# Then install remaining runtime deps that aren't in the vLLM image.
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+RUN pip install --no-cache-dir --no-deps ".[vllm]" \
+    && pip install --no-cache-dir \
+        pydantic loguru typer pyyaml platformdirs nvidia-ml-py numpy \
+        pyarrow tqdm codecarbon datasets python-dotenv
+
+# HuggingFace cache — writable for non-root users
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
+
+CMD ["python3", "-m", "llenergymeasure.infra.container_entrypoint"]

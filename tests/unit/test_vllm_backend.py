@@ -457,17 +457,18 @@ class TestPreparePrompts:
 
         assert len(prompts) == 100
 
-    def test_prompts_reflect_max_input_tokens(self):
-        """Prompt length scales with max_input_tokens (M1 placeholder behaviour)."""
-        config_short = _make_config(n=1, max_input_tokens=4)
-        config_long = _make_config(n=1, max_input_tokens=512)
+    def test_prompts_are_real_text(self):
+        """_prepare_prompts returns real prompts from the dataset, not M1 placeholder."""
+        config = _make_config(n=1)
         backend = VLLMBackend()
+        prompts = backend._prepare_prompts(config)
 
-        short_prompts = backend._prepare_prompts(config_short)
-        long_prompts = backend._prepare_prompts(config_long)
-
-        # Longer max_input_tokens → longer prompt string
-        assert len(long_prompts[0]) > len(short_prompts[0])
+        # Should return a real non-empty string (not "Hello, " repeated)
+        assert len(prompts) == 1
+        assert isinstance(prompts[0], str)
+        assert len(prompts[0]) > 0
+        # Should not be the old M1 placeholder pattern
+        assert prompts[0] != ("Hello, " * (512 // 4)).strip()
 
 
 # =============================================================================

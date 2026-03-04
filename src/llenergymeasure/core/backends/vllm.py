@@ -36,6 +36,8 @@ class _VLLMMeasurementData:
     input_tokens: int = 0
     output_tokens: int = 0
     batch_times: list[float] = field(default_factory=list)
+    peak_memory_mb: float = 0.0
+    model_memory_mb: float = 0.0
 
 
 class VLLMBackend:
@@ -99,6 +101,16 @@ class VLLMBackend:
 
         # 3. Load model via vllm.LLM()
         llm, sampling_params = self._load_model(config)
+
+        # Capture model memory baseline immediately after model load.
+        # vLLM pre-allocates memory via gpu_memory_utilization, so this reflects
+        # the pre-allocation size (model weights + pre-allocated KV cache blocks).
+        import torch as _torch
+
+        model_memory_mb = 0.0
+        if _torch.cuda.is_available():
+            model_memory_mb = _torch.cuda.max_memory_allocated() / (1024 * 1024)
+        logger.info("vLLM model memory baseline (post-load): %.1f MB", model_memory_mb)
 
         try:
             # 4. Prepare prompts (M1 placeholder — same pattern as PyTorchBackend)
@@ -207,6 +219,7 @@ class VLLMBackend:
         return self._build_result(
             config=config,
             data=result_data,
+            model_memory_mb=model_memory_mb,
             snapshot=snapshot,
             start_time=start_time,
             end_time=end_time,
@@ -460,23 +473,19 @@ class VLLMBackend:
     # -------------------------------------------------------------------------
 
     def _prepare_prompts(self, config: ExperimentConfig) -> list[str]:
-        """Prepare prompts for inference.
-
-        M1 placeholder: generates simple synthetic prompts. Dataset loading
-        (aienergyscore.jsonl + SyntheticDatasetConfig) is a deferred M1 item.
+        """Prepare prompts for inference from the configured dataset.
 
         Args:
-            config: Experiment configuration (uses config.n for count).
+            config: Experiment configuration. Uses config.dataset, config.n,
+                config.dataset_order, and config.random_seed.
 
         Returns:
             List of config.n prompt strings.
         """
-        # M1 placeholder — generates simple prompts of roughly max_input_tokens length
-        # A single token is ~4 chars; we use "Hello, " repeated as a simple approximation
-        words_per_prompt = max(1, config.max_input_tokens // 4)
-        base_prompt = ("Hello, " * words_per_prompt).strip()
-        prompts = [base_prompt] * config.n
-        logger.debug("Prepared %d prompts (M1 placeholder)", config.n)
+        from llenergymeasure.datasets.loader import load_prompts
+
+        prompts = load_prompts(config)
+        logger.debug("Loaded %d prompts from dataset %r", len(prompts), config.dataset)
         return prompts
 
     # -------------------------------------------------------------------------
@@ -508,9 +517,16 @@ class VLLMBackend:
         Raises:
             BackendError: On OOM or other inference failures.
         """
+        import torch
+
         from llenergymeasure.core.power_thermal import PowerThermalSampler
 
         data = _VLLMMeasurementData()
+
+        # Reset peak stats before the measurement loop so max_memory_allocated() below
+        # captures inference-window peak (KV cache occupancy + activations), not pre-allocation.
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
 
         logger.info(
             "Starting vLLM offline batch inference: %d prompts, max_tokens=%d",
@@ -544,6 +560,41 @@ class VLLMBackend:
         thermal_info = sampler.get_thermal_throttle_info()
         timeseries_samples = sampler.get_samples()
 
+        # Capture peak memory — torch first, NVML fallback for pre-allocation detection.
+        # vLLM pre-allocates memory via gpu_memory_utilization, so torch stats may
+        # reflect the pre-allocation ceiling rather than actual usage.
+        peak_mb = 0.0
+        if torch.cuda.is_available():
+            peak_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
+
+            # Heuristic: if peak matches gpu_memory_utilization * total_vram within 5%,
+            # it's likely pre-allocation, not actual usage. Fall back to NVML.
+            try:
+                total_vram = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+                vllm_cfg = config.vllm
+                gpu_util = 0.9  # vLLM default
+                if (
+                    vllm_cfg is not None
+                    and vllm_cfg.engine is not None
+                    and vllm_cfg.engine.gpu_memory_utilization is not None
+                ):
+                    gpu_util = vllm_cfg.engine.gpu_memory_utilization
+                expected_prealloc = total_vram * gpu_util
+                if peak_mb > 0 and abs(peak_mb - expected_prealloc) / expected_prealloc < 0.05:
+                    # Looks like pre-allocation — try NVML for actual usage
+                    logger.debug(
+                        "torch peak (%.1fMB) matches pre-allocation (%.1fMB), trying NVML",
+                        peak_mb,
+                        expected_prealloc,
+                    )
+                    nvml_peak = self._nvml_peak_memory_mb()
+                    if nvml_peak is not None:
+                        peak_mb = nvml_peak
+            except Exception:
+                pass  # Stick with torch value
+
+        data.peak_memory_mb = peak_mb
+
         # Count tokens from RequestOutput objects
         # input_tokens: prompt_token_ids length per output
         # output_tokens: generated token_ids length in first completion
@@ -566,6 +617,26 @@ class VLLMBackend:
     # -------------------------------------------------------------------------
     # Post-measurement helpers
     # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _nvml_peak_memory_mb() -> float | None:
+        """Query NVML for current GPU memory used. Returns MB or None on failure.
+
+        Used as a fallback when torch peak stats look like vLLM pre-allocation.
+        NVML reports actual current usage, not the torch allocator high-water mark.
+        """
+        try:
+            import pynvml
+
+            pynvml.nvmlInit()
+            try:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                return info.used / (1024 * 1024)
+            finally:
+                pynvml.nvmlShutdown()
+        except Exception:
+            return None
 
     @staticmethod
     def _cuda_sync() -> None:
@@ -648,6 +719,7 @@ class VLLMBackend:
         self,
         config: ExperimentConfig,
         data: _VLLMMeasurementData,
+        model_memory_mb: float,
         snapshot: Any,
         start_time: datetime,
         end_time: datetime,
@@ -664,6 +736,7 @@ class VLLMBackend:
         Args:
             config: Experiment configuration.
             data: Raw measurement data from the measurement loop.
+            model_memory_mb: GPU memory after model load, before inference (MB).
             snapshot: EnvironmentSnapshot captured before model load.
             start_time: Measurement start time.
             end_time: Measurement end time.
@@ -679,6 +752,10 @@ class VLLMBackend:
             Fully assembled ExperimentResult with backend='vllm'.
         """
         from llenergymeasure.core.baseline import create_energy_breakdown
+        from llenergymeasure.domain.metrics import (
+            ExtendedEfficiencyMetrics,
+            MemoryEfficiencyMetrics,
+        )
 
         experiment_id = f"{config.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 
@@ -701,6 +778,23 @@ class VLLMBackend:
 
         # FLOPs from PaLM formula (0.0 if estimation failed for vLLM)
         total_flops = flops_result.value if flops_result is not None else 0.0
+
+        # Memory metrics: inference-window-only peak and derived delta.
+        # inference_memory_mb = peak (inference window) - model baseline.
+        inference_memory_mb = max(0.0, data.peak_memory_mb - model_memory_mb)
+        logger.info(
+            "Memory: model=%.1fMB, peak_inference=%.1fMB, inference_delta=%.1fMB",
+            model_memory_mb,
+            data.peak_memory_mb,
+            inference_memory_mb,
+        )
+        extended_metrics = ExtendedEfficiencyMetrics(
+            memory=MemoryEfficiencyMetrics(
+                model_memory_mb=model_memory_mb,
+                peak_memory_mb=data.peak_memory_mb,
+                inference_memory_mb=inference_memory_mb,
+            )
+        )
 
         return ExperimentResult(
             experiment_id=experiment_id,
@@ -728,6 +822,7 @@ class VLLMBackend:
             baseline_power_w=energy_breakdown.baseline_power_w if energy_breakdown else None,
             energy_adjusted_j=energy_breakdown.adjusted_j if energy_breakdown else None,
             measurement_warnings=measurement_warnings,
+            extended_metrics=extended_metrics,
         )
 
     # -------------------------------------------------------------------------

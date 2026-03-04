@@ -2,7 +2,7 @@
 
 Images follow the naming convention::
 
-    ghcr.io/llenergymeasure/{backend}:{version}-cuda{cuda_major}
+    ghcr.io/henrycgbaker/llenergymeasure/{backend}:{version}-cuda{cuda_major}
 
 where:
     {version}    — current package version (e.g. "1.19.0")
@@ -38,7 +38,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 # {version} and {cuda_major} are filled at runtime.
-DEFAULT_IMAGE_TEMPLATE = "ghcr.io/llenergymeasure/{backend}:{version}-cuda{cuda_major}"
+DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{backend}:{version}-cuda{cuda_major}"
 
 # Backends that have a Docker image in the registry.
 _SUPPORTED_BACKENDS = frozenset({"pytorch", "vllm", "tensorrt"})
@@ -136,7 +136,7 @@ def get_default_image(backend: str) -> str:
 
     Returns:
         Full image reference string, e.g.
-        ``"ghcr.io/llenergymeasure/vllm:1.19.0-cuda12"``.
+        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:1.19.0-cuda12"``.
     """
     from llenergymeasure import __version__
 
