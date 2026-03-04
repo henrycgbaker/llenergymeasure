@@ -256,8 +256,11 @@ class VLLMBackend:
 
         logger.info("vLLM model loaded successfully")
 
-        # Build SamplingParams from DecoderConfig
-        sampling_params = self._build_sampling_params(config, SamplingParams)
+        # Build SamplingParams or BeamSearchParams depending on config
+        if config.vllm is not None and config.vllm.beam_search is not None:
+            sampling_params = self._build_beam_search_params(config, config.vllm.beam_search)
+        else:
+            sampling_params = self._build_sampling_params(config, SamplingParams)
         return llm, sampling_params
 
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
@@ -308,6 +311,39 @@ class VLLMBackend:
                     "num_speculative_tokens": engine.num_speculative_tokens,
                 }
 
+            # New Phase 19.2 engine fields
+            _set("disable_custom_all_reduce", engine.disable_custom_all_reduce)
+            _set("kv_cache_memory_bytes", engine.kv_cache_memory_bytes)
+            _set("offload_group_size", engine.offload_group_size)
+            _set("offload_num_in_group", engine.offload_num_in_group)
+            _set("offload_prefetch_step", engine.offload_prefetch_step)
+            _set("compilation_config", engine.compilation_config)
+
+            # offload_params: list[str] -> set[str] at wiring time (vLLM expects set[str])
+            if engine.offload_params is not None:
+                kwargs["offload_params"] = set(engine.offload_params)
+
+            # Attention config: wire individual fields as flat LLM() kwargs
+            if engine.attention is not None:
+                attn = engine.attention
+                # attention.backend -> attention_backend (vLLM kwarg name)
+                if attn.backend is not None:
+                    kwargs["attention_backend"] = attn.backend
+                _set("use_prefill_decode_attention", attn.use_prefill_decode_attention)
+                _set("use_prefill_query_quantization", attn.use_prefill_query_quantization)
+                _set("use_cudnn_prefill", attn.use_cudnn_prefill)
+                _set("disable_flashinfer_prefill", attn.disable_flashinfer_prefill)
+                _set("disable_flashinfer_q_quantization", attn.disable_flashinfer_q_quantization)
+                _set("use_trtllm_attention", attn.use_trtllm_attention)
+                _set("use_trtllm_ragged_deepseek_prefill", attn.use_trtllm_ragged_deepseek_prefill)
+                # Passthrough extras from VLLMAttentionConfig
+                if attn.model_extra:
+                    kwargs.update(attn.model_extra)
+
+            # Passthrough extras from VLLMEngineConfig (LAST — user extras can override)
+            if engine.model_extra:
+                kwargs.update(engine.model_extra)
+
         return kwargs
 
     @staticmethod
@@ -337,6 +373,11 @@ class VLLMBackend:
         Returns:
             SamplingParams instance.
         """
+        # Beam search path: use BeamSearchParams instead of SamplingParams
+        vllm_cfg = config.vllm
+        if vllm_cfg is not None and vllm_cfg.beam_search is not None:
+            return VLLMBackend._build_beam_search_params(config, vllm_cfg.beam_search)
+
         decoder = config.decoder
 
         # Greedy decode: temperature == 0.0 or do_sample is False
@@ -379,8 +420,40 @@ class VLLMBackend:
                 kwargs["frequency_penalty"] = sampling.frequency_penalty
             if sampling.ignore_eos is not None:
                 kwargs["ignore_eos"] = sampling.ignore_eos
+            if sampling.n is not None:
+                kwargs["n"] = sampling.n
+            # Passthrough extras from VLLMSamplingConfig
+            if sampling.model_extra:
+                kwargs.update(sampling.model_extra)
 
         return sampling_params_cls(**kwargs)
+
+    @staticmethod
+    def _build_beam_search_params(config: ExperimentConfig, beam_cfg: Any) -> Any:
+        """Build vllm.BeamSearchParams from VLLMBeamSearchConfig.
+
+        Args:
+            config: Experiment configuration (for max_output_tokens fallback).
+            beam_cfg: VLLMBeamSearchConfig instance.
+
+        Returns:
+            BeamSearchParams instance.
+        """
+        from vllm import BeamSearchParams
+
+        kwargs: dict[str, Any] = {}
+        if beam_cfg.beam_width is not None:
+            kwargs["beam_width"] = beam_cfg.beam_width
+        if beam_cfg.length_penalty is not None:
+            kwargs["length_penalty"] = beam_cfg.length_penalty
+        if beam_cfg.early_stopping is not None:
+            kwargs["early_stopping"] = beam_cfg.early_stopping
+        # max_tokens: beam_search overrides config.max_output_tokens if set
+        kwargs["max_tokens"] = beam_cfg.max_tokens or config.max_output_tokens
+        # Passthrough extras from VLLMBeamSearchConfig
+        if beam_cfg.model_extra:
+            kwargs.update(beam_cfg.model_extra)
+        return BeamSearchParams(**kwargs)
 
     # -------------------------------------------------------------------------
     # Prompt preparation
@@ -448,8 +521,13 @@ class VLLMBackend:
         try:
             with PowerThermalSampler(device_index=0) as sampler:
                 t0 = time.perf_counter()
-                # Single generate() call with ALL prompts — offline batch
-                outputs = llm.generate(prompts, sampling_params)
+                # BeamSearchParams uses llm.beam_search(), SamplingParams uses llm.generate()
+                from vllm import BeamSearchParams as _BSP
+
+                if isinstance(sampling_params, _BSP):
+                    outputs = llm.beam_search(prompts, sampling_params)
+                else:
+                    outputs = llm.generate(prompts, sampling_params)
                 elapsed = time.perf_counter() - t0
                 data.total_time_sec = elapsed
                 data.batch_times.append(elapsed)
