@@ -206,7 +206,7 @@ def _load_synthetic(config: object, n: int) -> list[str]:
     words = ["Hello", "world", "the", "a", "is", "it", "this", "that", "with", "for"]
 
     prompts: list[str] = []
-    for i in range(n):
+    for _i in range(n):
         selected = [rng.choice(words) for _ in range(words_per_prompt)]
         prompts.append(" ".join(selected))
 

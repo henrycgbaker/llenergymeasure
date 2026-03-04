@@ -36,7 +36,7 @@ def test_aienergyscore_has_1000_prompts() -> None:
     from llenergymeasure.datasets import aienergyscore
 
     lines = aienergyscore.read_text(encoding="utf-8").splitlines()
-    prompt_lines = [l for l in lines if l.strip() and not l.startswith('{"_provenance')]
+    prompt_lines = [line for line in lines if line.strip() and not line.startswith('{"_provenance')]
     assert len(prompt_lines) == 1000, f"Expected 1000 prompt lines, got {len(prompt_lines)}"
 
 
@@ -157,7 +157,7 @@ def test_load_prompts_grouped_ordering() -> None:
 
     # Check if dataset has source field
     lines = aienergyscore.read_text(encoding="utf-8").splitlines()
-    prompt_lines = [l for l in lines if l.strip() and not l.startswith('{"_provenance')]
+    prompt_lines = [line for line in lines if line.strip() and not line.startswith('{"_provenance')]
     first_record = json.loads(prompt_lines[0])
 
     if "source" not in first_record:
@@ -177,7 +177,7 @@ def test_load_prompts_grouped_ordering() -> None:
 
     # Get sources for the first 100 prompts in grouped order
     grouped_records = sorted(
-        [json.loads(l) for l in prompt_lines[:200]],
+        [json.loads(line) for line in prompt_lines[:200]],
         key=lambda r: r.get("source", ""),
     )[:100]
     grouped_sources = [r.get("source", "") for r in grouped_records]
