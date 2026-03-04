@@ -60,7 +60,7 @@ class TestGetDefaultImage:
         ):
             image = get_default_image("vllm")
 
-        assert image.startswith("ghcr.io/llenergymeasure/vllm:")
+        assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:")
         assert "cuda12" in image
 
     def test_fallback_to_latest_when_cuda_unknown(self):

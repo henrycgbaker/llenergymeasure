@@ -44,12 +44,12 @@ class DockerRunner:
         3. ``docker run --rm --gpus all -v {exchange_dir}:/run/llem``
                ``-e LLEM_CONFIG_PATH=/run/llem/{config_hash}_config.json``
                ``--shm-size 8g {image}``
-               ``python -m llenergymeasure.infra.container_entrypoint``
+               ``python3 -m llenergymeasure.infra.container_entrypoint``
         4. Read ``{config_hash}_result.json`` from exchange dir
         5. Clean up temp dir on success; preserve on failure with debug path logged
 
     Args:
-        image:   Docker image to run (e.g. ``"ghcr.io/llenergymeasure/vllm:1.19.0-cuda12"``).
+        image:   Docker image to run (e.g. ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:1.19.0-cuda12"``).
         timeout: Optional wall-clock timeout in seconds. None = no timeout.
         source:  Runner resolution source string (e.g. ``"yaml"``, ``"auto_detected"``).
                  Recorded in result effective_config for traceability.
@@ -186,7 +186,7 @@ class DockerRunner:
         cmd.extend(
             [
                 self.image,
-                "python",
+                "python3",
                 "-m",
                 "llenergymeasure.infra.container_entrypoint",
             ]
