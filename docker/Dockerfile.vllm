@@ -19,15 +19,17 @@ FROM vllm/vllm-openai:${VLLM_VERSION}
 # which conflicts with DockerRunner's command override pattern.
 ENTRYPOINT []
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 WORKDIR /app
 
 # Install llenergymeasure from source (no PyPI yet).
 # --no-deps on the package itself avoids re-installing vLLM/torch.
 # Then install remaining runtime deps that aren't in the vLLM image.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir --no-deps ".[vllm]" \
-    && pip install --no-cache-dir \
+RUN uv pip install --system --no-cache --no-deps ".[vllm]" \
+    && uv pip install --system --no-cache \
         pydantic loguru typer pyyaml platformdirs nvidia-ml-py numpy \
         pyarrow tqdm codecarbon datasets python-dotenv
 

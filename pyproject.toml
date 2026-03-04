@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llenergymeasure"
-version = "1.18.0"
+version = "0.8.0"
 description = "LLenergyMeasure - LLM inference efficiency measurement framework"
 authors = [
     {name = "henrycgbaker", email = "henry.c.g.baker@gmail.com"},
@@ -37,19 +37,14 @@ tensorrt = ["tensorrt-llm>=0.12"]
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
 webhooks = ["httpx>=0.23"]
+
+[dependency-groups]
 dev = [
-    # Test/lint tooling
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "ruff>=0.8",
     "mypy>=1.0",
     "types-pyyaml>=6.0.12",
-    # All CPU-testable backends (vllm/tensorrt need GPU runtime)
-    "llenergymeasure[pytorch,codecarbon,zeus,webhooks]",
-]
-dev-gpu = [
-    # Everything in dev + GPU-only backends
-    "llenergymeasure[dev,vllm,tensorrt]",
 ]
 
 [project.scripts]
@@ -102,6 +97,26 @@ exclude = [
     "results/aggregation\\.py",
     "core/timeseries\\.py",
     "core/backends/pytorch\\.py",
+]
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com/"
+
+[tool.uv]
+# vllm and tensorrt pin incompatible torch versions — mark as mutually exclusive extras
+conflicts = [
+    [
+        { extra = "vllm" },
+        { extra = "tensorrt" },
+    ],
+]
+# tensorrt-llm and some vllm transitive deps exist on both nvidia and pypi indexes;
+# unsafe-best-match allows uv to pick the best version across all registered indexes
+index-strategy = "unsafe-best-match"
+override-dependencies = [
+    "flashinfer @ git+https://github.com/flashinfer-ai/flashinfer.git@06309c4e",
+    "s2wrapper @ git+https://github.com/bfshi/scaling_on_scales.git@60da2afe",
 ]
 
 [tool.pytest.ini_options]

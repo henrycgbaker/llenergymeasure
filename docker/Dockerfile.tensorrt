@@ -20,6 +20,8 @@ ARG BASE_IMAGE=llenergymeasure-base:latest
 # ============================================================================
 FROM ${BASE_IMAGE} AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Install MPI libraries required by TensorRT-LLM for multi-GPU execution
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libopenmpi3 openmpi-bin openmpi-common \
@@ -32,18 +34,18 @@ WORKDIR /build
 # Note: tensorrt-llm has strict CUDA version requirements
 # Requires NVIDIA PyPI index for the actual wheel download
 # Fix dependency versions: onnx 1.16.0 for graphsurgeon, cuda-python 12.4.0 for CUDA bindings
-RUN pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com/ "tensorrt-llm>=0.21.0,<1.0.0" \
-    && pip install --no-cache-dir "onnx==1.16.0" "cuda-python==12.4.0"
+RUN uv pip install --system --no-cache --extra-index-url https://pypi.nvidia.com/ "tensorrt-llm>=0.21.0,<1.0.0" \
+    && uv pip install --system --no-cache "onnx==1.16.0" "cuda-python==12.4.0"
 
 # Copy project files
-COPY pyproject.toml poetry.lock* README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 
 # Install the package with tensorrt extras (--no-deps to avoid torch conflict)
 # Then install remaining dependencies for HuggingFace compatibility
 # Includes: peft (LoRA), sentencepiece (Llama/Qwen tokenizers), safetensors (model loading)
-RUN pip install --no-cache-dir --no-deps ".[tensorrt]" \
-    && pip install --no-cache-dir \
+RUN uv pip install --system --no-cache --no-deps ".[tensorrt]" \
+    && uv pip install --system --no-cache \
         pydantic loguru typer codecarbon datasets schedule python-dotenv \
         transformers accelerate huggingface_hub sentencepiece peft safetensors
 
@@ -73,6 +75,8 @@ CMD ["lem", "--help"]
 # ============================================================================
 FROM ${BASE_IMAGE} AS dev
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Install MPI libraries required by TensorRT-LLM for multi-GPU execution
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libopenmpi3 openmpi-bin openmpi-common \
@@ -81,18 +85,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install TensorRT-LLM (brings its own PyTorch)
 # Use 0.21.x series - compatible with CUDA 12.4 base image
 # Fix dependency versions: onnx 1.16.0 for graphsurgeon, cuda-python 12.4.0 for CUDA bindings
-RUN pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com/ "tensorrt-llm>=0.21.0,<1.0.0" \
-    && pip install --no-cache-dir "onnx==1.16.0" "cuda-python==12.4.0"
+RUN uv pip install --system --no-cache --extra-index-url https://pypi.nvidia.com/ "tensorrt-llm>=0.21.0,<1.0.0" \
+    && uv pip install --system --no-cache "onnx==1.16.0" "cuda-python==12.4.0"
 
 # Copy project files and install with tensorrt + dev extras
 # (--no-deps to avoid torch conflict, then install remaining deps)
-COPY pyproject.toml poetry.lock* README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir --no-deps ".[tensorrt]" \
-    && pip install --no-cache-dir \
+RUN uv pip install --system --no-cache --no-deps ".[tensorrt]" \
+    && uv pip install --system --no-cache \
         pydantic loguru typer codecarbon datasets schedule python-dotenv \
         transformers accelerate huggingface_hub sentencepiece peft safetensors \
-        pytest pytest-cov ruff mypy pre-commit commitizen
+        pytest pytest-cov ruff mypy pre-commit
 
 # TensorRT engine cache directory
 ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines

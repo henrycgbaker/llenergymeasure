@@ -6,30 +6,38 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  UV_FROZEN: "true"
+  UV_NO_PROGRESS: "1"
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v7
         with:
+          enable-cache: true
+          cache-suffix: lint-3.12
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
+      - run: uv sync --dev
       - name: Ruff lint
-        run: ruff check src/ tests/
+        run: uv run ruff check src/ tests/
       - name: Ruff format check
-        run: ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/
 
   type-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v7
         with:
+          enable-cache: true
+          cache-suffix: type-check-3.12
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
+      - run: uv sync --dev
       - name: mypy
-        run: mypy src/
+        run: uv run mypy src/
 
   test:
     runs-on: ubuntu-latest
@@ -38,11 +46,13 @@ jobs:
         python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v7
         with:
+          enable-cache: true
+          cache-suffix: test-${{ matrix.python-version }}
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
+      - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus --extra webhooks
       - name: Unit tests
-        run: pytest tests/unit/ -m "not gpu" -v --tb=short
+        run: uv run pytest tests/unit/ -m "not gpu" -v --tb=short
       - name: Import validation
-        run: python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
+        run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"

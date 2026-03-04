@@ -1,11 +1,19 @@
 name: GPU CI
 
+# GPU CI disabled — deferred to Phase 22 (GPU runner strategy)
+# on:
+#   push:
+#     branches: [main]
+#   schedule:
+#     - cron: "0 2 * * 1"  # Weekly Monday 02:00 UTC
+#   workflow_dispatch:
 on:
-  push:
-    branches: [main]
-  schedule:
-    - cron: "0 2 * * 1"  # Weekly Monday 02:00 UTC
-  workflow_dispatch:       # Manual trigger
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "GPU CI is disabled. Use manual trigger only for testing."
+        required: true
+        type: boolean
 
 jobs:
   gpu-integration:

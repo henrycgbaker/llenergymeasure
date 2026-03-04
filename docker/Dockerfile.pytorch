@@ -15,13 +15,15 @@ ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 
 FROM pytorch/pytorch:${PYTORCH_VERSION}
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 WORKDIR /app
 
 # Install llenergymeasure with pytorch extras from source (no PyPI yet).
 # sentencepiece needed for Llama/Qwen tokenisers.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir ".[pytorch]" sentencepiece
+RUN uv pip install --system --no-cache ".[pytorch]" sentencepiece
 
 # HuggingFace cache — writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface

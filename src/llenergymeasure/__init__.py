@@ -13,7 +13,7 @@ from llenergymeasure._api import run_experiment, run_study
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 
-__version__: str = "1.18.0"
+__version__: str = "0.8.0"
 
 __all__ = [
     "ExperimentConfig",
