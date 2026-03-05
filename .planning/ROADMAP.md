@@ -61,7 +61,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 21.1: CI & Versioning Scaffold** - INSERTED — Migrate CI to uv, reset version scheme to 0.x, revert docker-publish removal, improve release workflow (completed 2026-03-04)
 - [x] **Phase 22: Testing and CI** - Test strategy review, CI pipeline improvements, Docker path SIGINT verification, coverage analysis (completed 2026-03-05)
 - [x] **Phase 23: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference (completed 2026-03-05)
-- [ ] **Phase 24: M3 Integration Fixes and Retroactive Verification** - Fix preflight runner resolution, add GPU memory check to single-experiment path, retroactive verification of phases 18/20/21
+- [x] **Phase 24: M3 Integration Fixes and Retroactive Verification** - Fix preflight runner resolution, add GPU memory check to single-experiment path, retroactive verification of phases 18/20/21 (completed 2026-03-05)
 
 ## Phase Details
 
@@ -255,7 +255,7 @@ Phase 24 (Gap closure) after milestone audit.
 | 21.1. CI & Versioning Scaffold | 2/2 | Complete    | 2026-03-04 |
 | 22. Testing and CI | 4/4 | Complete    | 2026-03-05 |
 | 23. Documentation | 5/5 | Complete    | 2026-03-05 |
-| 24. Integration Fixes + Verification | 0/2 | Pending    | — |
+| 24. Integration Fixes + Verification | 2/2 | Complete    | 2026-03-05 |
 
 ---
 
