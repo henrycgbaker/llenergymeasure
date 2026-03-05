@@ -42,6 +42,7 @@ webhooks = ["httpx>=0.23"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.8",
     "mypy>=1.0",
     "types-pyyaml>=6.0.12",
@@ -123,7 +124,9 @@ override-dependencies = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short -m \"not gpu\""
+addopts = "-v --tb=short -m \"not gpu and not docker\""
 markers = [
     "gpu: marks tests as requiring GPU hardware (deselect with '-m \"not gpu\"')",
+    "docker: marks tests as requiring Docker with NVIDIA runtime",
+    "slow: marks tests as slow (>30s); excluded from Tier 1 fast runs",
 ]
