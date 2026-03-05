@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-04T15:24:18.345Z"
+last_updated: "2026-03-05T16:50:52Z"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 23 in progress. Plan 23-01 complete.
-Next: Phase 23 plans 02-05 (write doc files)
-Status: Foundation complete - stale docs deleted, auto-generation pipeline working, CI freshness check added.
-Last activity: 2026-03-05 - Phase 23 plan 01 complete (branch: gsd/phase-23-documentation)
+Phase: 23 in progress. Plan 23-02 complete.
+Next: Phase 23 plans 03-05 (remaining doc files)
+Status: Core researcher onboarding docs complete - installation.md, getting-started.md, cli-reference.md written.
+Last activity: 2026-03-05 - Phase 23 plan 02 complete (branch: gsd/phase-23-documentation)
 
-Progress: [█████████░] 91% (Phase 23 plans 02-05 remaining)
+Progress: [█████████░] 92% (Phase 23 plans 03-05 remaining)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 17
-- Average duration: 210s
-- Total execution time: 6242s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s)
+- Total plans completed (M3): 18
+- Average duration: 207s
+- Total execution time: 6348s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s)
 
 *Updated after each plan completion*
 
@@ -94,6 +94,8 @@ Progress: [█████████░] 91% (Phase 23 plans 02-05 remaining)
 - [Phase 22-04]: Study fixture uses experiments: list with warmup.enabled=false and baseline.enabled=false — avoids 30s+ thermal floor wait in CI
 - [Phase 23-01]: typer 0.24.1 has no get_docs_for_typer_app — use typer.main.get_command(app) + click introspection for CLI reference generation
 - [Phase 23-01]: Base install (uv sync --dev, no extras) sufficient for docs scripts — model_json_schema() does not import pytorch at runtime
+- [Phase 23-02]: Annotated output in getting-started.md constructed from _display.py source — host cannot run pytorch outside containers; constructed output matches exact print_result_summary() format
+- [Phase 23-02]: CLI reference supplements auto-generated flag table with manually written context (effective defaults, exit codes, examples) — generator output alone is incomplete as a reference
 
 ### Carried Items
 
@@ -108,5 +110,5 @@ Progress: [█████████░] 91% (Phase 23 plans 02-05 remaining)
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 23 plan 01 complete. Foundation work done: stale docs deleted, generate_config_docs.py (model_json_schema), generate_cli_reference.py (click introspection), CI docs-freshness job.
+Stopped at: Phase 23 plan 02 complete. Core researcher onboarding docs written: installation.md, getting-started.md (two-track: PyTorch + Docker), cli-reference.md (all 15 flags + study mode defaults).
 Resume file: None
