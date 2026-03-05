@@ -282,6 +282,12 @@ def _run_in_process(
     config_hash = compute_measurement_config_hash(config)
     cycle = 1
 
+    # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)
+    # Mirrors the pattern used in StudyRunner._run_one() and _run_one_docker().
+    from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
+
+    check_gpu_memory_residual()
+
     # Check runner spec for this backend
     spec = runner_specs.get(config.backend) if runner_specs else None
 
