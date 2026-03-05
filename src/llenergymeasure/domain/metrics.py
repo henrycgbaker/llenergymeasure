@@ -377,8 +377,24 @@ class ComputeMetrics(BaseModel):
     flops_total: float = Field(..., description="Total FLOPs for the inference")
     flops_per_token: float = Field(0.0, description="FLOPs per token")
     flops_per_second: float = Field(0.0, description="FLOPs throughput")
-    peak_memory_mb: float = Field(0.0, description="Peak GPU memory usage in MB")
-    model_memory_mb: float = Field(0.0, description="Model memory footprint in MB")
+    peak_memory_mb: float = Field(
+        0.0,
+        description=(
+            "Peak GPU memory allocated during the inference measurement window (MB). "
+            "Captured via torch.cuda.max_memory_allocated() after resetting stats at "
+            "measurement start (post-warmup). Reflects KV cache + activations + "
+            "batch buffers, NOT model weights. 0.0 = not measured."
+        ),
+    )
+    model_memory_mb: float = Field(
+        0.0,
+        description=(
+            "GPU memory after model load, before inference (MB). "
+            "Represents model weights + framework overhead. "
+            "Captured via torch.cuda.max_memory_allocated() immediately after from_pretrained(). "
+            "0.0 = not measured."
+        ),
+    )
 
     flops_method: str = Field(
         "unknown", description="Method used to estimate FLOPs (calflops, architecture, parameter)"
@@ -423,7 +439,23 @@ class MemoryEfficiencyMetrics(BaseModel):
     # Raw memory values (always available)
     total_vram_mb: float = Field(default=0.0, description="Total GPU VRAM in MB")
     model_memory_mb: float = Field(default=0.0, description="Model weights memory in MB")
-    peak_memory_mb: float = Field(default=0.0, description="Peak memory during inference in MB")
+    peak_memory_mb: float = Field(
+        default=0.0,
+        description=(
+            "Peak GPU memory during inference measurement window (MB). "
+            "See ComputeMetrics.peak_memory_mb for full semantics. 0.0 = not measured."
+        ),
+    )
+    inference_memory_mb: float = Field(
+        default=0.0,
+        description=(
+            "Inference-only memory: peak minus model baseline (MB). "
+            "Derived: max(0.0, peak_memory_mb - model_memory_mb). "
+            "Represents KV cache + activations + batch buffers allocated during inference. "
+            "Computed by backend _build_result(), not by the caller. "
+            "0.0 = not measured or not computable."
+        ),
+    )
     kv_cache_mb: float | None = Field(default=None, description="KV cache memory in MB (vLLM only)")
 
     # Derived efficiency metrics (null if not computable)

@@ -37,6 +37,7 @@ class _MeasurementData:
     # Warmup tokens are excluded — only measurement window tokens are counted here.
     input_tokens: int = 0
     output_tokens: int = 0
+    model_memory_mb: float = 0.0
 
 
 class PyTorchBackend:
@@ -99,6 +100,15 @@ class PyTorchBackend:
 
         # 3. Load model + tokenizer
         model, tokenizer = self._load_model(config)
+
+        # Capture model memory baseline immediately after model load (weights + framework overhead).
+        # Must happen BEFORE warmup, which allocates KV cache and raises max_memory_allocated.
+        import torch as _torch
+
+        model_memory_mb = 0.0
+        if _torch.cuda.is_available():
+            model_memory_mb = _torch.cuda.max_memory_allocated() / (1024 * 1024)
+        logger.info("Model memory baseline (weights): %.1f MB", model_memory_mb)
 
         try:
             # 4. Prepare prompts
@@ -181,6 +191,7 @@ class PyTorchBackend:
         return self._build_result(
             config=config,
             data=result_data,
+            model_memory_mb=model_memory_mb,
             snapshot=snapshot,
             start_time=start_time,
             end_time=end_time,
@@ -442,6 +453,13 @@ class PyTorchBackend:
         if config.pytorch is not None and config.pytorch.batch_size is not None:
             batch_size = config.pytorch.batch_size
 
+        # Reset peak stats BEFORE the measurement loop so max_memory_allocated() below
+        # captures inference-window-only peak (KV cache + activations + batch buffers),
+        # NOT model weights already allocated by _load_model().
+        # Must come before PowerThermalSampler so the reset window matches the measurement window.
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+
         data = _MeasurementData()
         generate_kwargs = self._build_generate_kwargs(config)
 
@@ -689,6 +707,7 @@ class PyTorchBackend:
         self,
         config: ExperimentConfig,
         data: _MeasurementData,
+        model_memory_mb: float,
         snapshot,
         start_time: datetime,
         end_time: datetime,
@@ -712,6 +731,7 @@ class PyTorchBackend:
         Args:
             config: Experiment configuration.
             data: Raw measurement data from the measurement loop.
+            model_memory_mb: GPU memory after model load, before inference (MB).
             snapshot: EnvironmentSnapshot captured before model load.
             start_time: Measurement start time.
             end_time: Measurement end time.
@@ -727,6 +747,10 @@ class PyTorchBackend:
             Fully assembled ExperimentResult.
         """
         from llenergymeasure.core.baseline import create_energy_breakdown
+        from llenergymeasure.domain.metrics import (
+            ExtendedEfficiencyMetrics,
+            MemoryEfficiencyMetrics,
+        )
 
         experiment_id = f"{config.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 
@@ -749,6 +773,23 @@ class PyTorchBackend:
 
         # FLOPs from PaLM formula
         total_flops = flops_result.value if flops_result is not None else 0.0
+
+        # Memory metrics: inference-window-only peak (reset before loop) and derived delta.
+        # inference_memory_mb = peak (inference window) - model baseline (weights).
+        inference_memory_mb = max(0.0, data.peak_memory_mb - model_memory_mb)
+        logger.info(
+            "Memory: model=%.1fMB, peak_inference=%.1fMB, inference_delta=%.1fMB",
+            model_memory_mb,
+            data.peak_memory_mb,
+            inference_memory_mb,
+        )
+        extended_metrics = ExtendedEfficiencyMetrics(
+            memory=MemoryEfficiencyMetrics(
+                model_memory_mb=model_memory_mb,
+                peak_memory_mb=data.peak_memory_mb,
+                inference_memory_mb=inference_memory_mb,
+            )
+        )
 
         return ExperimentResult(
             experiment_id=experiment_id,
@@ -776,6 +817,7 @@ class PyTorchBackend:
             baseline_power_w=energy_breakdown.baseline_power_w if energy_breakdown else None,
             energy_adjusted_j=energy_breakdown.adjusted_j if energy_breakdown else None,
             measurement_warnings=measurement_warnings,
+            extended_metrics=extended_metrics,
         )
 
     # -------------------------------------------------------------------------

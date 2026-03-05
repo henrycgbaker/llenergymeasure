@@ -378,6 +378,7 @@ def test_build_result_uses_real_energy_values() -> None:
     result = backend._build_result(
         config=config,
         data=data,
+        model_memory_mb=0.0,
         snapshot=None,
         start_time=now,
         end_time=now,
@@ -421,6 +422,7 @@ def test_build_result_zero_energy_when_no_backend() -> None:
     result = backend._build_result(
         config=config,
         data=data,
+        model_memory_mb=0.0,
         snapshot=None,
         start_time=now,
         end_time=now,
@@ -490,6 +492,7 @@ def _make_build_result_args():
     return dict(
         config=config,
         data=data,
+        model_memory_mb=0.0,
         snapshot=None,
         start_time=now,
         end_time=now,
