@@ -372,7 +372,7 @@ class StudyRunner:
 
         timeout = _calculate_timeout(config)
 
-        child_conn, parent_conn = mp_ctx.Pipe(duplex=False)
+        parent_conn, child_conn = mp_ctx.Pipe(duplex=False)
         progress_queue = mp_ctx.Queue()
 
         p = mp_ctx.Process(
