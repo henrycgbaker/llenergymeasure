@@ -55,8 +55,11 @@ jobs:
       - name: Import validation
         run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
 
+  gpu:
+    uses: ./.github/workflows/gpu-ci.yml
+
   release:
-    needs: [lint, type-check, test]
+    needs: [lint, type-check, test, gpu]
     runs-on: ubuntu-latest
     permissions:
       contents: write

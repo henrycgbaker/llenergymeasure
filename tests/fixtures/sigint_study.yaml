@@ -1,0 +1,20 @@
+# Minimal study config for SIGINT verification testing.
+# Uses gpt2 (smallest HuggingFace model) for fast loading.
+# 3 cycles gives enough runtime to interrupt mid-study.
+# Warmup and baseline disabled to reduce pre-experiment wait time.
+
+name: sigint-test
+
+experiments:
+  - model: gpt2
+    backend: pytorch
+    n: 10
+    max_output_tokens: 32
+    warmup:
+      enabled: false
+    baseline:
+      enabled: false
+
+execution:
+  n_cycles: 3
+  cycle_order: sequential

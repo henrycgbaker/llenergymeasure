@@ -1,5 +1,8 @@
 name: Docker Publish
 
+# Builds and pushes all backend Docker images to GHCR on release.
+# Called by release.yml after tests pass, or manually via workflow_dispatch.
+
 on:
   workflow_call:
     inputs:
@@ -16,10 +19,12 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   docker-publish:
+    strategy:
+      matrix:
+        backend: [pytorch, vllm, tensorrt]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -38,7 +43,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.backend }}
           tags: |
             type=raw,value=${{ inputs.version }}
             type=raw,value=latest
@@ -46,7 +51,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile.vllm
+          file: docker/Dockerfile.${{ matrix.backend }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

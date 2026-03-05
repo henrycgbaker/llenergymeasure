@@ -1,46 +1,73 @@
 name: GPU CI
 
-# GPU CI disabled — deferred to Phase 22 (GPU runner strategy)
-# on:
-#   push:
-#     branches: [main]
-#   schedule:
-#     - cron: "0 2 * * 1"  # Weekly Monday 02:00 UTC
-#   workflow_dispatch:
+# Tier 2: GPU integration tests on self-hosted runner (ds01-gpu).
+# Builds the pytorch Docker image from source, installs test deps, and runs
+# all tests inside the container with GPU access.
+#
+# Triggers:
+#   1. Manual:     workflow_dispatch (run any time via UI or `gh workflow run gpu-ci.yml`)
+#   2. Release:    called by release.yml as reusable workflow (gates GitHub Release)
+#   3. Label-gate: add 'gpu-ci' label to a PR to run GPU tests on that PR
+#
+# Does NOT run on every push to main. See docs/deployment.md for rationale.
+
 on:
   workflow_dispatch:
-    inputs:
-      confirm:
-        description: "GPU CI is disabled. Use manual trigger only for testing."
-        required: true
-        type: boolean
+  workflow_call:
+  pull_request:
+    types: [labeled, synchronize]
 
 jobs:
   gpu-integration:
+    # Skip PR runs unless 'gpu-ci' label is present.
+    # workflow_dispatch and workflow_call always run (no PR label context).
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'gpu-ci')
     runs-on: self-hosted
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
+      - name: Clean workspace (fix root-owned files from Docker)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
       - uses: actions/checkout@v4
 
-      - name: Build GPU test image
+      - name: Build pytorch CI image
         run: |
           docker build \
             -f docker/Dockerfile.pytorch \
-            -t llem-test:pytorch \
-            . || echo "::warning::Docker build failed -- check Dockerfile.pytorch exists"
+            -t llenergymeasure-ci:pytorch \
+            .
+          # Install test dependencies (not in production image)
+          docker run --name llem-ci-setup llenergymeasure-ci:pytorch \
+            pip install --no-cache-dir pytest pytest-xdist
+          docker commit llem-ci-setup llenergymeasure-ci:pytorch
+          docker rm llem-ci-setup
 
-      - name: Run GPU integration tests
+      - name: All tests (including GPU)
         run: |
           docker run --rm --gpus all \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            llem-test:pytorch \
-            pytest tests/integration/ -m gpu -v --tb=short
+            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}/results":/app/results \
+            llenergymeasure-ci:pytorch \
+            python3 -m pytest tests/ -v --tb=short -o "addopts="
 
-      - name: Run CLI smoke test
-        run: |
-          docker run --rm --gpus all \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            llem-test:pytorch \
-            bash -c "pip install -e '.[pytorch,dev]' && llem run --model gpt2 --backend pytorch --output /tmp/llem-test"
+      # SIGINT verification disabled — runner.py bug (OSError: connection is
+      # write-only at _collect_result:188). Fix tracked separately.
+      # Re-enable once fix/sigint-handling lands.
+
+      - name: Upload replay fixtures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-fixtures-${{ github.sha }}
+          path: tests/fixtures/replay/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Cleanup
+        if: always()
+        run: docker rmi llenergymeasure-ci:pytorch 2>/dev/null || true

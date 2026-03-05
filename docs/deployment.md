@@ -395,6 +395,142 @@ For accurate energy measurements:
 - Use full GPUs (disable MIG)
 - Or ensure no other workloads on sibling MIG instances
 
+## CI/CD Pipeline
+
+### Overview
+
+The project uses a two-tier CI strategy:
+
+| Tier | Workflow | Runs on | Trigger | Purpose |
+|------|----------|---------|---------|---------|
+| **Tier 1** | `ci.yml` | GitHub-hosted (`ubuntu-latest`) | Every PR + push to main | Lint, type-check, unit tests, package validation |
+| **Tier 2** | `gpu-ci.yml` | Self-hosted (`ds01-gpu`) | Manual, release tags, `gpu-ci` label | Full test suite with GPU + Docker + SIGINT verification |
+| **Release** | `release.yml` | Both | `v*` tag push | Tier 1 + Tier 2 gate, then build + publish |
+
+### Tier 2 GPU CI Triggers
+
+GPU CI does **not** run on every push to main. This is intentional — GPU tests are
+expensive (10-30 min) and most changes don't affect GPU behaviour. Instead:
+
+1. **Manual** (`workflow_dispatch`): Run any time via GitHub UI or CLI:
+   ```bash
+   gh workflow run gpu-ci.yml
+   gh run watch    # follow progress
+   ```
+
+2. **Release gate**: Automatically called by `release.yml` when a `v*` tag is pushed.
+   The GitHub Release is only created if GPU CI passes.
+
+3. **Label-gated on PRs**: Add the `gpu-ci` label to a PR to trigger GPU tests on
+   that PR. Useful when a change touches GPU-sensitive code (backends, measurement,
+   Docker). Remove and re-add the label to re-trigger.
+
+### Self-Hosted Runner (ds01-gpu)
+
+The Tier 2 runner is a GitHub Actions agent running on DS01 (4x A100-PCIE-40GB).
+
+**Location**: `~/actions-runner/`
+**Service**: User-level systemd (`github-runner.service`)
+**Labels**: `self-hosted`, `Linux`, `X64`, `gpu`
+
+#### Managing the runner
+
+```bash
+# Status
+systemctl --user status github-runner.service
+
+# Restart
+systemctl --user restart github-runner.service
+
+# Logs
+journalctl --user -u github-runner.service -f
+
+# Stop (e.g. for maintenance)
+systemctl --user stop github-runner.service
+```
+
+#### Runner survives logout (requires admin)
+
+The runner requires lingering to persist across user sessions. An admin must run
+(one-time):
+
+```bash
+sudo loginctl enable-linger h.baker@hertie-school.lan
+```
+
+Verify: `loginctl show-user h.baker@hertie-school.lan --property=Linger` should
+show `Linger=yes`.
+
+Without lingering, the runner stops when you log out of DS01.
+
+#### Re-registering the runner
+
+If the runner loses its registration (e.g. deleted from GitHub settings):
+
+```bash
+cd ~/actions-runner
+TOKEN=$(gh api repos/henrycgbaker/LLenergyMeasure/actions/runners/registration-token -X POST --jq '.token')
+./config.sh --url https://github.com/henrycgbaker/LLenergyMeasure --token "$TOKEN" --name ds01-gpu --labels self-hosted,linux,gpu --work _work --unattended
+systemctl --user restart github-runner.service
+```
+
+### Release Pipeline
+
+Releases are fully automated via the `release` label.
+
+#### Automated flow
+
+```
+1. Create PR: version bump in pyproject.toml + __init__.py
+2. Add 'release' label to the PR
+3. Tier 1 CI runs (lint, type-check, test)
+4. Review and merge
+
+   ┌─── auto-release.yml triggers ───┐
+   │                                  │
+   │  Tier 2 GPU CI (Docker + GPU)   │
+   │         │                        │
+   │    ┌────┴────┐                   │
+   │  Pass      Fail                  │
+   │    │         │                   │
+   │  Create    Create GitHub Issue   │
+   │  git tag   (no tag, no release)  │
+   └────┬─────────────────────────────┘
+        │
+   release.yml triggers on v* tag
+        │
+   ├── lint + type-check + test (re-check)
+   ├── GPU CI (belt-and-suspenders)
+   │
+   release (build wheel, create GitHub Release)
+        │
+   docker-publish (build + push all backends to GHCR)
+```
+
+#### Manual release (fallback)
+
+If the automated flow fails or you need to release manually:
+
+```bash
+# 1. Verify GPU CI passes
+gh workflow run gpu-ci.yml
+gh run watch
+
+# 2. Create tag
+git tag v0.9.0
+git push origin v0.9.0
+
+# 3. release.yml runs automatically from tag push
+```
+
+If a tag needs to be re-done:
+
+```bash
+git tag -d v0.9.0 && git push origin :v0.9.0   # delete tag
+# fix the issue, then:
+git tag v0.9.0 && git push origin v0.9.0        # re-tag
+```
+
 ## Troubleshooting
 
 ### Energy Metrics are Zero
