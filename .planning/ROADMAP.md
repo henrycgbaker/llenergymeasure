@@ -235,7 +235,7 @@ Phase 22 (Testing/CI) before Phase 23 (Docs) — testing informs documentation.
 | 21. Measurement Carried Items | 2/2 | Complete    | 2026-03-05 |
 | 21.1. CI & Versioning Scaffold | 2/2 | Complete    | 2026-03-04 |
 | 22. Testing and CI | 4/4 | Complete    | 2026-03-05 |
-| 23. Documentation | 2/5 | In Progress|  |
+| 23. Documentation | 3/5 | In Progress|  |
 
 ---
 
