@@ -473,23 +473,21 @@ class VLLMBackend:
     # -------------------------------------------------------------------------
 
     def _prepare_prompts(self, config: ExperimentConfig) -> list[str]:
-        """Prepare prompts for inference.
+        """Prepare prompts for inference using the dataset loader.
 
-        M1 placeholder: generates simple synthetic prompts. Dataset loading
-        (aienergyscore.jsonl + SyntheticDatasetConfig) is a deferred M1 item.
+        Delegates to the datasets module which handles built-in datasets
+        (aienergyscore), user-supplied JSONL files, and synthetic prompts.
 
         Args:
-            config: Experiment configuration (uses config.n for count).
+            config: Experiment configuration (uses config.dataset, config.n).
 
         Returns:
             List of config.n prompt strings.
         """
-        # M1 placeholder — generates simple prompts of roughly max_input_tokens length
-        # A single token is ~4 chars; we use "Hello, " repeated as a simple approximation
-        words_per_prompt = max(1, config.max_input_tokens // 4)
-        base_prompt = ("Hello, " * words_per_prompt).strip()
-        prompts = [base_prompt] * config.n
-        logger.debug("Prepared %d prompts (M1 placeholder)", config.n)
+        from llenergymeasure.datasets.loader import load_prompts
+
+        prompts = load_prompts(config)
+        logger.debug("Prepared %d prompts via dataset loader", len(prompts))
         return prompts
 
     # -------------------------------------------------------------------------
