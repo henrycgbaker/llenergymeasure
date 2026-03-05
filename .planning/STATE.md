@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-05T18:08:45.000Z"
+last_updated: "2026-03-05T16:59:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 23 in progress. Plan 23-04 complete.
-Next: Phase 23 plan 05 (policy maker guides)
-Status: Study/sweep YAML reference, energy measurement, methodology, and troubleshooting docs complete.
-Last activity: 2026-03-05 - Phase 23 plan 04 complete (branch: gsd/phase-23-documentation)
+Phase: 23 complete. All 5 plans complete.
+Next: Milestone completion (v0.9.0 M3)
+Status: Full 13-file documentation set complete — 9 researcher docs + 4 policy maker guides + rewritten README.
+Last activity: 2026-03-05 - Phase 23 plan 05 complete (branch: gsd/phase-23-documentation)
 
-Progress: [█████████░] 95% (Phase 23 plan 05 remaining)
+Progress: [██████████] 100% (Phase 23 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 20
-- Average duration: 206s
-- Total execution time: 6799s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s)
+- Total plans completed (M3): 21
+- Average duration: 205s
+- Total execution time: 7022s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s + 223s)
 
 *Updated after each plan completion*
 
@@ -98,6 +98,8 @@ Progress: [█████████░] 95% (Phase 23 plan 05 remaining)
 - [Phase 23-02]: CLI reference supplements auto-generated flag table with manually written context (effective defaults, exit codes, examples) — generator output alone is incomplete as a reference
 - [Phase 23-documentation]: Parameter support matrix in backends.md manually constructed from Pydantic config models; GPU test results required for full regeneration via generate_param_matrix.py
 - [Phase 23-04]: WarmupConfig thermal_floor_seconds default is 60.0s (not 30s as stated in plan) — corrected from Pydantic model source; aligned with MLPerf Power minimum
+- [Phase 23-05]: README rewritten as concise 75-line overview with links to all 13 docs — no inline content per CONTEXT.md decision
+- [Phase 23-05]: Policy maker guides are self-contained — guide-comparison-context.md explains CodeCarbon and Zeus as measurement backends (not separate benchmarks) to avoid reader confusion
 
 ### Carried Items
 
@@ -112,5 +114,5 @@ Progress: [█████████░] 95% (Phase 23 plan 05 remaining)
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 23 plan 04 complete. study-config.md (7 sweep grammar patterns, inlined config reference), energy-measurement.md, methodology.md, troubleshooting.md (inlined invalid combos) written.
+Stopped at: Phase 23 complete. All 13 docs written (9 researcher + 4 policy maker guides). README rewritten as overview with links.
 Resume file: None
