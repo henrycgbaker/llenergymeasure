@@ -2,9 +2,9 @@
 # SIGINT verification: confirms that sending SIGINT to a running study
 # preserves the manifest file with status 'interrupted' and exits with code 130.
 #
-# Requires: GPU hardware, gpt2 model cached, llem installed (uv run)
-# Runs in: Tier 2 GPU CI (self-hosted DS01)
-# Must be run from repository root.
+# Requires: GPU hardware (CUDA), gpt2 model cached, llem installed
+# Runs in: Tier 2 GPU CI inside Docker container (ds01-gpu)
+# Must be run from repository root (or /app inside container).
 set -euo pipefail
 
 STUDY_YAML="tests/fixtures/sigint_study.yaml"
@@ -12,15 +12,26 @@ RESULTS_DIR="results"
 # Seconds to wait for manifest to appear before sending SIGINT
 POLL_TIMEOUT=120
 
+# Force local runner — inside a container, we already have CUDA.
+export LLEM_RUNNER_PYTORCH=local
+
+# Use llem directly if available (container), else uv run (host)
+if command -v llem &>/dev/null; then
+    LLEM_CMD="llem"
+else
+    LLEM_CMD="uv run llem"
+fi
+
 echo "=== SIGINT Verification ==="
 echo "Config: $STUDY_YAML"
 echo "Results dir: $RESULTS_DIR"
+echo "Runner: $LLEM_CMD"
 
 # Record start time for finding the manifest created by this run
 START_EPOCH=$(date +%s)
 
 # Launch llem run in background (study path: manifest written to results/)
-uv run llem run "$STUDY_YAML" &
+$LLEM_CMD run "$STUDY_YAML" &
 LLEM_PID=$!
 echo "Started llem (PID $LLEM_PID)"
 

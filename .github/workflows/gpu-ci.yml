@@ -1,6 +1,9 @@
 name: GPU CI
 
 # Tier 2: GPU integration tests on self-hosted runner (ds01-gpu).
+# Builds the pytorch Docker image from source, installs test deps, and runs
+# all tests inside the container with GPU access.
+#
 # Triggers:
 #   1. Manual:     workflow_dispatch (run any time via UI or `gh workflow run gpu-ci.yml`)
 #   2. Release:    called by release.yml as reusable workflow (gates GitHub Release)
@@ -14,10 +17,6 @@ on:
   pull_request:
     types: [labeled, synchronize]
 
-env:
-  UV_FROZEN: "true"
-  UV_NO_PROGRESS: "1"
-
 jobs:
   gpu-integration:
     # Skip PR runs unless 'gpu-ci' label is present.
@@ -30,26 +29,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-suffix: gpu-3.12
-          python-version: "3.12"
+      - name: Build pytorch CI image
+        run: |
+          docker build \
+            -f docker/Dockerfile.pytorch \
+            -t llenergymeasure-ci:pytorch \
+            .
+          # Install test dependencies (not in production image)
+          docker run --name llem-ci-setup llenergymeasure-ci:pytorch \
+            pip install --no-cache-dir pytest pytest-xdist
+          docker commit llem-ci-setup llenergymeasure-ci:pytorch
+          docker rm llem-ci-setup
 
-      - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus
-
-      - name: Cache HuggingFace models
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: hf-models-${{ hashFiles('tests/fixtures/model_list.txt') }}
-          restore-keys: hf-models-
-
-      - name: All tests (including GPU + Docker)
-        run: uv run pytest tests/ -v --tb=short
+      - name: All tests (including GPU)
+        run: |
+          docker run --rm --gpus all \
+            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}/results":/app/results \
+            llenergymeasure-ci:pytorch \
+            python3 -m pytest tests/ -v --tb=short
 
       - name: SIGINT verification
-        run: bash tests/integration/sigint_verify.sh
+        run: |
+          docker run --rm --gpus all \
+            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}/results":/app/results \
+            llenergymeasure-ci:pytorch \
+            bash tests/integration/sigint_verify.sh
 
       - name: Upload replay fixtures
         if: always()
@@ -59,3 +65,7 @@ jobs:
           path: tests/fixtures/replay/
           retention-days: 30
           if-no-files-found: ignore
+
+      - name: Cleanup
+        if: always()
+        run: docker rmi llenergymeasure-ci:pytorch 2>/dev/null || true
