@@ -351,9 +351,7 @@ def aggregate_results(
 
     # Warmup result: take from first process if not provided
     if warmup_result is None:
-        warmup_result = next(
-            (p.warmup_result for p in raw_results if p.warmup_result), None
-        )
+        warmup_result = next((p.warmup_result for p in raw_results if p.warmup_result), None)
 
     return ExperimentResult(
         schema_version="2.0",
