@@ -1,258 +1,234 @@
 #!/usr/bin/env python3
-"""Generate configuration reference documentation from Pydantic models.
+"""Generate configuration reference documentation from ExperimentConfig JSON schema.
 
-This script extracts parameter information from the ExperimentConfig Pydantic model
-and generates markdown documentation. Run this script to regenerate docs after
-changing config models.
+Uses Pydantic model_json_schema() to extract the full schema, then renders
+a structured Markdown reference grouped by section.
 
 Usage:
     python scripts/generate_config_docs.py
+    python scripts/generate_config_docs.py --output docs/study-config-reference.md
 
 Output:
-    docs/generated/config-reference.md
+    Markdown to stdout (or --output path). Suitable for inlining into docs/study-config.md.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Any, get_args, get_origin
+from typing import Any
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
-from pydantic import BaseModel  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Schema helpers
+# ---------------------------------------------------------------------------
 
 
-def get_type_str(annotation: Any) -> str:
-    """Convert a type annotation to a readable string.
+def _resolve_ref(ref: str, defs: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a $ref string to its definition dict."""
+    name = ref.split("/")[-1]
+    return defs.get(name, {})
 
-    Args:
-        annotation: Type annotation from model field.
 
-    Returns:
-        Human-readable type string.
-    """
-    if annotation is None:
-        return "Any"
+def _type_label(prop: dict[str, Any], defs: dict[str, Any]) -> str:
+    """Return a human-readable type string for a schema property."""
+    if "$ref" in prop:
+        return _resolve_ref(prop["$ref"], defs).get("title", prop["$ref"].split("/")[-1])
 
-    origin = get_origin(annotation)
-    args = get_args(annotation)
+    prop_type = prop.get("type")
 
-    # Handle Optional (Union with None)
-    if origin is type(None):
-        return "None"
+    # anyOf / allOf patterns (Optional[X] → anyOf: [X, null])
+    any_of = prop.get("anyOf") or prop.get("allOf")
+    if any_of:
+        non_null = [p for p in any_of if p.get("type") != "null"]
+        parts = [_type_label(p, defs) for p in non_null]
+        has_null = any(p.get("type") == "null" for p in any_of)
+        label = " | ".join(parts)
+        return f"{label} | None" if has_null else label
 
-    if origin in (list, set, tuple):
-        if args:
-            inner = ", ".join(get_type_str(a) for a in args)
-            return f"{origin.__name__}[{inner}]"
-        return origin.__name__
+    if "enum" in prop:
+        return " | ".join(repr(v) for v in prop["enum"])
 
-    if origin is dict:
-        if args and len(args) >= 2:
-            return f"dict[{get_type_str(args[0])}, {get_type_str(args[1])}]"
+    if prop_type == "array":
+        items = prop.get("items", {})
+        return f"list[{_type_label(items, defs)}]"
+
+    if prop_type == "object":
         return "dict"
 
-    # Handle Union types (including Optional which is Union[T, None])
-    if hasattr(origin, "__name__") and origin.__name__ == "Union":
-        non_none = [a for a in args if a is not type(None)]
-        if len(non_none) == 1 and type(None) in args:
-            # This is Optional[T]
-            return f"{get_type_str(non_none[0])} | None"
-        return " | ".join(get_type_str(a) for a in args)
-
-    # Handle Literal
-    if hasattr(origin, "__name__") and origin.__name__ == "Literal":
-        return f"Literal[{', '.join(repr(a) for a in args)}]"
-
-    if hasattr(annotation, "__name__"):
-        return annotation.__name__
-
-    return str(annotation).replace("typing.", "")
+    return prop_type or "any"
 
 
-def extract_field_info(model: type[BaseModel], prefix: str = "") -> list[dict[str, Any]]:
-    """Extract field information from a Pydantic model recursively.
-
-    Args:
-        model: Pydantic model class.
-        prefix: Path prefix for nested fields.
-
-    Returns:
-        List of field info dictionaries.
-    """
-    fields = []
-
-    for field_name, field_info in model.model_fields.items():
-        path = f"{prefix}{field_name}" if prefix else field_name
-        annotation = model.__annotations__.get(field_name)
-
-        # Check if this is a nested model
-        is_nested = (
-            annotation is not None
-            and isinstance(annotation, type)
-            and issubclass(annotation, BaseModel)
-        )
-
-        field_data = {
-            "path": path,
-            "name": field_name,
-            "type": get_type_str(annotation),
-            "default": _format_default(field_info.default),
-            "description": field_info.description or "",
-            "required": field_info.is_required(),
-            "is_nested": is_nested,
-        }
-
-        fields.append(field_data)
-
-        # Recursively extract nested model fields
-        if is_nested:
-            nested_fields = extract_field_info(annotation, prefix=f"{path}.")
-            fields.extend(nested_fields)
-
-    return fields
+def _default_label(prop: dict[str, Any]) -> str:
+    """Return a human-readable default value for a schema property."""
+    if "default" not in prop:
+        return "*(required)*"
+    val = prop["default"]
+    if val is None:
+        return "`null`"
+    if isinstance(val, bool):
+        return f"`{str(val).lower()}`"
+    if isinstance(val, str):
+        return f"`{val}`"
+    return f"`{val}`"
 
 
-def _format_default(default: Any) -> str:
-    """Format a default value for display."""
-    if default is None:
-        return "None"
-    if callable(default):
-        # Handle factory defaults
-        try:
-            val = default()
-            if isinstance(val, list | dict) and not val:
-                return f"{type(val).__name__}()"
-            return repr(val)
-        except Exception:
-            return "<factory>"
-    return repr(default)
+def _description(prop: dict[str, Any]) -> str:
+    return prop.get("description", "")
 
 
-def generate_markdown(fields: list[dict[str, Any]], presets: dict[str, Any]) -> str:
-    """Generate markdown documentation from field information.
+# ---------------------------------------------------------------------------
+# Section renderers
+# ---------------------------------------------------------------------------
 
-    Args:
-        fields: List of field info dictionaries.
-        presets: Dictionary of preset configurations.
+_SECTION_ORDER = [
+    ("top-level", "Top-Level Fields"),
+    ("decoder", "Decoder / Sampling (`decoder:`)"),
+    ("warmup", "Warmup (`warmup:`)"),
+    ("baseline", "Baseline (`baseline:`)"),
+    ("energy", "Energy (`energy:`)"),
+    ("pytorch", "PyTorch Backend (`pytorch:`)"),
+    ("vllm_engine", "vLLM Engine (`vllm.engine:`)"),
+    ("vllm_sampling", "vLLM Sampling (`vllm.sampling:`)"),
+    ("vllm_beam_search", "vLLM Beam Search (`vllm.beam_search:`)"),
+    ("vllm_attention", "vLLM Attention (`vllm.engine.attention:`)"),
+    ("tensorrt", "TensorRT-LLM Backend (`tensorrt:`)"),
+]
 
-    Returns:
-        Markdown string.
-    """
+# Map from JSON schema $defs key to our section key
+_DEF_TO_SECTION: dict[str, str] = {
+    "DecoderConfig": "decoder",
+    "WarmupConfig": "warmup",
+    "BaselineConfig": "baseline",
+    "EnergyConfig": "energy",
+    "PyTorchConfig": "pytorch",
+    "VLLMEngineConfig": "vllm_engine",
+    "VLLMSamplingConfig": "vllm_sampling",
+    "VLLMBeamSearchConfig": "vllm_beam_search",
+    "VLLMAttentionConfig": "vllm_attention",
+    "TensorRTConfig": "tensorrt",
+}
+
+
+def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
     lines = [
-        "# Configuration Reference",
+        "| Field | Type | Default | Description |",
+        "|-------|------|---------|-------------|",
+    ]
+    for name, prop in props.items():
+        # Resolve $ref to get actual property info
+        if "$ref" in prop:
+            section_name = prop["$ref"].split("/")[-1]
+            # Use field-level description (from ExperimentConfig.Field) not class docstring
+            desc = _description(prop)
+            lines.append(f"| `{name}` | {section_name} | *(see section)* | {desc} |")
+            continue
+
+        # anyOf with $ref (Optional[SubModel])
+        any_of = prop.get("anyOf") or []
+        ref_in_anyof = next((p for p in any_of if "$ref" in p), None)
+        if ref_in_anyof:
+            section_name = ref_in_anyof["$ref"].split("/")[-1]
+            # Use field-level description (from ExperimentConfig.Field) not class docstring
+            desc = _description(prop)
+            has_null = any(p.get("type") == "null" for p in any_of)
+            type_str = f"{section_name} | None" if has_null else section_name
+            default = _default_label(prop)
+            lines.append(f"| `{name}` | {type_str} | {default} | {desc} |")
+            continue
+
+        type_str = _type_label(prop, defs)
+        default = _default_label(prop)
+        desc = _description(prop)
+        lines.append(f"| `{name}` | {type_str} | {default} | {desc} |")
+    return lines
+
+
+def render_markdown(schema: dict[str, Any]) -> str:
+    defs = schema.get("$defs", {})
+    top_props = schema.get("properties", {})
+
+    # Build section content
+    sections: dict[str, list[str]] = {}
+
+    # Top-level fields
+    sections["top-level"] = _render_table(top_props, defs)
+
+    # Sub-model sections from $defs
+    for def_name, section_key in _DEF_TO_SECTION.items():
+        if def_name in defs:
+            def_schema = defs[def_name]
+            props = def_schema.get("properties", {})
+            if props:
+                sections[section_key] = _render_table(props, defs)
+
+    # Render output
+    lines: list[str] = [
+        "<!-- Auto-generated by scripts/generate_config_docs.py -- do not edit manually -->",
         "",
-        "> This file is auto-generated from Pydantic models. Do not edit manually.",
-        f"> Generated: {datetime.now().strftime('%Y-%m-%d')}",
+        "## Configuration Reference",
         "",
-        "## Table of Contents",
+        "Full reference for all `ExperimentConfig` fields.",
+        "All fields except `model` are optional and have sensible defaults.",
         "",
     ]
 
-    # Group by top-level section
-    sections: dict[str, list[dict[str, Any]]] = {}
-    for field in fields:
-        top_level = field["path"].split(".")[0]
-        if top_level not in sections:
-            sections[top_level] = []
-        sections[top_level].append(field)
+    # Table of contents
+    lines.append("**Sections:**")
+    for section_key, section_title in _SECTION_ORDER:
+        if section_key in sections:
+            anchor = section_title.lower()
+            for ch in " /`.:()`":
+                anchor = anchor.replace(ch, "-")
+            while "--" in anchor:
+                anchor = anchor.replace("--", "-")
+            anchor = anchor.strip("-")
+            lines.append(f"- [{section_title}](#{anchor})")
+    lines.append("")
 
-    # Generate TOC
-    for section in sorted(sections.keys()):
-        lines.append(f"- [{section}](#{section.lower().replace('_', '-')})")
-
-    lines.extend(["", "---", ""])
-
-    # Generate sections
-    for section in sorted(sections.keys()):
-        section_fields = sections[section]
-        lines.append(f"## {section}")
+    # Sections
+    for section_key, section_title in _SECTION_ORDER:
+        if section_key not in sections:
+            continue
+        lines.append(f"### {section_title}")
         lines.append("")
-
-        # Create table
-        lines.append("| Parameter | Type | Default | Description |")
-        lines.append("|-----------|------|---------|-------------|")
-
-        for field in section_fields:
-            path = field["path"]
-            type_str = field["type"].replace("|", "\\|")
-            default = field["default"].replace("|", "\\|")
-            desc = field["description"].replace("|", "\\|")
-            required = " *(required)*" if field["required"] else ""
-
-            lines.append(f"| `{path}` | {type_str} | {default}{required} | {desc} |")
-
-        lines.append("")
-
-    # Add presets section
-    lines.extend(
-        [
-            "---",
-            "",
-            "## Built-in Presets",
-            "",
-            "Presets provide convenient defaults for common use cases.",
-            "",
-        ]
-    )
-
-    for preset_name, preset_config in sorted(presets.items()):
-        lines.append(f"### {preset_name}")
-        lines.append("")
-        lines.append("```yaml")
-
-        for key, value in preset_config.items():
-            if isinstance(value, dict):
-                lines.append(f"{key}:")
-                for k, v in value.items():
-                    if isinstance(v, dict):
-                        lines.append(f"  {k}:")
-                        for kk, vv in v.items():
-                            lines.append(f"    {kk}: {_yaml_value(vv)}")
-                    else:
-                        lines.append(f"  {k}: {_yaml_value(v)}")
-            else:
-                lines.append(f"{key}: {_yaml_value(value)}")
-
-        lines.append("```")
+        lines.extend(sections[section_key])
         lines.append("")
 
     return "\n".join(lines)
 
 
-def _yaml_value(value: Any) -> str:
-    """Format a value for YAML display."""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, str):
-        return f'"{value}"'
-    if isinstance(value, list):
-        return repr(value)
-    return str(value)
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    """Generate configuration documentation."""
+    parser = argparse.ArgumentParser(description="Generate config reference Markdown")
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
+        help="Write output to this file path (default: stdout)",
+    )
+    args = parser.parse_args()
+
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.constants import PRESETS
 
-    print("Extracting field information from ExperimentConfig...")
-    fields = extract_field_info(ExperimentConfig)
-    print(f"  Found {len(fields)} parameters")
+    schema = ExperimentConfig.model_json_schema()
+    markdown = render_markdown(schema)
 
-    print("Generating markdown...")
-    markdown = generate_markdown(fields, PRESETS)
-
-    output_dir = project_root / "docs" / "generated"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_path = output_dir / "config-reference.md"
-    output_path.write_text(markdown)
-    print(f"Generated: {output_path}")
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(markdown)
+        print(f"Written to {args.output}", file=sys.stderr)
+    else:
+        print(markdown)
 
 
 if __name__ == "__main__":
