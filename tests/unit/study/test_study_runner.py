@@ -91,7 +91,7 @@ def _make_mock_context(
     if pipe_data is not None:
         parent_conn.recv.return_value = pipe_data
 
-    ctx.Pipe.return_value = (child_conn, parent_conn)
+    ctx.Pipe.return_value = (parent_conn, child_conn)
 
     # Queue: use a real in-process queue so the consumer thread works
     ctx.Queue.return_value = queue.SimpleQueue()
@@ -336,7 +336,7 @@ def test_interleaved_ordering() -> None:
         parent = MagicMock()
         parent.poll.return_value = True
         parent.recv.return_value = fake_result
-        return child, parent
+        return parent, child
 
     ctx = MagicMock()
     ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
@@ -380,7 +380,7 @@ def test_sequential_ordering() -> None:
         parent = MagicMock()
         parent.poll.return_value = True
         parent.recv.return_value = fake_result
-        return child, parent
+        return parent, child
 
     ctx = MagicMock()
     ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
@@ -603,7 +603,7 @@ def test_multi_cycle_correct_experiment_count() -> None:
         parent = MagicMock()
         parent.poll.return_value = True
         parent.recv.return_value = fake_result
-        return child, parent
+        return parent, child
 
     ctx = MagicMock()
     ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
@@ -659,7 +659,7 @@ def test_cycle_counter_increments_per_config_hash() -> None:
         parent = MagicMock()
         parent.poll.return_value = True
         parent.recv.return_value = fake_result
-        return child, parent
+        return parent, child
 
     ctx = MagicMock()
     ctx.Process.side_effect = lambda **kwargs: fake_process_factory(**kwargs)
@@ -921,3 +921,34 @@ def test_docker_error_caught_and_converted_to_failure_dict(
     # Manifest should record failure
     manifest.mark_failed.assert_called_once()
     manifest.mark_completed.assert_not_called()
+
+
+# =============================================================================
+# Pipe direction regression test
+# =============================================================================
+
+
+def test_pipe_direction_parent_reads_child_writes() -> None:
+    """Regression: Pipe(duplex=False) returns (recv_end, send_end).
+
+    The runner must unpack as parent_conn, child_conn so parent can recv
+    and child can send. A previous bug swapped these, causing OSError on
+    every subprocess experiment.
+    """
+    import multiprocessing
+
+    ctx = multiprocessing.get_context("spawn")
+    conn1, conn2 = ctx.Pipe(duplex=False)
+
+    # conn1 is recv-only, conn2 is send-only (Python docs guarantee)
+    assert not conn1.writable, "First Pipe element should be read-only"
+    assert not conn2.readable, "Second Pipe element should be write-only"
+
+    # Verify the runner's unpacking matches: parent_conn=conn1 (reads), child_conn=conn2 (sends)
+    src = inspect.getsource(StudyRunner._run_one)
+    assert "parent_conn, child_conn = " in src, (
+        "Pipe unpacking must be 'parent_conn, child_conn' (recv, send order)"
+    )
+
+    conn1.close()
+    conn2.close()

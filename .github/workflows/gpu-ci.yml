@@ -55,9 +55,13 @@ jobs:
             llenergymeasure-ci:pytorch \
             python3 -m pytest tests/ -v --tb=short -o "addopts="
 
-      # SIGINT verification disabled — runner.py bug (OSError: connection is
-      # write-only at _collect_result:188). Fix tracked separately.
-      # Re-enable once fix/sigint-handling lands.
+      - name: SIGINT verification
+        run: |
+          docker run --rm --gpus all \
+            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}/results":/app/results \
+            llenergymeasure-ci:pytorch \
+            bash tests/integration/sigint_verify.sh
 
       - name: Upload replay fixtures
         if: always()
