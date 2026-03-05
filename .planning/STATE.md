@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
+milestone: v0.1
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-04T15:24:18.345Z"
+last_updated: "2026-03-05T16:52:06.840Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
+  total_phases: 5
+  completed_phases: 3
+  total_plans: 15
+  completed_plans: 11
 ---
 
 # Project State
@@ -22,19 +22,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 23 in progress. Plan 23-01 complete.
-Next: Phase 23 plans 02-05 (write doc files)
-Status: Foundation complete - stale docs deleted, auto-generation pipeline working, CI freshness check added.
-Last activity: 2026-03-05 - Phase 23 plan 01 complete (branch: gsd/phase-23-documentation)
+Phase: 23 in progress. Plan 23-03 complete.
+Next: Phase 23 plans 04-05 (remaining doc files)
+Status: Docker setup guide and backend configuration guide complete - docker-setup.md, backends.md written.
+Last activity: 2026-03-05 - Phase 23 plan 03 complete (branch: gsd/phase-23-documentation)
 
-Progress: [█████████░] 91% (Phase 23 plans 02-05 remaining)
+Progress: [█████████░] 93% (Phase 23 plans 04-05 remaining)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 17
-- Average duration: 210s
-- Total execution time: 6242s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s)
+- Total plans completed (M3): 19
+- Average duration: 206s
+- Total execution time: 6509s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s)
 
 *Updated after each plan completion*
 
@@ -94,6 +94,9 @@ Progress: [█████████░] 91% (Phase 23 plans 02-05 remaining)
 - [Phase 22-04]: Study fixture uses experiments: list with warmup.enabled=false and baseline.enabled=false — avoids 30s+ thermal floor wait in CI
 - [Phase 23-01]: typer 0.24.1 has no get_docs_for_typer_app — use typer.main.get_command(app) + click introspection for CLI reference generation
 - [Phase 23-01]: Base install (uv sync --dev, no extras) sufficient for docs scripts — model_json_schema() does not import pytorch at runtime
+- [Phase 23-02]: Annotated output in getting-started.md constructed from _display.py source — host cannot run pytorch outside containers; constructed output matches exact print_result_summary() format
+- [Phase 23-02]: CLI reference supplements auto-generated flag table with manually written context (effective defaults, exit codes, examples) — generator output alone is incomplete as a reference
+- [Phase 23-documentation]: Parameter support matrix in backends.md manually constructed from Pydantic config models; GPU test results required for full regeneration via generate_param_matrix.py
 
 ### Carried Items
 
@@ -108,5 +111,5 @@ Progress: [█████████░] 91% (Phase 23 plans 02-05 remaining)
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 23 plan 01 complete. Foundation work done: stale docs deleted, generate_config_docs.py (model_json_schema), generate_cli_reference.py (click introspection), CI docs-freshness job.
+Stopped at: Phase 23 plan 03 complete. docker-setup.md (full NVIDIA CT walkthrough with troubleshooting) and backends.md (PyTorch/vLLM params, runner config, parameter matrix) written.
 Resume file: None
