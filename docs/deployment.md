@@ -476,24 +476,54 @@ systemctl --user restart github-runner.service
 
 ### Release Pipeline
 
-When you push a `v*` tag, `release.yml` runs:
+Releases are fully automated via the `release` label.
+
+#### Automated flow
 
 ```
-v* tag push
-  ├── lint           (GitHub-hosted)
-  ├── type-check     (GitHub-hosted)
-  ├── test           (GitHub-hosted, Python 3.10 + 3.12)
-  └── gpu            (self-hosted ds01-gpu, calls gpu-ci.yml)
+1. Create PR: version bump in pyproject.toml + __init__.py
+2. Add 'release' label to the PR
+3. Tier 1 CI runs (lint, type-check, test)
+4. Review and merge
+
+   ┌─── auto-release.yml triggers ───┐
+   │                                  │
+   │  Tier 2 GPU CI (Docker + GPU)   │
+   │         │                        │
+   │    ┌────┴────┐                   │
+   │  Pass      Fail                  │
+   │    │         │                   │
+   │  Create    Create GitHub Issue   │
+   │  git tag   (no tag, no release)  │
+   └────┬─────────────────────────────┘
         │
-        ▼
-    release          (build wheel, create GitHub Release)
+   release.yml triggers on v* tag
         │
-        ▼
-    docker           (build + push GHCR images)
+   ├── lint + type-check + test (re-check)
+   ├── GPU CI (belt-and-suspenders)
+   │
+   release (build wheel, create GitHub Release)
+        │
+   docker-publish (build + push all backends to GHCR)
 ```
 
-If any job fails, the release is not created. The tag still exists but can be
-deleted and re-pushed after fixing the issue:
+#### Manual release (fallback)
+
+If the automated flow fails or you need to release manually:
+
+```bash
+# 1. Verify GPU CI passes
+gh workflow run gpu-ci.yml
+gh run watch
+
+# 2. Create tag
+git tag v0.9.0
+git push origin v0.9.0
+
+# 3. release.yml runs automatically from tag push
+```
+
+If a tag needs to be re-done:
 
 ```bash
 git tag -d v0.9.0 && git push origin :v0.9.0   # delete tag

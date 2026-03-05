@@ -1,0 +1,91 @@
+name: Auto Release
+
+# Automated release pipeline for PRs merged with the 'release' label.
+#
+# Flow:
+#   1. PR with 'release' label merges to main
+#   2. This workflow triggers and runs Tier 2 GPU CI
+#   3. If GPU CI passes → extracts version from pyproject.toml → creates git tag → release.yml takes over
+#   4. If GPU CI fails → creates a GitHub Issue with failure details
+#
+# The 'release' label should only be added to version-bump PRs (chore: release 0.X.0).
+# See docs/deployment.md for the full release process.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  check-release:
+    if: >-
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)"/\1/')
+          echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Detected version: v${VERSION}"
+
+  gpu-ci:
+    needs: check-release
+    uses: ./.github/workflows/gpu-ci.yml
+
+  create-tag:
+    needs: [check-release, gpu-ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create and push tag
+        run: |
+          git tag "${{ needs.check-release.outputs.version }}"
+          git push origin "${{ needs.check-release.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # release.yml triggers on the v* tag push and handles:
+  # Tier 1 re-check → GitHub Release → Docker publish
+
+  open-issue-on-failure:
+    needs: [check-release, gpu-ci]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ needs.check-release.outputs.version }}';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Release ${version} failed: GPU CI did not pass`,
+              body: [
+                `## Release blocked`,
+                ``,
+                `The release PR was merged but GPU CI (Tier 2) failed.`,
+                `The version tag \`${version}\` was **not** created.`,
+                ``,
+                `**Failed run:** ${runUrl}`,
+                `**PR:** #${context.payload.pull_request.number}`,
+                ``,
+                `### Next steps`,
+                `1. Investigate the GPU CI failure in the run linked above`,
+                `2. Fix the issue in a follow-up PR`,
+                `3. Either:`,
+                `   - Manually trigger GPU CI (\`gh workflow run gpu-ci.yml\`) and create the tag once it passes`,
+                `   - Or create a new release PR with the fix`,
+              ].join('\n'),
+              labels: ['bug', 'release'],
+            });
