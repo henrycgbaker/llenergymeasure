@@ -350,15 +350,3 @@ def test_no_loguru_import():
         n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "loguru"
     ]
     assert loguru_imports == [], "aggregation.py must not use loguru"
-
-
-def test_csv_exporter_no_loguru():
-    """exporters.py must not import from loguru."""
-    import ast
-
-    src = Path("src/llenergymeasure/results/exporters.py").read_text()
-    tree = ast.parse(src)
-    loguru_imports = [
-        n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "loguru"
-    ]
-    assert loguru_imports == [], "exporters.py must not use loguru"

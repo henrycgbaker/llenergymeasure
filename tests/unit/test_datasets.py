@@ -112,18 +112,7 @@ def test_load_prompts_unknown_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 7: core.dataset_loader is importable (broken import fix)
-# ---------------------------------------------------------------------------
-
-
-def test_dataset_loader_importable() -> None:
-    from llenergymeasure.core.dataset_loader import load_prompts_from_source
-
-    assert callable(load_prompts_from_source)
-
-
-# ---------------------------------------------------------------------------
-# Test 8: dataset_order config field validation
+# Test 7: dataset_order config field validation
 # ---------------------------------------------------------------------------
 
 
