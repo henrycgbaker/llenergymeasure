@@ -1,10 +1,1 @@
-"""Infrastructure utilities for llenergymeasure.
-
-Contains subprocess lifecycle management and other low-level infrastructure.
-"""
-
-from llenergymeasure.infra.subprocess import build_subprocess_env
-
-__all__ = [
-    "build_subprocess_env",
-]
+"""Infrastructure utilities for llenergymeasure."""
