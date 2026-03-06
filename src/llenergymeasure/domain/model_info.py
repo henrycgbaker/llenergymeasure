@@ -18,16 +18,6 @@ class QuantizationSpec(BaseModel):
         """Check if using BitsAndBytes quantization."""
         return self.method == "bitsandbytes"
 
-    @property
-    def flops_reduction_factor(self) -> float:
-        """FLOPs reduction factor for this quantization.
-
-        Note: BitsAndBytes computes at FP16 after dequantization, so no reduction.
-        Native INT4/INT8 would have reduction, but that's not currently supported.
-        """
-        # BNB dequantizes to FP16 for compute, so theoretical FLOPs unchanged
-        return 1.0
-
 
 class ModelInfo(BaseModel):
     """Information about the model being benchmarked."""
