@@ -11,9 +11,13 @@ Boundary:
 import importlib.util
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.exceptions import PreFlightError
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.user_config import UserRunnersConfig
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +154,12 @@ def run_preflight(config: ExperimentConfig) -> None:
     _warn_if_persistence_mode_off()
 
 
-def run_study_preflight(study: StudyConfig, skip_preflight: bool = False) -> None:
+def run_study_preflight(
+    study: StudyConfig,
+    skip_preflight: bool = False,
+    yaml_runners: dict[str, str] | None = None,
+    user_config: "UserRunnersConfig | None" = None,
+) -> None:
     """Pre-flight checks for a study configuration.
 
     Single-backend studies pass through — per-experiment pre-flight runs later
@@ -165,6 +174,11 @@ def run_study_preflight(study: StudyConfig, skip_preflight: bool = False) -> Non
         skip_preflight: Skip Docker pre-flight checks. The effective skip value
             is ``skip_preflight OR study.execution.skip_preflight`` — CLI flag
             takes priority, then YAML config.
+        yaml_runners: Runner config from the study YAML ``runners:`` section.
+            Forwarded to ``resolve_study_runners()`` so pre-flight uses the same
+            runner resolution as the actual dispatch path.
+        user_config: Loaded UserRunnersConfig. Forwarded to
+            ``resolve_study_runners()`` to match actual dispatch precedence.
 
     Raises:
         PreFlightError: Multi-backend study and Docker is not available.
@@ -191,7 +205,9 @@ def run_study_preflight(study: StudyConfig, skip_preflight: bool = False) -> Non
     # Docker pre-flight: run once if any backend resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
     effective_skip = skip_preflight or getattr(study.execution, "skip_preflight", False)
-    runner_specs = resolve_study_runners(list(backends))
+    runner_specs = resolve_study_runners(
+        list(backends), yaml_runners=yaml_runners, user_config=user_config
+    )
     if any(spec.mode == "docker" for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 

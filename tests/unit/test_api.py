@@ -683,6 +683,52 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     assert captured_runner_specs[0] == resolved_specs
 
 
+# =============================================================================
+# Plan 24-01: GPU memory check in _run_in_process
+# =============================================================================
+
+
+def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
+    """_run_in_process() calls check_gpu_memory_residual before running the experiment."""
+    import llenergymeasure._api as api_module
+    import llenergymeasure.core.backends as backends_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    gpu_check_calls: list[int] = []
+
+    def mock_gpu_check(device_index=0, threshold_mb=1024.0):
+        gpu_check_calls.append(device_index)
+
+    mock_result = _make_experiment_result(experiment_id="gpu-check-test")
+    mock_backend = _MockBackend(mock_result)
+
+    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
+        mock_gpu_check,
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.results.persistence.save_result",
+        lambda result, output_dir, **kw: tmp_path / "result.json",
+    )
+
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.study.manifest import ManifestWriter
+
+    mock_manifest = MagicMock(spec=ManifestWriter)
+
+    config = ExperimentConfig(model="gpt2", backend="pytorch")
+    study = StudyConfig(experiments=[config])
+
+    api_module._run_in_process(study, mock_manifest, tmp_path, runner_specs=None)
+
+    assert len(gpu_check_calls) == 1, (
+        f"Expected check_gpu_memory_residual to be called once, got {len(gpu_check_calls)}"
+    )
+
+
 def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     """_run() logs a warning when runner_specs has mixed local/docker modes."""
     import logging

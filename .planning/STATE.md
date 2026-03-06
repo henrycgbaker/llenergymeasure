@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-05T16:59:00.000Z"
+last_updated: "2026-03-05T22:38:14.706Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 15
-  completed_plans: 13
+  total_phases: 12
+  completed_phases: 5
+  total_plans: 17
+  completed_plans: 23
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 23 (Documentation) or milestone completion
+**Current focus:** Phase 24 (M3 integration fixes and verification) — verification gap closure
 
 ## Current Position
 
-Phase: 23 complete. All 5 plans complete.
+Phase: 24 complete. All 2 plans complete.
 Next: Milestone completion (v0.9.0 M3)
-Status: Full 13-file documentation set complete — 9 researcher docs + 4 policy maker guides + rewritten README.
-Last activity: 2026-03-05 - Phase 23 plan 05 complete (branch: gsd/phase-23-documentation)
+Status: Both integration gaps closed — preflight runner resolution aligned with dispatch, GPU memory check in single-experiment path.
+Last activity: 2026-03-05 - Phase 24 plan 01 complete (branch: gsd/phase-24-m3-integration-fixes-and-verification)
 
-Progress: [██████████] 100% (Phase 23 complete)
+Progress: [██████████] 100% (Phase 24 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 21
-- Average duration: 205s
-- Total execution time: 7022s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s + 223s)
+- Total plans completed (M3): 24
+- Average duration: 194s
+- Total execution time: 7574s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s + 223s + 126s + 126s + 300s)
 
 *Updated after each plan completion*
 
@@ -100,6 +100,8 @@ Progress: [██████████] 100% (Phase 23 complete)
 - [Phase 23-04]: WarmupConfig thermal_floor_seconds default is 60.0s (not 30s as stated in plan) — corrected from Pydantic model source; aligned with MLPerf Power minimum
 - [Phase 23-05]: README rewritten as concise 75-line overview with links to all 13 docs — no inline content per CONTEXT.md decision
 - [Phase 23-05]: Policy maker guides are self-contained — guide-comparison-context.md explains CodeCarbon and Zeus as measurement backends (not separate benchmarks) to avoid reader confusion
+- [Phase 24-01]: user_config loaded before run_study_preflight in _run() — ensures preflight and dispatch use identical runner resolution; supersedes Phase 18-01 decision (auto-detection was incorrect)
+- [Phase 24-01]: check_gpu_memory_residual placed before Docker/local branch split in _run_in_process — single call covers both paths consistently with StudyRunner
 
 ### Carried Items
 
@@ -114,5 +116,5 @@ Progress: [██████████] 100% (Phase 23 complete)
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 23 complete. All 13 docs written (9 researcher + 4 policy maker guides). README rewritten as overview with links.
+Stopped at: Phase 24 complete. All 2 plans done. Integration fixes: preflight runner resolution + GPU memory check in single-experiment path.
 Resume file: None

@@ -61,6 +61,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 21.1: CI & Versioning Scaffold** - INSERTED — Migrate CI to uv, reset version scheme to 0.x, revert docker-publish removal, improve release workflow (completed 2026-03-04)
 - [x] **Phase 22: Testing and CI** - Test strategy review, CI pipeline improvements, Docker path SIGINT verification, coverage analysis (completed 2026-03-05)
 - [x] **Phase 23: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference (completed 2026-03-05)
+- [x] **Phase 24: M3 Integration Fixes and Retroactive Verification** - Fix preflight runner resolution, add GPU memory check to single-experiment path, retroactive verification of phases 18/20/21 (completed 2026-03-05)
 
 ## Phase Details
 
@@ -215,13 +216,31 @@ Plans:
 - [ ] 23-04-PLAN.md — Study YAML reference, energy measurement, methodology, troubleshooting
 - [ ] 23-05-PLAN.md — Policy maker guides (4 files) + README.md rewrite
 
+### Phase 24: M3 Integration Fixes and Retroactive Verification
+**Goal**: Close audit tech debt — fix 2 integration issues found by the integration checker and create retroactive VERIFICATION.md files for 3 unverified phases
+**Depends on**: Phase 23
+**Requirements**: DOCK-07, DOCK-08, DOCK-09, DOCK-10, MEAS-01, MEAS-02, MEAS-03, MEAS-04
+**Gap Closure**: Closes gaps from v0.9.0 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. `run_study_preflight()` receives `yaml_runners` and `user_config` from the caller and forwards them to `resolve_study_runners()` — runner resolution in preflight matches `_api._run()`
+  2. `_run_in_process()` calls `check_gpu_memory_residual()` before running a single experiment (both local and Docker paths)
+  3. Phase 18 (Docker pre-flight) has a VERIFICATION.md with DOCK-07, DOCK-08, DOCK-09 verified against current codebase
+  4. Phase 20 (Docker image and CI) has a VERIFICATION.md with DOCK-10 verified against current codebase
+  5. Phase 21 (Measurement carried items) has a VERIFICATION.md with MEAS-03, MEAS-04 verified against current codebase
+**Plans**: 2 plans
+
+Plans:
+- [ ] 24-01-PLAN.md — Fix preflight runner resolution (forward yaml_runners/user_config) + add GPU memory check to _run_in_process (DOCK-07, DOCK-08, DOCK-09, MEAS-01, MEAS-02)
+- [ ] 24-02-PLAN.md — Retroactive VERIFICATION.md for phases 18, 20, 21 (DOCK-07, DOCK-08, DOCK-09, DOCK-10, MEAS-03, MEAS-04)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 16 → 17 → 18 → 19 → 19.1 → 20 → 21 → 21.1 → 22 → 23
+Phases execute in numeric order: 16 → 17 → 18 → 19 → 19.1 → 20 → 21 → 21.1 → 22 → 23 → 24
 Phase 21 can run in parallel with Phase 20 (no dependency between them).
 Phase 21.1 (CI scaffold) before Phase 22 (Testing) — CI must be stable before testing improvements.
 Phase 22 (Testing/CI) before Phase 23 (Docs) — testing informs documentation.
+Phase 24 (Gap closure) after milestone audit.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -235,7 +254,8 @@ Phase 22 (Testing/CI) before Phase 23 (Docs) — testing informs documentation.
 | 21. Measurement Carried Items | 2/2 | Complete    | 2026-03-05 |
 | 21.1. CI & Versioning Scaffold | 2/2 | Complete    | 2026-03-04 |
 | 22. Testing and CI | 4/4 | Complete    | 2026-03-05 |
-| 23. Documentation | 5/5 | Complete   | 2026-03-05 |
+| 23. Documentation | 5/5 | Complete    | 2026-03-05 |
+| 24. Integration Fixes + Verification | 2/2 | Complete    | 2026-03-05 |
 
 ---
 
