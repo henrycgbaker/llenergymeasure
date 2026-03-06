@@ -202,11 +202,6 @@ class FlopsEstimator:
             # Handle different return formats
             flops = result[0] if isinstance(result, tuple) else result
 
-            # Convert to float if needed
-            if isinstance(flops, str):
-                # Parse string like "1.5 GFLOPS"
-                flops = self._parse_flops_string(flops)
-
             if flops is not None and flops > 0:
                 logger.debug("calflops estimation: %.2e FLOPs", flops)
                 return FlopsResult(
@@ -344,39 +339,6 @@ class FlopsEstimator:
                 precision=precision,
                 notes="Could not estimate FLOPs - all methods failed",
             )
-
-    def _parse_flops_string(self, flops_str: str) -> float | None:
-        """Parse a FLOPs string like '1.5 GFLOPS' to a float.
-
-        Args:
-            flops_str: String representation of FLOPs.
-
-        Returns:
-            FLOPs as float, or None if parsing fails.
-        """
-        try:
-            # Remove common suffixes and parse
-            multipliers = {
-                "T": 1e12,
-                "G": 1e9,
-                "M": 1e6,
-                "K": 1e3,
-                "TFLOPS": 1e12,
-                "GFLOPS": 1e9,
-                "MFLOPS": 1e6,
-                "KFLOPS": 1e3,
-            }
-
-            flops_str = flops_str.strip().upper()
-            for suffix, mult in multipliers.items():
-                if suffix in flops_str:
-                    num_str = flops_str.replace(suffix, "").replace("FLOPS", "").strip()
-                    return float(num_str) * mult
-
-            # Try direct parse
-            return float(flops_str)
-        except (ValueError, AttributeError):
-            return None
 
 
 # Module-level convenience instance
