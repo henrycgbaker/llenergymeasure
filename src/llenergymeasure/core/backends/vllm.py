@@ -781,6 +781,21 @@ class VLLMBackend:
         # FLOPs from PaLM formula (0.0 if estimation failed for vLLM)
         total_flops = flops_result.value if flops_result is not None else 0.0
 
+        # FLOPs derived fields (B2 fix -- no longer hardcoded to 0.0)
+        flops_per_output_token = (
+            total_flops / data.output_tokens
+            if (total_flops > 0 and data.output_tokens > 0)
+            else None
+        )
+        flops_per_input_token = (
+            total_flops / data.input_tokens if (total_flops > 0 and data.input_tokens > 0) else None
+        )
+        flops_per_second = (
+            total_flops / data.total_time_sec
+            if (total_flops > 0 and data.total_time_sec > 0)
+            else None
+        )
+
         # Memory metrics: inference-window-only peak and derived delta.
         # inference_memory_mb = peak (inference window) - model baseline.
         inference_memory_mb = max(0.0, data.peak_memory_mb - model_memory_mb)
@@ -813,6 +828,9 @@ class VLLMBackend:
             avg_tokens_per_second=avg_tokens_per_second,
             avg_energy_per_token_j=avg_energy_per_token_j,
             total_flops=total_flops,
+            flops_per_output_token=flops_per_output_token,
+            flops_per_input_token=flops_per_input_token,
+            flops_per_second=flops_per_second,
             process_results=[],
             start_time=start_time,
             end_time=end_time,

@@ -775,3 +775,71 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     assert any("mixed" in m.lower() for m in warning_messages), (
         f"Expected mixed runner warning, got: {warning_messages}"
     )
+
+
+# =============================================================================
+# B3 fix: study experiment count no double-multiply
+# =============================================================================
+
+
+def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_path):
+    """total_experiments == len(study.experiments) — no double-multiply by n_cycles.
+
+    The study passed to _run() has experiments already cycle-expanded (as load_study_config
+    does). With 2 unique configs and n_cycles=3, study.experiments has 6 entries.
+    total_experiments must be 6, not 18 (the pre-fix bug: 6 * 3).
+    unique_configurations must be 2 (6 / 3).
+    """
+    import llenergymeasure._api as api_module
+    import llenergymeasure.orchestration.preflight as pf_module
+
+    # Build 6 mock results (2 configs × 3 cycles, already cycle-expanded)
+    mock_results = [_make_experiment_result(experiment_id=f"b3-{i}") for i in range(6)]
+
+    # Mock _run_via_runner to return pre-built results (bypasses real subprocess)
+    def mock_run_via_runner(study, manifest, study_dir, runner_specs=None):
+        result_files = [str(tmp_path / f"result-{i}.json") for i in range(6)]
+        return result_files, mock_results, []
+
+    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.resolve_study_runners",
+        lambda backends, yaml_runners=None, user_config=None: {},
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.config.user_config.load_user_config",
+        lambda **kwargs: type("C", (), {"runners": None})(),
+    )
+    monkeypatch.setattr(
+        "llenergymeasure.study.manifest.create_study_dir",
+        lambda name, output_dir: tmp_path,
+    )
+    monkeypatch.setattr(api_module, "_run_via_runner", mock_run_via_runner)
+
+    # Simulate what load_study_config returns: experiments already cycle-expanded.
+    # 2 unique configs × 3 cycles = 6 entries, n_cycles=3 in execution config.
+    expanded_experiments = [
+        ExperimentConfig(model="gpt2"),
+        ExperimentConfig(model="gpt2-medium"),
+        ExperimentConfig(model="gpt2"),
+        ExperimentConfig(model="gpt2-medium"),
+        ExperimentConfig(model="gpt2"),
+        ExperimentConfig(model="gpt2-medium"),
+    ]
+    study = StudyConfig(
+        experiments=expanded_experiments,
+        execution={"n_cycles": 3, "cycle_order": "sequential"},
+    )
+    # Verify our study fixture has exactly 6 experiments
+    assert len(study.experiments) == 6
+
+    study_result = api_module._run(study)
+
+    assert study_result.summary is not None
+    assert study_result.summary.total_experiments == 6, (
+        f"Expected 6 (cycle-expanded count), got {study_result.summary.total_experiments} "
+        f"(pre-fix bug would give 18 = 6 × 3)"
+    )
+    assert study_result.summary.unique_configurations == 2, (
+        f"Expected 2 unique configurations (6 / 3), got {study_result.summary.unique_configurations}"
+    )
