@@ -279,8 +279,8 @@ def _run_study_impl(
 
     from llenergymeasure import run_study
     from llenergymeasure.cli._display import print_study_summary
+    from llenergymeasure.config.grid import format_preflight_summary
     from llenergymeasure.config.loader import load_study_config
-    from llenergymeasure.study.grid import format_preflight_summary
 
     # Check what the YAML execution block specifies (to apply CLI effective defaults)
     raw = yaml.safe_load(config.read_text()) or {}

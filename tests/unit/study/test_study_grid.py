@@ -13,9 +13,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import ConfigError
-from llenergymeasure.study.grid import (
+from llenergymeasure.config.grid import (
     CycleOrder,
     SkippedConfig,
     apply_cycles,
@@ -23,6 +21,8 @@ from llenergymeasure.study.grid import (
     expand_grid,
     format_preflight_summary,
 )
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.exceptions import ConfigError
 
 # =============================================================================
 # ExecutionConfig model tests
