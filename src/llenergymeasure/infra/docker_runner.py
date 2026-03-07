@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -63,10 +63,8 @@ def _env_file(secrets: dict[str, str]) -> Iterator[Path | None]:
                 f.write(f"{key}={value}\n")
         yield path
     finally:
-        try:
+        with suppress(FileNotFoundError):
             path.unlink()
-        except FileNotFoundError:
-            pass
 
 
 def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
