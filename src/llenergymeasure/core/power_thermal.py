@@ -106,16 +106,26 @@ class PowerThermalSampler:
                 pynvml.nvmlShutdown()
                 return
 
-            # Resolve NVML throttle reason constants
+            # Resolve NVML throttle reason constants (prefer non-deprecated names)
             thermal_bits = 0
-            for attr in [
-                "nvmlClocksThrottleReasonSwThermalSlowdown",
-                "nvmlClocksThrottleReasonHwThermalSlowdown",
+            for attr_new, attr_old in [
+                (
+                    "nvmlClocksEventReasonSwThermalSlowdown",
+                    "nvmlClocksThrottleReasonSwThermalSlowdown",
+                ),
+                (
+                    "nvmlClocksEventReasonHwThermalSlowdown",
+                    "nvmlClocksThrottleReasonHwThermalSlowdown",
+                ),
             ]:
-                thermal_bits |= getattr(pynvml, attr, 0)
-            # Older NVML versions may not have Hw variants
-            gpu_idle = getattr(pynvml, "nvmlClocksThrottleReasonGpuIdle", 0)
-            _ = gpu_idle  # reserved for future use
+                thermal_bits |= getattr(pynvml, attr_new, getattr(pynvml, attr_old, 0))
+
+            # Prefer non-deprecated clock reasons query (NVML 12+)
+            _get_clocks_reasons = getattr(
+                pynvml,
+                "nvmlDeviceGetCurrentClocksEventReasons",
+                getattr(pynvml, "nvmlDeviceGetCurrentClocksThrottleReasons", None),
+            )
 
             while self._running:
                 try:
@@ -152,9 +162,10 @@ class PowerThermalSampler:
 
                     # Throttle reasons
                     try:
-                        reasons = pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle)
-                        sample.throttle_reasons = reasons
-                        sample.thermal_throttle = bool(reasons & thermal_bits)
+                        if _get_clocks_reasons is not None:
+                            reasons = _get_clocks_reasons(handle)
+                            sample.throttle_reasons = reasons
+                            sample.thermal_throttle = bool(reasons & thermal_bits)
                     except pynvml.NVMLError:
                         pass
 
@@ -219,11 +230,28 @@ class PowerThermalSampler:
             for s in self._samples:
                 combined_reasons |= s.throttle_reasons
 
-            thermal_bit = getattr(pynvml, "nvmlClocksThrottleReasonSwThermalSlowdown", 0)
-            power_bit = getattr(pynvml, "nvmlClocksThrottleReasonSwPowerCap", 0)
-            sw_thermal_bit = getattr(pynvml, "nvmlClocksThrottleReasonSwThermalSlowdown", 0)
-            hw_thermal_bit = getattr(pynvml, "nvmlClocksThrottleReasonHwThermalSlowdown", 0)
-            hw_power_bit = getattr(pynvml, "nvmlClocksThrottleReasonHwPowerBrakeSlowdown", 0)
+            hw_thermal_bit = getattr(
+                pynvml,
+                "nvmlClocksEventReasonHwThermalSlowdown",
+                getattr(pynvml, "nvmlClocksThrottleReasonHwThermalSlowdown", 0),
+            )
+            sw_thermal_bit = getattr(
+                pynvml,
+                "nvmlClocksEventReasonSwThermalSlowdown",
+                getattr(pynvml, "nvmlClocksThrottleReasonSwThermalSlowdown", 0),
+            )
+            power_bit = getattr(
+                pynvml,
+                "nvmlClocksEventReasonSwPowerCap",
+                getattr(pynvml, "nvmlClocksThrottleReasonSwPowerCap", 0),
+            )
+            hw_power_bit = getattr(
+                pynvml,
+                "nvmlClocksEventReasonHwPowerBrakeSlowdown",
+                getattr(pynvml, "nvmlClocksThrottleReasonHwPowerBrakeSlowdown", 0),
+            )
+            # Combined "any thermal" bit: True if either hw or sw thermal throttling occurred
+            thermal_bit = hw_thermal_bit | sw_thermal_bit
 
             return ThermalThrottleInfo(
                 detected=any_throttle,
