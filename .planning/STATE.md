@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-05T22:38:14.706Z"
+last_updated: "2026-03-06T20:10:00.279Z"
 progress:
-  total_phases: 12
+  total_phases: 13
   completed_phases: 5
-  total_plans: 17
-  completed_plans: 23
+  total_plans: 21
+  completed_plans: 26
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 24 (M3 integration fixes and verification) — verification gap closure
+**Current focus:** Phase 25 (Dead Code Deletion)
 
 ## Current Position
 
-Phase: 24 complete. All 2 plans complete.
-Next: Milestone completion (v0.9.0 M3)
-Status: Both integration gaps closed — preflight runner resolution aligned with dispatch, GPU memory check in single-experiment path.
-Last activity: 2026-03-05 - Phase 24 plan 01 complete (branch: gsd/phase-24-m3-integration-fixes-and-verification)
+Phase: 25 complete. All 3 plans done.
+Next: Phase 26 (next phase in ROADMAP)
+Status: Phases 16-25 complete. Dead code deletion complete: bulk file deletions + surgical function removal.
+Last activity: 2026-03-06 - Phase 25-03 complete: validate_parallelism_constraints, _parse_flops_string, flops_reduction_factor removed
 
-Progress: [██████████] 100% (Phase 24 complete)
+Progress: Phase 25 complete (3/3 plans done)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 24
-- Average duration: 194s
-- Total execution time: 7574s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s + 223s + 126s + 126s + 300s)
+- Total plans completed (M3): 27
+- Average duration: 190s
+- Total execution time: 8170s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s + 223s + 126s + 126s + 300s + 181s + 0s + 415s)
 
 *Updated after each plan completion*
 
@@ -102,6 +102,8 @@ Progress: [██████████] 100% (Phase 24 complete)
 - [Phase 23-05]: Policy maker guides are self-contained — guide-comparison-context.md explains CodeCarbon and Zeus as measurement backends (not separate benchmarks) to avoid reader confusion
 - [Phase 24-01]: user_config loaded before run_study_preflight in _run() — ensures preflight and dispatch use identical runner resolution; supersedes Phase 18-01 decision (auto-detection was incorrect)
 - [Phase 24-01]: check_gpu_memory_residual placed before Docker/local branch split in _run_in_process — single call covers both paths consistently with StudyRunner
+- [Phase 25-01]: .product/designs/ is gitignored — design docs (tensorrt-m4-skeleton.md, backend-plugin-protocol.md) are local-only; consistent with how .product/ has been managed since c20909a
+- [Phase 25-03]: Dead string-parsing branch calling _parse_flops_string() removed from _try_calflops() alongside method deletion — output_as_string=False makes isinstance(flops, str) branch unreachable; clean removal prevents latent AttributeError
 
 ### Carried Items
 
@@ -115,6 +117,6 @@ Progress: [██████████] 100% (Phase 24 complete)
 
 ## Session Continuity
 
-Last session: 2026-03-05
-Stopped at: Phase 24 complete. All 2 plans done. Integration fixes: preflight runner resolution + GPU memory check in single-experiment path.
+Last session: 2026-03-06
+Stopped at: Phase 25-03 complete. All Phase 25 dead code deleted.
 Resume file: None

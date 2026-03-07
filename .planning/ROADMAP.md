@@ -5,13 +5,36 @@
 - [x] **v0.1.0–v0.6.0 Foundation & Planning** — Phases 1–4.5 (shipped 2026-02-26)
 - [x] **v0.7.0 M1 — Core Single-Experiment** — Phases 1–8.2 (shipped 2026-02-27)
 - [x] **v0.8.0 M2 — Study / Sweep** — Phases 9–15 (shipped 2026-02-27)
-- [ ] **v0.9.0 M3 — Docker + vLLM** — Phases 16–23 (in progress)
+- [ ] **v0.9.0 M3 — Docker + vLLM** — Phases 16–31 (in progress)
 
 ## Phases
 
 **Phase Numbering:**
 - Integer phases (1, 2, 3...): Planned milestone work
 - Decimal phases (9.1, 10.1...): Urgent insertions (marked with INSERTED)
+
+**Phase Discussion Protocol (Phases 25+):**
+Every phase follows a structured workflow that moves from ambiguity to informed decisions before any code is written:
+
+1. **Identify Grey Areas** — Review the phase scope and surface open questions, ambiguous requirements, and decisions where multiple valid approaches exist. These are the "Discussion" topics listed under each phase below.
+2. **Peer Research** — For each grey area, research how peer codebases and tools handle the same problem (e.g., for dead code: how mlflow/wandb/pytorch-lightning manage deprecation; for dedup: how they structure shared utilities; for testing: their test strategies). Research produces concrete recommendations with rationale, not just summaries.
+3. **Informed Decisions** — Discuss research findings, weigh trade-offs, and make explicit decisions for each grey area. Every decision has a rationale grounded in peer evidence.
+4. **CONTEXT.md** — All decisions, rationale, and relevant research findings are captured in a phase-level `CONTEXT.md` file (`.planning/phases/{phase}/CONTEXT.md`). This is the decision record that all subsequent work executes against.
+5. **Phase-Level Research** — During planning, the planner agent conducts additional targeted research (implementation details, API specifics, library docs) as needed to flesh out the plan.
+6. **Planning** — Plans are written against the CONTEXT.md decisions. Each plan references the decisions it implements.
+
+```
+Grey areas → Research → Decisions → CONTEXT.md → Plan research → Plans
+```
+
+This ensures every refactoring decision is informed by real-world patterns, not just internal opinion.
+
+**Cross-Cutting Architectural Principle — Backend Plugin Model:**
+The refactoring phases (25-28) should collectively move towards a clear plugin architecture where:
+- **The tool IS the measurement harness**: energy sampling, NVML lifecycle, result construction, CUDA sync, thermal management, warmup, persistence, and progress reporting are shared library infrastructure.
+- **Backends ARE thin inference plugins**: each backend (PyTorch, vLLM, future TensorRT, SGLang) implements only the inference-specific logic (model loading, prompt formatting, generation call) and plugs into the shared harness.
+- **New backends should not require re-implementing** measurement infrastructure. Adding a fourth backend should be a small, focused piece of work - not a copy-paste of 800+ lines from an existing backend.
+- Phase 27 is where this architecture is researched and the shared extraction happens. Phases 25-26 clear the ground; Phase 28 cleans up remaining inconsistencies.
 
 <details>
 <summary>✅ v0.7.0 M1 — Core Single-Experiment (Phases 1–8.2) — SHIPPED 2026-02-27</summary>
@@ -48,7 +71,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 
 ### M3 — Docker + vLLM (v0.9.0)
 
-**Milestone Goal:** Docker container infrastructure with ephemeral per-experiment lifecycle, vLLM backend activation, Docker pre-flight validation, GPU memory cleanup, and full user documentation.
+**Milestone Goal:** Docker container infrastructure with ephemeral per-experiment lifecycle, vLLM backend activation, Docker pre-flight validation, GPU memory cleanup, full user documentation, comprehensive codebase refactoring, and test hardening.
 
 - [x] **Phase 16: GPU Memory Verification** - NVML residual memory check before each experiment dispatch in both local and Docker paths (completed 2026-02-27)
 - [x] **Phase 17: Docker Runner Infrastructure** - StudyRunner Docker dispatch path, config/result transfer via volume, per-backend runner configuration (completed 2026-02-28)
@@ -62,6 +85,13 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 22: Testing and CI** - Test strategy review, CI pipeline improvements, Docker path SIGINT verification, coverage analysis (completed 2026-03-05)
 - [x] **Phase 23: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference (completed 2026-03-05)
 - [x] **Phase 24: M3 Integration Fixes and Retroactive Verification** - Fix preflight runner resolution, add GPU memory check to single-experiment path, retroactive verification of phases 18/20/21 (completed 2026-03-05)
+- [x] **Phase 25: Dead Code Deletion** - Salvage audit of dead modules, then delete ~4,500 lines of v1.x dead code, ghost packages, and unreachable modules (completed 2026-03-06)
+- [ ] **Phase 26: Bug Fixes and Security** - Fix 3 active bugs (thermal throttle, FLOPs fields, study count) + HF_TOKEN security issue
+- [ ] **Phase 27: Deduplication and Circular Import** - Extract shared backend methods, config utilities, NVML context manager; break config-study circular import
+- [ ] **Phase 28: Logging and Performance** - Unify logging to loguru, fix 8 performance issues (dead subprocesses, measurement boundary overhead, caching)
+- [ ] **Phase 29: Test Cleanup and Quality** - Delete dead tests, replace 8 source-inspection tests, fix 6 tautological assertions, fix robustness issues
+- [ ] **Phase 30: Test Coverage** - Close coverage gaps in core measurement + CLI paths, add E2E integration tests, target ≥75% adjusted coverage
+- [ ] **Phase 31: CI Pipeline Improvements** - Remove duplicate GPU CI, add version checks, extend Docker smoke, add dependabot, coverage reporting
 
 ## Phase Details
 
@@ -233,14 +263,217 @@ Plans:
 - [ ] 24-01-PLAN.md — Fix preflight runner resolution (forward yaml_runners/user_config) + add GPU memory check to _run_in_process (DOCK-07, DOCK-08, DOCK-09, MEAS-01, MEAS-02)
 - [ ] 24-02-PLAN.md — Retroactive VERIFICATION.md for phases 18, 20, 21 (DOCK-07, DOCK-08, DOCK-09, DOCK-10, MEAS-03, MEAS-04)
 
+### Phase 25: Dead Code Deletion
+**Goal**: Audit dead code for salvageable patterns, then remove all v1.x dead code, ghost packages, and unreachable modules - reducing the codebase by ~4,500 lines and eliminating the dead dual backend system
+**Depends on**: Phase 24
+**Requirements**: (internal quality - no REQUIREMENTS.md entries)
+**Success Criteria** (what must be TRUE):
+  1. A salvage audit has been performed: all dead modules reviewed for reusable logic, patterns worth preserving documented before deletion
+  2. All dead v1.x CLI files deleted (`cli/experiment.py`, `cli/config.py`, `cli/results.py`, `cli/utils.py`)
+  3. Entire `cli/display/` Rich package deleted (5 files, ~550 lines)
+  4. Dead `core/inference_backends/` system deleted (4 files, ~3,500 lines) - resolves DA1/DA2
+  5. Dead orchestration functions deleted (`launcher.py` dead functions, `orchestration/runner.py`, `context.py`, `factory.py`)
+  6. Dead core modules deleted (`compute_metrics.py`, `model_loader.py`, `distributed.py`, `parallelism.py`, `gpu_utilisation.py`, `prompts.py`, `implementations.py`, `inference.py`)
+  7. Dead results modules deleted (`exporters.py`, `repository.py`, `timeseries.py`)
+  8. Dead misc modules deleted (`logging.py`, `resilience.py`, `state/`, `notifications/`, `infra/subprocess.py`, `config/quantization.py`)
+  9. Dead functions in `config/validation.py` deleted (`validate_parallelism_constraints`)
+  10. Dead `core/dataset_loader.py` deleted (active system is `datasets/loader.py`)
+  11. All `__init__.py` re-exports and `__all__` lists updated to reflect deletions
+  12. Tests pass, lint clean, no broken imports
+**Plans**: 3 plans
+**Source**: `.planning/simplify-audit/AUDIT-REPORT.md` (P1.1-P1.9), `test-coverage-gaps.md` (dead code inventory)
+
+Discussion (research → CONTEXT.md → plans):
+- Salvage inventory: which dead modules contain logic worth preserving for M4+ (TensorRT skeleton, distributed launch, CSV export, FlopsEstimator strategies)?
+- What is the safe deletion order to avoid broken imports mid-refactor?
+
+Plans:
+- [ ] 25-01-PLAN.md — Salvage audit: document TensorRT skeleton + InferenceBackend protocol in .product/designs/, preserve CSV column ordering comment in aggregation.py
+- [ ] 25-02-PLAN.md — Bulk file deletion: 34 dead files/directories (cli/display/, core/inference_backends/, orchestration dead cluster + launcher.py, dead results, dead core, dead misc, ghost packages), co-delete test_cli_experiment.py + test_csv_exporter_no_loguru
+- [ ] 25-03-PLAN.md — Targeted cleanup: remove dead functions from live files (validate_parallelism_constraints, _parse_flops_string, flops_reduction_factor), final verification pass
+
+### Phase 26: Bug Fixes and Security
+**Goal**: Fix all confirmed bugs that produce incorrect measurement output and close the HF_TOKEN security issue
+**Depends on**: Phase 25
+**Requirements**: (internal quality - no REQUIREMENTS.md entries)
+**Success Criteria** (what must be TRUE):
+  1. B1 fixed: `thermal_bit` uses `HwThermalSlowdown` and `sw_thermal_bit` uses `SwThermalSlowdown` in `power_thermal.py` - thermal throttle metadata is no longer silently corrupted
+  2. B2 fixed: `flops_per_token` and `flops_per_second` are computed from available data (`flops_total`, `output_tokens`, `inference_time_sec`) instead of hardcoded to 0.0
+  3. B3 fixed: `StudySummary.total_experiments` counts correctly without double-multiplying by `n_cycles`
+  4. S1 fixed: `HF_TOKEN` passed via `--env-file` with a temp file instead of plaintext CLI arg in `docker_runner.py`
+  5. All existing tests pass; new tests added for each fix
+**Plans**: 2 plans
+**Source**: `.planning/simplify-audit/AUDIT-REPORT.md` (B1-B3, S1)
+
+Note: B4-B7 are in dead code deleted by Phase 25. Active bugs are B1, B2, B3, and S1.
+
+Discussion (research → CONTEXT.md → plans):
+- How do peer tools pass secrets to Docker containers? (env-file, Docker secrets, tmpfs mount patterns)
+- NVML thermal throttle constant naming: verify against upstream `pynvml`/`nvidia-ml-py` source to confirm correct Hw vs Sw constants
+- How do peer measurement tools compute derived FLOPs metrics (per-token, per-second)?
+- How do peer study/sweep tools count experiments when cycles are involved?
+
+Plans:
+- [ ] 26-01-PLAN.md — Measurement bug fixes: thermal throttle constants (B1), FLOPs derived fields (B2), study experiment count (B3) + unit tests for each
+- [ ] 26-02-PLAN.md — Security fix: HF_TOKEN env-file pattern (S1), temp file lifecycle, process table verification
+
+### Phase 27: Deduplication and Circular Import
+**Goal**: Consolidate duplicated code across backends, config, and infrastructure - extract shared utilities and break the config-study circular import
+**Depends on**: Phase 26
+**Requirements**: (internal quality - no REQUIREMENTS.md entries)
+**Success Criteria** (what must be TRUE):
+  1. P2.1: Shared backend methods extracted to `core/backends/_shared.py` (`_build_result`, `_collect_warnings`, `_cuda_sync`, `_check_persistence_mode`, `_MeasurementData`) - ~280 lines deduplicated
+  2. P2.2: Single `compute_config_hash()` utility replaces 5 independent SHA-256[:16] implementations
+  3. P2.3: `_unflatten` and `_deep_merge` extracted to `config/_dict_utils.py` - 3 copies consolidated to 1
+  4. P2.4: Single `is_backend_available` implementation (if both survive Phase 25)
+  5. P2.5: `nvml_context()` context manager in `core/gpu_info.py` replaces 12+ ad-hoc `try/finally: nvmlShutdown()` sites
+  6. P2.6: `_save_and_record()` helper replaces 3 duplicated save-result + manifest-update blocks
+  7. P2.7: Docker dispatch logic consolidated between `_api.py` and `study/runner.py`
+  8. P2.9: `thermal_floor_wait()` extracted to `core/warmup.py` from both backends
+  9. P2.10: NVIDIA toolkit binary list defined once, imported in both `runner_resolution.py` and `docker_preflight.py`
+  10. P2.11: Docker error `__init__` moved to `DockerError` base class, removed from 6 subclasses
+  11. P3.4: `config/loader.py` no longer imports from `study/grid.py` - circular import broken
+  12. All existing tests pass; deduplication is behaviour-preserving
+**Plans**: 3 plans
+**Source**: `.planning/simplify-audit/AUDIT-REPORT.md` (P2.1-P2.11, P3.4)
+
+Discussion (research → CONTEXT.md → plans):
+- **Backend plugin architecture**: How do peer measurement/benchmarking tools (lm-eval-harness, mlperf, zeus, codecarbon) structure the boundary between "measurement harness" and "inference backend"? What is the minimal interface a backend plugin must implement? How do they ensure new backends don't re-implement measurement infra?
+- How do peer tools (pytorch-lightning, huggingface transformers, vllm) structure shared backend utilities and avoid code duplication across backends?
+- NVML lifecycle patterns: how do tools that wrap pynvml (zeus, codecarbon, nvitop) manage init/shutdown? Context manager vs singleton vs lazy init?
+- How do peer Python projects break circular imports? (private util modules, lazy imports, dependency inversion)
+- Config hash consolidation: what hashing patterns do peer tools use for experiment deduplication?
+- What should the `InferenceBackend` protocol look like post-refactor? Current `run(config) -> ExperimentResult` bundles too much - should backends return raw inference data while the harness handles measurement?
+
+Plans:
+- [ ] 27-01-PLAN.md — Backend shared module: extract `_build_result`, `_collect_warnings`, `_cuda_sync`, `_check_persistence_mode`, `_MeasurementData` to `core/backends/_shared.py` + `thermal_floor_wait` to `core/warmup.py` (P2.1, P2.9)
+- [ ] 27-02-PLAN.md — Config utilities and circular import: extract `_dict_utils.py`, break circular import, consolidate `compute_config_hash`, unify `is_backend_available` (P2.2, P2.3, P2.4, P3.4)
+- [ ] 27-03-PLAN.md — Infrastructure deduplication: `nvml_context()`, `_save_and_record()`, Docker dispatch, Docker error base class, NVIDIA toolkit binaries (P2.5, P2.6, P2.7, P2.10, P2.11)
+
+### Phase 28: Logging Standardisation and Performance
+**Goal**: Unify all logging to loguru with f-strings, and fix performance issues that add unnecessary latency to measurements
+**Depends on**: Phase 27
+**Requirements**: (internal quality - no REQUIREMENTS.md entries)
+**Success Criteria** (what must be TRUE):
+  1. P2.8: All 9+ files using `logging.getLogger(__name__)` migrated to `from loguru import logger` with f-string formatting
+  2. P4.1: Dead `nvidia-smi` subprocess removed from `collect_compute_metrics()` - saves 150-200ms per measurement
+  3. P4.2: `_cuda_sync()` no longer calls `importlib.util.find_spec("torch")` at the measurement boundary
+  4. P4.3: `ThreadPoolExecutor` hoisted outside the per-sample loop in FLOPs fallback
+  5. P4.4: `collect_environment_snapshot()` runs `pip freeze`/`conda list` in a background thread (or made opt-in)
+  6. P4.5: `is_docker_available()` cached with `@functools.lru_cache`
+  7. P4.7: `_load_jsonl` short-circuits after `n` records for the interleaved path
+  8. P4.8: `compute_measurement_config_hash` results cached to avoid O(N*C) recomputation in study loop
+  9. P4.9: Dead `nvidia-smi` subprocess removed from `get_cuda_major_version()`
+  10. No behavioural changes beyond performance improvements; all tests pass
+**Plans**: 2 plans
+**Source**: `.planning/simplify-audit/AUDIT-REPORT.md` (P2.8, P4.1-P4.9)
+
+Note: P4.6 (StateManager O(N) filename scan) deferred - requires filename schema change with low frequency impact.
+
+Discussion (research → CONTEXT.md → plans):
+- Logging in measurement tools: how do peer tools (zeus, codecarbon, mlflow) handle logging? loguru vs structlog vs stdlib - what do mature Python tools choose and why?
+- loguru configuration patterns: sinks, formatting, level filtering, test integration (caplog compatibility)
+- Environment snapshot performance: how do peer tools collect environment metadata without blocking experiment start? (lazy, background thread, opt-in)
+- Measurement boundary overhead: what precision do energy measurement tools need at the CUDA sync point? What overhead is acceptable?
+
+Plans:
+- [ ] 28-01-PLAN.md — Logging migration: replace `logging.getLogger` with `loguru.logger` across `core/baseline.py`, `core/flops.py`, `core/power_thermal.py`, `core/warmup.py`, `core/state.py`, `domain/environment.py`, `core/backends/pytorch.py`, `core/backends/vllm.py`, plus %-style to f-string conversion
+- [ ] 28-02-PLAN.md — Performance fixes: dead nvidia-smi removal (P4.1, P4.9), find_spec guard removal (P4.2), ThreadPoolExecutor hoist (P4.3), background env snapshot (P4.4), lru_cache on is_docker_available (P4.5), JSONL short-circuit (P4.7), config hash caching (P4.8)
+
+### Phase 29: Test Cleanup and Quality
+**Goal**: Fix broken, fragile, and meaningless tests so the suite is trustworthy before adding new coverage
+**Depends on**: Phase 28
+**Requirements**: (internal quality - no REQUIREMENTS.md entries)
+**Success Criteria** (what must be TRUE):
+  1. Dead test file `test_cli_experiment.py` deleted
+  2. All 8 source-inspection tests replaced with behavioural equivalents (test_cli_run.py ×2, test_cli_config.py ×1, test_vllm_backend.py ×2, test_aggregation_v2.py ×2, test_peak_memory.py ×all)
+  3. All 6 tautological assertions fixed to test real conditions (test_backend_protocol.py ×2, test_backend_detection.py ×2, test_config_introspection.py, test_flops_v2.py)
+  4. Robustness issues fixed: timing assertion in test_study_gaps.py, probabilistic assertion in test_study_grid.py, `builtins.open` patch narrowed in test_environment_snapshot.py, `lru_cache` cleanup via autouse fixture in test_image_registry.py, `Path.exists` patch narrowed in test_docker_detection.py
+  5. `FakeResultsRepository.load()` uses path-based lookup instead of returning last-saved
+  6. All relative paths in tests replaced with `__file__`-relative or `importlib.resources` paths
+  7. All tests pass; no new test failures introduced
+**Plans**: 2 plans
+**Source**: `.planning/simplify-audit/test-quality-audit.md`
+
+Discussion (research → CONTEXT.md → plans):
+- How do peer Python tools test hardware-dependent code? (mock strategies for pynvml, CUDA, Docker daemon)
+- Source-inspection tests: are there legitimate uses, or should they always be behavioural? What do testing best-practice guides say?
+- Fake/stub design patterns: how do peer tools (pytest-mock patterns, httpx test client, respx) design test doubles that faithfully model real behaviour?
+- Flaky test mitigation: what strategies do large Python projects use? (deterministic seeds, time-independent assertions, fixture-based cleanup)
+
+Plans:
+- [ ] 29-01-PLAN.md — Delete dead tests and replace fragile tests: delete test_cli_experiment.py, replace 8 source-inspection tests with behavioural equivalents, fix all relative paths
+- [ ] 29-02-PLAN.md — Fix assertions and robustness: fix 6 tautological assertions, fix timing/probabilistic flakiness, narrow global patches, fix FakeResultsRepository, lru_cache cleanup fixtures
+
+### Phase 30: Test Coverage
+**Goal**: Close critical coverage gaps in core measurement, CLI, and integration paths - target adjusted coverage ≥75%
+**Depends on**: Phase 29
+**Requirements**: (internal quality - no REQUIREMENTS.md entries)
+**Success Criteria** (what must be TRUE):
+  1. `core/baseline.py` coverage: 37% → ≥80% (cache hit/miss paths, NVML failure paths, invalidation)
+  2. `core/power_thermal.py` coverage: 30% → ≥75% (sample loop with mocked pynvml, mean power, throttle detection)
+  3. `core/flops.py` coverage: 27% → ≥70% (FlopsEstimator dispatch chain, precision detection, architecture/parameter fallbacks)
+  4. `core/environment.py` coverage: 12% → ≥70% (GPU/CUDA/thermal/CPU/container collection with mocked NVML)
+  5. `cli/_vram.py` coverage: 10% → ≥70% (VRAM estimation, HF Hub mock, precision bytes mapping)
+  6. `cli/run.py` coverage: 52% → ≥75% (error exit codes, dry-run, study detection, CLI defaults)
+  7. `cli/config_cmd.py` coverage: 47% → ≥70% (GPU probe, backend version probe, verbose paths)
+  8. `cli/_display.py` coverage: 54% → ≥70% (result summary branches, dry-run output, study progress)
+  9. E2E pipeline integration test: YAML → StudyConfig → FakeBackends → StudyResult (unit-level, no GPU)
+  10. CLI E2E test: `llem run config.yaml` via CliRunner with tmp_path YAML and fake backends
+  11. Adjusted test coverage ≥75% (excluding GPU-only code paths)
+**Plans**: 3 plans
+**Source**: `.planning/simplify-audit/test-coverage-gaps.md`
+
+Discussion (research → CONTEXT.md → plans):
+- How do peer measurement/benchmarking tools (mlperf, lm-eval-harness, zeus) structure their test suites? What coverage targets do they aim for?
+- E2E integration test patterns: how do tools with complex pipelines (config → runner → result) test the full chain without real hardware?
+- Coverage reporting: Codecov vs Coveralls vs HTML artifacts - what works best for single-developer open-source projects?
+- What is a realistic and useful coverage target for a GPU-dependent measurement tool where significant code paths require real hardware?
+
+Plans:
+- [ ] 30-01-PLAN.md — Core measurement coverage: baseline.py (8 tests), power_thermal.py (10 tests), flops.py (14 tests), environment.py (12 tests)
+- [ ] 30-02-PLAN.md — CLI coverage: _vram.py (8 tests), run.py (9 tests), config_cmd.py (8 tests), _display.py (10+ tests)
+- [ ] 30-03-PLAN.md — Integration tests: E2E pipeline test (YAML → StudyConfig → FakeBackends → StudyResult), CLI E2E test (llem run config.yaml), coverage reporting setup
+
+### Phase 31: CI Pipeline Improvements
+**Goal**: Fix CI issues identified by the pipeline audit - remove redundancy, add safety checks, improve reliability
+**Depends on**: Phase 25 (can run in parallel with Phases 29-30)
+**Requirements**: (internal quality - no REQUIREMENTS.md entries)
+**Success Criteria** (what must be TRUE):
+  1. GPU CI no longer runs twice in the release path (removed from `release.yml`, kept in `auto-release.yml`)
+  2. Version tag ↔ pyproject.toml consistency check in `release.yml` - mismatched tags fail early
+  3. Test markers aligned between `ci.yml` and `release.yml` (`-m "not gpu and not docker"` in both)
+  4. `mkdir -p results/` added to `gpu-ci.yml` before first Docker bind mount
+  5. `-n auto` added to `release.yml` test job for parallel test execution
+  6. Docker smoke test extended to include `Dockerfile.pytorch` (not just vllm)
+  7. Version extraction in `auto-release.yml` uses `tomllib` instead of fragile grep/sed
+  8. `dependabot.yml` added for GitHub Actions version pinning
+  9. Version sync check added (pyproject.toml ↔ `__init__.py`) in CI
+  10. Coverage reporting configured (`--cov` flag, XML output, optional Codecov upload)
+**Plans**: 2 plans
+**Source**: `.planning/simplify-audit/ci-pipeline-audit.md`
+
+Discussion (research → CONTEXT.md → plans):
+- How do peer Python/ML projects structure their GitHub Actions CI? (pytorch, huggingface, vllm, mlflow)
+- Release pipeline patterns: how do mature projects gate releases on GPU CI without redundant runs?
+- Dependabot configuration for GitHub Actions: SHA pinning, update frequency, security-only vs all updates
+- Version consistency enforcement: how do projects with dual version sources (pyproject.toml + __init__.py) keep them in sync?
+
+Plans:
+- [ ] 31-01-PLAN.md — CI fixes: remove duplicate GPU CI (MEDIUM), version tag check (MEDIUM), align test markers (MEDIUM), mkdir results (MEDIUM), parallel release tests (LOW)
+- [ ] 31-02-PLAN.md — CI additions: Docker smoke matrix, tomllib version extraction, dependabot.yml, version sync check, coverage reporting
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 16 → 17 → 18 → 19 → 19.1 → 20 → 21 → 21.1 → 22 → 23 → 24
+Phases execute in numeric order: 16 → ... → 24 → 25 → 26 → 27 → 28 → 29 → 30 → 31
 Phase 21 can run in parallel with Phase 20 (no dependency between them).
 Phase 21.1 (CI scaffold) before Phase 22 (Testing) — CI must be stable before testing improvements.
 Phase 22 (Testing/CI) before Phase 23 (Docs) — testing informs documentation.
 Phase 24 (Gap closure) after milestone audit.
+Phase 25 (Dead code) → 26 (Bugs) → 27 (Dedup) → 28 (Logging/Perf): strict sequence - each builds on prior cleanup.
+Phase 29 (Test cleanup) → 30 (Test coverage): tests must target clean code only.
+Phase 31 (CI) can run in parallel with Phases 29-30 (touches workflow files, not source or tests).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -256,6 +489,13 @@ Phase 24 (Gap closure) after milestone audit.
 | 22. Testing and CI | 4/4 | Complete    | 2026-03-05 |
 | 23. Documentation | 5/5 | Complete    | 2026-03-05 |
 | 24. Integration Fixes + Verification | 2/2 | Complete    | 2026-03-05 |
+| 25. Dead Code Deletion | 3/3 | Complete    | 2026-03-06 |
+| 26. Bug Fixes and Security | 0/2 | Not started | — |
+| 27. Deduplication + Circular Import | 0/3 | Not started | — |
+| 28. Logging + Performance | 0/2 | Not started | — |
+| 29. Test Cleanup + Quality | 0/2 | Not started | — |
+| 30. Test Coverage | 0/3 | Not started | — |
+| 31. CI Pipeline | 0/2 | Not started | — |
 
 ---
 
@@ -266,3 +506,4 @@ Phase 24 (Gap closure) after milestone audit.
 *M2 shipped: 2026-02-27 (v0.8.0)*
 *Version scheme reset: 2026-03-04 (1.x → 0.x)*
 *Phase 13 (docs) folded into M3 Phase 22: 2026-02-27*
+*Phases 25-31 rewritten: 2026-03-06 (refactor + test hardening, replacing 2-phase stubs)*

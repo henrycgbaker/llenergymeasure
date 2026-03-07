@@ -21,6 +21,8 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,44 @@ from llenergymeasure.infra.docker_errors import (
 __all__ = ["DockerRunner"]
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _env_file(secrets: dict[str, str]) -> Iterator[Path | None]:
+    """Write secrets to a temp env-file, yield path, delete on exit.
+
+    Creates a temp file with mode 0600 (owner read-write only) via mkstemp.
+    Yields None if secrets dict is empty.
+    Cleanup is guaranteed via finally block (crash/SIGINT/normal exit).
+
+    Args:
+        secrets: Dict of env var name -> value pairs.
+
+    Yields:
+        Path to temp file, or None if no secrets.
+    """
+    if not secrets:
+        yield None
+        return
+
+    fd, path_str = tempfile.mkstemp(prefix="llem-env", suffix=".env")
+    path = Path(path_str)
+    try:
+        with os.fdopen(fd, "w") as f:
+            for key, value in secrets.items():
+                f.write(f"{key}={value}\n")
+        yield path
+    finally:
+        with suppress(FileNotFoundError):
+            path.unlink()
+
+
+def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
+    """Replace secret values with *** in a string."""
+    for v in secrets.values():
+        if v and len(v) > 4:
+            text = text.replace(v, "***")
+    return text
 
 
 class DockerRunner:
@@ -93,30 +133,40 @@ class DockerRunner:
         config_hash = compute_measurement_config_hash(config)
         exchange_dir = Path(tempfile.mkdtemp(prefix="llem-"))
 
+        # Collect secrets for env-file (never pass as CLI args)
+        secrets: dict[str, str] = {}
+        hf_token = os.environ.get("HF_TOKEN")
+        if hf_token:
+            secrets["HF_TOKEN"] = hf_token
+
         try:
             # --- Write config JSON ---
             config_path = exchange_dir / f"{config_hash}_config.json"
             config_path.write_text(config.model_dump_json(), encoding="utf-8")
 
             # --- Build and execute docker command ---
-            cmd = self._build_docker_cmd(config_hash, str(exchange_dir))
-            try:
-                proc = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout,
-                )
-            except subprocess.TimeoutExpired as exc:
-                logger.debug(
-                    "Docker container timed out after %ss. Debug artifacts at %s",
-                    self.timeout,
-                    exchange_dir,
-                )
-                raise DockerTimeoutError(
-                    message=f"Container timed out after {self.timeout}s.",
-                    fix_suggestion="Increase timeout or reduce experiment size.",
-                ) from exc
+            # Secrets are passed via a temp env-file (mode 0600) that is deleted after
+            # subprocess.run completes — they never appear in the command argument list.
+            with _env_file(secrets) as env_path:
+                cmd = self._build_docker_cmd(config_hash, str(exchange_dir), env_path=env_path)
+                logger.debug("Running docker command: %s", _mask_secrets(str(cmd), secrets))
+                try:
+                    proc = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=self.timeout,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    logger.debug(
+                        "Docker container timed out after %ss. Debug artifacts at %s",
+                        self.timeout,
+                        exchange_dir,
+                    )
+                    raise DockerTimeoutError(
+                        message=f"Container timed out after {self.timeout}s.",
+                        fix_suggestion="Increase timeout or reduce experiment size.",
+                    ) from exc
 
             # --- Handle non-zero exit ---
             if proc.returncode != 0:
@@ -154,12 +204,18 @@ class DockerRunner:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _build_docker_cmd(self, config_hash: str, exchange_dir: str) -> list[str]:
+    def _build_docker_cmd(
+        self, config_hash: str, exchange_dir: str, env_path: Path | None = None
+    ) -> list[str]:
         """Build the ``docker run`` command list.
 
         Args:
             config_hash:  Hash prefix for config/result file names.
             exchange_dir: Host path of the temporary exchange directory.
+            env_path:     Path to a temp env-file (written by ``_env_file``), or None.
+                          When set, ``--env-file <path>`` is added to the command.
+                          Secrets (e.g. HF_TOKEN) are never passed as ``-e KEY=VALUE``
+                          arguments to avoid exposure in ``/proc/<pid>/cmdline``.
 
         Returns:
             List of strings suitable for ``subprocess.run``.
@@ -178,10 +234,9 @@ class DockerRunner:
             "8g",
         ]
 
-        # Propagate HF_TOKEN for gated models inside the container
-        hf_token = os.environ.get("HF_TOKEN")
-        if hf_token:
-            cmd.extend(["-e", f"HF_TOKEN={hf_token}"])
+        # Propagate secrets via --env-file (never as -e KEY=VALUE CLI args)
+        if env_path is not None:
+            cmd.extend(["--env-file", str(env_path)])
 
         cmd.extend(
             [

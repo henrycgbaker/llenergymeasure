@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from llenergymeasure.infra.docker_errors import (
     DockerPermissionError,
     DockerTimeoutError,
 )
-from llenergymeasure.infra.docker_runner import DockerRunner
+from llenergymeasure.infra.docker_runner import DockerRunner, _env_file, _mask_secrets
 from tests.conftest import make_config, make_result
 
 # ---------------------------------------------------------------------------
@@ -369,8 +370,8 @@ class TestDockerCommandStructure:
 
 
 class TestHFTokenPropagation:
-    def test_hf_token_added_to_docker_command(self, tmp_path, monkeypatch):
-        """HF_TOKEN env var is forwarded into the docker run command."""
+    def test_hf_token_uses_env_file_not_cli_arg(self, tmp_path, monkeypatch):
+        """HF_TOKEN is forwarded via --env-file, not as a -e CLI argument."""
         monkeypatch.setenv("HF_TOKEN", "hf_test_secret_token")
         config = make_config()
         exchange_dir = tmp_path / "llem-hftoken"
@@ -395,7 +396,10 @@ class TestHFTokenPropagation:
 
         cmd = captured_cmds[0]
         joined = " ".join(cmd)
-        assert "HF_TOKEN=hf_test_secret_token" in joined
+        # Token value must NOT appear in the command args (security requirement)
+        assert "hf_test_secret_token" not in joined
+        # Must use --env-file instead
+        assert "--env-file" in cmd
 
     def test_hf_token_absent_when_not_set(self, tmp_path, monkeypatch):
         """HF_TOKEN is not added to docker command when env var is absent."""
@@ -532,3 +536,118 @@ class TestCleanupWarning:
         assert returned.experiment_id == result.experiment_id
         # Warning was logged
         assert any("Could not remove" in record.message for record in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Test 12: S1 security — HF_TOKEN env-file pattern
+# ---------------------------------------------------------------------------
+
+
+class TestHFTokenSecure:
+    def test_hf_token_not_in_cmd_args(self, tmp_path, monkeypatch):
+        """HF_TOKEN value never appears in docker run command args (S1 security fix)."""
+        monkeypatch.setenv("HF_TOKEN", "hf_test_secret_token_12345")
+        config = make_config()
+        exchange_dir = tmp_path / "llem-s1-cmd"
+        exchange_dir.mkdir()
+
+        captured_cmds: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            captured_cmds.append(cmd)
+            return _make_proc(1, stderr="No such image")
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerImagePullError):
+                runner.run(config)
+
+        cmd = captured_cmds[0]
+        # Token value must not appear in any cmd element
+        assert not any("hf_test_secret_token_12345" in arg for arg in cmd)
+        # Token must not be passed as -e KEY=VALUE
+        assert not any("HF_TOKEN" in arg and "=" in arg for arg in cmd)
+        # --env-file must be present
+        assert "--env-file" in cmd
+
+    def test_hf_token_env_file_content(self):
+        """_env_file creates a file with KEY=VALUE format; file is deleted after context exits."""
+        secrets = {"HF_TOKEN": "hf_test_secret_value"}
+
+        captured_path: list[Path] = []
+
+        with _env_file(secrets) as path:
+            assert path is not None
+            captured_path.append(path)
+            content = path.read_text()
+            assert content == "HF_TOKEN=hf_test_secret_value\n"
+
+        # File must be deleted after context exits
+        assert not captured_path[0].exists()
+
+    def test_no_env_file_when_no_token(self, tmp_path, monkeypatch):
+        """No --env-file flag in docker command when HF_TOKEN is absent."""
+        monkeypatch.delenv("HF_TOKEN", raising=False)
+        config = make_config()
+        exchange_dir = tmp_path / "llem-s1-notoken"
+        exchange_dir.mkdir()
+
+        captured_cmds: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            captured_cmds.append(cmd)
+            return _make_proc(1, stderr="No such image")
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerImagePullError):
+                runner.run(config)
+
+        cmd = captured_cmds[0]
+        assert "--env-file" not in cmd
+
+    def test_env_file_cleanup_on_failure(self):
+        """Temp env-file is deleted even when an exception is raised inside the context."""
+        secrets = {"HF_TOKEN": "hf_cleanup_test_value"}
+        captured_path: list[Path] = []
+
+        try:
+            with _env_file(secrets) as path:
+                assert path is not None
+                captured_path.append(path)
+                # File exists inside context
+                assert path.exists()
+                raise RuntimeError("Simulated failure inside context")
+        except RuntimeError:
+            pass
+
+        # File must be deleted even after the exception
+        assert not captured_path[0].exists()
+
+    def test_mask_secrets(self):
+        """_mask_secrets replaces long secret values with *** in strings."""
+        # Long values (>4 chars) are masked
+        result = _mask_secrets(
+            "docker run -e HF_TOKEN=abc123xyz",
+            {"HF_TOKEN": "abc123xyz"},
+        )
+        assert result == "docker run -e HF_TOKEN=***"
+
+        # Short values (<=4 chars) are NOT masked — avoids false positives
+        result_short = _mask_secrets(
+            "some text with abcd",
+            {"KEY": "abcd"},
+        )
+        assert "abcd" in result_short
