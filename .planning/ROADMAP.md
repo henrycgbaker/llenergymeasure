@@ -491,7 +491,7 @@ Phase 31 (CI) can run in parallel with Phases 29-30 (touches workflow files, not
 | 24. Integration Fixes + Verification | 2/2 | Complete    | 2026-03-05 |
 | 25. Dead Code Deletion | 3/3 | Complete    | 2026-03-06 |
 | 26. Bug Fixes and Security | 2/2 | Complete   | 2026-03-07 |
-| 27. Deduplication + Circular Import | 1/3 | In Progress|  |
+| 27. Deduplication + Circular Import | 2/3 | In Progress|  |
 | 28. Logging + Performance | 0/2 | Not started | — |
 | 29. Test Cleanup + Quality | 0/2 | Not started | — |
 | 30. Test Coverage | 0/3 | Not started | — |
