@@ -235,3 +235,66 @@ def test_flops_result_invalid_method_rejected() -> None:
 def test_legacy_estimate_flops_still_works() -> None:
     """estimate_flops (legacy wrapper) is still importable and callable."""
     assert callable(estimate_flops)
+
+
+# =============================================================================
+# B2 fix: FLOPs derived fields on ExperimentResult
+# =============================================================================
+
+
+def _make_experiment_result(**overrides):
+    """Build a minimal valid ExperimentResult for FLOPs derived field tests."""
+    from datetime import datetime, timezone
+
+    from llenergymeasure.domain.experiment import AggregationMetadata, ExperimentResult
+
+    epoch = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    epoch_end = datetime(2026, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
+
+    defaults = {
+        "experiment_id": "flops-test-001",
+        "measurement_config_hash": "abc123def4567890",
+        "measurement_methodology": "total",
+        "aggregation": AggregationMetadata(num_processes=1),
+        "total_tokens": 100,
+        "total_energy_j": 10.0,
+        "total_inference_time_sec": 10.0,
+        "avg_tokens_per_second": 10.0,
+        "avg_energy_per_token_j": 0.1,
+        "total_flops": 0.0,
+        "start_time": epoch,
+        "end_time": epoch_end,
+    }
+    defaults.update(overrides)
+    return ExperimentResult(**defaults)
+
+
+def test_flops_derived_fields_computed() -> None:
+    """flops_per_output_token, flops_per_input_token, flops_per_second are non-None when data available."""
+    total_flops = 1e12
+    output_tokens = 50
+    input_tokens = 50
+    inference_time_sec = 10.0
+
+    result = _make_experiment_result(
+        total_flops=total_flops,
+        flops_per_output_token=total_flops / output_tokens,
+        flops_per_input_token=total_flops / input_tokens,
+        flops_per_second=total_flops / inference_time_sec,
+    )
+
+    assert result.flops_per_output_token is not None
+    assert result.flops_per_input_token is not None
+    assert result.flops_per_second is not None
+    assert result.flops_per_output_token == pytest.approx(total_flops / output_tokens)
+    assert result.flops_per_input_token == pytest.approx(total_flops / input_tokens)
+    assert result.flops_per_second == pytest.approx(total_flops / inference_time_sec)
+
+
+def test_flops_derived_fields_none_when_zero() -> None:
+    """All FLOPs derived fields are None when total_flops=0."""
+    result = _make_experiment_result(total_flops=0.0)
+
+    assert result.flops_per_output_token is None
+    assert result.flops_per_input_token is None
+    assert result.flops_per_second is None

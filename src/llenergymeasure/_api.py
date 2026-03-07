@@ -233,12 +233,17 @@ def _run(study: StudyConfig, skip_preflight: bool = False) -> StudyResult:
     failed = len(experiment_results) - completed
     total_energy = sum(r.total_energy_j for r in experiment_results if r is not None)
 
+    # study.experiments is already cycle-expanded by apply_cycles(), so len() is the true total
+    n_cycles = study.execution.n_cycles
+    unique_configs = len(study.experiments) // n_cycles if n_cycles > 0 else len(study.experiments)
+
     summary = StudySummary(
-        total_experiments=len(study.experiments) * study.execution.n_cycles,
+        total_experiments=len(study.experiments),
         completed=completed,
         failed=failed,
         total_wall_time_s=wall_time,
         total_energy_j=total_energy,
+        unique_configurations=unique_configs,
         warnings=warnings,
     )
 

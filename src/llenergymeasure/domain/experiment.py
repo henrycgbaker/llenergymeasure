@@ -177,6 +177,20 @@ class ExperimentResult(BaseModel):
     avg_energy_per_token_j: float = Field(..., description="Average energy per token")
     total_flops: float = Field(..., description="Total FLOPs (reference metadata)")
 
+    # FLOPs derived fields (computed from total_flops + token/time denominators)
+    flops_per_output_token: float | None = Field(
+        default=None,
+        description="FLOPs per output (decode) token. None if total_flops=0 or output_tokens=0.",
+    )
+    flops_per_input_token: float | None = Field(
+        default=None,
+        description="FLOPs per input (prefill) token. None if total_flops=0 or input_tokens=0.",
+    )
+    flops_per_second: float | None = Field(
+        default=None,
+        description="FLOPs throughput (total_flops / inference_time_sec). None if time=0 or flops=0.",
+    )
+
     # Energy detail (RES-06, RES-07)
     baseline_power_w: float | None = Field(
         default=None, description="Idle GPU power (W) measured before experiment"
@@ -314,6 +328,10 @@ class StudySummary(BaseModel):
     failed: int = Field(default=0, description="Number of failed experiments")
     total_wall_time_s: float = Field(default=0.0, description="Total wall-clock time in seconds")
     total_energy_j: float = Field(default=0.0, description="Total energy consumed in joules")
+    unique_configurations: int | None = Field(
+        default=None,
+        description="Number of distinct experiment configurations (total_experiments / n_cycles)",
+    )
     warnings: list[str] = Field(
         default_factory=list,
         description="Runtime warnings (CLI narrowing, failures, etc.)",
