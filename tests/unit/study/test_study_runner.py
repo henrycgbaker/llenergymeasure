@@ -290,7 +290,7 @@ def _make_ordering_study(
     fully-cycled execution list from apply_cycles(). The runner must not call
     apply_cycles() again.
     """
-    from llenergymeasure.study.grid import CycleOrder, apply_cycles
+    from llenergymeasure.config.grid import CycleOrder, apply_cycles
 
     exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
     exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
@@ -573,7 +573,7 @@ def test_multi_cycle_correct_experiment_count() -> None:
     study.experiments is the pre-cycled list (6 entries) from apply_cycles().
     The runner must NOT call apply_cycles() again.
     """
-    from llenergymeasure.study.grid import CycleOrder, apply_cycles
+    from llenergymeasure.config.grid import CycleOrder, apply_cycles
 
     exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
     exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
@@ -625,8 +625,8 @@ def test_cycle_counter_increments_per_config_hash() -> None:
     - hash_A: cycles should be [1, 2]
     - hash_B: cycles should be [1, 2]
     """
+    from llenergymeasure.config.grid import CycleOrder, apply_cycles
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
-    from llenergymeasure.study.grid import CycleOrder, apply_cycles
 
     exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
     exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)

@@ -86,7 +86,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 23: Documentation** - Full user docs: installation, getting started, Docker setup guide, backend config guide, study YAML reference (completed 2026-03-05)
 - [x] **Phase 24: M3 Integration Fixes and Retroactive Verification** - Fix preflight runner resolution, add GPU memory check to single-experiment path, retroactive verification of phases 18/20/21 (completed 2026-03-05)
 - [x] **Phase 25: Dead Code Deletion** - Salvage audit of dead modules, then delete ~4,500 lines of v1.x dead code, ghost packages, and unreachable modules (completed 2026-03-06)
-- [ ] **Phase 26: Bug Fixes and Security** - Fix 3 active bugs (thermal throttle, FLOPs fields, study count) + HF_TOKEN security issue
+- [x] **Phase 26: Bug Fixes and Security** - Fix 3 active bugs (thermal throttle, FLOPs fields, study count) + HF_TOKEN security issue (completed 2026-03-07)
 - [ ] **Phase 27: Deduplication and Circular Import** - Extract shared backend methods, config utilities, NVML context manager; break config-study circular import
 - [ ] **Phase 28: Logging and Performance** - Unify logging to loguru, fix 8 performance issues (dead subprocesses, measurement boundary overhead, caching)
 - [ ] **Phase 29: Test Cleanup and Quality** - Delete dead tests, replace 8 source-inspection tests, fix 6 tautological assertions, fix robustness issues
@@ -346,9 +346,9 @@ Discussion (research → CONTEXT.md → plans):
 - What should the `InferenceBackend` protocol look like post-refactor? Current `run(config) -> ExperimentResult` bundles too much - should backends return raw inference data while the harness handles measurement?
 
 Plans:
-- [ ] 27-01-PLAN.md — Backend shared module: extract `_build_result`, `_collect_warnings`, `_cuda_sync`, `_check_persistence_mode`, `_MeasurementData` to `core/backends/_shared.py` + `thermal_floor_wait` to `core/warmup.py` (P2.1, P2.9)
-- [ ] 27-02-PLAN.md — Config utilities and circular import: extract `_dict_utils.py`, break circular import, consolidate `compute_config_hash`, unify `is_backend_available` (P2.2, P2.3, P2.4, P3.4)
-- [ ] 27-03-PLAN.md — Infrastructure deduplication: `nvml_context()`, `_save_and_record()`, Docker dispatch, Docker error base class, NVIDIA toolkit binaries (P2.5, P2.6, P2.7, P2.10, P2.11)
+- [ ] 27-01-PLAN.md — Circular import + dict utils: move `study/grid.py` → `config/grid.py`, create `config/_dict_utils.py`, update all importers (P3.4, P2.3)
+- [ ] 27-02-PLAN.md — MeasurementHarness extraction: `BackendPlugin` protocol, `InferenceOutput` dataclass, `core/harness.py`, shrink backends to thin plugins, wire callers, `thermal_floor_wait()` to `core/warmup.py` (P2.1, P2.9)
+- [ ] 27-03-PLAN.md — Infrastructure dedup: `nvml_context()` replaces 12+ NVML sites, `DockerError.__init__` base class, NVIDIA toolkit list canonical, `_save_and_record()` helper (P2.5, P2.6, P2.10, P2.11)
 
 ### Phase 28: Logging Standardisation and Performance
 **Goal**: Unify all logging to loguru with f-strings, and fix performance issues that add unnecessary latency to measurements
@@ -490,8 +490,8 @@ Phase 31 (CI) can run in parallel with Phases 29-30 (touches workflow files, not
 | 23. Documentation | 5/5 | Complete    | 2026-03-05 |
 | 24. Integration Fixes + Verification | 2/2 | Complete    | 2026-03-05 |
 | 25. Dead Code Deletion | 3/3 | Complete    | 2026-03-06 |
-| 26. Bug Fixes and Security | 0/2 | Not started | — |
-| 27. Deduplication + Circular Import | 0/3 | Not started | — |
+| 26. Bug Fixes and Security | 2/2 | Complete   | 2026-03-07 |
+| 27. Deduplication + Circular Import | 1/3 | In Progress|  |
 | 28. Logging + Performance | 0/2 | Not started | — |
 | 29. Test Cleanup + Quality | 0/2 | Not started | — |
 | 30. Test Coverage | 0/3 | Not started | — |

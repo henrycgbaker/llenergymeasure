@@ -409,7 +409,7 @@ def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
     """
     from collections import defaultdict
 
-    from llenergymeasure.study.grid import CycleOrder, apply_cycles
+    from llenergymeasure.config.grid import CycleOrder, apply_cycles
 
     exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
     exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)

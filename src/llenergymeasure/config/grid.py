@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from pydantic import ValidationError
 
+from llenergymeasure.config._dict_utils import _deep_merge, _unflatten
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.exceptions import ConfigError
 
@@ -251,46 +252,6 @@ def format_preflight_summary(
 # =============================================================================
 # Private helpers
 # =============================================================================
-
-
-def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
-    """Expand dotted keys into nested dicts. Non-dotted keys pass through.
-
-    Defined locally to avoid a circular import with config.loader (which itself
-    imports from this module). Identical semantics to loader._unflatten.
-
-    Example:
-        {"engine.block_size": 16} -> {"engine": {"block_size": 16}}
-        {"batch_size": 4}         -> {"batch_size": 4}
-    """
-    result: dict[str, Any] = {}
-    for key, value in flat.items():
-        if "." in key:
-            parts = key.split(".", 1)
-            if parts[0] not in result:
-                result[parts[0]] = {}
-            if isinstance(result[parts[0]], dict):
-                result[parts[0]][parts[1]] = value
-        else:
-            result[key] = value
-    return result
-
-
-def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Deep merge two dicts, with overlay taking precedence.
-
-    Defined locally to avoid a circular import with config.loader (which itself
-    imports from this module). Identical semantics to loader.deep_merge.
-    """
-    from copy import deepcopy
-
-    result = deepcopy(base)
-    for key, value in overlay.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = deepcopy(value)
-    return result
 
 
 def _extract_fixed(raw_study: dict[str, Any]) -> dict[str, Any]:

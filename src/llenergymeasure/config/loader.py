@@ -19,14 +19,15 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import ConfigError
-from llenergymeasure.study.grid import (
+from llenergymeasure.config._dict_utils import _unflatten
+from llenergymeasure.config.grid import (
     CycleOrder,
     apply_cycles,
     compute_study_design_hash,
     expand_grid,
 )
+from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.exceptions import ConfigError
 
 __all__ = ["deep_merge", "load_experiment_config", "load_study_config"]
 
@@ -259,26 +260,6 @@ def _load_file(path: Path | str) -> dict[str, Any]:
         return result
     except (yaml.YAMLError, json.JSONDecodeError) as e:
         raise ConfigError(f"Parse error in {path}: {e}") from e
-
-
-def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
-    """Expand dotted keys into nested dicts. Non-dotted keys pass through.
-
-    Example:
-        {"pytorch.batch_size": 8, "model": "gpt2"}
-        -> {"pytorch": {"batch_size": 8}, "model": "gpt2"}
-    """
-    result: dict[str, Any] = {}
-    for key, value in flat.items():
-        if "." in key:
-            parts = key.split(".", 1)
-            if parts[0] not in result:
-                result[parts[0]] = {}
-            if isinstance(result[parts[0]], dict):
-                result[parts[0]][parts[1]] = value
-        else:
-            result[key] = value
-    return result
 
 
 def _did_you_mean(key: str, candidates: set[str], max_distance: int = 3) -> str | None:

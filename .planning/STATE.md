@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-06T20:10:00.279Z"
+last_updated: "2026-03-07T17:44:40.975Z"
 progress:
-  total_phases: 13
-  completed_phases: 5
-  total_plans: 21
+  total_phases: 15
+  completed_phases: 6
+  total_plans: 23
   completed_plans: 26
 ---
 
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Researchers can run broad parameter sweeps across deployment configurations and produce publishable, methodology-sound measurements showing which implementation choices matter most for LLM energy efficiency.
-**Current focus:** Phase 25 (Dead Code Deletion)
+**Current focus:** Phase 27 (Deduplication and Circular Import)
 
 ## Current Position
 
-Phase: 25 complete. All 3 plans done.
-Next: Phase 26 (next phase in ROADMAP)
-Status: Phases 16-25 complete. Dead code deletion complete: bulk file deletions + surgical function removal.
-Last activity: 2026-03-06 - Phase 25-03 complete: validate_parallelism_constraints, _parse_flops_string, flops_reduction_factor removed
+Phase: 27 in progress. Plan 01 done.
+Next: Phase 27-02
+Status: Phase 27-01 complete: circular import broken, grid moved to config package, _dict_utils consolidated.
+Last activity: 2026-03-07 - Phase 27-01 complete: config/_dict_utils.py + config/grid.py, study/grid.py deleted, 872 tests pass
 
-Progress: Phase 25 complete (3/3 plans done)
+Progress: Phase 27 plan 01 complete
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed (M3): 27
+- Total plans completed (M3): 30
 - Average duration: 190s
-- Total execution time: 8170s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s + 223s + 126s + 126s + 300s + 181s + 0s + 415s)
+- Total execution time: 8693s (173s + 492s + 300s + 300s + 1020s + 793s + 429s + 179s + 420s + 420s + 308s + 242s + 58s + 430s + 83s + 481s + 114s + 106s + 161s + 290s + 223s + 126s + 126s + 300s + 181s + 0s + 415s + 265s + 258s)
 
 *Updated after each plan completion*
 
@@ -104,6 +104,9 @@ Progress: Phase 25 complete (3/3 plans done)
 - [Phase 24-01]: check_gpu_memory_residual placed before Docker/local branch split in _run_in_process — single call covers both paths consistently with StudyRunner
 - [Phase 25-01]: .product/designs/ is gitignored — design docs (tensorrt-m4-skeleton.md, backend-plugin-protocol.md) are local-only; consistent with how .product/ has been managed since c20909a
 - [Phase 25-03]: Dead string-parsing branch calling _parse_flops_string() removed from _try_calflops() alongside method deletion — output_as_string=False makes isinstance(flops, str) branch unreachable; clean removal prevents latent AttributeError
+- [Phase 26-02]: HF_TOKEN passed via mkstemp env-file (mode 0600) not -e CLI arg — eliminates /proc/<pid>/cmdline exposure; _env_file yields None for empty secrets dict; _mask_secrets only masks values with len > 4
+- [Phase 26-01]: thermal_bit = hw_thermal_bit | sw_thermal_bit (combined OR); FLOPs derived fields use None when denominator is 0; StudySummary.total_experiments = len(study.experiments) without n_cycles multiply
+- [Phase 27]: config/_dict_utils.py is the single canonical location for _unflatten and _deep_merge; study/grid.py deleted with no compat shim; config/ self-contained, no circular import with study/
 
 ### Carried Items
 
@@ -117,6 +120,6 @@ Progress: Phase 25 complete (3/3 plans done)
 
 ## Session Continuity
 
-Last session: 2026-03-06
-Stopped at: Phase 25-03 complete. All Phase 25 dead code deleted.
+Last session: 2026-03-07
+Stopped at: Completed 27-01-PLAN.md. Circular import broken, config/_dict_utils.py and config/grid.py created, study/grid.py deleted.
 Resume file: None
