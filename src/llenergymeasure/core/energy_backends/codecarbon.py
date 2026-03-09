@@ -9,9 +9,9 @@ from typing import Any
 
 import torch
 
-logger = logging.getLogger(__name__)
-
 from llenergymeasure.domain.metrics import EnergyMetrics
+
+logger = logging.getLogger(__name__)
 
 # Suppress FutureWarning from codecarbon's pandas usage
 # (DataFrame concatenation with empty columns deprecation)

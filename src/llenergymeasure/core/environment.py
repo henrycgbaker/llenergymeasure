@@ -13,8 +13,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from llenergymeasure.core.gpu_info import nvml_context
 from llenergymeasure.domain.environment import (
     ContainerEnvironment,
@@ -24,6 +22,8 @@ from llenergymeasure.domain.environment import (
     GPUEnvironment,
     ThermalEnvironment,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def collect_environment_metadata(device_index: int = 0) -> EnvironmentMetadata:
