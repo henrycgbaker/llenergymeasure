@@ -92,12 +92,12 @@ class TestProtocolCompliance:
         backend = VLLMBackend()
         assert backend.name == "vllm"
 
-    def test_vllm_backend_satisfies_protocol(self):
-        """VLLMBackend satisfies the runtime_checkable InferenceBackend protocol."""
-        from llenergymeasure.core.backends.protocol import InferenceBackend
+    def test_vllm_backend_satisfies_plugin_protocol(self):
+        """VLLMBackend satisfies the runtime_checkable BackendPlugin protocol."""
+        from llenergymeasure.core.backends.protocol import BackendPlugin
 
         backend = VLLMBackend()
-        assert isinstance(backend, InferenceBackend)
+        assert isinstance(backend, BackendPlugin)
 
     def test_get_backend_returns_vllm_instance(self):
         """get_backend('vllm') returns a VLLMBackend with name 'vllm'."""

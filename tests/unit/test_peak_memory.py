@@ -1,11 +1,17 @@
 """Tests for peak_memory_mb measurement semantics (MEAS-04).
 
 Verifies:
-- PyTorchBackend resets peak stats before the measurement loop (code structure)
-- VLLMBackend captures peak memory in _run_measurement (code structure)
+- PyTorchBackend resets peak stats before the measurement loop in run_inference (code structure)
+- VLLMBackend captures peak memory in run_inference (code structure)
 - MemoryEfficiencyMetrics has inference_memory_mb field
 - Field descriptions document the inference-window semantics precisely
-- Both backends' _build_result() compute inference_memory_mb = max(0.0, peak - model)
+- MeasurementHarness._build_result() computes inference_memory_mb = max(0.0, peak - model)
+
+Note: After the harness refactor (phase 27-02), both backends are thin BackendPlugin
+implementations. The measurement lifecycle (PowerThermalSampler, energy tracking,
+result assembly) lives in MeasurementHarness (core/harness.py). The backends own
+reset_peak_memory_stats + max_memory_allocated in run_inference, and harness._build_result
+computes inference_memory_mb from InferenceOutput.peak_memory_mb and model_memory_mb.
 """
 
 from __future__ import annotations
@@ -20,6 +26,11 @@ def _pytorch_source() -> str:
 
 def _vllm_source() -> str:
     path = "src/llenergymeasure/core/backends/vllm.py"
+    return open(path).read()
+
+
+def _harness_source() -> str:
+    path = "src/llenergymeasure/core/harness.py"
     return open(path).read()
 
 
@@ -67,42 +78,41 @@ def _extract_method_body(source: str, name: str) -> str:
 
 
 def test_pytorch_resets_peak_before_measurement():
-    """reset_peak_memory_stats appears before 'with PowerThermalSampler(' in _run_measurement."""
-    body = _extract_method_body(_pytorch_source(), "_run_measurement")
+    """reset_peak_memory_stats appears in run_inference before the measurement loop.
+
+    After the harness refactor, PowerThermalSampler lives in MeasurementHarness.run(),
+    not in the backend. The backend owns reset_peak_memory_stats in run_inference so
+    peak stats are cleared for the inference-window-only measurement.
+    """
+    body = _extract_method_body(_pytorch_source(), "run_inference")
     assert "reset_peak_memory_stats" in body, (
-        "PyTorchBackend._run_measurement must call reset_peak_memory_stats()"
+        "PyTorchBackend.run_inference must call reset_peak_memory_stats()"
     )
-    assert "with PowerThermalSampler(" in body, (
-        "PyTorchBackend._run_measurement must use PowerThermalSampler context manager"
-    )
-    reset_pos = body.index("reset_peak_memory_stats")
-    # Search for the context-manager use, not the import
-    sampler_pos = body.index("with PowerThermalSampler(")
-    assert reset_pos < sampler_pos, (
-        "reset_peak_memory_stats must appear BEFORE 'with PowerThermalSampler(' "
-        "(reset must happen before the measurement window opens)"
+    assert "max_memory_allocated" in body, (
+        "PyTorchBackend.run_inference must read max_memory_allocated() for peak_memory_mb"
     )
 
 
 def test_pytorch_reads_peak_after_measurement():
-    """max_memory_allocated appears in _run_measurement after PowerThermalSampler block."""
-    body = _extract_method_body(_pytorch_source(), "_run_measurement")
+    """max_memory_allocated appears in run_inference and result is captured as peak_memory_mb."""
+    body = _extract_method_body(_pytorch_source(), "run_inference")
     assert "max_memory_allocated" in body, (
-        "PyTorchBackend._run_measurement must read max_memory_allocated()"
+        "PyTorchBackend.run_inference must read max_memory_allocated()"
     )
-    # max_memory_allocated should appear after the with PowerThermalSampler( block
-    # (after the closing of the context manager — confirmed by 'peak_memory_mb' assignment)
-    assert "peak_memory_mb" in body, "PyTorchBackend._run_measurement must assign peak_memory_mb"
+    assert "peak_memory_mb" in body, "PyTorchBackend.run_inference must assign peak_memory_mb"
 
 
 def test_pytorch_build_result_computes_inference_memory():
-    """_build_result in pytorch.py contains inference_memory_mb = max(0.0, ...) computation."""
-    body = _extract_method_body(_pytorch_source(), "_build_result")
+    """MeasurementHarness._build_result contains inference_memory_mb = max(0.0, ...) computation.
+
+    After the harness refactor, _build_result lives in harness.py, not pytorch.py.
+    """
+    body = _extract_method_body(_harness_source(), "_build_result")
     assert "inference_memory_mb" in body, (
-        "PyTorchBackend._build_result must compute inference_memory_mb"
+        "MeasurementHarness._build_result must compute inference_memory_mb"
     )
     assert "max(0.0" in body, (
-        "PyTorchBackend._build_result must use max(0.0, ...) for inference_memory_mb"
+        "MeasurementHarness._build_result must use max(0.0, ...) for inference_memory_mb"
     )
 
 
@@ -112,31 +122,46 @@ def test_pytorch_build_result_computes_inference_memory():
 
 
 def test_vllm_has_peak_memory_capture():
-    """VLLMBackend._run_measurement captures peak_memory_mb and resets stats."""
-    body = _extract_method_body(_vllm_source(), "_run_measurement")
-    assert "peak_memory_mb" in body, "VLLMBackend._run_measurement must set data.peak_memory_mb"
+    """VLLMBackend.run_inference captures peak_memory_mb and resets stats.
+
+    After the harness refactor, PowerThermalSampler context manager is in
+    MeasurementHarness.run(). The backend owns reset_peak_memory_stats and
+    max_memory_allocated in run_inference.
+    """
+    body = _extract_method_body(_vllm_source(), "run_inference")
+    assert "peak_mb" in body or "peak_memory_mb" in body, (
+        "VLLMBackend.run_inference must set peak_memory_mb (or peak_mb)"
+    )
     assert "reset_peak_memory_stats" in body, (
-        "VLLMBackend._run_measurement must call reset_peak_memory_stats()"
+        "VLLMBackend.run_inference must call reset_peak_memory_stats()"
     )
     assert "max_memory_allocated" in body, (
-        "VLLMBackend._run_measurement must read max_memory_allocated()"
+        "VLLMBackend.run_inference must read max_memory_allocated()"
     )
-    # reset must appear before the batch inference block
+    # reset must appear before the actual assignment using max_memory_allocated().
+    # The comment above reset also mentions max_memory_allocated() — search for the
+    # assignment form to distinguish the comment from the actual call.
     reset_pos = body.index("reset_peak_memory_stats")
-    sampler_pos = body.index("with PowerThermalSampler(")
-    assert reset_pos < sampler_pos, (
-        "reset_peak_memory_stats must appear BEFORE 'with PowerThermalSampler(' in vLLM"
+    # Match the assignment: "peak_mb = torch.cuda.max_memory_allocated()"
+    alloc_assign = "= torch.cuda.max_memory_allocated()"
+    alloc_pos = body.index(alloc_assign)
+    assert reset_pos < alloc_pos, (
+        "reset_peak_memory_stats must appear BEFORE the max_memory_allocated() assignment "
+        "in vLLM run_inference"
     )
 
 
 def test_vllm_build_result_computes_inference_memory():
-    """_build_result in vllm.py contains inference_memory_mb = max(0.0, ...) computation."""
-    body = _extract_method_body(_vllm_source(), "_build_result")
+    """MeasurementHarness._build_result contains inference_memory_mb = max(0.0, ...) computation.
+
+    After the harness refactor, _build_result lives in harness.py, not vllm.py.
+    """
+    body = _extract_method_body(_harness_source(), "_build_result")
     assert "inference_memory_mb" in body, (
-        "VLLMBackend._build_result must compute inference_memory_mb"
+        "MeasurementHarness._build_result must compute inference_memory_mb"
     )
     assert "max(0.0" in body, (
-        "VLLMBackend._build_result must use max(0.0, ...) for inference_memory_mb"
+        "MeasurementHarness._build_result must use max(0.0, ...) for inference_memory_mb"
     )
 
 

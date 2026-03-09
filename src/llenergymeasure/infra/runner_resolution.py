@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 # Re-exported from image_registry for convenience — parse_runner_value is defined
 # there (canonical home) but used heavily in this module and its tests.
+from llenergymeasure.infra.docker_preflight import _NVIDIA_TOOLKIT_BINS
 from llenergymeasure.infra.image_registry import parse_runner_value
 
 __all__ = [
@@ -59,12 +60,7 @@ def is_docker_available() -> bool:
     if shutil.which("docker") is None:
         return False
 
-    nvidia_tools = (
-        "nvidia-container-runtime",
-        "nvidia-ctk",
-        "nvidia-container-cli",
-    )
-    return any(shutil.which(tool) is not None for tool in nvidia_tools)
+    return any(shutil.which(tool) is not None for tool in _NVIDIA_TOOLKIT_BINS)
 
 
 # ---------------------------------------------------------------------------

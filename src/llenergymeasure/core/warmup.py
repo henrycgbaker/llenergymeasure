@@ -3,17 +3,20 @@
 Replaces fixed-iteration warmup with adaptive convergence detection.
 Warmup continues until latency coefficient of variation (CV) stabilises
 below a configured threshold, or until the safety cap is reached.
+
+Also provides thermal_floor_wait() for use by MeasurementHarness after warmup.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 
-from llenergymeasure.config.models import WarmupConfig
+from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
 
 logger = logging.getLogger(__name__)
@@ -171,3 +174,26 @@ def create_warmup_inference_fn(
         return (time.perf_counter() - start) * 1000.0
 
     return _run
+
+
+def thermal_floor_wait(config: ExperimentConfig) -> float:
+    """Sleep for thermal_floor_seconds after warmup. Returns actual wait time in seconds.
+
+    Returns 0.0 immediately if warmup is disabled or thermal_floor_seconds <= 0.
+    Called by MeasurementHarness after backend.warmup(), before energy tracking starts.
+
+    Args:
+        config: Experiment configuration (reads warmup.enabled and warmup.thermal_floor_seconds).
+
+    Returns:
+        Actual elapsed wait time in seconds (>= 0.0).
+    """
+    if not config.warmup.enabled or config.warmup.thermal_floor_seconds <= 0:
+        return 0.0
+    logger.info(
+        "Thermal stabilisation: waiting %.0fs...",
+        config.warmup.thermal_floor_seconds,
+    )
+    t0 = time.monotonic()
+    time.sleep(config.warmup.thermal_floor_seconds)
+    return time.monotonic() - t0

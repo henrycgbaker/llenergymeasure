@@ -55,6 +55,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     # Lazy imports — only needed at runtime, not import time
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.core.backends import get_backend
+    from llenergymeasure.core.harness import MeasurementHarness
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
     from llenergymeasure.orchestration.preflight import run_preflight
 
@@ -68,7 +69,8 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     # --- Run experiment via library API (not CLI) ---
     run_preflight(config)
     backend = get_backend(config.backend)
-    result = backend.run(config)
+    harness = MeasurementHarness()
+    result = harness.run(backend, config)
 
     # --- Write result ---
     result_dir.mkdir(parents=True, exist_ok=True)

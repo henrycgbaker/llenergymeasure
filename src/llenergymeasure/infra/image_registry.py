@@ -87,13 +87,16 @@ def get_cuda_major_version() -> str | None:
     try:
         import pynvml  # type: ignore[import-untyped]
 
-        pynvml.nvmlInit()
-        cuda_version_raw = pynvml.nvmlSystemGetCudaDriverVersion()
-        pynvml.nvmlShutdown()
-        # nvmlSystemGetCudaDriverVersion returns an integer like 12030 → major 12
-        major_int = cuda_version_raw // 1000
-        if major_int > 0:
-            return str(major_int)
+        from llenergymeasure.core.gpu_info import nvml_context
+
+        cuda_version_raw: int | None = None
+        with nvml_context():
+            cuda_version_raw = pynvml.nvmlSystemGetCudaDriverVersion()
+        if cuda_version_raw is not None:
+            # nvmlSystemGetCudaDriverVersion returns an integer like 12030 → major 12
+            major_int = cuda_version_raw // 1000
+            if major_int > 0:
+                return str(major_int)
     except Exception:
         pass
 

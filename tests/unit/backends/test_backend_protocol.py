@@ -13,13 +13,13 @@ import pytest
 # =============================================================================
 
 
-def test_pytorch_backend_satisfies_protocol():
-    """PyTorchBackend must satisfy the InferenceBackend Protocol."""
-    from llenergymeasure.core.backends.protocol import InferenceBackend
+def test_pytorch_backend_satisfies_plugin_protocol():
+    """PyTorchBackend must satisfy the BackendPlugin Protocol."""
+    from llenergymeasure.core.backends.protocol import BackendPlugin
     from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
-    assert isinstance(backend, InferenceBackend)
+    assert isinstance(backend, BackendPlugin)
     assert backend.name == "pytorch"
 
 
@@ -333,37 +333,34 @@ def test_build_generate_kwargs_greedy_decoding():
 # =============================================================================
 
 
-def test_inference_backend_protocol_has_name_property():
-    """InferenceBackend Protocol defines the name property."""
-    from llenergymeasure.core.backends.protocol import InferenceBackend
-
-    # Protocol defines __protocol_attrs__ listing required members
-    # 'name' and 'run' must be present
-    assert hasattr(InferenceBackend, "__protocol_attrs__") or True  # runtime_checkable
-    _backend_annotations = getattr(InferenceBackend, "__annotations__", {})
-    # Check via isinstance with a conforming object
+def test_backend_plugin_protocol_has_required_methods():
+    """BackendPlugin Protocol defines all 4 required methods plus name property."""
     from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     obj = PyTorchBackend()
     assert hasattr(obj, "name")
-    assert hasattr(obj, "run")
+    assert hasattr(obj, "load_model")
+    assert hasattr(obj, "warmup")
+    assert hasattr(obj, "run_inference")
+    assert hasattr(obj, "cleanup")
 
 
-def test_inference_backend_protocol_is_runtime_checkable():
-    """InferenceBackend is @runtime_checkable (isinstance works)."""
-    from llenergymeasure.core.backends.protocol import InferenceBackend
+def test_backend_plugin_protocol_is_runtime_checkable():
+    """BackendPlugin is @runtime_checkable (isinstance works)."""
+    from llenergymeasure.core.backends.protocol import BackendPlugin
     from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     # runtime_checkable means isinstance() works without raising TypeError
-    result = isinstance(PyTorchBackend(), InferenceBackend)
+    result = isinstance(PyTorchBackend(), BackendPlugin)
     assert isinstance(result, bool)  # didn't raise
+    assert result is True
 
 
-def test_non_conforming_object_fails_protocol_check():
-    """An object without name/run does not satisfy InferenceBackend."""
-    from llenergymeasure.core.backends.protocol import InferenceBackend
+def test_non_conforming_object_fails_plugin_protocol_check():
+    """An object without the 4 plugin methods does not satisfy BackendPlugin."""
+    from llenergymeasure.core.backends.protocol import BackendPlugin
 
     class NotABackend:
         pass
 
-    assert not isinstance(NotABackend(), InferenceBackend)
+    assert not isinstance(NotABackend(), BackendPlugin)

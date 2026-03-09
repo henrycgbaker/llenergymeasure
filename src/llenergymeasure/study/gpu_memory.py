@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 
+from llenergymeasure.core.gpu_info import nvml_context
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,16 +38,17 @@ def check_gpu_memory_residual(
         logger.debug("pynvml not available, skipping GPU memory check")
         return
 
-    try:
-        pynvml.nvmlInit()
+    used_mb: float | None = None
+    with nvml_context():
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
             mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
             used_mb = mem_info.used / (1024 * 1024)
-        finally:
-            pynvml.nvmlShutdown()
-    except Exception as e:
-        logger.debug("GPU memory check failed: %s", e)
+        except Exception as e:
+            logger.debug("GPU memory check failed: %s", e)
+            return
+
+    if used_mb is None:
         return
 
     if used_mb > threshold_mb:

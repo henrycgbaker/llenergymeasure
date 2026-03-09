@@ -1,36 +1,71 @@
-"""InferenceBackend Protocol — contract all backends must satisfy."""
+"""Backend protocol contracts for inference plugins and the harness interface."""
 
-from typing import Protocol, runtime_checkable
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Protocol, runtime_checkable
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult
+from llenergymeasure.domain.metrics import WarmupResult
+
+
+@dataclass
+class InferenceOutput:
+    """Minimal output from one backend inference run.
+
+    Backend-specific data (e.g. vLLM RequestOutput objects) goes in extras.
+    The harness uses these fields to assemble the full ExperimentResult.
+    """
+
+    elapsed_time_sec: float
+    input_tokens: int
+    output_tokens: int
+    peak_memory_mb: float
+    model_memory_mb: float
+    batch_times: list[float] = field(default_factory=list)
+    extras: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
 
 
 @runtime_checkable
-class InferenceBackend(Protocol):
-    """Contract for all inference backends (PyTorch, vLLM, TRT-LLM).
+class BackendPlugin(Protocol):
+    """Contract for thin inference plugins.
 
-    Each backend owns its entire lifecycle internally:
-    model load, warmup, measurement, cleanup. This matches the
-    lm-eval LM subclass pattern — one method, one contract.
+    MeasurementHarness owns the full measurement lifecycle (energy tracking,
+    CUDA sync, FLOPs estimation, result assembly). Plugins own only inference.
     """
 
     @property
     def name(self) -> str:
-        """Backend identifier (e.g., 'pytorch', 'vllm', 'tensorrt')."""
+        """Backend identifier (e.g. 'pytorch', 'vllm', 'tensorrt')."""
         ...
 
-    def run(self, config: ExperimentConfig) -> ExperimentResult:
-        """Run a complete inference experiment and return aggregated results.
-
-        Args:
-            config: Fully resolved experiment configuration.
-
-        Returns:
-            ExperimentResult with all measurement fields populated.
-
-        Raises:
-            BackendError: If model loading or inference fails.
-            PreFlightError: If pre-flight checks fail before GPU allocation.
-        """
+    def load_model(self, config: ExperimentConfig) -> Any:
+        """Load model into memory. Returns opaque model object passed to warmup/run_inference/cleanup."""
         ...
+
+    def warmup(self, config: ExperimentConfig, model: Any) -> WarmupResult:
+        """Run warmup iterations. Returns WarmupResult (thermal_floor_wait_s set by harness)."""
+        ...
+
+    def run_inference(self, config: ExperimentConfig, model: Any) -> InferenceOutput:
+        """Run inference over all prompts. Returns InferenceOutput."""
+        ...
+
+    def cleanup(self, model: Any) -> None:
+        """Release model from memory and clear CUDA cache."""
+        ...
+
+
+@runtime_checkable
+class InferenceBackend(Protocol):
+    """Deprecated: use BackendPlugin. Kept during Phase 27 harness wiring."""
+
+    @property
+    def name(self) -> str: ...
+
+    def run(self, config: ExperimentConfig) -> ExperimentResult: ...

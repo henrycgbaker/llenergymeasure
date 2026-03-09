@@ -127,9 +127,13 @@ def get_gpu_vram_gb() -> float | None:
     try:
         import pynvml
 
-        pynvml.nvmlInit()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        return mem_info.total / 1e9
+        from llenergymeasure.core.gpu_info import nvml_context
+
+        vram_gb: float | None = None
+        with nvml_context():
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            vram_gb = mem_info.total / 1e9
+        return vram_gb
     except Exception:
         return None

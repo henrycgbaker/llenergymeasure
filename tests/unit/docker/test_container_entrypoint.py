@@ -19,6 +19,7 @@ from tests.conftest import make_config, make_result
 # because container_entrypoint imports these inside function scope.
 _PATCH_PREFLIGHT = "llenergymeasure.orchestration.preflight.run_preflight"
 _PATCH_GET_BACKEND = "llenergymeasure.core.backends.get_backend"
+_PATCH_HARNESS_RUN = "llenergymeasure.core.harness.MeasurementHarness.run"
 
 
 # ---------------------------------------------------------------------------
@@ -57,11 +58,10 @@ class TestRunContainerExperiment:
         with (
             patch(_PATCH_PREFLIGHT) as mock_preflight,
             patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
             mock_preflight.return_value = None
-            mock_backend = MagicMock()
-            mock_backend.run.return_value = fake_result
-            mock_get_backend.return_value = mock_backend
+            mock_get_backend.return_value = MagicMock()
 
             from llenergymeasure.infra.container_entrypoint import run_container_experiment
 
@@ -86,6 +86,7 @@ class TestRunContainerExperiment:
         with (
             patch(_PATCH_PREFLIGHT) as mock_preflight,
             patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
 
             def track_preflight(c):
@@ -93,9 +94,7 @@ class TestRunContainerExperiment:
 
             def track_get_backend(name):
                 call_order.append("get_backend")
-                b = MagicMock()
-                b.run.return_value = fake_result
-                return b
+                return MagicMock()
 
             mock_preflight.side_effect = track_preflight
             mock_get_backend.side_effect = track_get_backend
@@ -114,10 +113,9 @@ class TestRunContainerExperiment:
         with (
             patch(_PATCH_PREFLIGHT),
             patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
-            mock_backend = MagicMock()
-            mock_backend.run.return_value = fake_result
-            mock_get_backend.return_value = mock_backend
+            mock_get_backend.return_value = MagicMock()
 
             from llenergymeasure.infra.container_entrypoint import run_container_experiment
 
@@ -132,10 +130,9 @@ class TestRunContainerExperiment:
         with (
             patch(_PATCH_PREFLIGHT),
             patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, side_effect=RuntimeError("GPU exploded")),
         ):
-            mock_backend = MagicMock()
-            mock_backend.run.side_effect = RuntimeError("GPU exploded")
-            mock_get_backend.return_value = mock_backend
+            mock_get_backend.return_value = MagicMock()
 
             from llenergymeasure.infra.container_entrypoint import run_container_experiment
 
@@ -159,10 +156,9 @@ class TestMainErrorHandling:
         with (
             patch(_PATCH_PREFLIGHT),
             patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, side_effect=ValueError("model not found")),
         ):
-            mock_backend = MagicMock()
-            mock_backend.run.side_effect = ValueError("model not found")
-            mock_get_backend.return_value = mock_backend
+            mock_get_backend.return_value = MagicMock()
 
             from llenergymeasure.infra.container_entrypoint import main
 
@@ -189,10 +185,9 @@ class TestMainErrorHandling:
         with (
             patch(_PATCH_PREFLIGHT),
             patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
-            mock_backend = MagicMock()
-            mock_backend.run.return_value = fake_result
-            mock_get_backend.return_value = mock_backend
+            mock_get_backend.return_value = MagicMock()
 
             from llenergymeasure.infra.container_entrypoint import main
 
@@ -219,10 +214,9 @@ class TestMainErrorHandling:
         with (
             patch(_PATCH_PREFLIGHT),
             patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, side_effect=Exception("boom")),
         ):
-            mock_backend = MagicMock()
-            mock_backend.run.side_effect = Exception("boom")
-            mock_get_backend.return_value = mock_backend
+            mock_get_backend.return_value = MagicMock()
 
             from llenergymeasure.infra.container_entrypoint import main
 

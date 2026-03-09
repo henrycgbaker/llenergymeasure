@@ -276,12 +276,12 @@ def _run_in_process(
     When runner_specs resolves the backend to "docker", uses DockerRunner directly
     (no subprocess spawning). Otherwise runs in-process via the backend.
 
-    Errors from run_preflight() and backend.run() propagate unchanged (PreFlightError,
+    Errors from run_preflight() and harness.run(backend, config) propagate unchanged (PreFlightError,
     BackendError). Only result-saving errors are caught so a save failure does not
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
-    from llenergymeasure.results.persistence import save_result
+    from llenergymeasure.study.runner import _save_and_record
 
     config = study.experiments[0]
     config_hash = compute_measurement_config_hash(config)
@@ -328,11 +328,13 @@ def _run_in_process(
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
         from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.core.harness import MeasurementHarness
         from llenergymeasure.orchestration.preflight import run_preflight
 
         run_preflight(config)
         backend = get_backend(config.backend)
-        result = backend.run(config)
+        harness = MeasurementHarness()
+        result = harness.run(backend, config)
 
     # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
     if isinstance(result, dict) and "type" in result:
@@ -343,14 +345,7 @@ def _run_in_process(
 
     result_files: list[str] = []
     warnings: list[str] = []
-    try:
-        result_path = save_result(result, study_dir)
-        rel_path = str(result_path.relative_to(study_dir))
-        result_files.append(str(result_path))
-        manifest.mark_completed(config_hash, cycle, rel_path)
-    except Exception as exc:
-        warnings.append(f"Result save failed: {exc}")
-        manifest.mark_completed(config_hash, cycle, result_file="")
+    _save_and_record(result, study_dir, manifest, config_hash, cycle, result_files)
 
     return result_files, [result], warnings
 
