@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-from loguru import logger
 
 from llenergymeasure.domain.metrics import EnergyMetrics
+
+logger = logging.getLogger(__name__)
 
 # Suppress FutureWarning from codecarbon's pandas usage
 # (DataFrame concatenation with empty columns deprecation)
@@ -100,7 +101,7 @@ class CodeCarbonBackend:
             return tracker
         except Exception as e:
             # Handle NVML permission errors in containers, etc.
-            logger.warning(f"Energy tracking unavailable: {e}")
+            logger.warning("Energy tracking unavailable: %s", e)
             logger.warning("Continuing without energy metrics (common in containers)")
             return None
 
@@ -122,7 +123,7 @@ class CodeCarbonBackend:
             data = self._extract_data(tracker)
             return self._convert_to_metrics(data)
         except Exception as e:
-            logger.error(f"Failed to stop energy tracking: {e}")
+            logger.error("Failed to stop energy tracking: %s", e)
             return self._empty_metrics()
 
     def _empty_metrics(self) -> EnergyMetrics:
@@ -225,7 +226,7 @@ def warm_up(
         num_warmup_runs: Number of warm-up iterations.
         warmup_prompt: Prompt text to use for warm-up.
     """
-    logger.info(f"Running {num_warmup_runs} warm-up iterations")
+    logger.info("Running %d warm-up iterations", num_warmup_runs)
 
     for i in range(num_warmup_runs):
         dummy_input = tokenizer(
@@ -240,6 +241,6 @@ def warm_up(
         with torch.no_grad():
             _ = model(**dummy_input)
 
-        logger.debug(f"Warm-up iteration {i + 1}/{num_warmup_runs} completed")
+        logger.debug("Warm-up iteration %d/%d completed", i + 1, num_warmup_runs)
 
     logger.info("Warm-up complete")

@@ -84,7 +84,7 @@ class UserUIConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    verbosity: Literal["quiet", "standard", "verbose"] = Field(default="standard")
+    log_level: Literal["WARNING", "INFO", "DEBUG"] = Field(default="WARNING")
     prompt: bool = Field(default=True, description="Enable interactive prompts (False for CI/HPC)")
 
 

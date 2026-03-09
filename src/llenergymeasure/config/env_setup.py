@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
-from loguru import logger
+logger = logging.getLogger(__name__)
 
 
 def ensure_env_file(project_root: Path | None = None) -> Path:
@@ -49,7 +50,7 @@ def ensure_env_file(project_root: Path | None = None) -> Path:
             append += "\n".join(missing_vars) + "\n"
             with open(env_file, "a") as f:
                 f.write(append)
-            logger.info(f"Appended {', '.join(missing_vars)} to existing .env")
+            logger.info("Appended %s to existing .env", ", ".join(missing_vars))
         return env_file
 
     # Generate new .env with PUID/PGID
@@ -63,6 +64,6 @@ PGID={pgid}
 """
 
     env_file.write_text(content)
-    logger.info(f"Generated .env with PUID={puid} PGID={pgid} for Docker")
+    logger.info("Generated .env with PUID=%d PGID=%d for Docker", puid, pgid)
 
     return env_file

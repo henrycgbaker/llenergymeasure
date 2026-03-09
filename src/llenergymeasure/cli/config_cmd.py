@@ -76,18 +76,21 @@ def _probe_backend_version(backend: str) -> str | None:
 
 def config_command(
     verbose: Annotated[
-        bool,
-        typer.Option("--verbose", "-v", help="Show detailed backend versions and full config"),
-    ] = False,
+        int,
+        typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
+    ] = 0,
 ) -> None:
     """Show environment and configuration status."""
+    from llenergymeasure.cli import _setup_logging
+
+    _setup_logging(verbose)
     # --- GPU ---
     print("GPU")
     gpus = _probe_gpu()
     if gpus:
         for gpu in gpus:
             print(f"  {gpu['name']}  {gpu['vram_gb']:.1f} GB")
-        if verbose:
+        if verbose > 0:
             try:
                 import pynvml
 
@@ -110,7 +113,7 @@ def config_command(
         installed = importlib.util.find_spec(package) is not None
         if installed:
             print(f"  {backend}: installed", end="")
-            if verbose:
+            if verbose > 0:
                 version = _probe_backend_version(backend)
                 if version:
                     print(f"  ({version})", end="")
@@ -146,7 +149,7 @@ def config_command(
     print(f"  Path: {config_path}")
     if config_path.exists():
         print("  Status: loaded")
-        if verbose:
+        if verbose > 0:
             from llenergymeasure.config.user_config import (
                 UserConfig,
                 load_user_config,

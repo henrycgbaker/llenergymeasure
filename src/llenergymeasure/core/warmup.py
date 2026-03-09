@@ -76,7 +76,7 @@ def warmup_until_converged(
             try:
                 latency_ms = run_single_inference()
             except Exception as exc:
-                logger.warning(f"Warmup prompt {i + 1} failed: {exc}")
+                logger.warning("Warmup prompt %d failed: %s", i + 1, exc)
                 if progress is not None:
                     progress.update(1)
                 continue
@@ -123,7 +123,9 @@ def warmup_until_converged(
             f"(CV={final_cv:.3f} < {config.cv_threshold})"
         )
     elif fixed_mode:
-        logger.info(f"Warmup completed {len(latencies)} fixed iterations (final CV={final_cv:.3f})")
+        logger.info(
+            "Warmup completed %d fixed iterations (final CV=%.3f)", len(latencies), final_cv
+        )
     else:
         logger.warning(
             f"Warmup did not converge after {iteration_limit} prompts "

@@ -6,12 +6,13 @@ including NVIDIA Multi-Instance GPU (MIG) partitions.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from loguru import logger
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -141,7 +142,7 @@ def detect_gpu_topology() -> GPUTopology:
         if devices:
             return GPUTopology(devices=devices)
     except Exception as e:
-        logger.debug(f"pynvml detection failed: {e}")
+        logger.debug("pynvml detection failed: %s", e)
 
     # Fall back to PyTorch
     try:
@@ -149,7 +150,7 @@ def detect_gpu_topology() -> GPUTopology:
         if devices:
             return GPUTopology(devices=devices)
     except Exception as e:
-        logger.debug(f"PyTorch detection failed: {e}")
+        logger.debug("PyTorch detection failed: %s", e)
 
     # No GPUs detected
     logger.warning("No CUDA devices detected")
@@ -167,7 +168,7 @@ def _detect_via_pynvml() -> list[GPUInfo]:
 
     with nvml_context():
         device_count = pynvml.nvmlDeviceGetCount()
-        logger.debug(f"pynvml detected {device_count} device(s)")
+        logger.debug("pynvml detected %d device(s)", device_count)
 
         for i in range(device_count):
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
@@ -210,7 +211,7 @@ def _get_mig_instance_counts() -> dict[int, int]:
 
         return counts
     except Exception as e:
-        logger.debug(f"Failed to get MIG instance counts: {e}")
+        logger.debug("Failed to get MIG instance counts: %s", e)
         return {}
 
 
@@ -308,7 +309,7 @@ def _detect_via_torch() -> list[GPUInfo]:
 
     devices: list[GPUInfo] = []
     device_count = torch.cuda.device_count()
-    logger.debug(f"PyTorch detected {device_count} device(s)")
+    logger.debug("PyTorch detected %d device(s)", device_count)
 
     for i in range(device_count):
         props = torch.cuda.get_device_properties(i)
@@ -466,7 +467,7 @@ def get_device_mig_info(cuda_device_index: int) -> dict[str, Any]:
         }
 
     except Exception as e:
-        logger.debug(f"Failed to get MIG info for device {cuda_device_index}: {e}")
+        logger.debug("Failed to get MIG info for device %d: %s", cuda_device_index, e)
         return {
             "gpu_is_mig": False,
             "gpu_mig_profile": None,
@@ -494,6 +495,6 @@ def get_gpu_architecture(device_index: int = 0) -> str:
             props = torch.cuda.get_device_properties(device_index)
             return f"sm_{props.major}{props.minor}"
     except Exception as e:
-        logger.debug(f"Failed to get GPU architecture for device {device_index}: {e}")
+        logger.debug("Failed to get GPU architecture for device %d: %s", device_index, e)
 
     return "unknown"

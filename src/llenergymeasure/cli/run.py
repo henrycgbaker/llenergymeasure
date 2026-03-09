@@ -78,9 +78,9 @@ def run(
         typer.Option("--quiet", "-q", help="Suppress progress bars"),
     ] = False,
     verbose: Annotated[
-        bool,
-        typer.Option("--verbose", "-v", help="Show detailed output and tracebacks"),
-    ] = False,
+        int,
+        typer.Option("--verbose", "-v", count=True, help="Increase verbosity (-v=INFO, -vv=DEBUG)"),
+    ] = 0,
     cycles: Annotated[
         int | None,
         typer.Option("--cycles", help="Number of cycles (study mode)"),
@@ -105,6 +105,10 @@ def run(
 ) -> None:
     """Run an LLM efficiency experiment."""
 
+    from llenergymeasure.cli import _setup_logging
+
+    _setup_logging(verbose)
+
     # Install SIGINT handler so Ctrl-C exits with code 130
     def _handle_sigint(signum: int, frame: Any) -> None:
         print("\nInterrupted.", file=sys.stderr)
@@ -124,17 +128,17 @@ def run(
             output=output,
             dry_run=dry_run,
             quiet=quiet,
-            verbose=verbose,
+            verbose=verbose > 0,
             cycles=cycles,
             order=order,
             no_gaps=no_gaps,
             skip_preflight=skip_preflight,
         )
     except ConfigError as e:
-        print(format_error(e, verbose=verbose), file=sys.stderr)
+        print(format_error(e, verbose=verbose > 0), file=sys.stderr)
         raise typer.Exit(code=2) from None
     except (PreFlightError, ExperimentError, BackendError, StudyError) as e:
-        print(format_error(e, verbose=verbose), file=sys.stderr)
+        print(format_error(e, verbose=verbose > 0), file=sys.stderr)
         raise typer.Exit(code=1) from None
     except ValidationError as e:
         print(format_validation_error(e), file=sys.stderr)

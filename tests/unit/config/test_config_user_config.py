@@ -48,7 +48,7 @@ def test_load_user_config_missing_file_returns_defaults(tmp_path):
     # Default values from the model
     assert config.output.results_dir == "./results"
     assert config.measurement.energy_backend == "auto"
-    assert config.ui.verbosity == "standard"
+    assert config.ui.log_level == "WARNING"
 
 
 def test_load_user_config_missing_file_no_error(tmp_path):
@@ -67,18 +67,18 @@ def test_load_user_config_missing_file_no_error(tmp_path):
 def test_load_user_config_valid_file(tmp_path):
     """load_user_config() with valid YAML returns UserConfig with overridden values."""
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("output:\n  results_dir: /custom/results\nui:\n  verbosity: verbose\n")
+    config_file.write_text("output:\n  results_dir: /custom/results\nui:\n  log_level: DEBUG\n")
     config = load_user_config(config_path=config_file)
     assert config.output.results_dir == "/custom/results"
-    assert config.ui.verbosity == "verbose"
+    assert config.ui.log_level == "DEBUG"
 
 
 def test_load_user_config_partial_file_uses_defaults_for_missing(tmp_path):
     """Partial user config file merges with defaults for unspecified fields."""
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("ui:\n  verbosity: quiet\n")
+    config_file.write_text("ui:\n  log_level: INFO\n")
     config = load_user_config(config_path=config_file)
-    assert config.ui.verbosity == "quiet"
+    assert config.ui.log_level == "INFO"
     # Unspecified fields retain defaults
     assert config.output.results_dir == "./results"
 
