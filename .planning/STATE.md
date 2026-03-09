@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-07T18:53:50.898Z"
+last_updated: "2026-03-07T17:44:40.975Z"
 progress:
   total_phases: 15
-  completed_phases: 7
+  completed_phases: 6
   total_plans: 23
-  completed_plans: 28
+  completed_plans: 26
 ---
 
 # Project State
@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 27 complete. All 3 plans done.
-Next: Phase 28 (or squash-merge PR for Phase 27 refactor)
-Status: Phase 27-03 complete: nvml_context() added, DockerError base __init__ consolidated, NVIDIA toolkit list de-duplicated, _save_and_record helper, 877 tests pass.
-Last activity: 2026-03-07 - Phase 27-03 complete: all P2.x and P3.4 deduplication items verified
+Phase: 27 in progress. Plan 01 done.
+Next: Phase 27-02
+Status: Phase 27-01 complete: circular import broken, grid moved to config package, _dict_utils consolidated.
+Last activity: 2026-03-07 - Phase 27-01 complete: config/_dict_utils.py + config/grid.py, study/grid.py deleted, 872 tests pass
 
-Progress: Phase 27 complete (3/3 plans done)
+Progress: Phase 27 plan 01 complete
 
 ## Performance Metrics
 
@@ -107,9 +107,6 @@ Progress: Phase 27 complete (3/3 plans done)
 - [Phase 26-02]: HF_TOKEN passed via mkstemp env-file (mode 0600) not -e CLI arg — eliminates /proc/<pid>/cmdline exposure; _env_file yields None for empty secrets dict; _mask_secrets only masks values with len > 4
 - [Phase 26-01]: thermal_bit = hw_thermal_bit | sw_thermal_bit (combined OR); FLOPs derived fields use None when denominator is 0; StudySummary.total_experiments = len(study.experiments) without n_cycles multiply
 - [Phase 27]: config/_dict_utils.py is the single canonical location for _unflatten and _deep_merge; study/grid.py deleted with no compat shim; config/ self-contained, no circular import with study/
-- [Phase 27-02]: MeasurementHarness owns full lifecycle; BackendPlugin is 4-method protocol (load_model, warmup, run_inference, cleanup); hf_model for FLOPs passed via InferenceOutput.extras; model_memory_mb captured by harness after load_model, backends report 0.0
-- [Phase 27-03]: nvml_context() is best-effort (silently yields on pynvml absence/failure) — callers needing availability detection must probe inside the with block (e.g. NVMLBackend.is_available uses nvmlDeviceGetCount as probe)
-- [Phase 27-03]: DockerError base class gets __init__(message, fix_suggestion, stderr_snippet) — all 6 subclasses inherit it; fix_suggestion defaults to "" for compatibility with LLEMError(message) construction patterns
 
 ### Carried Items
 
@@ -124,5 +121,5 @@ Progress: Phase 27 complete (3/3 plans done)
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 27-03-PLAN.md. nvml_context(), DockerError base __init__, NVIDIA toolkit list, _save_and_record helper. Phase 27 complete.
+Stopped at: Completed 27-01-PLAN.md. Circular import broken, config/_dict_utils.py and config/grid.py created, study/grid.py deleted.
 Resume file: None

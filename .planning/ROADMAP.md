@@ -87,7 +87,7 @@ Full details: `milestones/v1.18.0-ROADMAP.md`
 - [x] **Phase 24: M3 Integration Fixes and Retroactive Verification** - Fix preflight runner resolution, add GPU memory check to single-experiment path, retroactive verification of phases 18/20/21 (completed 2026-03-05)
 - [x] **Phase 25: Dead Code Deletion** - Salvage audit of dead modules, then delete ~4,500 lines of v1.x dead code, ghost packages, and unreachable modules (completed 2026-03-06)
 - [x] **Phase 26: Bug Fixes and Security** - Fix 3 active bugs (thermal throttle, FLOPs fields, study count) + HF_TOKEN security issue (completed 2026-03-07)
-- [x] **Phase 27: Deduplication and Circular Import** - Extract shared backend methods, config utilities, NVML context manager; break config-study circular import (completed 2026-03-07)
+- [ ] **Phase 27: Deduplication and Circular Import** - Extract shared backend methods, config utilities, NVML context manager; break config-study circular import
 - [ ] **Phase 28: Logging and Performance** - Unify logging to loguru, fix 8 performance issues (dead subprocesses, measurement boundary overhead, caching)
 - [ ] **Phase 29: Test Cleanup and Quality** - Delete dead tests, replace 8 source-inspection tests, fix 6 tautological assertions, fix robustness issues
 - [ ] **Phase 30: Test Coverage** - Close coverage gaps in core measurement + CLI paths, add E2E integration tests, target ≥75% adjusted coverage
@@ -491,7 +491,7 @@ Phase 31 (CI) can run in parallel with Phases 29-30 (touches workflow files, not
 | 24. Integration Fixes + Verification | 2/2 | Complete    | 2026-03-05 |
 | 25. Dead Code Deletion | 3/3 | Complete    | 2026-03-06 |
 | 26. Bug Fixes and Security | 2/2 | Complete   | 2026-03-07 |
-| 27. Deduplication + Circular Import | 3/3 | Complete    | 2026-03-07 |
+| 27. Deduplication + Circular Import | 1/3 | In Progress|  |
 | 28. Logging + Performance | 0/2 | Not started | — |
 | 29. Test Cleanup + Quality | 0/2 | Not started | — |
 | 30. Test Coverage | 0/3 | Not started | — |
