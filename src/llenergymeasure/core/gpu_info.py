@@ -6,10 +6,31 @@ including NVIDIA Multi-Instance GPU (MIG) partitions.
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
 from loguru import logger
+
+
+@contextmanager
+def nvml_context() -> Generator[None, None, None]:
+    """Context manager for NVML init/shutdown lifecycle.
+
+    Best-effort: silently ignores ImportError (pynvml not installed) and
+    NVMLError (no NVIDIA GPU). Callers receive None on failure - handle gracefully.
+    """
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        try:
+            yield
+        finally:
+            pynvml.nvmlShutdown()
+    except Exception:
+        yield  # pynvml absent or nvmlInit failed — caller proceeds without NVML
 
 
 @dataclass
@@ -139,13 +160,12 @@ def _detect_via_pynvml() -> list[GPUInfo]:
     """Detect GPUs using pynvml."""
     import pynvml
 
-    pynvml.nvmlInit()
     devices: list[GPUInfo] = []
 
     # Get MIG instance counts from nvidia-smi (pynvml doesn't expose this easily)
     mig_counts = _get_mig_instance_counts()
 
-    try:
+    with nvml_context():
         device_count = pynvml.nvmlDeviceGetCount()
         logger.debug(f"pynvml detected {device_count} device(s)")
 
@@ -153,9 +173,6 @@ def _detect_via_pynvml() -> list[GPUInfo]:
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
             info = _get_device_info_pynvml(handle, i, mig_counts.get(i, 0))
             devices.append(info)
-
-    finally:
-        pynvml.nvmlShutdown()
 
     return devices
 

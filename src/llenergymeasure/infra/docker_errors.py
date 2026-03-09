@@ -37,55 +37,25 @@ __all__ = [
 class DockerImagePullError(DockerError):
     """Docker image could not be found or pulled."""
 
-    def __init__(self, message: str, fix_suggestion: str, stderr_snippet: str | None = None):
-        super().__init__(message)
-        self.fix_suggestion = fix_suggestion
-        self.stderr_snippet = stderr_snippet
-
 
 class DockerGPUAccessError(DockerError):
     """NVIDIA Container Toolkit or GPU access error inside Docker."""
-
-    def __init__(self, message: str, fix_suggestion: str, stderr_snippet: str | None = None):
-        super().__init__(message)
-        self.fix_suggestion = fix_suggestion
-        self.stderr_snippet = stderr_snippet
 
 
 class DockerOOMError(DockerError):
     """Container ran out of memory (GPU or host)."""
 
-    def __init__(self, message: str, fix_suggestion: str, stderr_snippet: str | None = None):
-        super().__init__(message)
-        self.fix_suggestion = fix_suggestion
-        self.stderr_snippet = stderr_snippet
-
 
 class DockerPermissionError(DockerError):
     """Permission denied when communicating with Docker daemon."""
-
-    def __init__(self, message: str, fix_suggestion: str, stderr_snippet: str | None = None):
-        super().__init__(message)
-        self.fix_suggestion = fix_suggestion
-        self.stderr_snippet = stderr_snippet
 
 
 class DockerTimeoutError(DockerError):
     """Container exceeded the allowed wall-clock time and was killed."""
 
-    def __init__(self, message: str, fix_suggestion: str, stderr_snippet: str | None = None):
-        super().__init__(message)
-        self.fix_suggestion = fix_suggestion
-        self.stderr_snippet = stderr_snippet
-
 
 class DockerContainerError(DockerError):
     """Generic Docker container failure (unrecognised stderr pattern)."""
-
-    def __init__(self, message: str, fix_suggestion: str, stderr_snippet: str | None = None):
-        super().__init__(message)
-        self.fix_suggestion = fix_suggestion
-        self.stderr_snippet = stderr_snippet
 
 
 # ---------------------------------------------------------------------------

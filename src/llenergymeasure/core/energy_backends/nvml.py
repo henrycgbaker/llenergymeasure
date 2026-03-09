@@ -54,11 +54,19 @@ class NVMLBackend:
 
     def is_available(self) -> bool:
         """Return True if pynvml can initialise on this machine."""
+        import importlib.util
+
+        if importlib.util.find_spec("pynvml") is None:
+            return False
         try:
             import pynvml
 
-            pynvml.nvmlInit()
-            pynvml.nvmlShutdown()
+            from llenergymeasure.core.gpu_info import nvml_context
+
+            # Use a sentinel to detect whether nvml_context yielded successfully
+            # (nvml_context silently yields even on failure — we probe via nvmlDeviceGetCount)
+            with nvml_context():
+                pynvml.nvmlDeviceGetCount()
             return True
         except Exception:
             return False

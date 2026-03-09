@@ -9,12 +9,13 @@ Gracefully degrades when NVML is unavailable — returns None instead of crashin
 
 from __future__ import annotations
 
-import contextlib
+import importlib.util
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from llenergymeasure.core.gpu_info import nvml_context
 from llenergymeasure.domain.metrics import EnergyBreakdown
 
 logger = logging.getLogger(__name__)
@@ -67,41 +68,33 @@ def measure_baseline_power(
         return cached
 
     # Measure fresh baseline
-    try:
-        import pynvml
-
-        pynvml.nvmlInit()
-    except ImportError:
+    if importlib.util.find_spec("pynvml") is None:
         logger.warning("Baseline: pynvml not available, cannot measure baseline power")
         return None
-    except Exception as e:
-        logger.warning("Baseline: NVML init failed: %s", e)
-        return None
 
-    try:
-        handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
-    except pynvml.NVMLError as e:
-        logger.warning("Baseline: failed to get device handle: %s", e)
-        pynvml.nvmlShutdown()
-        return None
+    import pynvml
 
     samples: list[float] = []
     interval = sample_interval_ms / 1000.0
     start = time.monotonic()
 
-    try:
-        while (time.monotonic() - start) < duration_sec:
-            try:
-                power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
-                samples.append(power_mw / 1000.0)
-            except pynvml.NVMLError:
-                pass
-            time.sleep(interval)
-    except Exception as e:
-        logger.warning("Baseline: sampling failed: %s", e)
-    finally:
-        with contextlib.suppress(Exception):
-            pynvml.nvmlShutdown()
+    with nvml_context():
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
+        except Exception as e:
+            logger.warning("Baseline: failed to get device handle: %s", e)
+            return None
+
+        try:
+            while (time.monotonic() - start) < duration_sec:
+                try:
+                    power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
+                    samples.append(power_mw / 1000.0)
+                except pynvml.NVMLError:
+                    pass
+                time.sleep(interval)
+        except Exception as e:
+            logger.warning("Baseline: sampling failed: %s", e)
 
     if not samples:
         logger.warning("Baseline: no power samples collected")

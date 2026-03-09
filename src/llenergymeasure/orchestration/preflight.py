@@ -97,8 +97,9 @@ def _warn_if_persistence_mode_off() -> None:
     try:
         import pynvml
 
-        pynvml.nvmlInit()
-        try:
+        from llenergymeasure.core.gpu_info import nvml_context
+
+        with nvml_context():
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
             if mode == pynvml.NVML_FEATURE_DISABLED:
@@ -106,8 +107,6 @@ def _warn_if_persistence_mode_off() -> None:
                     "GPU persistence mode is off. First experiment may have higher "
                     "latency. Enable: sudo nvidia-smi -pm 1"
                 )
-        finally:
-            pynvml.nvmlShutdown()
     except Exception:
         pass
 

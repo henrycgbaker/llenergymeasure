@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
-__all__ = ["StudyRunner", "_calculate_timeout", "_run_experiment_worker"]
+__all__ = ["StudyRunner", "_calculate_timeout", "_run_experiment_worker", "_save_and_record"]
 
 
 # =============================================================================
@@ -43,6 +43,29 @@ def _calculate_timeout(config: ExperimentConfig) -> int:
     No model-size scaling — keep it simple for M2.
     """
     return max(config.n * 2, 600)
+
+
+def _save_and_record(
+    result: Any,
+    study_dir: Path,
+    manifest: ManifestWriter,
+    config_hash: str,
+    cycle: int,
+    result_files: list[str],
+) -> None:
+    """Save result to disk and update manifest. Appends result path to result_files.
+
+    On save failure, marks the experiment as completed with empty path.
+    """
+    try:
+        from llenergymeasure.results.persistence import save_result
+
+        result_path = save_result(result, study_dir)
+        result_files.append(str(result_path))
+        rel_path = str(result_path.relative_to(study_dir))
+        manifest.mark_completed(config_hash, cycle, rel_path)
+    except Exception:
+        manifest.mark_completed(config_hash, cycle, result_file="")
 
 
 # =============================================================================
@@ -78,6 +101,7 @@ def _run_experiment_worker(
 
         # Run the actual experiment in-process (within the spawned subprocess)
         from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.core.harness import MeasurementHarness
         from llenergymeasure.orchestration.preflight import run_preflight
 
         # Pre-flight inside subprocess: CUDA availability must be checked in the
@@ -85,7 +109,8 @@ def _run_experiment_worker(
         run_preflight(config)
 
         backend = get_backend(config.backend)
-        result = backend.run(config)
+        harness = MeasurementHarness()
+        result = harness.run(backend, config)
 
         # Send result back to parent via Pipe
         conn.send(result)
@@ -423,16 +448,9 @@ class StudyRunner:
             self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
         else:
             # Save result to study directory and track path (RES-15)
-            try:
-                from llenergymeasure.results.persistence import save_result
-
-                result_path = save_result(result, self.study_dir)
-                self.result_files.append(str(result_path))
-                rel_path = str(result_path.relative_to(self.study_dir))
-                self.manifest.mark_completed(config_hash, cycle, rel_path)
-            except Exception:
-                # Save failure does not abort the study
-                self.manifest.mark_completed(config_hash, cycle, result_file="")
+            _save_and_record(
+                result, self.study_dir, self.manifest, config_hash, cycle, self.result_files
+            )
 
         return result
 
@@ -502,16 +520,9 @@ class StudyRunner:
             print_study_progress(index, total, config, status="failed")
         else:
             # Save result to study directory and track path (RES-15)
-            try:
-                from llenergymeasure.results.persistence import save_result
-
-                result_path = save_result(result, self.study_dir)
-                self.result_files.append(str(result_path))
-                rel_path = str(result_path.relative_to(self.study_dir))
-                self.manifest.mark_completed(config_hash, cycle, rel_path)
-            except Exception:
-                # Save failure does not abort the study
-                self.manifest.mark_completed(config_hash, cycle, result_file="")
+            _save_and_record(
+                result, self.study_dir, self.manifest, config_hash, cycle, self.result_files
+            )
             print_study_progress(index, total, config, status="completed")
 
         return result

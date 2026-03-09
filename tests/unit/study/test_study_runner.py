@@ -531,20 +531,24 @@ def test_worker_calls_get_backend(monkeypatch) -> None:
 
     Uses a mock conn (not a real Pipe) so MagicMock results don't need pickling.
     """
+    from tests.conftest import make_result
+
     config = ExperimentConfig(model="test/model", backend="pytorch", n=10)
 
     backend_calls: list[str] = []
     sent_results: list = []
-    fake_result = MagicMock()
+    fake_result = make_result()
 
     def fake_get_backend(name: str):
         backend_calls.append(name)
-        mock_backend = MagicMock()
-        mock_backend.run.return_value = fake_result
-        return mock_backend
+        return MagicMock()
 
     monkeypatch.setattr("llenergymeasure.core.backends.get_backend", fake_get_backend)
     monkeypatch.setattr("llenergymeasure.orchestration.preflight.run_preflight", lambda c: None)
+    monkeypatch.setattr(
+        "llenergymeasure.core.harness.MeasurementHarness.run",
+        lambda self, backend, config: fake_result,
+    )
 
     # Use a mock connection to avoid pickling MagicMock through a real Pipe
     mock_conn = MagicMock()

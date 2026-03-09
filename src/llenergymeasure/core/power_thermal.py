@@ -15,6 +15,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from llenergymeasure.core.gpu_info import nvml_context
 from llenergymeasure.domain.metrics import ThermalThrottleInfo
 
 logger = logging.getLogger(__name__)
@@ -95,15 +96,17 @@ class PowerThermalSampler:
         """Background sampling loop using pynvml."""
         try:
             import pynvml
+        except ImportError:
+            logger.debug("Power/thermal: pynvml not available")
+            return
 
-            pynvml.nvmlInit()
+        with nvml_context():
             self._pynvml_available = True
 
             try:
                 handle = pynvml.nvmlDeviceGetHandleByIndex(self._device_index)
-            except pynvml.NVMLError as e:
+            except Exception as e:
                 logger.debug("Power/thermal: failed to get device handle: %s", e)
-                pynvml.nvmlShutdown()
                 return
 
             # Resolve NVML throttle reason constants (prefer non-deprecated names)
@@ -127,62 +130,60 @@ class PowerThermalSampler:
                 getattr(pynvml, "nvmlDeviceGetCurrentClocksThrottleReasons", None),
             )
 
-            while self._running:
-                try:
-                    sample = PowerThermalSample(timestamp=time.perf_counter())
-
-                    # Power (milliwatts -> watts)
+            try:
+                while self._running:
                     try:
-                        power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
-                        sample.power_w = power_mw / 1000.0
+                        sample = PowerThermalSample(timestamp=time.perf_counter())
+
+                        # Power (milliwatts -> watts)
+                        try:
+                            power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
+                            sample.power_w = power_mw / 1000.0
+                        except pynvml.NVMLError:
+                            pass
+
+                        # Memory
+                        try:
+                            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                            sample.memory_used_mb = mem_info.used / (1024 * 1024)
+                            sample.memory_total_mb = mem_info.total / (1024 * 1024)
+                        except pynvml.NVMLError:
+                            pass
+
+                        # Temperature
+                        try:
+                            temp = pynvml.nvmlDeviceGetTemperature(
+                                handle, pynvml.NVML_TEMPERATURE_GPU
+                            )
+                            sample.temperature_c = float(temp)
+                        except pynvml.NVMLError:
+                            pass
+
+                        # Utilisation
+                        try:
+                            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                            sample.sm_utilisation = float(util.gpu)
+                        except pynvml.NVMLError:
+                            pass
+
+                        # Throttle reasons
+                        try:
+                            if _get_clocks_reasons is not None:
+                                reasons = _get_clocks_reasons(handle)
+                                sample.throttle_reasons = reasons
+                                sample.thermal_throttle = bool(reasons & thermal_bits)
+                        except pynvml.NVMLError:
+                            pass
+
+                        self._samples.append(sample)
+
                     except pynvml.NVMLError:
+                        # Entire sample failed, skip
                         pass
 
-                    # Memory
-                    try:
-                        mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                        sample.memory_used_mb = mem_info.used / (1024 * 1024)
-                        sample.memory_total_mb = mem_info.total / (1024 * 1024)
-                    except pynvml.NVMLError:
-                        pass
-
-                    # Temperature
-                    try:
-                        temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-                        sample.temperature_c = float(temp)
-                    except pynvml.NVMLError:
-                        pass
-
-                    # Utilisation
-                    try:
-                        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-                        sample.sm_utilisation = float(util.gpu)
-                    except pynvml.NVMLError:
-                        pass
-
-                    # Throttle reasons
-                    try:
-                        if _get_clocks_reasons is not None:
-                            reasons = _get_clocks_reasons(handle)
-                            sample.throttle_reasons = reasons
-                            sample.thermal_throttle = bool(reasons & thermal_bits)
-                    except pynvml.NVMLError:
-                        pass
-
-                    self._samples.append(sample)
-
-                except pynvml.NVMLError:
-                    # Entire sample failed, skip
-                    pass
-
-                time.sleep(self._sample_interval)
-
-            pynvml.nvmlShutdown()
-
-        except ImportError:
-            logger.debug("Power/thermal: pynvml not available")
-        except Exception as e:
-            logger.debug("Power/thermal sampling failed: %s", e)
+                    time.sleep(self._sample_interval)
+            except Exception as e:
+                logger.debug("Power/thermal sampling failed: %s", e)
 
     def get_samples(self) -> list[PowerThermalSample]:
         """Get all collected samples."""

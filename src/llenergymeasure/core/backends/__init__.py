@@ -2,10 +2,10 @@
 
 import importlib.util
 
-from llenergymeasure.core.backends.protocol import InferenceBackend
+from llenergymeasure.core.backends.protocol import BackendPlugin, InferenceBackend
 from llenergymeasure.exceptions import BackendError
 
-__all__ = ["InferenceBackend", "detect_default_backend", "get_backend"]
+__all__ = ["BackendPlugin", "InferenceBackend", "detect_default_backend", "get_backend"]
 
 
 def detect_default_backend() -> str:
@@ -27,14 +27,14 @@ def detect_default_backend() -> str:
     )
 
 
-def get_backend(name: str) -> InferenceBackend:
+def get_backend(name: str) -> BackendPlugin:
     """Get an inference backend instance by name.
 
     Args:
         name: Backend name ('pytorch', 'vllm', 'tensorrt').
 
     Returns:
-        An InferenceBackend instance.
+        A BackendPlugin instance.
 
     Raises:
         BackendError: If the backend name is unknown.

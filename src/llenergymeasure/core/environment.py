@@ -5,7 +5,7 @@ Gracefully degrades when NVML is unavailable — returns EnvironmentMetadata
 with reasonable defaults instead of crashing.
 """
 
-import contextlib
+import importlib.util
 import os
 import platform
 from datetime import datetime
@@ -14,6 +14,7 @@ from typing import Any
 
 from loguru import logger
 
+from llenergymeasure.core.gpu_info import nvml_context
 from llenergymeasure.domain.environment import (
     ContainerEnvironment,
     CPUEnvironment,
@@ -36,47 +37,43 @@ def collect_environment_metadata(device_index: int = 0) -> EnvironmentMetadata:
     Returns:
         EnvironmentMetadata with all available hardware/software info.
     """
-    try:
-        import pynvml
-
-        pynvml.nvmlInit()
-        logger.debug("Environment: NVML initialised")
-    except ImportError:
+    if importlib.util.find_spec("pynvml") is None:
         logger.debug("Environment: pynvml not available, returning defaults")
         return _unavailable_metadata()
-    except Exception as e:
-        logger.debug(f"Environment: NVML init failed: {e}")
-        return _unavailable_metadata()
 
-    try:
-        handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
-    except pynvml.NVMLError as e:
-        logger.debug(f"Environment: failed to get device handle: {e}")
-        pynvml.nvmlShutdown()
-        return _unavailable_metadata()
+    import pynvml
 
-    try:
-        gpu = _collect_gpu(pynvml, handle)
-        cuda = _collect_cuda(pynvml)
-        thermal = _collect_thermal(pynvml, handle)
-        cpu = _collect_cpu()
-        container = _collect_container()
+    result: EnvironmentMetadata | None = None
 
-        pynvml.nvmlShutdown()
+    with nvml_context():
+        logger.debug("Environment: NVML initialised")
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
+        except Exception as e:
+            logger.debug(f"Environment: failed to get device handle: {e}")
+            return _unavailable_metadata()
 
-        return EnvironmentMetadata(
-            gpu=gpu,
-            cuda=cuda,
-            thermal=thermal,
-            cpu=cpu,
-            container=container,
-            collected_at=datetime.now(),
-        )
-    except Exception as e:
-        logger.debug(f"Environment: collection failed: {e}")
-        with contextlib.suppress(Exception):
-            pynvml.nvmlShutdown()
-        return _unavailable_metadata()
+        try:
+            gpu = _collect_gpu(pynvml, handle)
+            cuda = _collect_cuda(pynvml)
+            thermal = _collect_thermal(pynvml, handle)
+            cpu = _collect_cpu()
+            container = _collect_container()
+
+            result = EnvironmentMetadata(
+                gpu=gpu,
+                cuda=cuda,
+                thermal=thermal,
+                cpu=cpu,
+                container=container,
+                collected_at=datetime.now(),
+            )
+        except Exception as e:
+            logger.debug(f"Environment: collection failed: {e}")
+
+    if result is not None:
+        return result
+    return _unavailable_metadata()
 
 
 def _collect_gpu(pynvml: Any, handle: Any) -> GPUEnvironment:

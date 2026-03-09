@@ -25,17 +25,18 @@ def _probe_gpu() -> list[dict[str, Any]] | None:
     try:
         import pynvml
 
-        pynvml.nvmlInit()
-        count = pynvml.nvmlDeviceGetCount()
-        gpus = []
-        for i in range(count):
-            h = pynvml.nvmlDeviceGetHandleByIndex(i)
-            name = pynvml.nvmlDeviceGetName(h)
-            if isinstance(name, bytes):
-                name = name.decode()
-            mem = pynvml.nvmlDeviceGetMemoryInfo(h)
-            gpus.append({"name": name, "vram_gb": mem.total / 1e9})
-        pynvml.nvmlShutdown()
+        from llenergymeasure.core.gpu_info import nvml_context
+
+        gpus: list[dict[str, Any]] = []
+        with nvml_context():
+            count = pynvml.nvmlDeviceGetCount()
+            for i in range(count):
+                h = pynvml.nvmlDeviceGetHandleByIndex(i)
+                name = pynvml.nvmlDeviceGetName(h)
+                if isinstance(name, bytes):
+                    name = name.decode()
+                mem = pynvml.nvmlDeviceGetMemoryInfo(h)
+                gpus.append({"name": name, "vram_gb": mem.total / 1e9})
         return gpus if gpus else None
     except Exception:
         return None
@@ -90,12 +91,14 @@ def config_command(
             try:
                 import pynvml
 
-                pynvml.nvmlInit()
-                driver = pynvml.nvmlSystemGetDriverVersion()
-                if isinstance(driver, bytes):
-                    driver = driver.decode()
-                pynvml.nvmlShutdown()
-                print(f"  Driver: {driver}")
+                from llenergymeasure.core.gpu_info import nvml_context
+
+                driver: str | None = None
+                with nvml_context():
+                    raw = pynvml.nvmlSystemGetDriverVersion()
+                    driver = raw.decode() if isinstance(raw, bytes) else str(raw)
+                if driver:
+                    print(f"  Driver: {driver}")
             except Exception:
                 pass
     else:
