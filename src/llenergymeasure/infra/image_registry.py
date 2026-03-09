@@ -22,7 +22,6 @@ Runner value parsing
 
 from __future__ import annotations
 
-import contextlib
 import subprocess
 from functools import lru_cache
 
@@ -53,7 +52,7 @@ _SUPPORTED_BACKENDS = frozenset({"pytorch", "vllm", "tensorrt"})
 def get_cuda_major_version() -> str | None:
     """Detect the host CUDA major version.
 
-    Tries ``nvcc --version`` first, falls back to ``nvidia-smi``.
+    Tries ``nvcc --version`` first, falls back to pynvml.
 
     Returns:
         CUDA major version string, e.g. ``"12"``, or ``None`` if detection fails.
@@ -73,17 +72,7 @@ def get_cuda_major_version() -> str | None:
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         pass
 
-    # --- Secondary: nvidia-smi ---
-    with contextlib.suppress(FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        subprocess.run(
-            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        # nvidia-smi doesn't directly give CUDA version; fall through.
-
-    # --- Tertiary: pynvml ---
+    # --- Secondary: pynvml ---
     try:
         import pynvml  # type: ignore[import-untyped]
 
