@@ -22,6 +22,14 @@ from llenergymeasure.infra.runner_resolution import (
     resolve_study_runners,
 )
 
+
+@pytest.fixture(autouse=True)
+def _clear_docker_cache():
+    is_docker_available.cache_clear()
+    yield
+    is_docker_available.cache_clear()
+
+
 # ---------------------------------------------------------------------------
 # parse_runner_value
 # ---------------------------------------------------------------------------

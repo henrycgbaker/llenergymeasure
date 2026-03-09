@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 from datetime import datetime
@@ -27,6 +28,11 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 
+@functools.lru_cache(maxsize=128)
+def _hash_canonical(canonical: str) -> str:
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+
 def compute_measurement_config_hash(config: ExperimentConfig) -> str:
     """SHA-256[:16] of ExperimentConfig. Layer 3 fields excluded by design.
 
@@ -35,7 +41,7 @@ def compute_measurement_config_hash(config: ExperimentConfig) -> str:
     naturally excludes them. No special exclusion logic needed.
     """
     canonical = json.dumps(config.model_dump(), sort_keys=True)
-    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+    return _hash_canonical(canonical)
 
 
 class Timestamps(BaseModel):

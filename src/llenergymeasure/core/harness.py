@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -87,6 +88,14 @@ def collect_environment_snapshot() -> EnvironmentSnapshot:  # pragma: no cover
     return _snap()
 
 
+def collect_environment_snapshot_async() -> Future[EnvironmentSnapshot]:  # pragma: no cover
+    from llenergymeasure.domain.environment import (
+        collect_environment_snapshot_async as _snap_async,
+    )
+
+    return _snap_async()
+
+
 def measure_baseline_power(duration_sec: float) -> BaselineCache | None:  # pragma: no cover
     from llenergymeasure.core.baseline import measure_baseline_power as _mbp
 
@@ -158,12 +167,19 @@ class MeasurementHarness:
     thermal floor wait, FLOPs estimation, timeseries, warnings, and result assembly.
     """
 
-    def run(self, backend: BackendPlugin, config: ExperimentConfig) -> ExperimentResult:
+    def run(
+        self,
+        backend: BackendPlugin,
+        config: ExperimentConfig,
+        snapshot: EnvironmentSnapshot | None = None,
+    ) -> ExperimentResult:
         """Run a complete measurement using the given backend plugin.
 
         Args:
             backend: BackendPlugin instance (pytorch, vllm, tensorrt, ...).
             config: Fully resolved experiment configuration.
+            snapshot: Pre-collected environment snapshot (study-level cache).
+                      When None, collected in a background thread during model load.
 
         Returns:
             ExperimentResult with all measurement fields populated.
@@ -172,9 +188,11 @@ class MeasurementHarness:
             BackendError: If model loading or inference fails.
             PreFlightError: If pre-flight checks fail before GPU allocation.
         """
-        # 1. Environment snapshot (BEFORE model loading — CM-32)
-        logger.debug("Collecting environment snapshot before model load")
-        snapshot = collect_environment_snapshot()
+        # 1. Environment snapshot — start background thread (BEFORE model loading — CM-32)
+        snapshot_future: Future[EnvironmentSnapshot] | None = None
+        if snapshot is None:
+            logger.debug("Collecting environment snapshot (background thread)")
+            snapshot_future = collect_environment_snapshot_async()
 
         # 2. Baseline power measurement (BEFORE model load — CM-17, CM-20)
         baseline = None
@@ -184,6 +202,10 @@ class MeasurementHarness:
 
         # 3. Load model via backend plugin
         model = backend.load_model(config)
+
+        # 3b. Join snapshot future — collection hidden behind model loading
+        if snapshot_future is not None:
+            snapshot = snapshot_future.result(timeout=10)
 
         # 4. Capture model memory baseline immediately after model load.
         # Must happen BEFORE warmup, which allocates KV cache.

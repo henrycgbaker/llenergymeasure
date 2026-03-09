@@ -19,6 +19,7 @@ import signal
 import sys
 import threading
 import traceback
+from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +27,7 @@ from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+    from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
@@ -77,6 +79,7 @@ def _run_experiment_worker(
     config: ExperimentConfig,
     conn: Any,  # multiprocessing.Connection (child end)
     progress_queue: Any,  # multiprocessing.Queue
+    snapshot: EnvironmentSnapshot | None = None,
 ) -> None:
     """Entry point for the child process. Runs one experiment and returns result via Pipe.
 
@@ -110,7 +113,7 @@ def _run_experiment_worker(
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
-        result = harness.run(backend, config)
+        result = harness.run(backend, config, snapshot=snapshot)
 
         # Send result back to parent via Pipe
         conn.send(result)
@@ -280,6 +283,8 @@ class StudyRunner:
         self._interrupt_count: int = 0
         # Per-config_hash cycle counters — reset at the start of each run()
         self._cycle_counters: dict[str, int] = {}
+        # Study-level environment snapshot cache — collected once, reused across experiments
+        self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
 
     def run(self) -> list[Any]:
         """Run all experiments in order; return list of results or failure dicts.
@@ -370,6 +375,18 @@ class StudyRunner:
 
         return results
 
+    def _get_env_snapshot(self) -> EnvironmentSnapshot:
+        """Return cached environment snapshot, collecting on first call.
+
+        Uses background-threaded collection on first call. Subsequent calls
+        return the resolved snapshot immediately (study-level cache).
+        """
+        if self._env_snapshot_future is None:
+            from llenergymeasure.domain.environment import collect_environment_snapshot_async
+
+            self._env_snapshot_future = collect_environment_snapshot_async()
+        return self._env_snapshot_future.result(timeout=10)
+
     def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int, total: int) -> Any:
         """Dispatch one experiment via Docker or subprocess, collect result or failure dict.
 
@@ -397,12 +414,15 @@ class StudyRunner:
 
         timeout = _calculate_timeout(config)
 
+        # Resolve cached snapshot in parent — serialised to subprocess via Pipe
+        snapshot = self._get_env_snapshot()
+
         parent_conn, child_conn = mp_ctx.Pipe(duplex=False)
         progress_queue = mp_ctx.Queue()
 
         p = mp_ctx.Process(
             target=_run_experiment_worker,
-            args=(config, child_conn, progress_queue),
+            args=(config, child_conn, progress_queue, snapshot),
             daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
         )
 
