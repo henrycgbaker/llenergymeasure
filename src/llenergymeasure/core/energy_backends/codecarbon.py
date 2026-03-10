@@ -123,7 +123,7 @@ class CodeCarbonBackend:
             data = self._extract_data(tracker)
             return self._convert_to_metrics(data)
         except Exception as e:
-            logger.error("Failed to stop energy tracking: %s", e)
+            logger.warning("Failed to stop energy tracking: %s", e)
             return self._empty_metrics()
 
     def _empty_metrics(self) -> EnergyMetrics:
@@ -226,7 +226,7 @@ def warm_up(
         num_warmup_runs: Number of warm-up iterations.
         warmup_prompt: Prompt text to use for warm-up.
     """
-    logger.info("Running %d warm-up iterations", num_warmup_runs)
+    logger.debug("Running %d warm-up iterations", num_warmup_runs)
 
     for i in range(num_warmup_runs):
         dummy_input = tokenizer(
@@ -243,4 +243,4 @@ def warm_up(
 
         logger.debug("Warm-up iteration %d/%d completed", i + 1, num_warmup_runs)
 
-    logger.info("Warm-up complete")
+    logger.debug("Warm-up complete")

@@ -173,13 +173,13 @@ class MeasurementHarness:
             PreFlightError: If pre-flight checks fail before GPU allocation.
         """
         # 1. Environment snapshot (BEFORE model loading — CM-32)
-        logger.info("Collecting environment snapshot before model load")
+        logger.debug("Collecting environment snapshot before model load")
         snapshot = collect_environment_snapshot()
 
         # 2. Baseline power measurement (BEFORE model load — CM-17, CM-20)
         baseline = None
         if config.baseline.enabled:
-            logger.info("Measuring baseline power (%.0fs)...", config.baseline.duration_seconds)
+            logger.debug("Measuring baseline power (%.0fs)...", config.baseline.duration_seconds)
             baseline = measure_baseline_power(config.baseline.duration_seconds)
 
         # 3. Load model via backend plugin
@@ -423,7 +423,7 @@ class MeasurementHarness:
 
         # Memory metrics: inference-window-only peak and derived delta.
         inference_memory_mb = max(0.0, output.peak_memory_mb - model_memory_mb)
-        logger.info(
+        logger.debug(
             "Memory: model=%.1fMB, peak_inference=%.1fMB, inference_delta=%.1fMB",
             model_memory_mb,
             output.peak_memory_mb,

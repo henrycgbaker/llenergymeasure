@@ -60,7 +60,7 @@ def measure_baseline_power(
     # Check cache first
     cached = _baseline_cache.get(device_index)
     if cached is not None and (time.time() - cached.timestamp) < cache_ttl_sec:
-        logger.info(
+        logger.debug(
             "Using cached baseline: %.1fW (age: %.0fs)",
             cached.power_w,
             time.time() - cached.timestamp,
@@ -113,7 +113,7 @@ def measure_baseline_power(
 
     _baseline_cache[device_index] = result
 
-    logger.info(
+    logger.debug(
         "Baseline power measured: %.1fW (%d samples over %.1fs)",
         mean_power,
         len(samples),

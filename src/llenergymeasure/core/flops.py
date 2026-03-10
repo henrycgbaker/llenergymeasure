@@ -331,7 +331,7 @@ class FlopsEstimator:
             )
 
         except Exception as e:
-            logger.error("All FLOPs estimation methods failed: %s", e)
+            logger.warning("All FLOPs estimation methods failed: %s", e)
             return FlopsResult(
                 value=0.0,
                 method="parameter_estimate",

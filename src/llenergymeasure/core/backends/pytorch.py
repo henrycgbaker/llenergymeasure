@@ -74,11 +74,11 @@ class PyTorchBackend:
             backend = config.pytorch.torch_compile_backend or "inductor"
             try:
                 model = _torch.compile(model, mode=mode, backend=backend)
-                logger.info("torch.compile applied (mode=%s, backend=%s)", mode, backend)
+                logger.debug("torch.compile applied (mode=%s, backend=%s)", mode, backend)
             except Exception as e:
                 logger.warning("torch.compile failed (non-fatal, continuing without): %s", e)
 
-        logger.info("Model loaded successfully")
+        logger.debug("Model loaded successfully")
         return model, tokenizer
 
     # -------------------------------------------------------------------------
@@ -107,7 +107,7 @@ class PyTorchBackend:
         hf_model, tokenizer = model
 
         if not config.warmup.enabled:
-            logger.info("Warmup disabled, skipping")
+            logger.debug("Warmup disabled, skipping")
             return WarmupResult(
                 converged=True,
                 final_cv=0.0,
@@ -120,7 +120,7 @@ class PyTorchBackend:
         words_per_prompt = max(1, config.max_input_tokens // 4)
         warmup_prompt = ("Hello, " * words_per_prompt).strip()
 
-        logger.info(
+        logger.debug(
             "Running warmup: %d fixed iterations (convergence_detection=%s)",
             config.warmup.n_warmup,
             config.warmup.convergence_detection,
@@ -130,7 +130,7 @@ class PyTorchBackend:
             hf_model, tokenizer, warmup_prompt, config.max_output_tokens
         )
         result = warmup_until_converged(inference_fn, config.warmup, show_progress=False)
-        logger.info("Warmup complete: %d iterations", result.iterations_completed)
+        logger.debug("Warmup complete: %d iterations", result.iterations_completed)
         return result
 
     # -------------------------------------------------------------------------
@@ -215,7 +215,7 @@ class PyTorchBackend:
 
         # model_memory_mb is queried by the harness after load_model(); we report 0.0 here
         # as the harness captures it before warmup (before this method is called).
-        logger.info(
+        logger.debug(
             "Measurement complete: %d total tokens in %.2fs",
             total_input_tokens + total_output_tokens,
             total_time_sec,
@@ -254,7 +254,7 @@ class PyTorchBackend:
                     logger.debug("CUDA cache cleared")
             except Exception:
                 logger.debug("CUDA cleanup failed", exc_info=True)
-        logger.info("Model cleanup complete")
+        logger.debug("Model cleanup complete")
 
     # -------------------------------------------------------------------------
     # Private: model loading helpers

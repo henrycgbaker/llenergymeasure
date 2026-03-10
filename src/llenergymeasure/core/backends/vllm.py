@@ -77,7 +77,7 @@ class VLLMBackend:
         except Exception as e:
             raise BackendError(f"vLLM model loading failed: {e}") from e
 
-        logger.info("vLLM model loaded successfully")
+        logger.debug("vLLM model loaded successfully")
 
         # Build SamplingParams or BeamSearchParams depending on config
         if config.vllm is not None and config.vllm.beam_search is not None:
@@ -106,13 +106,13 @@ class VLLMBackend:
         llm, _sampling_params = model
 
         if config.warmup.enabled:
-            logger.info("Running vLLM warmup (1 prompt, 1 token)...")
+            logger.debug("Running vLLM warmup (1 prompt, 1 token)...")
             from vllm import SamplingParams as _SP
 
             warmup_params = _SP(max_tokens=1, temperature=0.0)
             prompts = self._prepare_prompts(config)
             llm.generate(prompts[:1], warmup_params)
-            logger.info("vLLM warmup complete")
+            logger.debug("vLLM warmup complete")
 
         return WarmupResult(
             converged=True,
@@ -214,7 +214,7 @@ class VLLMBackend:
         input_token_count = sum(len(o.prompt_token_ids) for o in outputs)
         output_token_count = sum(len(o.outputs[0].token_ids) for o in outputs if o.outputs)
 
-        logger.info(
+        logger.debug(
             "vLLM inference complete: %d total tokens (in=%d, out=%d) in %.2fs",
             input_token_count + output_token_count,
             input_token_count,
@@ -263,7 +263,7 @@ class VLLMBackend:
                     logger.debug("CUDA cache cleared")
             except Exception:
                 logger.debug("CUDA cleanup failed", exc_info=True)
-        logger.info("vLLM model cleanup complete")
+        logger.debug("vLLM model cleanup complete")
 
     # -------------------------------------------------------------------------
     # Private: model loading helpers

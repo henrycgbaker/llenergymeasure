@@ -42,7 +42,7 @@ def warmup_until_converged(
     """
     # Early return if warmup is disabled
     if not config.enabled:
-        logger.info("Warmup disabled, skipping")
+        logger.debug("Warmup disabled, skipping")
         return WarmupResult(
             converged=True,
             final_cv=0.0,
@@ -192,7 +192,7 @@ def thermal_floor_wait(config: ExperimentConfig) -> float:
     """
     if not config.warmup.enabled or config.warmup.thermal_floor_seconds <= 0:
         return 0.0
-    logger.info(
+    logger.debug(
         "Thermal stabilisation: waiting %.0fs...",
         config.warmup.thermal_floor_seconds,
     )
