@@ -145,6 +145,9 @@ def _load_jsonl(
 
             records.append(record)
 
+            if order == "interleaved" and len(records) >= n:
+                break
+
     if len(records) < n:
         raise ValueError(
             f"Dataset {name!r} has only {len(records)} prompts but {n} were requested."

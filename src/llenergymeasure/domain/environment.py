@@ -4,12 +4,12 @@ Captures the hardware and software environment at experiment time,
 enabling post-hoc analysis of environmental factors affecting measurements.
 """
 
+import importlib.metadata
 import importlib.util
 import logging
 import platform
-import shutil
 import subprocess
-import sys
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -150,8 +150,7 @@ class EnvironmentSnapshot(BaseModel):
 
     hardware: EnvironmentMetadata
     python_version: str
-    pip_freeze: str
-    conda_list: str | None = None
+    installed_packages: list[str]
     tool_version: str
     cuda_version: str | None = None
     cuda_version_source: str | None = None  # "torch" | "version_txt" | "nvcc" | None
@@ -215,40 +214,19 @@ def detect_cuda_version_with_source() -> tuple[str | None, str | None]:
 
 
 # ---------------------------------------------------------------------------
-# Subprocess helpers
+# Package enumeration (in-process, replaces subprocess pip freeze / conda list)
 # ---------------------------------------------------------------------------
 
 
-def _capture_pip_freeze() -> str:
-    """Run `pip freeze` and return output as a string."""
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "freeze"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        return result.stdout
-    except Exception:
-        logger.debug("pip freeze failed", exc_info=True)
-        return ""
-
-
-def _capture_conda_list() -> str | None:
-    """Run `conda list` and return output, or None if conda is not available."""
-    if shutil.which("conda") is None:
-        return None
-    try:
-        result = subprocess.run(
-            ["conda", "list"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        return result.stdout
-    except Exception:
-        logger.debug("conda list failed", exc_info=True)
-        return None
+def _collect_installed_packages() -> list[str]:
+    """Enumerate installed packages in-process. Covers pip, conda, manual installs."""
+    result = []
+    for dist in importlib.metadata.distributions():
+        name = dist.metadata["Name"]
+        version = dist.metadata["Version"]
+        if name and version:
+            result.append(f"{name}=={version}")
+    return sorted(result)
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +251,20 @@ def collect_environment_snapshot() -> "EnvironmentSnapshot":
     return EnvironmentSnapshot(
         hardware=hardware,
         python_version=platform.python_version(),
-        pip_freeze=_capture_pip_freeze(),
-        conda_list=_capture_conda_list(),
+        installed_packages=_collect_installed_packages(),
         tool_version=tool_version,
         cuda_version=cuda_version,
         cuda_version_source=cuda_version_source,
     )
+
+
+# ---------------------------------------------------------------------------
+# Background-threaded snapshot collection
+# ---------------------------------------------------------------------------
+
+_snapshot_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="env-snapshot")
+
+
+def collect_environment_snapshot_async() -> Future[EnvironmentSnapshot]:
+    """Start background collection. Call .result(timeout=10) before writing results."""
+    return _snapshot_executor.submit(collect_environment_snapshot)

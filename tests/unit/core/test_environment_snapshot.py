@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -17,8 +18,8 @@ import pytest
 import llenergymeasure.domain.environment as env_module
 from llenergymeasure.domain.environment import (
     EnvironmentSnapshot,
-    _capture_conda_list,
-    _capture_pip_freeze,
+    _collect_installed_packages,
+    collect_environment_snapshot_async,
     detect_cuda_version_with_source,
 )
 
@@ -51,8 +52,7 @@ def test_environment_snapshot_model() -> None:
     snap = EnvironmentSnapshot(
         hardware=hardware,
         python_version="3.11.5",
-        pip_freeze="numpy==1.26.0\ntorch==2.2.0\n",
-        conda_list=None,
+        installed_packages=["numpy==1.26.0", "torch==2.2.0"],
         tool_version=__version__,
         cuda_version="12.4",
         cuda_version_source="torch",
@@ -62,8 +62,7 @@ def test_environment_snapshot_model() -> None:
     assert snap.tool_version == __version__
     assert snap.cuda_version == "12.4"
     assert snap.cuda_version_source == "torch"
-    assert snap.conda_list is None
-    assert "numpy" in snap.pip_freeze
+    assert "numpy==1.26.0" in snap.installed_packages
 
 
 def test_environment_snapshot_optional_fields() -> None:
@@ -73,12 +72,11 @@ def test_environment_snapshot_optional_fields() -> None:
     snap = EnvironmentSnapshot(
         hardware=hardware,
         python_version="3.10.0",
-        pip_freeze="",
+        installed_packages=[],
         tool_version=__version__,
     )
     assert snap.cuda_version is None
     assert snap.cuda_version_source is None
-    assert snap.conda_list is None
 
 
 # ---------------------------------------------------------------------------
@@ -215,64 +213,47 @@ def test_cuda_version_none(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test: pip freeze capture
+# Test: installed packages enumeration
 # ---------------------------------------------------------------------------
 
 
-def test_pip_freeze_capture(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_result = MagicMock()
-    mock_result.stdout = "numpy==1.26.0\ntorch==2.2.0\n"
-    monkeypatch.setattr(env_module.subprocess, "run", lambda *a, **kw: mock_result)
+def test_collect_installed_packages_returns_sorted_list() -> None:
+    """_collect_installed_packages returns a sorted list of name==version strings."""
+    result = _collect_installed_packages()
+    assert isinstance(result, list)
+    assert len(result) > 0
+    # All entries should be name==version format
+    for entry in result:
+        assert "==" in entry, f"Expected name==version format, got {entry!r}"
+    # Should be sorted
+    assert result == sorted(result)
 
-    result = _capture_pip_freeze()
-    assert "numpy==1.26.0" in result
-    assert "torch==2.2.0" in result
+
+# ---------------------------------------------------------------------------
+# Test: async snapshot collection returns a Future
+# ---------------------------------------------------------------------------
 
 
-def test_pip_freeze_capture_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Returns empty string when subprocess fails."""
+def test_collect_environment_snapshot_async_returns_future(monkeypatch: pytest.MonkeyPatch) -> None:
+    """collect_environment_snapshot_async returns a Future that resolves to a snapshot."""
+    hardware = _make_hardware()
+
     monkeypatch.setattr(
-        env_module.subprocess,
-        "run",
-        lambda *a, **kw: (_ for _ in ()).throw(Exception("pip not found")),
+        "llenergymeasure.core.environment.collect_environment_metadata",
+        lambda: hardware,
     )
-    result = _capture_pip_freeze()
-    assert result == ""
-
-
-# ---------------------------------------------------------------------------
-# Test: conda list returns None when conda not installed
-# ---------------------------------------------------------------------------
-
-
-def test_conda_list_no_conda(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(env_module.shutil, "which", lambda name: None)
-    result = _capture_conda_list()
-    assert result is None
-
-
-def test_conda_list_with_conda(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(env_module.shutil, "which", lambda name: "/usr/bin/conda")
-
-    mock_result = MagicMock()
-    mock_result.stdout = "# packages in environment at /opt/conda:\nnumpy 1.26.0 py311\n"
-    monkeypatch.setattr(env_module.subprocess, "run", lambda *a, **kw: mock_result)
-
-    result = _capture_conda_list()
-    assert result is not None
-    assert "numpy" in result
-
-
-def test_conda_list_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Returns None if conda list subprocess raises."""
-    monkeypatch.setattr(env_module.shutil, "which", lambda name: "/usr/bin/conda")
     monkeypatch.setattr(
-        env_module.subprocess,
-        "run",
-        lambda *a, **kw: (_ for _ in ()).throw(Exception("conda failed")),
+        env_module,
+        "detect_cuda_version_with_source",
+        lambda: ("12.4", "torch"),
     )
-    result = _capture_conda_list()
-    assert result is None
+
+    future = collect_environment_snapshot_async()
+    assert isinstance(future, Future)
+
+    snap = future.result(timeout=10)
+    assert isinstance(snap, EnvironmentSnapshot)
+    assert snap.hardware is hardware
 
 
 # ---------------------------------------------------------------------------
@@ -288,16 +269,6 @@ def test_collect_environment_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
         "llenergymeasure.core.environment.collect_environment_metadata",
         lambda: hardware,
     )
-
-    # Mock pip freeze
-    mock_pip_result = MagicMock()
-    mock_pip_result.stdout = "numpy==1.26.0\n"
-
-    # Mock conda: not installed
-    monkeypatch.setattr(env_module.shutil, "which", lambda name: None)
-
-    # Mock subprocess.run (only pip freeze will be called)
-    monkeypatch.setattr(env_module.subprocess, "run", lambda *a, **kw: mock_pip_result)
 
     # Mock CUDA detection to return a known result
     monkeypatch.setattr(
@@ -317,6 +288,6 @@ def test_collect_environment_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     assert snap.tool_version == __version__
     assert snap.cuda_version == "12.4"
     assert snap.cuda_version_source == "torch"
-    assert snap.conda_list is None
     assert snap.python_version != ""  # Real platform.python_version()
-    assert "numpy" in snap.pip_freeze
+    assert isinstance(snap.installed_packages, list)
+    assert len(snap.installed_packages) > 0  # At least llenergymeasure itself

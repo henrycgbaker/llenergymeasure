@@ -17,6 +17,7 @@ This module is intentionally free of Docker dispatch mechanics — it only decid
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import shutil
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+@functools.cache
 def is_docker_available() -> bool:
     """Return True if Docker CLI and NVIDIA Container Toolkit are both on PATH.
 
