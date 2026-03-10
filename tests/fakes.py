@@ -56,16 +56,19 @@ class FakeEnergyBackend:
 
 
 class FakeResultsRepository:
-    """Minimal ResultsRepository fake -- stores results in memory."""
+    """Minimal ResultsRepository fake -- stores results in memory, keyed by path."""
 
     def __init__(self):
+        self._store: dict[Path, ExperimentResult] = {}
         self.saved: list[tuple[ExperimentResult, Path]] = []
 
     def save(self, result: ExperimentResult, output_dir: Path) -> Path:
+        path = output_dir / "result.json"
+        self._store[path] = result
         self.saved.append((result, output_dir))
-        return output_dir / "result.json"
+        return path
 
     def load(self, path: Path) -> ExperimentResult:
-        if self.saved:
-            return self.saved[-1][0]
-        raise FileNotFoundError(f"No saved results: {path}")
+        if path not in self._store:
+            raise FileNotFoundError(f"No result at {path}")
+        return self._store[path]
