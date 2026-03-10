@@ -334,5 +334,5 @@ class StateManager:
                 state.mark_failed("Subprocess no longer running (stale state detected)")
                 self.save(state)
                 cleaned.append(exp_id)
-                logger.info("Marked stale experiment %r as failed", exp_id)
+                logger.debug("Marked stale experiment %r as failed", exp_id)
         return cleaned

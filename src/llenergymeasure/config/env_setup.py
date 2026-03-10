@@ -50,7 +50,7 @@ def ensure_env_file(project_root: Path | None = None) -> Path:
             append += "\n".join(missing_vars) + "\n"
             with open(env_file, "a") as f:
                 f.write(append)
-            logger.info("Appended %s to existing .env", ", ".join(missing_vars))
+            logger.debug("Appended %s to existing .env", ", ".join(missing_vars))
         return env_file
 
     # Generate new .env with PUID/PGID
@@ -64,6 +64,6 @@ PGID={pgid}
 """
 
     env_file.write_text(content)
-    logger.info("Generated .env with PUID=%d PGID=%d for Docker", puid, pgid)
+    logger.debug("Generated .env with PUID=%d PGID=%d for Docker", puid, pgid)
 
     return env_file
