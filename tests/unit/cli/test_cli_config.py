@@ -109,7 +109,8 @@ def test_config_no_rich_import() -> None:
     import ast
     import pathlib
 
-    src = pathlib.Path("src/llenergymeasure/cli/config_cmd.py").read_text()
+    src = pathlib.Path(__file__).parents[3] / "src" / "llenergymeasure" / "cli" / "config_cmd.py"
+    src = src.read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):

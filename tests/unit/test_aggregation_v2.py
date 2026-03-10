@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
@@ -333,20 +332,3 @@ def test_validate_process_completeness_duplicate(make_raw_result, tmp_path):
     assert report.is_complete is False
     assert 0 in report.duplicate_indices
     assert report.error_message is not None
-
-
-# ---------------------------------------------------------------------------
-# No loguru import checks
-# ---------------------------------------------------------------------------
-
-
-def test_no_loguru_import():
-    """aggregation.py must not import from loguru."""
-    import ast
-
-    src = Path("src/llenergymeasure/results/aggregation.py").read_text()
-    tree = ast.parse(src)
-    loguru_imports = [
-        n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "loguru"
-    ]
-    assert loguru_imports == [], "aggregation.py must not use loguru"

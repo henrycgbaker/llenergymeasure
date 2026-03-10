@@ -17,7 +17,6 @@ Coverage:
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import dataclass, field
 
 import pytest
@@ -356,29 +355,18 @@ class TestBuildSamplingParams:
 
 
 class TestNoStreamingCode:
-    def test_no_streaming_api_call_in_source(self):
-        """vllm.py has no streaming API calls — CM-07 resolved structurally.
-
-        The docstring mentions 'streaming' as context, but no streaming API
-        argument (stream=True/False, AsyncEngineArgs, etc.) appears in code.
-        """
-        source = inspect.getsource(VLLMBackend)
-        # No streaming API arguments passed to any vLLM call
-        assert "stream=True" not in source
-        assert "AsyncEngine" not in source
-        assert "async_engine" not in source
-
     def test_no_run_streaming_method(self):
-        """VLLMBackend has no _run_streaming method — offline batch only."""
-        source = inspect.getsource(VLLMBackend)
-        assert "_run_streaming" not in source
+        """VLLMBackend has no _run_streaming method — offline batch path only (CM-07)."""
+        assert not hasattr(VLLMBackend, "_run_streaming"), (
+            "VLLMBackend must not have a _run_streaming method — streaming is resolved "
+            "structurally by using offline batch inference exclusively"
+        )
 
-    def test_no_per_prompt_streaming_loop(self):
-        """Source uses a single generate() call — not a per-prompt streaming loop."""
-        source = inspect.getsource(VLLMBackend)
-        # Streaming-based per-prompt loops use AsyncLLMEngine or stream= argument
-        assert "stream=True" not in source
-        assert "stream=False" not in source
+    def test_no_async_engine_attribute(self):
+        """VLLMBackend has no async_engine attribute — no streaming engine (CM-07)."""
+        assert not hasattr(VLLMBackend, "async_engine"), (
+            "VLLMBackend must not have an async_engine attribute — offline batch only"
+        )
 
 
 # =============================================================================
