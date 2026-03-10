@@ -94,50 +94,6 @@ def minimal_config():
 # ---------------------------------------------------------------------------
 
 
-def _make_harness_patches():
-    """Return context manager stack of patches for all harness external calls."""
-    import contextlib
-    from unittest.mock import MagicMock
-
-    patches = [
-        patch(
-            "llenergymeasure.core.harness.collect_environment_snapshot",
-            return_value=None,
-        ),
-        patch(
-            "llenergymeasure.core.harness.measure_baseline_power",
-            return_value=None,
-        ),
-        patch(
-            "llenergymeasure.core.harness.select_energy_backend",
-            return_value=None,
-        ),
-        patch(
-            "llenergymeasure.core.harness.thermal_floor_wait",
-            return_value=0.0,
-        ),
-        patch(
-            "llenergymeasure.core.harness.estimate_flops_palm",
-            return_value=MagicMock(value=1e9),
-        ),
-        patch(
-            "llenergymeasure.core.harness._cuda_sync",
-        ),
-        patch(
-            "llenergymeasure.core.harness.PowerThermalSampler",
-        ),
-        patch(
-            "llenergymeasure.core.harness.write_timeseries_parquet",
-            return_value=MagicMock(name="timeseries.parquet"),
-        ),
-        patch(
-            "llenergymeasure.core.harness.collect_measurement_warnings",
-            return_value=[],
-        ),
-    ]
-    return contextlib.ExitStack(), patches
-
-
 def _apply_patches():
     """Apply all harness patches and return the ExitStack."""
     import contextlib
