@@ -52,16 +52,7 @@ def test_nvml_is_available_no_gpu() -> None:
 
 def test_nvml_is_available_import_error() -> None:
     """is_available() returns False when pynvml is not installed."""
-    import builtins
-
-    real_import = builtins.__import__
-
-    def mock_import(name: str, *args: object, **kwargs: object) -> object:
-        if name == "pynvml":
-            raise ImportError("No module named 'pynvml'")
-        return real_import(name, *args, **kwargs)
-
-    with patch("builtins.__import__", side_effect=mock_import):
+    with patch("importlib.util.find_spec", return_value=None):
         backend = NVMLBackend()
         result = backend.is_available()
     assert result is False
@@ -74,18 +65,23 @@ def test_nvml_is_available_import_error() -> None:
 
 def test_zeus_is_available_no_package() -> None:
     """is_available() returns False when zeus is not installed."""
-    import builtins
+    import sys
 
-    real_import = builtins.__import__
+    # Remove zeus from sys.modules so the deferred import inside is_available()
+    # raises ImportError as it would on a machine without zeus installed.
+    zeus_modules = {k: v for k, v in sys.modules.items() if k == "zeus" or k.startswith("zeus.")}
+    for k in zeus_modules:
+        sys.modules.pop(k)
 
-    def mock_import(name: str, *args: object, **kwargs: object) -> object:
-        if name == "zeus.monitor":
-            raise ImportError("No module named 'zeus'")
-        return real_import(name, *args, **kwargs)
-
-    with patch("builtins.__import__", side_effect=mock_import):
+    # Inject a sentinel that raises ImportError on attribute access (simulates absent package)
+    sys.modules["zeus.monitor"] = None  # type: ignore[assignment]
+    try:
         backend = ZeusBackend()
         result = backend.is_available()
+    finally:
+        sys.modules.pop("zeus.monitor", None)
+        sys.modules.update(zeus_modules)
+
     assert result is False
 
 
