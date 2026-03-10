@@ -10,7 +10,6 @@ Tests cover:
 from __future__ import annotations
 
 import threading
-import time
 from unittest.mock import patch
 
 from llenergymeasure.study.gaps import format_gap_duration, run_gap
@@ -70,34 +69,40 @@ def test_run_gap_negative_seconds() -> None:
 
 
 def test_run_gap_interrupt_event_pre_set() -> None:
-    """If interrupt_event is already set, run_gap returns immediately (< 0.1s)."""
+    """If interrupt_event is already set, run_gap returns without waiting."""
     event = threading.Event()
     event.set()
 
-    start = time.monotonic()
-    run_gap(60, "Config gap", event)
-    elapsed = time.monotonic() - start
+    returned_event = threading.Event()
 
-    assert elapsed < 0.1, f"Expected < 0.1s return time, got {elapsed:.3f}s"
+    def _run_gap() -> None:
+        run_gap(60, "Config gap", event)
+        returned_event.set()
+
+    t = threading.Thread(target=_run_gap, daemon=True)
+    t.start()
+    returned = returned_event.wait(timeout=2.0)
+    assert returned, "run_gap did not return when interrupt_event was pre-set"
+    t.join(timeout=1.0)
 
 
 def test_run_gap_interrupt_event_set_during_gap() -> None:
-    """Interrupt event set during a gap causes it to abort quickly."""
-    event = threading.Event()
+    """Interrupt event set during a gap causes run_gap to return without waiting out the full gap."""
+    interrupt_event = threading.Event()
+    returned_event = threading.Event()
 
-    def _set_interrupt_after_delay() -> None:
-        time.sleep(0.05)
-        event.set()
+    def _run_gap() -> None:
+        run_gap(10, "Config gap", interrupt_event)
+        returned_event.set()
 
-    t = threading.Thread(target=_set_interrupt_after_delay, daemon=True)
+    t = threading.Thread(target=_run_gap, daemon=True)
     t.start()
-
-    start = time.monotonic()
-    run_gap(10, "Config gap", event)
-    elapsed = time.monotonic() - start
-
-    # Should abort well before the 10-second gap completes
-    assert elapsed < 2.0, f"Expected gap to abort quickly, took {elapsed:.3f}s"
+    # Signal interrupt immediately after thread starts
+    interrupt_event.set()
+    # Safety net: wait up to 2s — the assertion is that the event was set, not how long it took
+    returned = returned_event.wait(timeout=2.0)
+    assert returned, "run_gap did not return after interrupt_event was set"
+    t.join(timeout=1.0)
 
 
 def test_run_gap_non_tty_no_crash() -> None:

@@ -201,7 +201,7 @@ def test_load_prompts_shuffled_deterministic() -> None:
     assert prompts_1 == prompts_2, "Shuffled prompts should be deterministic with same seed"
     assert len(prompts_1) == 50
 
-    # Different seed should (very likely) produce different order
+    # Different seed produces different order (seeds 42 and 99 verified to differ for n=50)
     config_diff_seed = ExperimentConfig(
         model="x",
         dataset="aienergyscore",
@@ -210,5 +210,5 @@ def test_load_prompts_shuffled_deterministic() -> None:
         random_seed=99,
     )
     prompts_diff = load_prompts(config_diff_seed)
-    # With 50 prompts from 1000, different seeds almost certainly give different order
+    # Seeds 42 and 99 confirmed to produce distinct orderings for n=50 from aienergyscore
     assert prompts_1 != prompts_diff, "Different seeds should produce different orderings"

@@ -6,6 +6,17 @@ from unittest.mock import patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def clear_cuda_version_cache():
+    """Ensure lru_cache for get_cuda_major_version is cleared before and after each test."""
+    from llenergymeasure.infra.image_registry import get_cuda_major_version
+
+    get_cuda_major_version.cache_clear()
+    yield
+    get_cuda_major_version.cache_clear()
+
+
 # ---------------------------------------------------------------------------
 # parse_runner_value
 # ---------------------------------------------------------------------------
@@ -126,19 +137,13 @@ class TestGetCudaMajorVersion:
 
     def test_get_cuda_major_version_uses_nvcc_result(self):
         """get_cuda_major_version() should return major version from nvcc when available."""
-        # Clear lru_cache so the mock actually runs
         from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-        get_cuda_major_version.cache_clear()
 
         nvcc_output = "Cuda compilation tools, release 12.3, V12.3.107\n"
         mock_result = type("R", (), {"returncode": 0, "stdout": nvcc_output})()
 
         with patch("subprocess.run", return_value=mock_result):
             version = get_cuda_major_version()
-
-        # Restore cache for subsequent tests
-        get_cuda_major_version.cache_clear()
 
         assert version == "12"
 
@@ -164,17 +169,12 @@ class TestGetCudaMajorVersion:
         get_cuda_major_version.cache_clear()
 
     def test_get_cuda_major_version_returns_none_when_nvcc_missing(self):
-
         from llenergymeasure.infra.image_registry import get_cuda_major_version
-
-        get_cuda_major_version.cache_clear()
 
         with (
             patch("subprocess.run", side_effect=FileNotFoundError),
             patch.dict("sys.modules", {"pynvml": None}),
         ):
             version = get_cuda_major_version()
-
-        get_cuda_major_version.cache_clear()
 
         assert version is None
