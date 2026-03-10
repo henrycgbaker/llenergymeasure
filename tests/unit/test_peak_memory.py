@@ -88,7 +88,6 @@ def test_peak_memory_reset_precedes_measurement():
     call_log: list[str] = []
 
     fake_model = object()
-    fake_tokenizer_instance = object()
 
     # Minimal mock tokenizer callable that returns plausible tensor-like data
     class FakeTokenizer:
