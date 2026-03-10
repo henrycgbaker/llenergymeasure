@@ -123,9 +123,11 @@ def test_cuda_version_from_torch_empty(monkeypatch: pytest.MonkeyPatch) -> None:
         env_module.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
     )
 
-    # Also mock open to fail
+    # Narrow patch: only affects open() calls within the environment module
     monkeypatch.setattr(
-        "builtins.open", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
+        "llenergymeasure.domain.environment.open",
+        lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
+        raising=False,
     )
 
     version, source = detect_cuda_version_with_source()
@@ -146,7 +148,7 @@ def test_cuda_version_from_version_txt(monkeypatch: pytest.MonkeyPatch, tmp_path
     version_file = tmp_path / "version.txt"
     version_file.write_text("CUDA Version 12.4.0\n")
 
-    # Patch open to serve our fake file for the expected paths
+    # Narrow patch: only affects open() calls within the environment module
     real_open = open
 
     def fake_open(path, *args, **kwargs):
@@ -154,7 +156,7 @@ def test_cuda_version_from_version_txt(monkeypatch: pytest.MonkeyPatch, tmp_path
             return real_open(str(version_file), *args, **kwargs)
         return real_open(path, *args, **kwargs)
 
-    monkeypatch.setattr("builtins.open", fake_open)
+    monkeypatch.setattr("llenergymeasure.domain.environment.open", fake_open, raising=False)
 
     version, source = detect_cuda_version_with_source()
     assert version == "12.4"
@@ -170,9 +172,11 @@ def test_cuda_version_from_nvcc(monkeypatch: pytest.MonkeyPatch) -> None:
     # No torch
     monkeypatch.setattr(env_module.importlib.util, "find_spec", lambda name: None)
 
-    # version.txt open fails
+    # Narrow patch: version.txt open fails within environment module only
     monkeypatch.setattr(
-        "builtins.open", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
+        "llenergymeasure.domain.environment.open",
+        lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
+        raising=False,
     )
 
     # Mock subprocess.run to return nvcc output
@@ -195,9 +199,11 @@ def test_cuda_version_none(monkeypatch: pytest.MonkeyPatch) -> None:
     # No torch
     monkeypatch.setattr(env_module.importlib.util, "find_spec", lambda name: None)
 
-    # No version.txt
+    # Narrow patch: no version.txt within environment module only
     monkeypatch.setattr(
-        "builtins.open", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError())
+        "llenergymeasure.domain.environment.open",
+        lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()),
+        raising=False,
     )
 
     # nvcc not available
