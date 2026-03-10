@@ -308,16 +308,13 @@ experiments:
 
 
 def test_cli_flags_present():
-    """llem run has --cycles, --order, --no-gaps flags."""
-    import inspect
-
-    from llenergymeasure.cli.run import run
-
-    sig = inspect.signature(run)
-    params = set(sig.parameters.keys())
-    assert "cycles" in params
-    assert "order" in params
-    assert "no_gaps" in params
+    """llem run --help output includes --cycles, --order, and --no-gaps flags."""
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+    plain = _strip_ansi(result.output)
+    assert "--cycles" in plain
+    assert "--order" in plain
+    assert "--no-gaps" in plain
 
 
 def test_print_study_summary_basic():
