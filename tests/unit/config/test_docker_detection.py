@@ -47,7 +47,12 @@ class TestIsInsideDocker:
         cgroup_content = "11:cpuset:/ \n10:memory:/\n"
         with (
             _make_dockerenv_patch(False),
-            patch("builtins.open", mock_open(read_data=cgroup_content)),
+            # Narrow patch: only affects open() within the docker_detection module
+            patch(
+                "llenergymeasure.config.docker_detection.open",
+                mock_open(read_data=cgroup_content),
+                create=True,
+            ),
         ):
             assert is_inside_docker() is False
 
@@ -56,7 +61,11 @@ class TestIsInsideDocker:
         cgroup_content = "11:cpuset:/docker/abc123\n"
         with (
             _make_dockerenv_patch(False),
-            patch("builtins.open", mock_open(read_data=cgroup_content)),
+            patch(
+                "llenergymeasure.config.docker_detection.open",
+                mock_open(read_data=cgroup_content),
+                create=True,
+            ),
         ):
             assert is_inside_docker() is True
 
@@ -65,7 +74,11 @@ class TestIsInsideDocker:
         cgroup_content = "11:cpuset:/containerd/abc123\n"
         with (
             _make_dockerenv_patch(False),
-            patch("builtins.open", mock_open(read_data=cgroup_content)),
+            patch(
+                "llenergymeasure.config.docker_detection.open",
+                mock_open(read_data=cgroup_content),
+                create=True,
+            ),
         ):
             assert is_inside_docker() is True
 
@@ -73,7 +86,11 @@ class TestIsInsideDocker:
         """/proc/1/cgroup missing (e.g. macOS) → not Docker."""
         with (
             _make_dockerenv_patch(False),
-            patch("builtins.open", side_effect=FileNotFoundError),
+            patch(
+                "llenergymeasure.config.docker_detection.open",
+                side_effect=FileNotFoundError,
+                create=True,
+            ),
         ):
             assert is_inside_docker() is False
 
@@ -81,7 +98,11 @@ class TestIsInsideDocker:
         """/proc/1/cgroup not readable → not Docker."""
         with (
             _make_dockerenv_patch(False),
-            patch("builtins.open", side_effect=PermissionError),
+            patch(
+                "llenergymeasure.config.docker_detection.open",
+                side_effect=PermissionError,
+                create=True,
+            ),
         ):
             assert is_inside_docker() is False
 
@@ -89,7 +110,12 @@ class TestIsInsideDocker:
         """/.dockerenv check short-circuits — cgroup is never read."""
         with (
             _make_dockerenv_patch(True),
-            patch("builtins.open", side_effect=AssertionError("cgroup should not be read")),
+            # Narrow patch: cgroup open within detection module should never be called
+            patch(
+                "llenergymeasure.config.docker_detection.open",
+                side_effect=AssertionError("cgroup should not be read"),
+                create=True,
+            ),
         ):
             # Should return True without reading cgroup
             assert is_inside_docker() is True
