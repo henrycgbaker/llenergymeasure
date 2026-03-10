@@ -241,19 +241,16 @@ class PyTorchBackend:
         Args:
             model: Tuple of (model, tokenizer) from load_model().
         """
-        import importlib.util
+        import torch
 
         hf_model, _tokenizer = model
         del hf_model
-        if importlib.util.find_spec("torch") is not None:
-            try:
-                import torch
-
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    logger.debug("CUDA cache cleared")
-            except Exception:
-                logger.debug("CUDA cleanup failed", exc_info=True)
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("CUDA cache cleared")
+        except Exception:
+            logger.debug("CUDA cleanup failed", exc_info=True)
         logger.debug("Model cleanup complete")
 
     # -------------------------------------------------------------------------
