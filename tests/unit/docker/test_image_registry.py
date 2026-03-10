@@ -142,6 +142,27 @@ class TestGetCudaMajorVersion:
 
         assert version == "12"
 
+    def test_cuda_major_no_nvidia_smi_subprocess(self, monkeypatch):
+        """Verify nvidia-smi subprocess is never called in get_cuda_major_version()."""
+        import subprocess as real_subprocess
+
+        from llenergymeasure.infra.image_registry import get_cuda_major_version
+
+        get_cuda_major_version.cache_clear()
+        original_run = real_subprocess.run
+        calls = []
+
+        def spy_run(cmd, *args, **kwargs):
+            calls.append(cmd)
+            if cmd[0] == "nvidia-smi":
+                raise AssertionError("nvidia-smi should not be called")
+            return original_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(real_subprocess, "run", spy_run)
+        get_cuda_major_version()
+        assert not any("nvidia-smi" in str(c) for c in calls)
+        get_cuda_major_version.cache_clear()
+
     def test_get_cuda_major_version_returns_none_when_nvcc_missing(self):
 
         from llenergymeasure.infra.image_registry import get_cuda_major_version
