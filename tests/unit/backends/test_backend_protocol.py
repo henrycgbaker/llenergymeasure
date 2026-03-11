@@ -350,10 +350,8 @@ def test_backend_plugin_protocol_is_runtime_checkable():
     from llenergymeasure.core.backends.protocol import BackendPlugin
     from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
-    # runtime_checkable means isinstance() works without raising TypeError
-    result = isinstance(PyTorchBackend(), BackendPlugin)
-    assert isinstance(result, bool)  # didn't raise
-    assert result is True
+    # runtime_checkable means isinstance() works and confirms protocol conformance
+    assert isinstance(PyTorchBackend(), BackendPlugin) is True
 
 
 def test_non_conforming_object_fails_plugin_protocol_check():

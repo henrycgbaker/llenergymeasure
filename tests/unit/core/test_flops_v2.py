@@ -233,8 +233,18 @@ def test_flops_result_invalid_method_rejected() -> None:
 
 
 def test_legacy_estimate_flops_still_works() -> None:
-    """estimate_flops (legacy wrapper) is still importable and callable."""
-    assert callable(estimate_flops)
+    """estimate_flops (legacy wrapper) is still importable and falls back to parameter estimate."""
+    model = make_model(non_embed_count=1_000_000)
+
+    # Provide a mock input_ids supporting .dim() and .shape used by the fallback chain
+    class MockInputIds:
+        shape = (1, 512)
+
+        def dim(self) -> int:
+            return 2
+
+    result = estimate_flops(model, MockInputIds())
+    assert result.value > 0
 
 
 # =============================================================================

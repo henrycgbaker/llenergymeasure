@@ -193,7 +193,7 @@ def test_reproducibility_notes_default(make_result):
     result = make_result()
     notes = result.reproducibility_notes
     assert "NVML" in notes
-    assert "accuracy" in notes.lower() or "Accuracy" in notes
+    assert "accuracy" in notes.lower()
 
 
 # ---------------------------------------------------------------------------

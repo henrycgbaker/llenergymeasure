@@ -27,17 +27,9 @@ from llenergymeasure.config.backend_detection import (
 
 class TestIsBackendAvailable:
     def test_returns_true_when_torch_importable(self):
-        with patch(
-            "builtins.__import__",
-            side_effect=lambda name, *a, **kw: (
-                None if name == "torch" else __import__(name, *a, **kw)
-            ),
-        ):
-            # torch import succeeds → available
-            # We use the real import instead because torch is installed on this host
-            result = is_backend_available("pytorch")
-        # pytorch is available on the test host (has torch installed)
-        assert isinstance(result, bool)
+        # pytorch is available on the test host (torch is installed)
+        result = is_backend_available("pytorch")
+        assert result is True
 
     def test_returns_false_when_torch_not_importable(self):
         with patch("llenergymeasure.config.backend_detection.__import__", create=True):
@@ -170,8 +162,8 @@ class TestGetBackendInstallHint:
     def test_pytorch_hint_is_base_install(self):
         hint = get_backend_install_hint("pytorch")
         assert "llenergymeasure" in hint
-        # pytorch ships with the base package — no extra needed
-        assert "[" not in hint or "pytorch" not in hint.split("[")[1] if "[" in hint else True
+        # pytorch ships with the base package — no extra bracket needed
+        assert "[" not in hint
 
     def test_vllm_hint_recommends_docker(self):
         hint = get_backend_install_hint("vllm")

@@ -131,16 +131,22 @@ def test_format_validation_error_did_you_mean():
     assert "pytorch" in result.lower() or "Did you mean" in result or "backend" in result
 
 
-def test_format_validation_error_single_vs_plural():
-    """Single error uses 'error', multiple errors use 'errors'."""
+@pytest.mark.parametrize(
+    "bad_kwargs, expected_str",
+    [
+        ({"backend": "bad"}, "1 error)"),
+        ({"backend": "bad", "precision": "bad"}, "2 errors)"),
+    ],
+)
+def test_format_validation_error_singular_plural(bad_kwargs, expected_str):
+    """Single error uses '1 error)', multiple errors use 'N errors)'."""
     from llenergymeasure.config.models import ExperimentConfig
 
     with pytest.raises(ValidationError) as exc_info:
-        ExperimentConfig(model="gpt2", backend="bad")  # type: ignore[arg-type]
+        ExperimentConfig(model="gpt2", **bad_kwargs)  # type: ignore[arg-type]
 
     result = format_validation_error(exc_info.value)
-    # 1 error -> singular
-    assert "1 error)" in result or "errors)" in result  # may be 1 or more depending on validators
+    assert expected_str in result
 
 
 # =============================================================================
