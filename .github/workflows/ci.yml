@@ -77,7 +77,7 @@ jobs:
           cache-suffix: test-3.12
           python-version: "3.12"
       - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus --extra webhooks
-      - name: Unit tests
+      - name: Unit + integration tests
         run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
       - name: Upload coverage to Codecov
         if: always()
