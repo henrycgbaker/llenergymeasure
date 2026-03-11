@@ -2,13 +2,12 @@
 
 Images follow the naming convention::
 
-    ghcr.io/henrycgbaker/llenergymeasure/{backend}:{version}-cuda{cuda_major}
+    ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}
 
 where:
-    {version}    — current package version (e.g. "1.19.0")
-    {cuda_major} — detected CUDA major version (e.g. "12")
+    {version} — current package version (e.g. "0.9.0")
 
-If CUDA version cannot be detected, "latest" is used as a fallback.
+Falls back to "latest" tag if version detection fails.
 
 Runner value parsing
 --------------------
@@ -36,8 +35,8 @@ __all__ = [
 # Template and registry
 # ---------------------------------------------------------------------------
 
-# {version} and {cuda_major} are filled at runtime.
-DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{backend}:{version}-cuda{cuda_major}"
+# {version} is filled at runtime; matches tags pushed by docker-publish.yml.
+DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}"
 
 # Backends that have a Docker image in the registry.
 _SUPPORTED_BACKENDS = frozenset({"pytorch", "vllm", "tensorrt"})
@@ -120,25 +119,24 @@ def _parse_cuda_major_from_nvcc(output: str) -> str | None:
 def get_default_image(backend: str) -> str:
     """Resolve the default Docker image for *backend*.
 
-    Uses the current package version and detected CUDA major version.
-    Falls back to ``"latest"`` for both if detection fails.
+    Uses the current package version to build a tag matching what
+    ``docker-publish.yml`` pushes (``v{version}``).
+    Falls back to ``"latest"`` if version detection fails.
 
     Args:
         backend: Backend name, e.g. ``"vllm"``, ``"pytorch"``, ``"tensorrt"``.
 
     Returns:
         Full image reference string, e.g.
-        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:1.19.0-cuda12"``.
+        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"``.
     """
     from llenergymeasure import __version__
 
-    cuda_major = get_cuda_major_version() or "latest"
     version = __version__ if __version__ else "latest"
 
     return DEFAULT_IMAGE_TEMPLATE.format(
         backend=backend,
         version=version,
-        cuda_major=cuda_major,
     )
 
 
