@@ -236,3 +236,70 @@ def test_make_config_override():
     config = make_config(model="bert-base", precision="fp32")
     assert config.model == "bert-base"
     assert config.precision == "fp32"
+
+
+# ---------------------------------------------------------------------------
+# EnergyConfig schema tests (moved from test_warmup_v2.py)
+# ---------------------------------------------------------------------------
+
+
+def test_energy_config_default() -> None:
+    """EnergyConfig defaults to backend='auto'."""
+    from llenergymeasure.config.models import EnergyConfig
+
+    assert EnergyConfig().backend == "auto"
+
+
+def test_energy_config_null() -> None:
+    """EnergyConfig(backend=None) disables energy measurement."""
+    from llenergymeasure.config.models import EnergyConfig
+
+    cfg = EnergyConfig(backend=None)
+    assert cfg.backend is None
+
+
+def test_energy_config_valid_backends() -> None:
+    """All backend literal values are accepted."""
+    from llenergymeasure.config.models import EnergyConfig
+
+    for backend in ("auto", "nvml", "zeus", "codecarbon"):
+        cfg = EnergyConfig(backend=backend)
+        assert cfg.backend == backend
+
+
+def test_energy_config_invalid_backend() -> None:
+    """Unknown backend values raise ValidationError."""
+    from llenergymeasure.config.models import EnergyConfig
+
+    with pytest.raises(ValidationError):
+        EnergyConfig(backend="unknown_backend")  # type: ignore[arg-type]
+
+
+def test_energy_config_extra_forbid() -> None:
+    """EnergyConfig: extra fields raise ValidationError."""
+    from llenergymeasure.config.models import EnergyConfig
+
+    with pytest.raises(ValidationError):
+        EnergyConfig(backend="auto", extra_field=1)  # type: ignore[call-arg]
+
+
+def test_experiment_config_has_energy() -> None:
+    """ExperimentConfig.energy defaults to EnergyConfig with backend='auto'."""
+    cfg = ExperimentConfig(model="gpt2")
+    assert cfg.energy.backend == "auto"
+
+
+def test_experiment_config_energy_override() -> None:
+    """ExperimentConfig allows overriding energy backend."""
+    from llenergymeasure.config.models import EnergyConfig
+
+    cfg = ExperimentConfig(model="gpt2", energy=EnergyConfig(backend="nvml"))
+    assert cfg.energy.backend == "nvml"
+
+
+def test_experiment_config_energy_disabled() -> None:
+    """ExperimentConfig allows disabling energy measurement via null."""
+    from llenergymeasure.config.models import EnergyConfig
+
+    cfg = ExperimentConfig(model="gpt2", energy=EnergyConfig(backend=None))
+    assert cfg.energy.backend is None
