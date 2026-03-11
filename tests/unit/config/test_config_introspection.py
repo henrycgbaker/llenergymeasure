@@ -42,17 +42,17 @@ def test_get_backend_params_pytorch_has_backend_support():
 
 
 def test_get_backend_params_vllm_returns_params():
-    """get_backend_params('vllm') returns params including max_num_seqs."""
+    """get_backend_params('vllm') returns params including vllm.engine.max_num_seqs."""
     params = get_backend_params("vllm")
     assert isinstance(params, dict)
-    assert len(params) > 0
+    assert "vllm.engine.max_num_seqs" in params
 
 
 def test_get_backend_params_tensorrt_returns_params():
-    """get_backend_params('tensorrt') returns params including max_batch_size."""
+    """get_backend_params('tensorrt') returns params including tensorrt.max_batch_size."""
     params = get_backend_params("tensorrt")
     assert isinstance(params, dict)
-    assert len(params) > 0
+    assert "tensorrt.max_batch_size" in params
 
 
 def test_get_backend_params_unknown_backend_raises():

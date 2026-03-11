@@ -944,15 +944,16 @@ def test_pipe_direction_parent_reads_child_writes() -> None:
     ctx = multiprocessing.get_context("spawn")
     conn1, conn2 = ctx.Pipe(duplex=False)
 
-    # conn1 is recv-only, conn2 is send-only (Python docs guarantee)
-    assert not conn1.writable, "First Pipe element should be read-only"
-    assert not conn2.readable, "Second Pipe element should be write-only"
+    try:
+        # conn1 is recv-only, conn2 is send-only (Python docs guarantee)
+        assert not conn1.writable, "First Pipe element should be read-only"
+        assert not conn2.readable, "Second Pipe element should be write-only"
 
-    # Verify the runner's unpacking matches: parent_conn=conn1 (reads), child_conn=conn2 (sends)
-    src = inspect.getsource(StudyRunner._run_one)
-    assert "parent_conn, child_conn = " in src, (
-        "Pipe unpacking must be 'parent_conn, child_conn' (recv, send order)"
-    )
-
-    conn1.close()
-    conn2.close()
+        # Verify the runner's unpacking matches: parent_conn=conn1 (reads), child_conn=conn2 (sends)
+        src = inspect.getsource(StudyRunner._run_one)
+        assert "parent_conn, child_conn = " in src, (
+            "Pipe unpacking must be 'parent_conn, child_conn' (recv, send order)"
+        )
+    finally:
+        conn1.close()
+        conn2.close()
