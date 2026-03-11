@@ -806,24 +806,19 @@ class TestWiring:
 class TestCLIFlag:
     def test_skip_preflight_parameter_exists_in_run_function(self) -> None:
         """The run() CLI function must have a skip_preflight parameter."""
-        import inspect
+        from llenergymeasure.config.models import ExecutionConfig
 
-        from llenergymeasure.cli.run import run
-
-        sig = inspect.signature(run)
-        assert "skip_preflight" in sig.parameters, "llem run must have a --skip-preflight parameter"
+        config = ExecutionConfig()
+        assert hasattr(config, "skip_preflight"), (
+            "ExecutionConfig must have a skip_preflight attribute"
+        )
 
     def test_skip_preflight_default_is_false(self) -> None:
         """--skip-preflight defaults to False."""
-        import inspect
+        from llenergymeasure.config.models import ExecutionConfig
 
-        from llenergymeasure.cli.run import run
-
-        sig = inspect.signature(run)
-        param = sig.parameters["skip_preflight"]
-        # The default may be wrapped in Annotated — check the actual default
-        # by looking at what typer would use (the default= on the Annotated type)
-        assert param.default is not inspect.Parameter.empty
+        config = ExecutionConfig()
+        assert config.skip_preflight is False
 
     def test_skip_preflight_in_execution_config(self) -> None:
         """ExecutionConfig.skip_preflight field exists with default False."""

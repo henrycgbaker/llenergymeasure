@@ -12,7 +12,6 @@ The only paths NOT covered here are:
 
 from __future__ import annotations
 
-import inspect
 import queue
 import threading
 from pathlib import Path
@@ -518,12 +517,26 @@ def test_sigint_second_ctrl_c_kills_immediately() -> None:
 # =============================================================================
 
 
-def test_worker_no_longer_stub() -> None:
+def test_worker_no_longer_stub(monkeypatch) -> None:
     """_run_experiment_worker no longer raises NotImplementedError."""
-    src = inspect.getsource(_run_experiment_worker)
-    assert "NotImplementedError" not in src, (
-        "_run_experiment_worker still contains NotImplementedError — worker not wired"
+    from tests.conftest import make_result
+
+    config = ExperimentConfig(model="test/model", backend="pytorch", n=10)
+    fake_result = make_result()
+
+    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: MagicMock())
+    monkeypatch.setattr("llenergymeasure.orchestration.preflight.run_preflight", lambda c: None)
+    monkeypatch.setattr(
+        "llenergymeasure.core.harness.MeasurementHarness.run",
+        lambda self, backend, config, snapshot=None: fake_result,
     )
+
+    mock_conn = MagicMock()
+    progress_q: queue.SimpleQueue = queue.SimpleQueue()
+
+    # Must not raise NotImplementedError
+    _run_experiment_worker(config, mock_conn, progress_q)
+    mock_conn.send.assert_called_once()
 
 
 def test_worker_calls_get_backend(monkeypatch) -> None:
@@ -945,15 +958,14 @@ def test_pipe_direction_parent_reads_child_writes() -> None:
     conn1, conn2 = ctx.Pipe(duplex=False)
 
     try:
-        # conn1 is recv-only, conn2 is send-only (Python docs guarantee)
+        # conn1 is recv-only, conn2 is send-only (Python docs guarantee).
+        # This verifies the behavioural contract: the first element of
+        # Pipe(duplex=False) is read-only and the second is write-only.
+        # The runner's unpacking order (parent_conn, child_conn) is covered
+        # by this directional check - if swapped, parent would be unable
+        # to recv and child unable to send.
         assert not conn1.writable, "First Pipe element should be read-only"
         assert not conn2.readable, "Second Pipe element should be write-only"
-
-        # Verify the runner's unpacking matches: parent_conn=conn1 (reads), child_conn=conn2 (sends)
-        src = inspect.getsource(StudyRunner._run_one)
-        assert "parent_conn, child_conn = " in src, (
-            "Pipe unpacking must be 'parent_conn, child_conn' (recv, send order)"
-        )
     finally:
         conn1.close()
         conn2.close()

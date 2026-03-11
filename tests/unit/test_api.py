@@ -639,20 +639,14 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
 
 def test_run_study_returns_study_result_type():
     """run_study return annotation is StudyResult (not a union)."""
-    import inspect
+    import typing
 
     import llenergymeasure._api as api_module
 
-    try:
-        import typing
-
-        typing.get_type_hints(api_module.run_study)
-    except Exception:
-        pass
-
-    # Check via source that return type is annotated as StudyResult
-    src = inspect.getsource(api_module.run_study)
-    assert "-> StudyResult" in src, "run_study must have -> StudyResult return annotation"
+    hints = typing.get_type_hints(api_module.run_study)
+    assert hints.get("return") is StudyResult, (
+        "run_study must have -> StudyResult return annotation"
+    )
 
 
 # =============================================================================
