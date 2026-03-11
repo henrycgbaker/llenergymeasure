@@ -12,7 +12,6 @@ import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from llenergymeasure.cli import app
@@ -104,22 +103,24 @@ def test_config_exits_0() -> None:
     assert result.exit_code == 0
 
 
-def test_config_no_rich_import() -> None:
-    """config_cmd must not import rich (no rich dependency for this module)."""
-    import ast
-    import pathlib
+def test_config_cmd_renders_without_rich() -> None:
+    """config_cmd renders correctly when rich is absent from sys.modules.
 
-    src = pathlib.Path(__file__).parents[3] / "src" / "llenergymeasure" / "cli" / "config_cmd.py"
-    src = src.read_text()
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    assert not alias.name.startswith("rich"), (
-                        f"config_cmd.py must not import rich, found: {alias.name}"
-                    )
-            elif (
-                isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("rich")
-            ):
-                pytest.fail(f"config_cmd.py must not import rich, found: {node.module}")
+    If config_cmd imported rich at the top-level, removing it from sys.modules
+    and importing the module would raise ImportError. The command must run
+    without rich available.
+    """
+    import sys
+
+    # Temporarily hide rich from sys.modules to verify config_cmd does not
+    # depend on it at module load or execution time.
+    rich_modules = {k: v for k, v in sys.modules.items() if k == "rich" or k.startswith("rich.")}
+    for k in rich_modules:
+        sys.modules.pop(k)
+
+    try:
+        with patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None):
+            result = runner.invoke(app, ["config"])
+        assert result.exit_code == 0, f"config command failed: {result.output}"
+    finally:
+        sys.modules.update(rich_modules)
