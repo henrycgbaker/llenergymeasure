@@ -528,7 +528,7 @@ def test_worker_no_longer_stub(monkeypatch) -> None:
     monkeypatch.setattr("llenergymeasure.orchestration.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.core.harness.MeasurementHarness.run",
-        lambda self, backend, config, snapshot=None: fake_result,
+        lambda self, backend, config, **kwargs: fake_result,
     )
 
     mock_conn = MagicMock()
