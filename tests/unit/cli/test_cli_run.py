@@ -372,3 +372,140 @@ def test_print_study_progress():
     assert "[1/4]" in output
     assert "OK" in output
     assert "test/model" in output
+
+
+# ---------------------------------------------------------------------------
+# Study routing tests — verify CLI actually invokes run_study for study YAMLs
+# ---------------------------------------------------------------------------
+
+
+def test_run_study_routing_sweep_yaml(tmp_path):
+    """YAML with sweep: key routes to run_study via _run_study_impl."""
+    from tests.conftest import make_study_result
+
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  precision: [fp32, fp16]\n"
+    )
+    mock_study_result = make_study_result()
+
+    # run_study and load_study_config are lazily imported inside _run_study_impl;
+    # patch at the source modules, not at llenergymeasure.cli.run
+    with (
+        patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
+        patch("llenergymeasure.config.loader.load_study_config") as mock_load,
+        patch("llenergymeasure.config.grid.format_preflight_summary", return_value="preflight"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+    ):
+        mock_load.return_value = MagicMock()
+        result = runner.invoke(app, ["run", str(study_yaml)])
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output: {result.output}"
+    )
+    mock_run.assert_called_once()
+
+
+def test_run_study_routing_experiments_yaml(tmp_path):
+    """YAML with experiments: key routes to run_study."""
+    from tests.conftest import make_study_result
+
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        "name: test\nexperiments:\n  - model: test/model-a\n    backend: pytorch\n  - model: test/model-b\n    backend: pytorch\n"
+    )
+    mock_study_result = make_study_result()
+
+    with (
+        patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
+        patch("llenergymeasure.config.loader.load_study_config") as mock_load,
+        patch("llenergymeasure.config.grid.format_preflight_summary", return_value="preflight"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+    ):
+        mock_load.return_value = MagicMock()
+        result = runner.invoke(app, ["run", str(study_yaml)])
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output: {result.output}"
+    )
+    mock_run.assert_called_once()
+
+
+def test_run_saves_to_output_dir(tmp_path):
+    """When output_dir is set on the config, result.save is called."""
+    mock_config = _make_mock_config()
+    mock_config.output_dir = str(tmp_path / "out")
+    mock_result = _make_mock_result()
+    mock_result.timeseries = None
+
+    with (
+        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
+        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result),
+        patch("llenergymeasure.cli.run.print_experiment_header"),
+        patch("llenergymeasure.cli.run.print_result_summary"),
+        patch("llenergymeasure.cli.run.tqdm") as mock_tqdm,
+    ):
+        mock_tqdm.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_tqdm.return_value.__exit__ = MagicMock(return_value=False)
+        result = runner.invoke(app, ["run", "--model", "gpt2", "--output", str(tmp_path / "out")])
+
+    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
+    mock_result.save.assert_called_once()
+
+
+def test_run_study_cli_defaults_applied(tmp_path):
+    """Study YAML without execution block receives CLI effective defaults: n_cycles=3, cycle_order=shuffled."""
+    from tests.conftest import make_study_result
+
+    study_yaml = tmp_path / "study.yaml"
+    study_yaml.write_text(
+        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  precision: [fp32, fp16]\n"
+    )
+    mock_study_result = make_study_result()
+
+    captured_overrides: list = []
+
+    def _capture_load(path, cli_overrides=None):
+        captured_overrides.append(cli_overrides)
+        return MagicMock()
+
+    # load_study_config, run_study, and format_preflight_summary are all lazily
+    # imported inside _run_study_impl — patch at source modules
+    with (
+        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.run_study", return_value=mock_study_result),
+        patch("llenergymeasure.config.grid.format_preflight_summary", return_value="preflight"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+    ):
+        result = runner.invoke(app, ["run", str(study_yaml)])
+
+    assert result.exit_code == 0
+    assert len(captured_overrides) == 1
+    overrides = captured_overrides[0]
+    assert overrides is not None
+    assert overrides["execution"]["n_cycles"] == 3
+    assert overrides["execution"]["cycle_order"] == "shuffled"
+
+
+def test_run_no_model_no_config_error_message():
+    """Error message for missing model/config mentions 'Provide a config file or --model flag'."""
+    result = runner.invoke(app, ["run"])
+    assert result.exit_code == 2
+    assert "Provide a config file or --model flag" in result.output
+
+
+def test_run_backend_error_exits_1():
+    """BackendError raised by run_experiment exits with code 1."""
+    from llenergymeasure.exceptions import BackendError
+
+    mock_config = _make_mock_config()
+
+    with (
+        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
+        patch("llenergymeasure.cli.run.run_experiment") as mock_run,
+    ):
+        mock_run.side_effect = BackendError("OOM during forward pass")
+        result = runner.invoke(app, ["run", "--model", "gpt2"])
+
+    assert result.exit_code == 1
+    assert "BackendError" in result.output
