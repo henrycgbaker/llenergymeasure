@@ -5,12 +5,42 @@ build-backend = "hatchling.build"
 [project]
 name = "llenergymeasure"
 version = "0.8.0"
-description = "LLenergyMeasure - LLM inference efficiency measurement framework"
+description = "Measure the energy efficiency of LLM inference across models, precisions, and backends"
 authors = [
-    {name = "henrycgbaker", email = "henry.c.g.baker@gmail.com"},
+    {name = "Henry C G Baker", email = "henry.c.g.baker@gmail.com"},
 ]
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = [
+    "llm",
+    "energy",
+    "efficiency",
+    "inference",
+    "benchmark",
+    "gpu",
+    "measurement",
+    "sustainability",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Benchmark",
+    "Typing :: Typed",
+]
 dependencies = [
     "pydantic>=2.0",
     "typer>=0.9",
@@ -48,8 +78,24 @@ dev = [
     "types-pyyaml>=6.0.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/henrycgbaker/LLenergyMeasure"
+Repository = "https://github.com/henrycgbaker/LLenergyMeasure"
+Documentation = "https://github.com/henrycgbaker/LLenergyMeasure#readme"
+Issues = "https://github.com/henrycgbaker/LLenergyMeasure/issues"
+Changelog = "https://github.com/henrycgbaker/LLenergyMeasure/blob/main/CHANGELOG.md"
+
 [project.scripts]
 llem = "llenergymeasure.cli:app"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/llenergymeasure",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/llenergymeasure"]
