@@ -6,79 +6,78 @@ Main package for the LLM efficiency measurement framework.
 
 ```
 llenergymeasure/
-├── cli.py              # Typer CLI application
+├── __init__.py         # Public API (run_experiment, run_study)
+├── _api.py             # API implementation
 ├── constants.py        # Global constants
-├── exceptions.py       # Custom exceptions
-├── logging.py          # Loguru configuration
-├── protocols.py        # Protocol definitions (interfaces)
-├── resilience.py       # Retry/circuit breaker utilities
-├── security.py         # Path sanitization, validation
-├── config/             # Configuration system
-├── core/               # Inference & metrics engine
-├── domain/             # Domain models (Pydantic)
-├── orchestration/      # Experiment lifecycle
-├── results/            # Results persistence
-└── state/              # Experiment state management
+├── exceptions.py       # Exception hierarchy
+├── protocols.py        # Protocol definitions (interfaces for DI)
+├── security.py         # Path sanitisation, validation
+├── cli/                # Typer CLI (run, config)
+├── config/             # Configuration system (SSOT models)
+├── core/               # Inference engine, metrics, energy backends
+├── datasets/           # Built-in prompt datasets
+├── domain/             # Domain models (ExperimentResult, etc.)
+├── infra/              # Docker runner, image registry, entrypoint
+├── orchestration/      # Experiment preflight checks
+├── results/            # Results persistence, aggregation
+├── state/              # Experiment state machine
+└── study/              # Study (sweep) runner, grid expansion
 ```
 
 ## Key Files
 
-### cli.py
-Typer-based CLI with subcommands:
-- `run` - Run experiment (placeholder, actual launch via accelerate)
-- `aggregate` - Aggregate raw results from multi-GPU runs
-- `config validate/show` - Configuration management
-- `results list/show` - Results inspection
-
-### constants.py
-Framework constants:
-- `DEFAULT_RESULTS_DIR` - Results output path
-- `SCHEMA_VERSION` - Result file schema version
-- Inference defaults (tokens, temperature)
+### cli/
+Modular Typer CLI with two commands:
+- `llem run [config.yaml]` — run single experiment or multi-experiment study
+- `llem config [-v]` — show environment, GPU, backend, and energy status
 
 ### protocols.py
 Protocol definitions for dependency injection:
-- `ModelLoader` - Load model/tokenizer
-- `InferenceEngine` - Run inference
-- `EnergyBackend` - Energy tracking
-- `MetricsCollector` - Collect metrics
-- `ResultsRepository` - Persist results
+- `ModelLoader` — load model and tokeniser
+- `InferenceEngine` — run inference
+- `EnergyBackend` — energy tracking (Zeus, NVML, CodeCarbon)
+- `MetricsCollector` — collect metrics
+- `ResultsRepository` — persist results
 
 ### exceptions.py
-Custom exceptions:
-- `LLMBenchError` - Base exception
-- `ConfigurationError` - Config loading/validation
-- `InferenceError` - Inference failures
-- `EnergyTrackingError` - Energy measurement issues
+Exception hierarchy rooted at `LLEMError`:
+- `ConfigError` — config loading/validation
+- `BackendError` — inference backend failures
+- `PreFlightError` — pre-flight check failures
+- `ExperimentError` — experiment execution errors
+- `StudyError` — study orchestration errors
+- `DockerError` — Docker container dispatch errors
 
 ### security.py
 Security utilities:
-- `sanitize_experiment_id()` - Sanitize IDs for filesystem
-- `is_safe_path()` - Prevent path traversal
+- `sanitize_experiment_id()` — sanitise IDs for filesystem
+- `is_safe_path()` — prevent path traversal
 
 ## Submodules
 
-| Module | Description |
-|--------|-------------|
-| `config/` | Configuration loading with inheritance support |
-| `core/` | Inference engine, model loading, FLOPs, energy backends |
-| `domain/` | Pydantic models for metrics and results |
-| `orchestration/` | Experiment runner, launcher, lifecycle |
-| `results/` | FileSystemRepository, aggregation logic |
-| `state/` | Experiment state tracking |
+| Module           | Description                                              |
+|------------------|----------------------------------------------------------|
+| `cli/`           | Typer CLI commands (run, config)                         |
+| `config/`        | Configuration loading, SSOT models, introspection        |
+| `core/`          | Inference backends, model loading, FLOPs, energy, GPU    |
+| `datasets/`      | Built-in prompt datasets                                 |
+| `domain/`        | Pydantic models for experiments and results              |
+| `infra/`         | Docker runner, image registry, container entrypoint      |
+| `orchestration/` | Experiment preflight checks                              |
+| `results/`       | FileSystemRepository, aggregation logic                  |
+| `state/`         | Experiment state machine                                 |
+| `study/`         | Study runner, grid expansion, manifest, preflight        |
 
 ## Usage
 
 ```python
-from llenergymeasure.config import load_config, ExperimentConfig
-from llenergymeasure.core import run_inference, load_model_tokenizer
-from llenergymeasure.domain import RawProcessResult, AggregatedResult
-from llenergymeasure.orchestration import ExperimentOrchestrator
-from llenergymeasure.results import FileSystemRepository
+from llenergymeasure import run_experiment, run_study
+from llenergymeasure.config import ExperimentConfig
+from llenergymeasure.domain import ExperimentResult
 ```
 
 ## Related
 
-- See `core/README.md` for inference engine details
+- See `cli/CLAUDE.md` for CLI architecture
 - See `config/README.md` for configuration system
-- See `orchestration/README.md` for experiment lifecycle
+- See `core/README.md` for inference engine details

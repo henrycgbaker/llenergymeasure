@@ -1,0 +1,73 @@
+# Maximal study reference — exercises all sweep and execution parameters
+# Run: llem run examples/study-reference.yaml
+#
+# This template demonstrates every sweep axis and execution option.
+# The Cartesian product of all sweep values produces the experiment grid.
+# Invalid combinations (e.g. pytorch section with backend: vllm) are
+# automatically skipped with a warning.
+
+name: reference-sweep
+
+# --- Shared fields (applied to every experiment in the grid) ---
+dataset: aienergyscore
+max_input_tokens: 512
+max_output_tokens: 128
+random_seed: 42
+energy:
+  backend: auto
+warmup:
+  enabled: true
+  n_warmup: 3
+  thermal_floor_seconds: 30.0
+
+# --- Sweep axes (Cartesian product) ---
+# Each key maps to a list of values. The grid expands all combinations.
+sweep:
+  model:
+    - meta-llama/Llama-3.2-1B
+    - Qwen/Qwen2.5-0.5B
+  backend:
+    - pytorch
+    - vllm
+  precision:
+    - bf16
+    - fp16
+  n:
+    - 50
+    - 100
+  decoder.temperature:
+    - 0.0
+    - 1.0
+  # Dotted paths work for nested fields:
+  # pytorch.batch_size:
+  #   - 1
+  #   - 4
+
+# --- Explicit experiments (appended after sweep expansion) ---
+# Use for one-off configs that don't fit the grid pattern.
+experiments:
+  - model: meta-llama/Llama-3.2-1B
+    backend: pytorch
+    precision: fp32
+    n: 25
+    decoder:
+      preset: deterministic
+    pytorch:
+      batch_size: 8
+      attn_implementation: flash_attention_2
+
+# --- Runner configuration ---
+# Determines how each backend executes: locally or via Docker.
+runners:
+  pytorch: local
+  vllm: docker
+  # vllm: "docker:ghcr.io/custom/vllm:latest"  # Custom image override
+
+# --- Execution controls ---
+execution:
+  n_cycles: 3                # Repeat experiment list 3 times
+  cycle_order: interleaved   # sequential | interleaved | shuffled
+  experiment_gap_seconds: 10.0  # Pause between experiments (thermal stabilisation)
+  cycle_gap_seconds: 30.0    # Pause between full cycles
+  # shuffle_seed: null       # Explicit seed for shuffled order (null = derived from study hash)
+  skip_preflight: false      # Skip Docker pre-flight checks
