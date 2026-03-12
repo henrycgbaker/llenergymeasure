@@ -7,7 +7,12 @@ from datetime import datetime, timezone
 import pytest
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.experiment import AggregationMetadata, ExperimentResult
+from llenergymeasure.domain.experiment import (
+    AggregationMetadata,
+    ExperimentResult,
+    StudyResult,
+    StudySummary,
+)
 
 _EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
@@ -50,6 +55,29 @@ def make_result(**overrides) -> ExperimentResult:
     return ExperimentResult(**defaults)
 
 
+def make_study_result(**overrides) -> StudyResult:
+    """Return a valid StudyResult with sensible defaults.
+
+    Needed by CLI tests (Plan 03) and E2E tests (Plan 04).
+    Tests override only what they care about.
+    """
+    one_result = make_result()
+    defaults: dict = {
+        "name": "test-study",
+        "experiments": [one_result],
+        "summary": StudySummary(
+            total_experiments=1,
+            completed=1,
+            failed=0,
+            total_wall_time_s=5.0,
+            total_energy_j=10.0,
+        ),
+        "result_files": [],
+    }
+    defaults.update(overrides)
+    return StudyResult(**defaults)
+
+
 @pytest.fixture
 def sample_config() -> ExperimentConfig:
     return make_config()
@@ -65,3 +93,78 @@ def tmp_results_dir(tmp_path):
     d = tmp_path / "results"
     d.mkdir()
     return d
+
+
+# ---------------------------------------------------------------------------
+# Autouse fixtures: module-level singleton cleanup
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def clear_baseline_cache():
+    """Clear _baseline_cache before and after each test.
+
+    Prevents baseline measurement state from leaking between tests, which is
+    especially important when pytest-randomly changes execution order.
+    """
+    from llenergymeasure.core.baseline import _baseline_cache
+
+    _baseline_cache.clear()
+    yield
+    _baseline_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_flops_estimator():
+    """Reset _default_estimator to None before and after each test.
+
+    The flops module lazily creates a singleton estimator on first use.
+    Resetting it prevents stale state from propagating across tests.
+    """
+    import llenergymeasure.core.flops as _flops_mod
+
+    _flops_mod._default_estimator = None
+    yield
+    _flops_mod._default_estimator = None
+
+
+@pytest.fixture(autouse=True)
+def reset_lru_caches():
+    """Clear lru_cache / functools.cache decorated functions between tests.
+
+    Only clears caches that are known to produce order-dependent results
+    (i.e. caches that depend on host environment state).
+    """
+    try:
+        from llenergymeasure.infra.runner_resolution import is_docker_available
+
+        if hasattr(is_docker_available, "cache_clear"):
+            is_docker_available.cache_clear()
+    except ImportError:
+        pass
+
+    try:
+        from llenergymeasure.infra.image_registry import get_cuda_major_version
+
+        if hasattr(get_cuda_major_version, "cache_clear"):
+            get_cuda_major_version.cache_clear()
+    except ImportError:
+        pass
+
+    yield
+
+    try:
+        from llenergymeasure.infra.runner_resolution import is_docker_available
+
+        if hasattr(is_docker_available, "cache_clear"):
+            is_docker_available.cache_clear()
+    except ImportError:
+        pass
+
+    try:
+        from llenergymeasure.infra.image_registry import get_cuda_major_version
+
+        if hasattr(get_cuda_major_version, "cache_clear"):
+            get_cuda_major_version.cache_clear()
+    except ImportError:
+        pass
