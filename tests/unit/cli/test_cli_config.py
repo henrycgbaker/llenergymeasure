@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from llenergymeasure.cli import app
@@ -100,6 +101,244 @@ def test_config_exits_0() -> None:
     """Config command always exits 0 regardless of environment state."""
     with patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None):
         result = runner.invoke(app, ["config"])
+    assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# Verbose mode tests
+# ---------------------------------------------------------------------------
+
+
+def test_config_verbose_gpu_driver() -> None:
+    """With -v and a GPU present, the driver version is shown."""
+    mock_gpu = [{"name": "NVIDIA A100", "vram_gb": 80.0}]
+    mock_driver_raw = b"535.129.03"
+
+    mock_pynvml = MagicMock()
+    mock_pynvml.nvmlSystemGetDriverVersion.return_value = mock_driver_raw
+    mock_pynvml.__spec__ = MagicMock()  # Must be non-None — sys.modules insertion requires it
+
+    mock_nvml_context = MagicMock()
+    mock_nvml_context.return_value.__enter__ = MagicMock(return_value=None)
+    mock_nvml_context.return_value.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=mock_gpu),
+        patch.dict("sys.modules", {"pynvml": mock_pynvml}),
+        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+    ):
+        result = runner.invoke(app, ["config", "-v"])
+
+    assert result.exit_code == 0
+    assert "Driver: 535.129.03" in result.output
+
+
+def test_config_verbose_backend_versions() -> None:
+    """With -v and transformers installed, version string is shown in parentheses."""
+    mock_torch = MagicMock()
+    mock_torch.__version__ = "2.2.0"
+
+    def fake_find_spec(name: str) -> MagicMock | None:
+        if name in ("transformers", "pynvml"):
+            return MagicMock()
+        return None
+
+    with (
+        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch("llenergymeasure.cli.config_cmd._probe_backend_version", return_value="2.2.0"),
+        patch("importlib.util.find_spec", side_effect=fake_find_spec),
+    ):
+        result = runner.invoke(app, ["config", "-v"])
+
+    assert result.exit_code == 0
+    assert "(2.2.0)" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Energy backend detection
+# ---------------------------------------------------------------------------
+
+
+def test_config_energy_backends_zeus() -> None:
+    """When zeus is installed, Energy section shows 'zeus'."""
+
+    def fake_find_spec_zeus(name: str) -> MagicMock | None:
+        if name == "zeus":
+            return MagicMock()
+        return None
+
+    with (
+        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch("importlib.util.find_spec", side_effect=fake_find_spec_zeus),
+    ):
+        result = runner.invoke(app, ["config"])
+
+    assert result.exit_code == 0
+    assert "Energy: zeus" in result.output
+
+
+def test_config_energy_backends_none() -> None:
+    """When no energy backends are installed, Energy section shows 'Energy: none'."""
+
+    def fake_find_spec_none(name: str) -> None:
+        return None
+
+    with (
+        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch("importlib.util.find_spec", side_effect=fake_find_spec_none),
+    ):
+        result = runner.invoke(app, ["config"])
+
+    assert result.exit_code == 0
+    assert "Energy: none" in result.output
+
+
+# ---------------------------------------------------------------------------
+# User config verbose non-defaults / not found
+# ---------------------------------------------------------------------------
+
+
+def test_config_user_config_not_found() -> None:
+    """When config file does not exist, Status shows 'using defaults'."""
+    fake_path = Path("/nonexistent/.config/llenergymeasure/config.yaml")
+
+    with (
+        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch("llenergymeasure.config.user_config.get_user_config_path", return_value=fake_path),
+    ):
+        result = runner.invoke(app, ["config"])
+
+    assert result.exit_code == 0
+    assert "using defaults" in result.output
+
+
+def test_config_user_config_loaded_verbose_non_defaults() -> None:
+    """With -v and a loaded config that has non-default values, 'Non-default values:' appears."""
+    from pathlib import Path as _Path
+
+    from llenergymeasure.config.user_config import UserConfig
+
+    # Build a UserConfig with a non-default value
+    defaults_cfg = UserConfig()
+    defaults_dump = defaults_cfg.model_dump()
+
+    # We need a config object that differs from defaults -- create a mock
+    mock_user_cfg = MagicMock(spec=UserConfig)
+    modified_dump = {section: dict(vals) for section, vals in defaults_dump.items()}
+    # Inject a non-default value in the first section we find that has dict values
+    for section, vals in modified_dump.items():
+        if isinstance(vals, dict) and vals:
+            first_key = next(iter(vals))
+            modified_dump[section][first_key] = "__non_default_value__"
+            break
+    mock_user_cfg.model_dump.return_value = modified_dump
+
+    fake_path = MagicMock(spec=_Path)
+    fake_path.exists.return_value = True
+    fake_path.__str__ = lambda self: "/fake/config.yaml"
+
+    # load_user_config and UserConfig are lazy-imported inside the function body —
+    # patch at the source module, not at config_cmd
+    with (
+        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch("llenergymeasure.config.user_config.get_user_config_path", return_value=fake_path),
+        patch("llenergymeasure.config.user_config.load_user_config", return_value=mock_user_cfg),
+        patch("llenergymeasure.config.user_config.UserConfig", return_value=defaults_cfg),
+    ):
+        result = runner.invoke(app, ["config", "-v"])
+
+    assert result.exit_code == 0
+    assert "Non-default values:" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Direct helper function tests
+# ---------------------------------------------------------------------------
+
+
+def test_probe_gpu_returns_list_with_gpu_info() -> None:
+    """_probe_gpu returns a list of dicts when pynvml works correctly."""
+    from types import SimpleNamespace
+
+    from llenergymeasure.cli.config_cmd import _probe_gpu
+
+    mock_pynvml = MagicMock()
+    mock_pynvml.__spec__ = MagicMock()
+    mock_pynvml.nvmlDeviceGetCount.return_value = 1
+    mock_handle = MagicMock()
+    mock_pynvml.nvmlDeviceGetHandleByIndex.return_value = mock_handle
+    mock_pynvml.nvmlDeviceGetName.return_value = b"NVIDIA A100"
+    mock_pynvml.nvmlDeviceGetMemoryInfo.return_value = SimpleNamespace(total=80_000_000_000)
+
+    mock_nvml_context = MagicMock()
+    mock_nvml_context.return_value.__enter__ = MagicMock(return_value=None)
+    mock_nvml_context.return_value.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch.dict("sys.modules", {"pynvml": mock_pynvml}),
+        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+    ):
+        result = _probe_gpu()
+
+    assert result is not None
+    assert len(result) == 1
+    assert result[0]["name"] == "NVIDIA A100"
+    assert result[0]["vram_gb"] == pytest.approx(80.0, rel=1e-3)
+
+
+def test_probe_gpu_returns_none_on_error() -> None:
+    """_probe_gpu returns None when pynvml raises an exception."""
+    from llenergymeasure.cli.config_cmd import _probe_gpu
+
+    with patch.dict("sys.modules", {"pynvml": None}):
+        result = _probe_gpu()
+
+    assert result is None
+
+
+def test_probe_backend_version_pytorch() -> None:
+    """_probe_backend_version returns torch.__version__ for pytorch backend."""
+    from llenergymeasure.cli.config_cmd import _probe_backend_version
+
+    mock_torch = MagicMock()
+    mock_torch.__version__ = "2.2.0"
+
+    with patch.dict("sys.modules", {"torch": mock_torch}):
+        result = _probe_backend_version("pytorch")
+
+    assert result == "2.2.0"
+
+
+def test_probe_backend_version_returns_none_on_import_error() -> None:
+    """_probe_backend_version returns None when the backend package is not installed."""
+    from llenergymeasure.cli.config_cmd import _probe_backend_version
+
+    with patch.dict("sys.modules", {"vllm": None}):
+        result = _probe_backend_version("vllm")
+
+    assert result is None
+
+
+def test_config_verbose_driver_exception_handled() -> None:
+    """With -v and driver query raising, command still exits 0 (exception suppressed)."""
+    mock_gpu = [{"name": "NVIDIA A100", "vram_gb": 80.0}]
+
+    mock_pynvml = MagicMock()
+    mock_pynvml.__spec__ = MagicMock()
+    mock_pynvml.nvmlSystemGetDriverVersion.side_effect = RuntimeError("driver error")
+
+    mock_nvml_context = MagicMock()
+    mock_nvml_context.return_value.__enter__ = MagicMock(return_value=None)
+    mock_nvml_context.return_value.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=mock_gpu),
+        patch.dict("sys.modules", {"pynvml": mock_pynvml}),
+        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+    ):
+        result = runner.invoke(app, ["config", "-v"])
+
+    # Driver exception is swallowed — command must still succeed
     assert result.exit_code == 0
 
 
