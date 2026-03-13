@@ -47,6 +47,9 @@ jobs:
           docker commit llem-ci-setup llenergymeasure-ci:pytorch
           docker rm llem-ci-setup
 
+      - name: Create results directory
+        run: mkdir -p results/
+
       - name: All tests (including GPU)
         run: |
           docker run --rm --gpus all \
