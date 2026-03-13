@@ -102,8 +102,11 @@ jobs:
             exit 0
           fi
 
-          # Skip if nothing changed
-          if git diff --quiet tests/fixtures/replay/; then
+          # Stage first so git detects new (untracked) files
+          git add tests/fixtures/replay/*.json
+
+          # Skip if nothing changed (staged vs HEAD)
+          if git diff --cached --quiet tests/fixtures/replay/; then
             echo "Replay fixtures unchanged"
             exit 0
           fi
@@ -113,7 +116,6 @@ jobs:
 
           BRANCH="chore/replay-fixtures-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
-          git add tests/fixtures/replay/*.json
           git commit -m "chore(test): update replay fixtures from GPU CI"
           git push origin "$BRANCH"
 
