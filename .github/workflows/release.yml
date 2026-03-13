@@ -37,6 +37,18 @@ jobs:
       - name: mypy
         run: uv run mypy src/
 
+  validate-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate tag matches pyproject.toml
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PYPROJECT_VER=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); print('v' + tomllib.load(f)['project']['version'])")
+          echo "Tag: ${TAG}"
+          echo "pyproject.toml reports: ${PYPROJECT_VER}"
+          [ "${TAG}" = "${PYPROJECT_VER}" ] || { echo "MISMATCH: tag=${TAG}, pyproject=${PYPROJECT_VER}"; exit 1; }
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -50,16 +62,27 @@ jobs:
           cache-suffix: test-${{ matrix.python-version }}
           python-version: ${{ matrix.python-version }}
       - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus --extra webhooks
-      - name: Unit tests
-        run: uv run pytest tests/unit/ -m "not gpu" -v --tb=short
+      - name: Unit + integration tests
+        run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12' && always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-release-${{ github.sha }}
+          path: coverage.xml
+          retention-days: 30
+          if-no-files-found: ignore
       - name: Import validation
         run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
 
-  gpu:
-    uses: ./.github/workflows/gpu-ci.yml
-
   release:
-    needs: [lint, type-check, test, gpu]
+    needs: [lint, type-check, test, validate-version]
     runs-on: ubuntu-latest
     permissions:
       contents: write
