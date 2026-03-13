@@ -130,3 +130,22 @@ markers = [
     "docker: marks tests as requiring Docker with NVIDIA runtime",
     "slow: marks tests as slow (>30s); excluded from Tier 1 fast runs",
 ]
+
+[tool.coverage.run]
+source = ["llenergymeasure"]
+omit = [
+    "*/core/backends/vllm.py",
+    "*/core/backends/tensorrt.py",
+    "*/infra/docker_runner.py",
+    "*/infra/container_entrypoint.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+    "raise NotImplementedError",
+    "@abstractmethod",
+]
+show_missing = true
