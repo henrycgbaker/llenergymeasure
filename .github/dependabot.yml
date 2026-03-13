@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # GitHub Actions - monthly, grouped into single PR
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Python (pip) - monthly, grouped minor+patch, major separate
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
+        exclude-patterns:
+          - "torch"
+          - "torchvision"
+          - "vllm"
+          - "tensorrt*"
+    ignore:
+      - dependency-name: "torch"
+      - dependency-name: "torchvision"
+      - dependency-name: "vllm"
+      - dependency-name: "tensorrt*"
