@@ -7,7 +7,19 @@ Run: pytest tests/integration/ -m gpu -v
 Requires: Docker with --gpus all, gpt2 model access
 """
 
+from pathlib import Path
+
 import pytest
+
+_REPLAY_DIR = Path("/app/results/replay")
+
+
+def _save_replay(result, model: str, backend: str) -> None:
+    """Save ExperimentResult JSON as a replay fixture for offline unit tests."""
+    _REPLAY_DIR.mkdir(parents=True, exist_ok=True)
+    slug = model.replace("/", "-").lower()
+    filename = f"{slug}_{backend}_v{result.schema_version}.json"
+    (_REPLAY_DIR / filename).write_text(result.model_dump_json(indent=2), encoding="utf-8")
 
 
 @pytest.mark.gpu
@@ -47,6 +59,9 @@ class TestM1ExitCriteria:
 
         # FLOPs populated
         assert result.total_flops > 0
+
+        # Save replay fixture for offline unit tests
+        _save_replay(result, "gpt2", "pytorch")
 
     def test_environment_snapshot_populated(self, tmp_path):
         """Environment snapshot contains GPU, Python, CUDA info."""

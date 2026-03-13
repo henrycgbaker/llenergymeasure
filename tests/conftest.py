@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,8 @@ from llenergymeasure.domain.experiment import (
     StudyResult,
     StudySummary,
 )
+
+_REPLAY_DIR = Path(__file__).parent / "fixtures" / "replay"
 
 _EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
@@ -93,6 +96,22 @@ def tmp_results_dir(tmp_path):
     d = tmp_path / "results"
     d.mkdir()
     return d
+
+
+@pytest.fixture
+def replay_results() -> list[ExperimentResult]:
+    """Load GPU-produced ExperimentResult fixtures from tests/fixtures/replay/.
+
+    Returns an empty list when no fixtures exist (safe for GPU-free CI).
+    Uses model_validate_json directly (not from_json) because replay fixtures
+    are standalone JSON files without timeseries sidecars.
+    """
+    results = []
+    if _REPLAY_DIR.is_dir():
+        for json_file in sorted(_REPLAY_DIR.glob("*.json")):
+            content = json_file.read_text(encoding="utf-8")
+            results.append(ExperimentResult.model_validate_json(content))
+    return results
 
 
 # ---------------------------------------------------------------------------
