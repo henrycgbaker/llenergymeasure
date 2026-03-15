@@ -25,20 +25,30 @@ from llenergymeasure.exceptions import ConfigError
 def _resolve_gpu_indices(config: _ExperimentConfig) -> list[int]:
     """Determine GPU indices to monitor for an experiment.
 
-    Rules (PyTorch backend only — other backends return [0] as a safe default):
-    - device_map="auto" (or any non-None device_map): monitor all NVML-visible GPUs.
-      Model sharding is determined at load time inside harness.run(), but gpu_indices
-      must be passed *before* load. Using all visible GPUs is correct and safe.
-    - Otherwise: [0] (single-GPU default, backward compatible).
-
-    For future backends (vLLM: list(range(tp_size)), TensorRT: list(range(tp_size))),
-    add an elif branch here — the call sites do not need to change.
+    Rules per backend:
+    - **vLLM**: tensor_parallel_size * pipeline_parallel_size GPUs. Both are known
+      from config before the harness runs, so gpu_indices = list(range(total)).
+    - **PyTorch**: device_map="auto" (or any non-None device_map) monitors all
+      NVML-visible GPUs. Model sharding is determined at load time inside
+      harness.run(), but gpu_indices must be passed *before* load. Using all
+      visible GPUs is correct and safe.
+    - **TensorRT-LLM**: will use tp_size from config (added in M4 Phase 35).
+    - **Otherwise**: [0] (single-GPU default, backward compatible).
 
     Note: num_processes > 1 (data parallelism via Accelerate) is not handled here.
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    if (
+    if config.backend == "vllm" and config.vllm is not None:
+        tp = 1
+        pp = 1
+        if config.vllm.engine is not None:
+            tp = config.vllm.engine.tensor_parallel_size or 1
+            pp = config.vllm.engine.pipeline_parallel_size or 1
+        total = tp * pp
+        if total > 1:
+            return list(range(total))
+    elif (
         config.backend == "pytorch"
         and config.pytorch is not None
         and config.pytorch.device_map is not None
