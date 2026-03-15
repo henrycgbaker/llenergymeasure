@@ -37,7 +37,7 @@ jobs:
             -v "${{ github.workspace }}":/workspace \
             alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build pytorch CI image
         run: |
@@ -84,7 +84,7 @@ jobs:
 
       - name: Upload replay fixtures
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: replay-fixtures-${{ github.sha }}
           path: tests/fixtures/replay/
