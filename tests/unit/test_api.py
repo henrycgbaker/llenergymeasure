@@ -950,11 +950,11 @@ class TestResolveGpuIndices:
         config = self._make_pytorch_config(device_map="auto")
         assert _resolve_gpu_indices(config) == [0]
 
-    def test_non_pytorch_backend_returns_zero(self):
-        """Non-PyTorch backends (e.g. vllm) always return [0]."""
+    def test_non_pytorch_non_vllm_backend_returns_zero(self):
+        """Unknown backends return [0]."""
         from llenergymeasure._api import _resolve_gpu_indices
 
-        config = ExperimentConfig(model="gpt2", backend="vllm")
+        config = ExperimentConfig.model_construct(model="gpt2", backend="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
 
     def test_pytorch_backend_no_pytorch_block_returns_zero(self):
@@ -962,4 +962,60 @@ class TestResolveGpuIndices:
         from llenergymeasure._api import _resolve_gpu_indices
 
         config = ExperimentConfig.model_construct(model="gpt2", backend="pytorch", pytorch=None)
+        assert _resolve_gpu_indices(config) == [0]
+
+    # ── vLLM backend tests ──
+
+    def _make_vllm_config(self, tp: int | None = None, pp: int | None = None) -> ExperimentConfig:
+        """Build a minimal vLLM ExperimentConfig with TP/PP settings."""
+        from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+
+        engine = VLLMEngineConfig(
+            tensor_parallel_size=tp,
+            pipeline_parallel_size=pp,
+        )
+        vllm_cfg = VLLMConfig(engine=engine)
+        return ExperimentConfig(model="gpt2", backend="vllm", vllm=vllm_cfg)
+
+    def test_vllm_tp2_returns_two_gpus(self):
+        """vLLM with tensor_parallel_size=2 returns [0, 1]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = self._make_vllm_config(tp=2)
+        assert _resolve_gpu_indices(config) == [0, 1]
+
+    def test_vllm_tp4_returns_four_gpus(self):
+        """vLLM with tensor_parallel_size=4 returns [0, 1, 2, 3]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = self._make_vllm_config(tp=4)
+        assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
+
+    def test_vllm_tp2_pp2_returns_four_gpus(self):
+        """vLLM with tp=2, pp=2 returns [0, 1, 2, 3]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = self._make_vllm_config(tp=2, pp=2)
+        assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
+
+    def test_vllm_tp1_returns_single_gpu(self):
+        """vLLM with tensor_parallel_size=1 (default) returns [0]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = self._make_vllm_config(tp=1)
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_vllm_no_engine_block_returns_single_gpu(self):
+        """vLLM with no engine config returns [0]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+        from llenergymeasure.config.backend_configs import VLLMConfig
+
+        config = ExperimentConfig(model="gpt2", backend="vllm", vllm=VLLMConfig())
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_vllm_no_vllm_block_returns_single_gpu(self):
+        """vLLM backend with vllm=None returns [0]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = ExperimentConfig(model="gpt2", backend="vllm")
         assert _resolve_gpu_indices(config) == [0]
