@@ -121,7 +121,7 @@ def _apply_patches():
             return_value=MagicMock(value=1e9),
         ),
         patch("llenergymeasure.core.harness._cuda_sync"),
-        patch("llenergymeasure.core.harness.PowerThermalSampler"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=_make_mock_pts()),
         patch(
             "llenergymeasure.core.harness.write_timeseries_parquet",
             return_value=MagicMock(name="timeseries.parquet"),
@@ -222,3 +222,157 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
     # mutated by harness to reflect thermal_floor_wait_s = 45.0
     assert len(captured_warmup) == 1
     assert captured_warmup[0].thermal_floor_wait_s == 45.0
+
+
+# ---------------------------------------------------------------------------
+# gpu_indices wiring tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_pts():
+    """Build a PowerThermalSampler mock that satisfies the harness's usage."""
+    from llenergymeasure.domain.metrics import ThermalThrottleInfo
+
+    mock_pts_cls = MagicMock()
+    mock_pts_instance = MagicMock()
+    mock_pts_instance.get_thermal_throttle_info.return_value = ThermalThrottleInfo()
+    mock_pts_instance.get_samples.return_value = []
+    # Context manager protocol
+    mock_pts_instance.__enter__ = MagicMock(return_value=mock_pts_instance)
+    mock_pts_instance.__exit__ = MagicMock(return_value=False)
+    mock_pts_cls.return_value = mock_pts_instance
+    return mock_pts_cls
+
+
+def test_harness_passes_gpu_indices_to_energy_backend(minimal_config):
+    """harness.run(gpu_indices=[0, 1]) passes gpu_indices to select_energy_backend."""
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch(
+            "llenergymeasure.core.harness.collect_environment_snapshot",
+            return_value=None,
+        ),
+        patch("llenergymeasure.core.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.core.harness.select_energy_backend", return_value=None) as mock_seb,
+        patch("llenergymeasure.core.harness.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.core.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.core.harness._cuda_sync"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.core.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.core.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        harness.run(backend, minimal_config, gpu_indices=[0, 1])
+
+    mock_seb.assert_called_once()
+    _, kwargs = mock_seb.call_args
+    assert kwargs.get("gpu_indices") == [0, 1]
+
+
+def test_harness_passes_gpu_indices_to_thermal_sampler(minimal_config):
+    """harness.run(gpu_indices=[0, 1]) instantiates PowerThermalSampler with those indices."""
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    mock_pts_cls = _make_mock_pts()
+
+    with (
+        patch(
+            "llenergymeasure.core.harness.collect_environment_snapshot",
+            return_value=None,
+        ),
+        patch("llenergymeasure.core.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.core.harness.select_energy_backend", return_value=None),
+        patch("llenergymeasure.core.harness.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.core.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.core.harness._cuda_sync"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=mock_pts_cls),
+        patch(
+            "llenergymeasure.core.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.core.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        harness.run(backend, minimal_config, gpu_indices=[0, 1])
+
+    mock_pts_cls.assert_called_once()
+    _, kwargs = mock_pts_cls.call_args
+    assert kwargs.get("gpu_indices") == [0, 1]
+
+
+def test_harness_passes_gpu_indices_to_baseline(minimal_config):
+    """harness.run(gpu_indices=[0, 1]) passes gpu_indices to measure_baseline_power when enabled."""
+    from llenergymeasure.config.models import ExperimentConfig
+
+    config_with_baseline = ExperimentConfig(
+        model="fake/model",
+        backend="pytorch",
+        n=1,
+        max_input_tokens=32,
+        max_output_tokens=32,
+        baseline={"enabled": True, "duration_seconds": 5.0},
+    )
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch(
+            "llenergymeasure.core.harness.collect_environment_snapshot",
+            return_value=None,
+        ),
+        patch("llenergymeasure.core.harness.measure_baseline_power", return_value=None) as mock_mbp,
+        patch("llenergymeasure.core.harness.select_energy_backend", return_value=None),
+        patch("llenergymeasure.core.harness.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.core.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.core.harness._cuda_sync"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.core.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.core.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        harness.run(backend, config_with_baseline, gpu_indices=[0, 1])
+
+    mock_mbp.assert_called_once()
+    _, kwargs = mock_mbp.call_args
+    assert kwargs.get("gpu_indices") == [0, 1]
+
+
+def test_harness_defaults_to_no_gpu_indices(minimal_config):
+    """harness.run() without gpu_indices passes None to subsystems (defaults to [0] internally)."""
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    mock_pts_cls = _make_mock_pts()
+
+    with (
+        patch(
+            "llenergymeasure.core.harness.collect_environment_snapshot",
+            return_value=None,
+        ),
+        patch("llenergymeasure.core.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.core.harness.select_energy_backend", return_value=None) as mock_seb,
+        patch("llenergymeasure.core.harness.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.core.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.core.harness._cuda_sync"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=mock_pts_cls),
+        patch(
+            "llenergymeasure.core.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.core.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        harness.run(backend, minimal_config)
+
+    # gpu_indices should be None (not a missing kwarg error)
+    _, seb_kwargs = mock_seb.call_args
+    assert seb_kwargs.get("gpu_indices") is None
+
+    _, pts_kwargs = mock_pts_cls.call_args
+    assert pts_kwargs.get("gpu_indices") is None

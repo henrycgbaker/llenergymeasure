@@ -245,9 +245,7 @@ class MeasurementHarness:
             start_time = datetime.now()
 
             # Start thermal sampler around inference for timeseries + throttle detection
-            from llenergymeasure.core.power_thermal import PowerThermalSampler as _PTS
-
-            with _PTS(gpu_indices=gpu_indices) as sampler:
+            with PowerThermalSampler(gpu_indices=gpu_indices) as sampler:
                 output = backend.run_inference(config, model)
 
             thermal_info = sampler.get_thermal_throttle_info()
