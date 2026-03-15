@@ -880,3 +880,86 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     assert study_result.summary.unique_configurations == 2, (
         f"Expected 2 unique configurations (6 / 3), got {study_result.summary.unique_configurations}"
     )
+
+
+# =============================================================================
+# Quick Task 2: _resolve_gpu_indices unit tests
+# =============================================================================
+
+
+class TestResolveGpuIndices:
+    """Unit tests for _resolve_gpu_indices(). No real GPU required — NVML is monkeypatched."""
+
+    def _make_pytorch_config(self, device_map: str | None = None) -> ExperimentConfig:
+        """Build a minimal PyTorch ExperimentConfig."""
+        from llenergymeasure.config.backend_configs import PyTorchConfig
+
+        pytorch_cfg = PyTorchConfig(device_map=device_map)
+        return ExperimentConfig(model="gpt2", backend="pytorch", pytorch=pytorch_cfg)
+
+    def _make_mock_pynvml(self, device_count: int):
+        """Build a minimal pynvml mock with nvmlInit, nvmlDeviceGetCount, nvmlShutdown."""
+        import types
+
+        mod = types.ModuleType("pynvml")
+        mod.nvmlInit = lambda: None
+        mod.nvmlDeviceGetCount = lambda: device_count
+        mod.nvmlShutdown = lambda: None
+        return mod
+
+    def test_pytorch_no_device_map_returns_zero(self):
+        """PyTorch backend with device_map=None always returns [0]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = self._make_pytorch_config(device_map=None)
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_pytorch_device_map_auto_four_gpus(self, monkeypatch):
+        """PyTorch with device_map='auto' and 4 visible GPUs returns [0, 1, 2, 3]."""
+        import sys
+
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        mock_pynvml = self._make_mock_pynvml(device_count=4)
+        monkeypatch.setitem(sys.modules, "pynvml", mock_pynvml)
+
+        config = self._make_pytorch_config(device_map="auto")
+        assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
+
+    def test_pytorch_device_map_auto_one_gpu_returns_zero(self, monkeypatch):
+        """PyTorch with device_map='auto' and only 1 GPU returns [0] (no-op multi-GPU)."""
+        import sys
+
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        mock_pynvml = self._make_mock_pynvml(device_count=1)
+        monkeypatch.setitem(sys.modules, "pynvml", mock_pynvml)
+
+        config = self._make_pytorch_config(device_map="auto")
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_pytorch_device_map_auto_pynvml_absent_returns_zero(self, monkeypatch):
+        """PyTorch with device_map='auto' but pynvml absent falls through to [0]."""
+        import sys
+
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        # Remove pynvml from sys.modules so the local import raises ImportError
+        monkeypatch.setitem(sys.modules, "pynvml", None)  # type: ignore[arg-type]
+
+        config = self._make_pytorch_config(device_map="auto")
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_non_pytorch_backend_returns_zero(self):
+        """Non-PyTorch backends (e.g. vllm) always return [0]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = ExperimentConfig(model="gpt2", backend="vllm")
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_pytorch_backend_no_pytorch_block_returns_zero(self):
+        """PyTorch backend with pytorch=None (no pytorch block) returns [0]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = ExperimentConfig.model_construct(model="gpt2", backend="pytorch", pytorch=None)
+        assert _resolve_gpu_indices(config) == [0]
