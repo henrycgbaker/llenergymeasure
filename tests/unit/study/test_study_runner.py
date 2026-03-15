@@ -560,7 +560,7 @@ def test_worker_calls_get_backend(monkeypatch) -> None:
     monkeypatch.setattr("llenergymeasure.orchestration.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.core.harness.MeasurementHarness.run",
-        lambda self, backend, config, snapshot=None: fake_result,
+        lambda self, backend, config, snapshot=None, **kw: fake_result,
     )
 
     # Use a mock connection to avoid pickling MagicMock through a real Pipe
