@@ -66,44 +66,32 @@ class TestGetDefaultImage:
     def test_returns_well_formed_image_string(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        with patch(
-            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value="12"
-        ):
-            image = get_default_image("vllm")
+        image = get_default_image("vllm")
 
-        assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:")
-        assert "cuda12" in image
+        assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:v")
 
-    def test_fallback_to_latest_when_cuda_unknown(self):
+    def test_fallback_to_latest_when_version_empty(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        with patch(
-            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value=None
-        ):
+        with patch("llenergymeasure.__version__", ""):
             image = get_default_image("pytorch")
 
-        assert "latest" in image
+        assert image.endswith(":vlatest")
 
     def test_backend_name_included_in_image(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        with patch(
-            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value="12"
-        ):
-            for backend in ("pytorch", "vllm", "tensorrt"):
-                image = get_default_image(backend)
-                assert backend in image, f"Expected backend {backend!r} in image {image!r}"
+        for backend in ("pytorch", "vllm", "tensorrt"):
+            image = get_default_image(backend)
+            assert backend in image, f"Expected backend {backend!r} in image {image!r}"
 
     def test_package_version_included_in_image(self):
         from llenergymeasure import __version__
         from llenergymeasure.infra.image_registry import get_default_image
 
-        with patch(
-            "llenergymeasure.infra.image_registry.get_cuda_major_version", return_value="12"
-        ):
-            image = get_default_image("vllm")
+        image = get_default_image("vllm")
 
-        assert __version__ in image
+        assert f"v{__version__}" in image
 
 
 # ---------------------------------------------------------------------------

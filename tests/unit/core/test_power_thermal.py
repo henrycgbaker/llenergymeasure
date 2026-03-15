@@ -8,6 +8,8 @@ Covers:
 - Device handle failure: sample_count 0
 - get_power_samples filters None values
 - PowerThermalResult.from_sampler class method
+- Multi-GPU: gpu_indices constructor, samples tagged with gpu_index
+- PowerThermalSample.gpu_index default value
 """
 
 from __future__ import annotations
@@ -65,18 +67,68 @@ def _make_pynvml_mock(
     return mock
 
 
-def _make_sampler_with_samples(throttle_reasons_values: list[int]) -> PowerThermalSampler:
+def _make_sampler_with_samples(
+    throttle_reasons_values: list[int],
+    gpu_index: int = 0,
+) -> PowerThermalSampler:
     """Create a PowerThermalSampler with pre-populated samples (no real pynvml needed)."""
-    sampler = PowerThermalSampler(device_index=0, sample_interval_ms=100)
+    sampler = PowerThermalSampler(gpu_indices=[gpu_index], sample_interval_ms=100)
     for i, reasons in enumerate(throttle_reasons_values):
         # thermal_throttle flag not used by get_thermal_throttle_info (it reads throttle_reasons)
         sample = PowerThermalSample(
             timestamp=float(i),
             throttle_reasons=reasons,
             thermal_throttle=False,  # will be recalculated in get_thermal_throttle_info
+            gpu_index=gpu_index,
         )
         sampler._samples.append(sample)
     return sampler
+
+
+# =============================================================================
+# Test: PowerThermalSample.gpu_index default
+# =============================================================================
+
+
+def test_power_thermal_sample_gpu_index_default() -> None:
+    """PowerThermalSample() defaults gpu_index to 0."""
+    sample = PowerThermalSample(timestamp=0.0)
+    assert sample.gpu_index == 0
+
+
+def test_power_thermal_sample_gpu_index_set() -> None:
+    """PowerThermalSample(gpu_index=2) stores 2."""
+    sample = PowerThermalSample(timestamp=0.0, gpu_index=2)
+    assert sample.gpu_index == 2
+
+
+# =============================================================================
+# Test: PowerThermalSampler gpu_indices constructor
+# =============================================================================
+
+
+def test_sampler_accepts_gpu_indices() -> None:
+    """PowerThermalSampler(gpu_indices=[0, 1]) stores _gpu_indices."""
+    sampler = PowerThermalSampler(gpu_indices=[0, 1])
+    assert sampler._gpu_indices == [0, 1]
+
+
+def test_sampler_defaults_to_gpu_zero() -> None:
+    """PowerThermalSampler() with no args defaults _gpu_indices to [0]."""
+    sampler = PowerThermalSampler()
+    assert sampler._gpu_indices == [0]
+
+
+def test_sampler_backward_compat_device_index() -> None:
+    """PowerThermalSampler(device_index=1) uses _gpu_indices = [1] (deprecated)."""
+    sampler = PowerThermalSampler(device_index=1)
+    assert sampler._gpu_indices == [1]
+
+
+def test_sampler_gpu_indices_takes_precedence_over_device_index() -> None:
+    """gpu_indices takes precedence when both gpu_indices and device_index given."""
+    sampler = PowerThermalSampler(gpu_indices=[2, 3], device_index=0)
+    assert sampler._gpu_indices == [2, 3]
 
 
 # =============================================================================
@@ -200,7 +252,7 @@ def test_sampler_lifecycle_pynvml_available():
     mock_pynvml = _make_full_pynvml_mock()
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        sampler = PowerThermalSampler(device_index=0, sample_interval_ms=10)
+        sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=10)
         with sampler:
             time.sleep(0.07)  # ~7 intervals at 10ms; gives thread time to collect samples
 
@@ -219,7 +271,7 @@ def test_sampler_lifecycle_pynvml_available():
 def test_sampler_pynvml_unavailable():
     """When pynvml import fails, is_available=False and no samples collected."""
     with patch.dict(sys.modules, {"pynvml": None}):
-        sampler = PowerThermalSampler(device_index=0, sample_interval_ms=10)
+        sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=10)
         with sampler:
             time.sleep(0.03)
 
@@ -239,7 +291,7 @@ def test_sampler_device_handle_failure():
     mock_pynvml.nvmlDeviceGetHandleByIndex.side_effect = Exception("handle error")
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        sampler = PowerThermalSampler(device_index=0, sample_interval_ms=10)
+        sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=10)
         with sampler:
             time.sleep(0.03)
 
@@ -256,7 +308,7 @@ def test_sampler_context_manager_lifecycle():
     mock_pynvml = _make_full_pynvml_mock()
 
     with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
-        sampler = PowerThermalSampler(device_index=0, sample_interval_ms=10)
+        sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=10)
 
         # Before start: thread is None
         assert sampler._thread is None
@@ -279,7 +331,7 @@ def test_sampler_context_manager_lifecycle():
 
 def test_get_power_samples_filters_none():
     """get_power_samples() excludes samples where power_w is None."""
-    sampler = PowerThermalSampler(device_index=0, sample_interval_ms=100)
+    sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=100)
 
     # Inject samples: some with power, some without
     sampler._samples = [
@@ -302,7 +354,7 @@ def test_get_power_samples_filters_none():
 
 def test_power_thermal_result_from_sampler():
     """PowerThermalResult.from_sampler() extracts power, memory, temp samples correctly."""
-    sampler = PowerThermalSampler(device_index=0, sample_interval_ms=100)
+    sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=100)
     sampler._pynvml_available = True
 
     # Inject pre-computed samples
@@ -314,6 +366,7 @@ def test_power_thermal_result_from_sampler():
             temperature_c=70.0,
             throttle_reasons=0,
             thermal_throttle=False,
+            gpu_index=0,
         ),
         PowerThermalSample(
             timestamp=0.1,
@@ -322,6 +375,7 @@ def test_power_thermal_result_from_sampler():
             temperature_c=72.0,
             throttle_reasons=0,
             thermal_throttle=False,
+            gpu_index=0,
         ),
     ]
 
@@ -344,7 +398,7 @@ def test_power_thermal_result_from_sampler():
 
 def test_get_thermal_throttle_info_empty_samples():
     """get_thermal_throttle_info with no samples returns default ThermalThrottleInfo."""
-    sampler = PowerThermalSampler(device_index=0, sample_interval_ms=100)
+    sampler = PowerThermalSampler(gpu_indices=[0], sample_interval_ms=100)
     assert sampler._samples == []
 
     info = sampler.get_thermal_throttle_info()
@@ -353,3 +407,65 @@ def test_get_thermal_throttle_info_empty_samples():
     assert info.thermal is False
     assert info.throttle_duration_sec == 0.0
     assert info.max_temperature_c is None
+
+
+# =============================================================================
+# Test 12: Multi-GPU samples tagged with gpu_index
+# =============================================================================
+
+
+def test_sampler_multi_gpu_samples_tagged():
+    """PowerThermalSampler(gpu_indices=[0, 1]) tags each sample with correct gpu_index."""
+    mock_pynvml = _make_full_pynvml_mock()
+
+    # Return different handles for each GPU
+    handle_0 = MagicMock(name="handle_0")
+    handle_1 = MagicMock(name="handle_1")
+    mock_pynvml.nvmlDeviceGetHandleByIndex.side_effect = [handle_0, handle_1]
+
+    # GPU 0 returns 100W, GPU 1 returns 200W
+    def power_side_effect(handle):
+        if handle is handle_0:
+            return 100_000
+        return 200_000
+
+    mock_pynvml.nvmlDeviceGetPowerUsage.side_effect = power_side_effect
+
+    with patch.dict(sys.modules, {"pynvml": mock_pynvml}):
+        sampler = PowerThermalSampler(gpu_indices=[0, 1], sample_interval_ms=10)
+        with sampler:
+            time.sleep(0.05)
+
+    samples = sampler.get_samples()
+    assert len(samples) > 0
+
+    gpu_0_samples = [s for s in samples if s.gpu_index == 0]
+    gpu_1_samples = [s for s in samples if s.gpu_index == 1]
+
+    assert len(gpu_0_samples) > 0, "Should have samples tagged with gpu_index=0"
+    assert len(gpu_1_samples) > 0, "Should have samples tagged with gpu_index=1"
+
+    # Power readings should reflect per-GPU values
+    for s in gpu_0_samples:
+        if s.power_w is not None:
+            assert s.power_w == pytest.approx(100.0, rel=0.01)
+    for s in gpu_1_samples:
+        if s.power_w is not None:
+            assert s.power_w == pytest.approx(200.0, rel=0.01)
+
+
+def test_sampler_multi_gpu_mean_power_is_sum_of_per_gpu_means():
+    """get_mean_power() returns sum of per-GPU means (total power across all GPUs)."""
+    sampler = PowerThermalSampler(gpu_indices=[0, 1], sample_interval_ms=100)
+
+    # GPU 0 at 100W, GPU 1 at 200W
+    sampler._samples = [
+        PowerThermalSample(timestamp=0.0, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.0, power_w=200.0, gpu_index=1),
+        PowerThermalSample(timestamp=0.1, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.1, power_w=200.0, gpu_index=1),
+    ]
+
+    mean = sampler.get_mean_power()
+    # mean GPU 0 = 100W, mean GPU 1 = 200W, sum = 300W
+    assert mean == pytest.approx(300.0, rel=1e-6)

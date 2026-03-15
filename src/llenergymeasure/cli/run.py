@@ -222,6 +222,7 @@ def _run_impl(
             quiet=quiet,
             verbose=verbose,
             skip_preflight=skip_preflight,
+            dry_run=dry_run,
         )
         return
 
@@ -277,12 +278,12 @@ def _run_study_impl(
     quiet: bool,
     verbose: bool,
     skip_preflight: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """Study execution path — separated for clean error handling."""
     import yaml
 
-    from llenergymeasure import run_study
-    from llenergymeasure.cli._display import print_study_summary
+    from llenergymeasure.cli._display import print_study_dry_run, print_study_summary
     from llenergymeasure.config.grid import format_preflight_summary
     from llenergymeasure.config.loader import load_study_config
 
@@ -322,6 +323,11 @@ def _run_study_impl(
         cli_overrides=study_cli_overrides if study_cli_overrides else None,
     )
 
+    # --- Dry-run branch ---
+    if dry_run:
+        print_study_dry_run(study_config, verbose=verbose)
+        return
+
     # Pre-flight summary display
     if not quiet:
         summary = format_preflight_summary(study_config)
@@ -329,6 +335,8 @@ def _run_study_impl(
         print(file=sys.stderr)
 
     # Run the study — pass skip_preflight so CLI flag overrides YAML config
+    from llenergymeasure import run_study
+
     result = run_study(study_config, skip_preflight=skip_preflight)
 
     # Display summary

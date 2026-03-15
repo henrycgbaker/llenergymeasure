@@ -389,6 +389,72 @@ def test_print_dry_run_config_valid_message(capsys):
 
 
 # =============================================================================
+# print_study_dry_run tests
+# =============================================================================
+
+
+def test_print_study_dry_run_shows_configs(capsys, monkeypatch):
+    """Study dry run shows each experiment config in a table."""
+    from llenergymeasure.cli._display import print_study_dry_run
+    from llenergymeasure.config.models import StudyConfig
+    from tests.conftest import make_config
+
+    configs = [
+        make_config(model="gpt2", precision="fp16"),
+        make_config(model="gpt2", precision="bf16"),
+    ]
+    study = StudyConfig(experiments=configs, name="test-sweep")
+
+    # Mock VRAM functions to avoid GPU dependency
+    monkeypatch.setattr("llenergymeasure.cli._vram.estimate_vram", lambda c: None)
+    monkeypatch.setattr("llenergymeasure.cli._vram.get_gpu_vram_gb", lambda: None)
+
+    print_study_dry_run(study)
+    out = capsys.readouterr().out
+
+    assert "2 configs" in out
+    assert "gpt2" in out
+    assert "fp16" in out
+    assert "bf16" in out
+    assert "Config valid" in out
+
+
+def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
+    """Study dry run shows VRAM estimate for the peak model."""
+    from llenergymeasure.cli._display import print_study_dry_run
+    from llenergymeasure.config.models import StudyConfig
+    from tests.conftest import make_config
+
+    configs = [
+        make_config(model="gpt2", precision="fp16"),
+        make_config(model="gpt2", precision="bf16"),
+    ]
+    study = StudyConfig(experiments=configs, name="vram-test")
+
+    vram_small = {"weights_gb": 0.2, "kv_cache_gb": 0.0, "overhead_gb": 0.03, "total_gb": 0.23}
+    vram_large = {"weights_gb": 0.3, "kv_cache_gb": 0.0, "overhead_gb": 0.04, "total_gb": 0.34}
+
+    # Return different VRAM for each config (fp16 < bf16 in our mock)
+    call_count = 0
+
+    def mock_estimate(config):
+        nonlocal call_count
+        call_count += 1
+        return vram_small if call_count == 1 else vram_large
+
+    monkeypatch.setattr("llenergymeasure.cli._vram.estimate_vram", mock_estimate)
+    monkeypatch.setattr("llenergymeasure.cli._vram.get_gpu_vram_gb", lambda: 40.0)
+
+    print_study_dry_run(study)
+    out = capsys.readouterr().out
+
+    # Should show the peak (larger) VRAM estimate
+    assert "VRAM estimate (peak)" in out
+    assert "0.3" in out  # weights of larger config
+    assert "OK" in out
+
+
+# =============================================================================
 # print_experiment_header tests
 # =============================================================================
 

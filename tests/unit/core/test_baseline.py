@@ -8,9 +8,10 @@ Covers:
 - Device handle failure returns None
 - NVMLError during sampling skips bad samples
 - No samples collected returns None
-- invalidate_baseline_cache (specific device and all devices)
+- invalidate_baseline_cache (specific GPU set and all devices)
 - adjust_energy_for_baseline (positive and floor-at-zero)
 - create_energy_breakdown (with and without baseline)
+- Multi-GPU baseline measurement sums power across GPUs
 """
 
 from __future__ import annotations
@@ -60,23 +61,27 @@ def _noop_nvml_context():
     yield
 
 
-def _make_fresh_cache_entry(device_index: int = 0, power_w: float = 50.0) -> BaselineCache:
+def _make_fresh_cache_entry(
+    gpu_indices: list[int] | None = None, power_w: float = 50.0
+) -> BaselineCache:
     """Create a cache entry that is within TTL (timestamp = now)."""
     return BaselineCache(
         power_w=power_w,
         timestamp=time.time(),
-        device_index=device_index,
+        gpu_indices=gpu_indices if gpu_indices is not None else [0],
         sample_count=3,
         duration_sec=0.3,
     )
 
 
-def _make_expired_cache_entry(device_index: int = 0, power_w: float = 50.0) -> BaselineCache:
+def _make_expired_cache_entry(
+    gpu_indices: list[int] | None = None, power_w: float = 50.0
+) -> BaselineCache:
     """Create a cache entry that is beyond the default 3600s TTL."""
     return BaselineCache(
         power_w=power_w,
         timestamp=time.time() - 4000.0,  # well past 1-hour TTL
-        device_index=device_index,
+        gpu_indices=gpu_indices if gpu_indices is not None else [0],
         sample_count=3,
         duration_sec=0.3,
     )
@@ -93,8 +98,8 @@ _MODULE = "llenergymeasure.core.baseline"
 
 def test_cache_hit_returns_cached_without_pynvml_call():
     """Pre-populated fresh cache entry is returned without calling pynvml."""
-    entry = _make_fresh_cache_entry(device_index=0, power_w=42.0)
-    _baseline_cache[0] = entry
+    entry = _make_fresh_cache_entry(gpu_indices=[0], power_w=42.0)
+    _baseline_cache[(0,)] = entry
 
     mock_pynvml = _make_pynvml_mock()
 
@@ -103,7 +108,7 @@ def test_cache_hit_returns_cached_without_pynvml_call():
         patch.dict(sys.modules, {"pynvml": mock_pynvml}),
         patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
     ):
-        result = measure_baseline_power(device_index=0, cache_ttl_sec=3600.0)
+        result = measure_baseline_power(gpu_indices=[0], cache_ttl_sec=3600.0)
 
     assert result is entry
     assert result.power_w == 42.0
@@ -112,17 +117,32 @@ def test_cache_hit_returns_cached_without_pynvml_call():
 
 def test_cache_hit_respects_ttl():
     """Fresh entry within TTL is returned; expired entry is not used."""
-    fresh_entry = _make_fresh_cache_entry(device_index=0, power_w=99.0)
-    _baseline_cache[0] = fresh_entry
+    fresh_entry = _make_fresh_cache_entry(gpu_indices=[0], power_w=99.0)
+    _baseline_cache[(0,)] = fresh_entry
 
     # Very short TTL — should still hit because timestamp is "now"
     with (
         patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
         patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
     ):
-        result = measure_baseline_power(device_index=0, cache_ttl_sec=3600.0)
+        result = measure_baseline_power(gpu_indices=[0], cache_ttl_sec=3600.0)
 
     assert result is fresh_entry
+
+
+def test_cache_hit_backward_compat_device_index():
+    """device_index kwarg still hits cache keyed by (device_index,) tuple."""
+    entry = _make_fresh_cache_entry(gpu_indices=[0], power_w=77.0)
+    _baseline_cache[(0,)] = entry
+
+    with (
+        patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
+        patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
+    ):
+        result = measure_baseline_power(device_index=0, cache_ttl_sec=3600.0)
+
+    assert result is entry
+    assert result.power_w == 77.0
 
 
 # =============================================================================
@@ -132,8 +152,8 @@ def test_cache_hit_respects_ttl():
 
 def test_cache_expired_triggers_fresh_measurement():
     """An expired cache entry causes a fresh measurement to be taken."""
-    expired = _make_expired_cache_entry(device_index=0, power_w=10.0)
-    _baseline_cache[0] = expired
+    expired = _make_expired_cache_entry(gpu_indices=[0], power_w=10.0)
+    _baseline_cache[(0,)] = expired
 
     mock_pynvml = _make_pynvml_mock(power_mw_values=[200_000])
 
@@ -148,7 +168,7 @@ def test_cache_expired_triggers_fresh_measurement():
         patch(f"{_MODULE}.time.monotonic", side_effect=lambda: next(mono_iter)),
         patch(f"{_MODULE}.time.sleep"),
     ):
-        result = measure_baseline_power(device_index=0, duration_sec=1.0, cache_ttl_sec=3600.0)
+        result = measure_baseline_power(gpu_indices=[0], duration_sec=1.0, cache_ttl_sec=3600.0)
 
     # The expired entry should have been replaced
     assert result is not expired
@@ -172,15 +192,15 @@ def test_fresh_measurement_samples_and_caches():
         patch(f"{_MODULE}.time.monotonic", side_effect=lambda: next(mono_iter)),
         patch(f"{_MODULE}.time.sleep"),
     ):
-        result = measure_baseline_power(device_index=0, duration_sec=0.4)
+        result = measure_baseline_power(gpu_indices=[0], duration_sec=0.4)
 
     assert result is not None
     expected_mean = sum(v / 1000.0 for v in power_values) / len(power_values)
     assert result.power_w == pytest.approx(expected_mean, rel=1e-6)
     assert result.sample_count == len(power_values)
-    assert result.device_index == 0
+    assert result.gpu_indices == [0]
     # Must be stored in cache
-    assert _baseline_cache.get(0) is result
+    assert _baseline_cache.get((0,)) is result
 
 
 # =============================================================================
@@ -191,7 +211,7 @@ def test_fresh_measurement_samples_and_caches():
 def test_pynvml_unavailable_returns_none():
     """When find_spec('pynvml') returns None, measure_baseline_power returns None."""
     with patch(f"{_MODULE}.importlib.util.find_spec", return_value=None):
-        result = measure_baseline_power(device_index=0)
+        result = measure_baseline_power(gpu_indices=[0])
 
     assert result is None
 
@@ -206,7 +226,7 @@ def test_device_handle_failure_returns_none():
         patch.dict(sys.modules, {"pynvml": mock_pynvml}),
         patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
     ):
-        result = measure_baseline_power(device_index=0)
+        result = measure_baseline_power(gpu_indices=[0])
 
     assert result is None
 
@@ -230,7 +250,7 @@ def test_nvml_error_during_sampling_skips_bad_samples():
         patch(f"{_MODULE}.time.monotonic", side_effect=lambda: next(mono_iter)),
         patch(f"{_MODULE}.time.sleep"),
     ):
-        result = measure_baseline_power(device_index=0, duration_sec=0.4)
+        result = measure_baseline_power(gpu_indices=[0], duration_sec=0.4)
 
     # Two valid samples (200 W and 180 W); bad sample skipped
     assert result is not None
@@ -255,9 +275,69 @@ def test_no_samples_collected_returns_none():
         patch(f"{_MODULE}.time.monotonic", side_effect=lambda: next(mono_iter)),
         patch(f"{_MODULE}.time.sleep"),
     ):
-        result = measure_baseline_power(device_index=0, duration_sec=0.2)
+        result = measure_baseline_power(gpu_indices=[0], duration_sec=0.2)
 
     assert result is None
+
+
+# =============================================================================
+# Multi-GPU baseline measurement
+# =============================================================================
+
+
+def test_multi_gpu_baseline_measurement():
+    """Baseline power for 2 GPUs sums their per-GPU means."""
+    # GPU 0 at 100W, GPU 1 at 150W -> total = 250W
+    call_count = [0]
+
+    def power_side_effect(handle):
+        call_count[0] += 1
+        # Alternate handles: 0 -> 100_000 mW, 1 -> 150_000 mW
+        # Handles are mock objects; we use call order to determine GPU
+        # handle_0 is the first handle returned, handle_1 second
+        if handle is handle_0:
+            return 100_000
+        return 150_000
+
+    mock_pynvml = MagicMock()
+    mock_pynvml.NVMLError = Exception
+    handle_0 = MagicMock(name="handle_0")
+    handle_1 = MagicMock(name="handle_1")
+    mock_pynvml.nvmlDeviceGetHandleByIndex.side_effect = [handle_0, handle_1]
+    mock_pynvml.nvmlDeviceGetPowerUsage.side_effect = power_side_effect
+
+    # monotonic: start=0.0, one iteration (0.1 < 0.4), then exit (1.0)
+    mono_values = [0.0, 0.1, 1.0, 1.0]
+    mono_iter = iter(mono_values)
+
+    with (
+        patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
+        patch.dict(sys.modules, {"pynvml": mock_pynvml}),
+        patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
+        patch(f"{_MODULE}.time.monotonic", side_effect=lambda: next(mono_iter)),
+        patch(f"{_MODULE}.time.sleep"),
+    ):
+        result = measure_baseline_power(gpu_indices=[0, 1], duration_sec=0.4)
+
+    assert result is not None
+    assert result.gpu_indices == [0, 1]
+    # 100W + 150W = 250W
+    assert result.power_w == pytest.approx(250.0, rel=1e-6)
+
+
+def test_multi_gpu_cache_keyed_by_sorted_tuple():
+    """Multi-GPU baseline is cached under sorted gpu_indices tuple."""
+    entry = _make_fresh_cache_entry(gpu_indices=[0, 1], power_w=300.0)
+    _baseline_cache[(0, 1)] = entry
+
+    with (
+        patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
+        patch(f"{_MODULE}.importlib.util.find_spec", return_value=MagicMock()),
+    ):
+        # Same GPUs different order — should hit cache
+        result = measure_baseline_power(gpu_indices=[1, 0], cache_ttl_sec=3600.0)
+
+    assert result is entry
 
 
 # =============================================================================
@@ -266,21 +346,21 @@ def test_no_samples_collected_returns_none():
 
 
 def test_invalidate_specific_device():
-    """invalidate_baseline_cache(0) removes device 0 but leaves device 1."""
-    _baseline_cache[0] = _make_fresh_cache_entry(device_index=0)
-    _baseline_cache[1] = _make_fresh_cache_entry(device_index=1)
+    """invalidate_baseline_cache([0]) removes GPU 0 but leaves GPU 1."""
+    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
+    _baseline_cache[(1,)] = _make_fresh_cache_entry(gpu_indices=[1])
 
-    invalidate_baseline_cache(0)
+    invalidate_baseline_cache([0])
 
-    assert 0 not in _baseline_cache
-    assert 1 in _baseline_cache
+    assert (0,) not in _baseline_cache
+    assert (1,) in _baseline_cache
 
 
 def test_invalidate_all_devices():
     """invalidate_baseline_cache(None) clears the entire cache."""
-    _baseline_cache[0] = _make_fresh_cache_entry(device_index=0)
-    _baseline_cache[1] = _make_fresh_cache_entry(device_index=1)
-    _baseline_cache[2] = _make_fresh_cache_entry(device_index=2)
+    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
+    _baseline_cache[(1,)] = _make_fresh_cache_entry(gpu_indices=[1])
+    _baseline_cache[(2,)] = _make_fresh_cache_entry(gpu_indices=[2])
 
     invalidate_baseline_cache(None)
 
@@ -288,12 +368,23 @@ def test_invalidate_all_devices():
 
 
 def test_invalidate_missing_device_is_noop():
-    """invalidate_baseline_cache for a device not in cache does not raise."""
-    _baseline_cache[0] = _make_fresh_cache_entry(device_index=0)
+    """invalidate_baseline_cache for a GPU set not in cache does not raise."""
+    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
 
-    invalidate_baseline_cache(99)  # device 99 not in cache
+    invalidate_baseline_cache([99])  # GPU 99 not in cache
 
-    assert 0 in _baseline_cache  # device 0 untouched
+    assert (0,) in _baseline_cache  # GPU 0 untouched
+
+
+def test_invalidate_multi_gpu_set():
+    """invalidate_baseline_cache([0, 1]) removes (0, 1) key."""
+    _baseline_cache[(0, 1)] = _make_fresh_cache_entry(gpu_indices=[0, 1])
+    _baseline_cache[(0,)] = _make_fresh_cache_entry(gpu_indices=[0])
+
+    invalidate_baseline_cache([0, 1])
+
+    assert (0, 1) not in _baseline_cache
+    assert (0,) in _baseline_cache  # single-GPU entry untouched
 
 
 # =============================================================================
@@ -359,7 +450,7 @@ def test_create_energy_breakdown_with_fresh_baseline():
     entry = BaselineCache(
         power_w=20.0,
         timestamp=time.time(),  # age ~ 0s
-        device_index=0,
+        gpu_indices=[0],
         sample_count=5,
         duration_sec=0.5,
     )
@@ -385,7 +476,7 @@ def test_create_energy_breakdown_with_cached_baseline():
     entry = BaselineCache(
         power_w=5.0,
         timestamp=time.time() - 600.0,  # 10 minutes old
-        device_index=0,
+        gpu_indices=[0],
         sample_count=5,
         duration_sec=0.5,
     )
@@ -411,7 +502,7 @@ def test_create_energy_breakdown_adjusted_value_correct():
     entry = BaselineCache(
         power_w=power_w,
         timestamp=time.time() - 10.0,
-        device_index=0,
+        gpu_indices=[0],
         sample_count=3,
         duration_sec=0.3,
     )

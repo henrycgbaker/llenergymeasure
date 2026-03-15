@@ -26,6 +26,29 @@ def test_nvml_backend_name() -> None:
 
 
 # ---------------------------------------------------------------------------
+# NVMLBackend gpu_indices constructor
+# ---------------------------------------------------------------------------
+
+
+def test_nvml_backend_accepts_gpu_indices() -> None:
+    """NVMLBackend(gpu_indices=[0, 1]) stores _gpu_indices correctly."""
+    b = NVMLBackend(gpu_indices=[0, 1])
+    assert b._gpu_indices == [0, 1]
+
+
+def test_nvml_backend_defaults_to_gpu_zero() -> None:
+    """NVMLBackend() with no args defaults to [0] (backward compatible)."""
+    b = NVMLBackend()
+    assert b._gpu_indices == [0]
+
+
+def test_nvml_backend_single_gpu_explicit() -> None:
+    """NVMLBackend(gpu_indices=[2]) stores [2]."""
+    b = NVMLBackend(gpu_indices=[2])
+    assert b._gpu_indices == [2]
+
+
+# ---------------------------------------------------------------------------
 # ZeusBackend name
 # ---------------------------------------------------------------------------
 
@@ -229,7 +252,57 @@ def test_select_backend_auto_returns_none_when_nothing_available() -> None:
 
 
 # ---------------------------------------------------------------------------
-# NVMLBackend trapezoidal integration
+# select_energy_backend — gpu_indices forwarding
+# ---------------------------------------------------------------------------
+
+
+def test_select_backend_forwards_gpu_indices_nvml() -> None:
+    """select_energy_backend('nvml', gpu_indices=[0, 1]) returns NVMLBackend with those indices."""
+    with patch(
+        "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+        return_value=True,
+    ):
+        result = select_energy_backend("nvml", gpu_indices=[0, 1])
+
+    assert isinstance(result, NVMLBackend)
+    assert result._gpu_indices == [0, 1]
+
+
+def test_select_backend_forwards_gpu_indices_zeus() -> None:
+    """select_energy_backend('zeus', gpu_indices=[0, 1]) returns ZeusBackend with those indices."""
+    with patch(
+        "llenergymeasure.core.energy_backends.ZeusBackend.is_available",
+        return_value=True,
+    ):
+        result = select_energy_backend("zeus", gpu_indices=[0, 1])
+
+    assert isinstance(result, ZeusBackend)
+    assert result._gpu_indices == [0, 1]
+
+
+def test_select_backend_auto_forwards_gpu_indices() -> None:
+    """Auto-selection forwards gpu_indices to the chosen backend."""
+
+    def fake_find_spec(name: str) -> object:
+        if name == "zeus":
+            return None
+        return MagicMock()
+
+    with (
+        patch("importlib.util.find_spec", side_effect=fake_find_spec),
+        patch(
+            "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+            return_value=True,
+        ),
+    ):
+        result = select_energy_backend("auto", gpu_indices=[2, 3])
+
+    assert isinstance(result, NVMLBackend)
+    assert result._gpu_indices == [2, 3]
+
+
+# ---------------------------------------------------------------------------
+# NVMLBackend trapezoidal integration — single GPU
 # ---------------------------------------------------------------------------
 
 
@@ -241,18 +314,18 @@ def test_nvml_trapezoidal_integration() -> None:
     """
     from llenergymeasure.core.power_thermal import PowerThermalSample
 
-    # Build synthetic samples
+    # Build synthetic samples (single GPU 0)
     sample_data = [
-        PowerThermalSample(timestamp=0.0, power_w=100.0),
-        PowerThermalSample(timestamp=0.1, power_w=100.0),
-        PowerThermalSample(timestamp=0.2, power_w=100.0),
+        PowerThermalSample(timestamp=0.0, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.1, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.2, power_w=100.0, gpu_index=0),
     ]
 
     # Mock sampler
     mock_sampler = MagicMock()
     mock_sampler.get_samples.return_value = sample_data
 
-    backend = NVMLBackend(device_index=0)
+    backend = NVMLBackend(gpu_indices=[0])
     result = backend.stop_tracking(mock_sampler)
 
     assert isinstance(result, EnergyMeasurement)
@@ -267,9 +340,9 @@ def test_nvml_trapezoidal_skips_none_power() -> None:
 
     # Middle sample has None power — pairs (0,1) and (1,2) both involve None
     sample_data = [
-        PowerThermalSample(timestamp=0.0, power_w=100.0),
-        PowerThermalSample(timestamp=0.1, power_w=None),
-        PowerThermalSample(timestamp=0.2, power_w=100.0),
+        PowerThermalSample(timestamp=0.0, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.1, power_w=None, gpu_index=0),
+        PowerThermalSample(timestamp=0.2, power_w=100.0, gpu_index=0),
     ]
 
     mock_sampler = MagicMock()
@@ -288,10 +361,76 @@ def test_nvml_trapezoidal_single_sample() -> None:
 
     mock_sampler = MagicMock()
     mock_sampler.get_samples.return_value = [
-        PowerThermalSample(timestamp=0.0, power_w=200.0),
+        PowerThermalSample(timestamp=0.0, power_w=200.0, gpu_index=0),
     ]
 
     backend = NVMLBackend()
     result = backend.stop_tracking(mock_sampler)
     assert result.total_j == 0.0
     assert result.duration_sec == 0.0
+
+
+# ---------------------------------------------------------------------------
+# NVMLBackend trapezoidal integration — multi-GPU
+# ---------------------------------------------------------------------------
+
+
+def test_nvml_multi_gpu_trapezoidal_integration() -> None:
+    """stop_tracking() sums energy across multiple GPUs, populates per_gpu_j.
+
+    GPU 0: 100W over 0.2s = 20J
+    GPU 1: 200W over 0.2s = 40J
+    Total: 60J, per_gpu_j = {0: 20J, 1: 40J}
+
+    Samples are interleaved (as produced by _sample_loop).
+    """
+    from llenergymeasure.core.power_thermal import PowerThermalSample
+
+    # Interleaved samples from GPU 0 and GPU 1
+    sample_data = [
+        PowerThermalSample(timestamp=0.0, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.0, power_w=200.0, gpu_index=1),
+        PowerThermalSample(timestamp=0.1, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.1, power_w=200.0, gpu_index=1),
+        PowerThermalSample(timestamp=0.2, power_w=100.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.2, power_w=200.0, gpu_index=1),
+    ]
+
+    mock_sampler = MagicMock()
+    mock_sampler.get_samples.return_value = sample_data
+
+    backend = NVMLBackend(gpu_indices=[0, 1])
+    result = backend.stop_tracking(mock_sampler)
+
+    assert isinstance(result, EnergyMeasurement)
+    assert result.total_j == pytest.approx(60.0, abs=1e-6)
+    assert result.per_gpu_j is not None
+    assert result.per_gpu_j[0] == pytest.approx(20.0, abs=1e-6)
+    assert result.per_gpu_j[1] == pytest.approx(40.0, abs=1e-6)
+
+
+def test_nvml_multi_gpu_energy_per_gpu_dict_populated() -> None:
+    """per_gpu_j dict contains an entry for each GPU that had samples."""
+    from llenergymeasure.core.power_thermal import PowerThermalSample
+
+    sample_data = [
+        PowerThermalSample(timestamp=0.0, power_w=50.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.0, power_w=75.0, gpu_index=1),
+        PowerThermalSample(timestamp=0.0, power_w=100.0, gpu_index=2),
+        PowerThermalSample(timestamp=0.1, power_w=50.0, gpu_index=0),
+        PowerThermalSample(timestamp=0.1, power_w=75.0, gpu_index=1),
+        PowerThermalSample(timestamp=0.1, power_w=100.0, gpu_index=2),
+    ]
+
+    mock_sampler = MagicMock()
+    mock_sampler.get_samples.return_value = sample_data
+
+    backend = NVMLBackend(gpu_indices=[0, 1, 2])
+    result = backend.stop_tracking(mock_sampler)
+
+    assert result.per_gpu_j is not None
+    assert set(result.per_gpu_j.keys()) == {0, 1, 2}
+    assert result.total_j == pytest.approx(
+        result.per_gpu_j[0] + result.per_gpu_j[1] + result.per_gpu_j[2],
+        abs=1e-9,
+    )

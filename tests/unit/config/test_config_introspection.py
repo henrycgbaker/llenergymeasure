@@ -139,10 +139,10 @@ def test_get_experiment_config_schema_contains_backend_field():
 
 
 def test_get_param_test_values_pytorch_batch_size_returns_list():
-    """get_param_test_values('pytorch.batch_size') returns a non-empty list."""
+    """get_param_test_values('pytorch.batch_size') returns a list containing 1."""
     values = get_param_test_values("pytorch.batch_size")
     assert isinstance(values, list)
-    assert len(values) > 0
+    assert 1 in values
 
 
 def test_get_param_test_values_precision_returns_all_options():
@@ -183,10 +183,10 @@ def test_get_all_params_has_shared_key():
     assert "shared" in all_params
 
 
-def test_get_all_params_pytorch_section_non_empty():
-    """get_all_params()['pytorch'] is a non-empty dict."""
+def test_get_all_params_pytorch_section_contains_batch_size():
+    """get_all_params()['pytorch'] contains the batch_size param."""
     all_params = get_all_params()
-    assert len(all_params["pytorch"]) > 0
+    assert "pytorch.batch_size" in all_params["pytorch"]
 
 
 # ---------------------------------------------------------------------------
@@ -194,11 +194,12 @@ def test_get_all_params_pytorch_section_non_empty():
 # ---------------------------------------------------------------------------
 
 
-def test_list_all_param_paths_non_empty():
-    """list_all_param_paths() returns a non-empty sorted list of dotted paths."""
+def test_list_all_param_paths_contains_expected_paths():
+    """list_all_param_paths() returns a sorted list containing known param paths."""
     paths = list_all_param_paths()
     assert isinstance(paths, list)
-    assert len(paths) > 0
+    assert "pytorch.batch_size" in paths
+    assert "precision" in paths
 
 
 def test_list_all_param_paths_contains_known_paths():
@@ -247,10 +248,11 @@ def test_ssot_precision_values_match_param_test_values():
 
 
 def test_get_validation_rules_returns_list():
-    """get_validation_rules() returns a list of dicts."""
+    """get_validation_rules() returns a list containing the backend mismatch rule."""
     rules = get_validation_rules()
     assert isinstance(rules, list)
-    assert len(rules) > 0
+    combinations = [r["combination"] for r in rules]
+    assert any("mismatch" in c for c in combinations)
 
 
 def test_get_validation_rules_each_has_required_keys():
