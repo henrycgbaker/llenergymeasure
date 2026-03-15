@@ -158,6 +158,10 @@ class PowerThermalSampler:  # pragma: no cover
 
         return _PTS(*args, **kwargs)
 
+    def __enter__(self) -> Any: ...  # type: ignore[empty-body]
+
+    def __exit__(self, *args: Any) -> None: ...  # type: ignore[empty-body]
+
 
 # ---------------------------------------------------------------------------
 # MeasurementHarness
