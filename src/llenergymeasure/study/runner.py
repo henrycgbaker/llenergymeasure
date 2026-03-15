@@ -113,7 +113,10 @@ def _run_experiment_worker(
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
-        result = harness.run(backend, config, snapshot=snapshot)
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        gpu_indices = _resolve_gpu_indices(config)
+        result = harness.run(backend, config, snapshot=snapshot, gpu_indices=gpu_indices)
 
         # Send result back to parent via Pipe
         conn.send(result)
