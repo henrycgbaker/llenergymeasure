@@ -30,7 +30,7 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 RUN uv pip install --system --no-cache --no-deps ".[vllm]" \
     && uv pip install --system --no-cache \
-        pydantic loguru typer pyyaml platformdirs nvidia-ml-py numpy \
+        pydantic typer pyyaml platformdirs nvidia-ml-py numpy \
         pyarrow tqdm codecarbon datasets python-dotenv
 
 # HuggingFace cache — writable for non-root users
