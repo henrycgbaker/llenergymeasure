@@ -38,22 +38,25 @@ def _resolve_gpu_indices(config: _ExperimentConfig) -> list[int]:
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    if config.backend == "pytorch" and config.pytorch is not None:
-        if config.pytorch.device_map is not None:
-            # Model will shard across all visible GPUs — measure all of them.
-            # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].
-            try:
-                import pynvml
+    if (
+        config.backend == "pytorch"
+        and config.pytorch is not None
+        and config.pytorch.device_map is not None
+    ):
+        # Model will shard across all visible GPUs — measure all of them.
+        # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].
+        try:
+            import pynvml
 
-                pynvml.nvmlInit()
-                try:
-                    count = pynvml.nvmlDeviceGetCount()
-                finally:
-                    pynvml.nvmlShutdown()
-                if count > 1:
-                    return list(range(count))
-            except Exception:
-                pass  # pynvml absent or no NVIDIA GPU — fall through to [0]
+            pynvml.nvmlInit()
+            try:
+                count = pynvml.nvmlDeviceGetCount()
+            finally:
+                pynvml.nvmlShutdown()
+            if count > 1:
+                return list(range(count))
+        except Exception:
+            pass  # pynvml absent or no NVIDIA GPU — fall through to [0]
     return [0]
 
 
