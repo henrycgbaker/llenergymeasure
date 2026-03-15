@@ -267,6 +267,65 @@ def format_validation_error(e: ValidationError) -> str:
     return "\n".join(lines)
 
 
+def print_study_dry_run(
+    study_config: object,
+    verbose: bool = False,
+) -> None:
+    """Print dry-run output for a study to stdout.
+
+    Shows grid summary, per-experiment configs, and VRAM estimate for the
+    largest model. Mirrors the single-experiment dry-run format.
+    """
+    from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
+    from llenergymeasure.config.grid import format_preflight_summary
+    from llenergymeasure.config.models import StudyConfig
+
+    assert isinstance(study_config, StudyConfig)
+
+    # Pre-flight summary (configs x cycles = runs, order)
+    summary = format_preflight_summary(study_config)
+    print(summary)
+    print()
+
+    # Per-experiment config table
+    header = f"{'#':>3}  {'Model':<25}  {'Backend':<10}  {'Precision':<10}  {'n':>5}"
+    print(header)
+    print("-" * len(header))
+    for i, exp in enumerate(study_config.experiments, 1):
+        model_str = exp.model
+        if len(model_str) > 25:
+            model_str = "..." + model_str[-22:]
+        print(f"{i:>3}  {model_str:<25}  {exp.backend:<10}  {exp.precision:<10}  {exp.n:>5}")
+    print()
+
+    # VRAM estimate for the peak model (largest weight estimate)
+    gpu_vram_gb = get_gpu_vram_gb()
+    peak_vram: dict[str, float] | None = None
+    peak_config: ExperimentConfig | None = None
+    for exp in study_config.experiments:
+        vram = estimate_vram(exp)
+        if vram is not None and (peak_vram is None or vram["total_gb"] > peak_vram["total_gb"]):
+            peak_vram = vram
+            peak_config = exp
+
+    print("VRAM estimate (peak)")
+    if peak_vram is not None and peak_config is not None:
+        print(f"  Weights        {_sig3(peak_vram['weights_gb'])} GB ({peak_config.precision})")
+        print(f"  KV cache       {_sig3(peak_vram['kv_cache_gb'])} GB")
+        print(f"  Overhead       {_sig3(peak_vram['overhead_gb'])} GB")
+        total_line = f"  Total          ~{_sig3(peak_vram['total_gb'])} GB"
+        if gpu_vram_gb is not None:
+            fits = peak_vram["total_gb"] <= gpu_vram_gb
+            status = "OK" if fits else "WARNING: may not fit"
+            total_line += f" / {_sig3(gpu_vram_gb)} GB available   {status}"
+        print(total_line)
+    else:
+        print("  (unavailable)")
+    print()
+
+    print("Config valid. Run without --dry-run to start.")
+
+
 def print_experiment_header(config: ExperimentConfig) -> None:
     """Print one-line experiment header to stderr (progress area).
 
