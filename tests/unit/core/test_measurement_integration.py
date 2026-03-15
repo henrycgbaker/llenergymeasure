@@ -531,7 +531,7 @@ def test_harness_build_result_propagates_baseline_fields() -> None:
     kwargs["baseline"] = BaselineCache(
         power_w=30.0,
         timestamp=0.0,
-        device_index=0,
+        gpu_indices=[0],
         sample_count=300,
         duration_sec=30.0,
     )

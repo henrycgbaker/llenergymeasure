@@ -96,16 +96,22 @@ def collect_environment_snapshot_async() -> Future[EnvironmentSnapshot]:  # prag
     return _snap_async()
 
 
-def measure_baseline_power(duration_sec: float) -> BaselineCache | None:  # pragma: no cover
+def measure_baseline_power(
+    duration_sec: float,
+    gpu_indices: list[int] | None = None,
+) -> BaselineCache | None:  # pragma: no cover
     from llenergymeasure.core.baseline import measure_baseline_power as _mbp
 
-    return _mbp(duration_sec=duration_sec)
+    return _mbp(duration_sec=duration_sec, gpu_indices=gpu_indices)
 
 
-def select_energy_backend(explicit: str | None) -> EnergyBackend | None:  # pragma: no cover
+def select_energy_backend(
+    explicit: str | None,
+    gpu_indices: list[int] | None = None,
+) -> EnergyBackend | None:  # pragma: no cover
     from llenergymeasure.core.energy_backends import select_energy_backend as _seb
 
-    return _seb(explicit)
+    return _seb(explicit, gpu_indices=gpu_indices)
 
 
 def estimate_flops_palm(
@@ -117,11 +123,11 @@ def estimate_flops_palm(
 
 
 def write_timeseries_parquet(
-    samples: list[PowerThermalSample], path: Path, gpu_index: int = 0
+    samples: list[PowerThermalSample], path: Path
 ) -> Path:  # pragma: no cover
     from llenergymeasure.core.timeseries import write_timeseries_parquet as _wts
 
-    return _wts(samples, path, gpu_index=gpu_index)
+    return _wts(samples, path)
 
 
 def collect_measurement_warnings(
@@ -152,6 +158,10 @@ class PowerThermalSampler:  # pragma: no cover
 
         return _PTS(*args, **kwargs)
 
+    def __enter__(self) -> Any: ...  # type: ignore[empty-body]
+
+    def __exit__(self, *args: Any) -> None: ...  # type: ignore[empty-body]
+
 
 # ---------------------------------------------------------------------------
 # MeasurementHarness
@@ -172,6 +182,7 @@ class MeasurementHarness:
         backend: BackendPlugin,
         config: ExperimentConfig,
         snapshot: EnvironmentSnapshot | None = None,
+        gpu_indices: list[int] | None = None,
     ) -> ExperimentResult:
         """Run a complete measurement using the given backend plugin.
 
@@ -180,6 +191,8 @@ class MeasurementHarness:
             config: Fully resolved experiment configuration.
             snapshot: Pre-collected environment snapshot (study-level cache).
                       When None, collected in a background thread during model load.
+            gpu_indices: GPU device indices to monitor for energy/thermal measurement.
+                         Defaults to [0] (single GPU, backward compatible) when None.
 
         Returns:
             ExperimentResult with all measurement fields populated.
@@ -198,7 +211,9 @@ class MeasurementHarness:
         baseline = None
         if config.baseline.enabled:
             logger.debug("Measuring baseline power (%.0fs)...", config.baseline.duration_seconds)
-            baseline = measure_baseline_power(config.baseline.duration_seconds)
+            baseline = measure_baseline_power(
+                config.baseline.duration_seconds, gpu_indices=gpu_indices
+            )
 
         # 3. Load model via backend plugin
         model = backend.load_model(config)
@@ -220,7 +235,7 @@ class MeasurementHarness:
             warmup_result.thermal_floor_wait_s = wait_s
 
             # 7. Select energy backend (CM-14)
-            energy_backend = select_energy_backend(config.energy.backend)
+            energy_backend = select_energy_backend(config.energy.backend, gpu_indices=gpu_indices)
 
             # 8. Start energy tracking (after warmup + thermal floor)
             energy_tracker = None
@@ -234,9 +249,7 @@ class MeasurementHarness:
             start_time = datetime.now()
 
             # Start thermal sampler around inference for timeseries + throttle detection
-            from llenergymeasure.core.power_thermal import PowerThermalSampler as _PTS
-
-            with _PTS(device_index=0) as sampler:
+            with PowerThermalSampler(gpu_indices=gpu_indices) as sampler:
                 output = backend.run_inference(config, model)
 
             thermal_info = sampler.get_thermal_throttle_info()
@@ -264,7 +277,6 @@ class MeasurementHarness:
             ts_file = write_timeseries_parquet(
                 timeseries_samples,
                 Path(config.output_dir) / "timeseries.parquet",
-                gpu_index=0,
             )
             timeseries_path = ts_file.name  # relative name in result JSON
 

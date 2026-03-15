@@ -41,11 +41,11 @@ class NVMLBackend:
     All pynvml access is fully deferred — safe to import on CPU-only hosts.
 
     Args:
-        device_index: CUDA device index to monitor (default: 0).
+        gpu_indices: CUDA device indices to monitor. Defaults to [0] when None.
     """
 
-    def __init__(self, device_index: int = 0) -> None:
-        self._device_index = device_index
+    def __init__(self, gpu_indices: list[int] | None = None) -> None:
+        self._gpu_indices = gpu_indices if gpu_indices is not None else [0]
 
     @property
     def name(self) -> str:
@@ -80,16 +80,16 @@ class NVMLBackend:
         from llenergymeasure.core.power_thermal import PowerThermalSampler
 
         sampler = PowerThermalSampler(
-            device_index=self._device_index,
+            gpu_indices=self._gpu_indices,
             sample_interval_ms=100,
         )
         sampler.start()
         return sampler
 
     def stop_tracking(self, tracker: Any) -> EnergyMeasurement:
-        """Stop polling and integrate power samples to joules.
+        """Stop polling and integrate power samples to joules per GPU.
 
-        Uses the trapezoidal rule: for each consecutive sample pair,
+        Uses the trapezoidal rule: for each consecutive sample pair (per GPU),
         ``energy += (p[i] + p[i+1]) / 2 * dt``.  Pairs where either
         power_w is None are skipped rather than failing.
 
@@ -97,33 +97,42 @@ class NVMLBackend:
             tracker: PowerThermalSampler returned by start_tracking().
 
         Returns:
-            EnergyMeasurement with total_j, duration_sec, and raw samples.
+            EnergyMeasurement with total_j (sum across all GPUs), duration_sec,
+            per_gpu_j breakdown, and raw samples.
         """
         tracker.stop()
         samples = tracker.get_samples()
 
         total_j = 0.0
         duration_sec = 0.0
+        per_gpu_j: dict[int, float] = {}
 
         if len(samples) >= 2:
-            # Overall window duration from first to last sample timestamp
+            # Overall window duration from first to last sample timestamp across all GPUs
             duration_sec = samples[-1].timestamp - samples[0].timestamp
 
-            for i in range(len(samples) - 1):
-                s_a = samples[i]
-                s_b = samples[i + 1]
-                if s_a.power_w is None or s_b.power_w is None:
-                    continue
-                dt = s_b.timestamp - s_a.timestamp
-                avg_power = (s_a.power_w + s_b.power_w) / 2.0
-                total_j += avg_power * dt
+            # Group samples by gpu_index for per-GPU integration
+            by_gpu: dict[int, list[Any]] = {}
+            for s in samples:
+                gpu_idx = getattr(s, "gpu_index", self._gpu_indices[0])
+                by_gpu.setdefault(gpu_idx, []).append(s)
 
-        # Per-device breakdown is device_index -> total_j (single GPU)
-        per_gpu_j = {self._device_index: total_j} if total_j > 0.0 else None
+            for gpu_idx, gpu_samples in by_gpu.items():
+                gpu_j = 0.0
+                for i in range(len(gpu_samples) - 1):
+                    s_a = gpu_samples[i]
+                    s_b = gpu_samples[i + 1]
+                    if s_a.power_w is None or s_b.power_w is None:
+                        continue
+                    dt = s_b.timestamp - s_a.timestamp
+                    avg_power = (s_a.power_w + s_b.power_w) / 2.0
+                    gpu_j += avg_power * dt
+                per_gpu_j[gpu_idx] = gpu_j
+                total_j += gpu_j
 
         return EnergyMeasurement(
             total_j=total_j,
             duration_sec=duration_sec,
             samples=samples,
-            per_gpu_j=per_gpu_j,
+            per_gpu_j=per_gpu_j if per_gpu_j else None,
         )

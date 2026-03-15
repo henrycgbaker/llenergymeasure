@@ -133,7 +133,10 @@ _INSTALL_GUIDANCE: dict[str, str] = {
 }
 
 
-def select_energy_backend(explicit: str | None) -> EnergyBackend | None:
+def select_energy_backend(
+    explicit: str | None,
+    gpu_indices: list[int] | None = None,
+) -> EnergyBackend | None:
     """Select and return an energy measurement backend.
 
     This is the primary v2.0 API for backend selection.
@@ -147,6 +150,8 @@ def select_energy_backend(explicit: str | None) -> EnergyBackend | None:
 
     Args:
         explicit: Backend name, ``"auto"``, or ``None`` to disable energy measurement.
+        gpu_indices: GPU device indices to monitor. Defaults to [0] when None.
+            Forwarded to NVMLBackend and ZeusBackend constructors.
 
     Returns:
         An EnergyBackend instance, or ``None`` if measurement is unavailable/disabled.
@@ -159,10 +164,10 @@ def select_energy_backend(explicit: str | None) -> EnergyBackend | None:
         return None
 
     if explicit == "auto":
-        return _auto_select()
+        return _auto_select(gpu_indices=gpu_indices)
 
     # Explicit backend requested
-    backend = _instantiate(explicit)
+    backend = _instantiate(explicit, gpu_indices=gpu_indices)
     if not backend.is_available():
         guidance = _INSTALL_GUIDANCE.get(explicit, f"pip install llenergymeasure[{explicit}]")
         raise ConfigError(
@@ -172,20 +177,20 @@ def select_energy_backend(explicit: str | None) -> EnergyBackend | None:
     return backend
 
 
-def _auto_select() -> EnergyBackend | None:
+def _auto_select(gpu_indices: list[int] | None = None) -> EnergyBackend | None:
     """Auto-select best available backend: Zeus > NVML > CodeCarbon > None."""
     # Zeus — preferred: hardware energy register accuracy
     if importlib.util.find_spec("zeus") is not None:
-        backend = ZeusBackend()
+        backend = ZeusBackend(gpu_indices=gpu_indices)
         if backend.is_available():
             return backend
 
     # NVML — always available on GPU machines (nvidia-ml-py is a base dep)
-    nvml_backend = NVMLBackend()
+    nvml_backend = NVMLBackend(gpu_indices=gpu_indices)
     if nvml_backend.is_available():
         return nvml_backend
 
-    # CodeCarbon — software fallback
+    # CodeCarbon — software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
     if importlib.util.find_spec("codecarbon") is not None:
         from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
 
@@ -197,11 +202,12 @@ def _auto_select() -> EnergyBackend | None:
     return None
 
 
-def _instantiate(name: str) -> EnergyBackend:
+def _instantiate(name: str, gpu_indices: list[int] | None = None) -> EnergyBackend:
     """Instantiate a named backend.
 
     Args:
         name: One of ``"nvml"``, ``"zeus"``, ``"codecarbon"``.
+        gpu_indices: GPU device indices to monitor. Forwarded to NVML/Zeus constructors.
 
     Returns:
         Backend instance (not yet checked for availability).
@@ -210,9 +216,9 @@ def _instantiate(name: str) -> EnergyBackend:
         ConfigError: If the name is not a known backend.
     """
     if name == "nvml":
-        return NVMLBackend()
+        return NVMLBackend(gpu_indices=gpu_indices)
     if name == "zeus":
-        return ZeusBackend()
+        return ZeusBackend(gpu_indices=gpu_indices)
     if name == "codecarbon":
         from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
 

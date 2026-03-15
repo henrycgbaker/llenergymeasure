@@ -3,6 +3,9 @@
 Downsamples 100ms NVML power/thermal samples to 1 Hz and writes
 a Parquet sidecar file alongside the result JSON. Uses pyarrow
 directly (no pandas dependency).
+
+For multi-GPU experiments, each GPU gets its own row per second bucket,
+grouped by (bucket_idx, gpu_index).
 """
 
 from __future__ import annotations
@@ -43,13 +46,18 @@ def write_timeseries_parquet(
 ) -> Path:
     """Write 1 Hz downsampled timeseries to a Parquet file.
 
-    Groups 100ms NVML power/thermal samples into 1-second buckets and writes
-    the mean of each metric per bucket. The schema is locked (see CONTEXT.md).
+    Groups 100ms NVML power/thermal samples into 1-second buckets per GPU and
+    writes the mean of each metric per (bucket, gpu_index) pair. The schema is
+    locked (see CONTEXT.md).
+
+    For multi-GPU experiments, samples carry a gpu_index field; each GPU produces
+    its own row per second. The ``gpu_index`` parameter is kept for backward
+    compatibility but is only used as a fallback when samples lack the attribute.
 
     Args:
         samples: Raw PowerThermalSamples from PowerThermalSampler.
         output_path: Destination path for the Parquet file.
-        gpu_index: GPU device index to record in the gpu_index column.
+        gpu_index: Fallback GPU device index when samples have no gpu_index attribute.
 
     Returns:
         The output_path after writing.
@@ -71,16 +79,19 @@ def write_timeseries_parquet(
         pq.write_table(empty_table, output_path)
         return output_path
 
-    # Group samples into 1-second buckets
+    # Group samples into (1-second bucket, gpu_index) pairs
     base_ts = samples[0].timestamp
-    buckets: dict[int, list[PowerThermalSample]] = {}
+    # buckets key: (bucket_idx, gpu_idx)
+    buckets: dict[tuple[int, int], list[PowerThermalSample]] = {}
     for s in samples:
         bucket = int(s.timestamp - base_ts)
-        buckets.setdefault(bucket, []).append(s)
+        gpu_idx = getattr(s, "gpu_index", gpu_index)
+        key = (bucket, gpu_idx)
+        buckets.setdefault(key, []).append(s)
 
     rows = []
-    for bucket_idx in sorted(buckets.keys()):
-        bucket_samples = buckets[bucket_idx]
+    for bucket_idx, gpu_idx in sorted(buckets.keys()):
+        bucket_samples = buckets[(bucket_idx, gpu_idx)]
 
         def _mean(values: list) -> float | None:
             valid = [v for v in values if v is not None]
@@ -100,7 +111,7 @@ def write_timeseries_parquet(
         rows.append(
             {
                 "timestamp_s": float(bucket_idx),
-                "gpu_index": gpu_index,
+                "gpu_index": gpu_idx,
                 "power_w": float(power_w) if power_w is not None else None,
                 "temperature_c": float(temperature_c) if temperature_c is not None else None,
                 "memory_used_mb": float(memory_used_mb) if memory_used_mb is not None else None,
