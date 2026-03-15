@@ -7,12 +7,55 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.models import ExperimentConfig as _ExperimentConfig
 
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.exceptions import ConfigError
+
+# ---------------------------------------------------------------------------
+# GPU index resolution
+# ---------------------------------------------------------------------------
+
+
+def _resolve_gpu_indices(config: _ExperimentConfig) -> list[int]:
+    """Determine GPU indices to monitor for an experiment.
+
+    Rules (PyTorch backend only — other backends return [0] as a safe default):
+    - device_map="auto" (or any non-None device_map): monitor all NVML-visible GPUs.
+      Model sharding is determined at load time inside harness.run(), but gpu_indices
+      must be passed *before* load. Using all visible GPUs is correct and safe.
+    - Otherwise: [0] (single-GPU default, backward compatible).
+
+    For future backends (vLLM: list(range(tp_size)), TensorRT: list(range(tp_size))),
+    add an elif branch here — the call sites do not need to change.
+
+    Note: num_processes > 1 (data parallelism via Accelerate) is not handled here.
+    For local runs this path is not yet implemented; for Docker each subprocess calls
+    the harness independently.
+    """
+    if config.backend == "pytorch" and config.pytorch is not None:
+        if config.pytorch.device_map is not None:
+            # Model will shard across all visible GPUs — measure all of them.
+            # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].
+            try:
+                import pynvml
+
+                pynvml.nvmlInit()
+                try:
+                    count = pynvml.nvmlDeviceGetCount()
+                finally:
+                    pynvml.nvmlShutdown()
+                if count > 1:
+                    return list(range(count))
+            except Exception:
+                pass  # pynvml absent or no NVIDIA GPU — fall through to [0]
+    return [0]
+
 
 # ---------------------------------------------------------------------------
 # run_experiment — three overloaded forms
@@ -334,7 +377,8 @@ def _run_in_process(
         run_preflight(config)
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
-        result = harness.run(backend, config)
+        gpu_indices = _resolve_gpu_indices(config)
+        result = harness.run(backend, config, gpu_indices=gpu_indices)
 
     # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
     if isinstance(result, dict) and "type" in result:

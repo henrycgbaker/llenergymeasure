@@ -338,7 +338,7 @@ def _patch_harness(monkeypatch, result: ExperimentResult) -> None:
     import llenergymeasure.core.harness as harness_module
 
     monkeypatch.setattr(
-        harness_module.MeasurementHarness, "run", lambda self, backend, config: result
+        harness_module.MeasurementHarness, "run", lambda self, backend, config, **kw: result
     )
 
 
@@ -481,7 +481,7 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
     import llenergymeasure.core.harness as harness_module
     import llenergymeasure.orchestration.preflight as pf_module
 
-    def _failing_harness_run(self, backend, config):
+    def _failing_harness_run(self, backend, config, **kw):
         raise BackendError("GPU out of memory")
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)

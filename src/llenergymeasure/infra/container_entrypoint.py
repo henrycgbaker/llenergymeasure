@@ -53,6 +53,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
         ``main()`` can catch it and write an error payload.
     """
     # Lazy imports — only needed at runtime, not import time
+    from llenergymeasure._api import _resolve_gpu_indices
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.core.backends import get_backend
     from llenergymeasure.core.harness import MeasurementHarness
@@ -70,7 +71,8 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     run_preflight(config)
     backend = get_backend(config.backend)
     harness = MeasurementHarness()
-    result = harness.run(backend, config)
+    gpu_indices = _resolve_gpu_indices(config)
+    result = harness.run(backend, config, gpu_indices=gpu_indices)
 
     # --- Write result ---
     result_dir.mkdir(parents=True, exist_ok=True)
