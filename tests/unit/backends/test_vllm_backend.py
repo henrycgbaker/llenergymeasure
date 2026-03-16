@@ -996,3 +996,53 @@ class TestFlashAttnFieldsWired:
         kwargs = VLLMBackend()._build_llm_kwargs(config)
         assert kwargs["flash_attn_version"] == 2
         assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 16
+
+
+# =============================================================================
+# Test Group 17: M2 — min_p forwarded in _build_beam_search_params
+# =============================================================================
+
+
+class TestBeamSearchMinP:
+    """Verify min_p from DecoderConfig flows through to BeamSearchParams."""
+
+    def _build_beam_params(self, config, monkeypatch):
+        """Call _build_beam_search_params with a fake BeamSearchParams to avoid vLLM import."""
+        import sys
+        import types
+
+        # Inject a fake vllm module with our _FakeBeamSearchParams so the lazy
+        # `from vllm import BeamSearchParams` inside _build_beam_search_params succeeds.
+        fake_vllm = types.ModuleType("vllm")
+        fake_vllm.BeamSearchParams = _FakeBeamSearchParams
+        monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
+
+        beam_cfg = config.vllm.beam_search
+        return VLLMBackend._build_beam_search_params(config, beam_cfg)
+
+    def test_min_p_forwarded_to_beam_search_params(self, monkeypatch):
+        """min_p=0.05 from DecoderConfig appears in BeamSearchParams kwargs."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.05)
+        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
+        config = _make_config(decoder=decoder, vllm=vllm_cfg)
+        params = self._build_beam_params(config, monkeypatch)
+        assert "min_p" in params._kwargs
+        assert params._kwargs["min_p"] == pytest.approx(0.05)
+
+    def test_min_p_absent_when_none(self, monkeypatch):
+        """min_p is NOT in BeamSearchParams kwargs when DecoderConfig.min_p is None."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=None)
+        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
+        config = _make_config(decoder=decoder, vllm=vllm_cfg)
+        params = self._build_beam_params(config, monkeypatch)
+        assert "min_p" not in params._kwargs
+
+    def test_beam_width_and_min_p_together(self, monkeypatch):
+        """beam_width and min_p both appear in kwargs when set."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.1)
+        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=8, max_tokens=64))
+        config = _make_config(decoder=decoder, vllm=vllm_cfg)
+        params = self._build_beam_params(config, monkeypatch)
+        assert params._kwargs["beam_width"] == 8
+        assert params._kwargs["min_p"] == pytest.approx(0.1)
+        assert params._kwargs["max_tokens"] == 64

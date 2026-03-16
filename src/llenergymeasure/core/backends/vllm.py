@@ -416,6 +416,8 @@ class VLLMBackend:
         if beam_cfg.early_stopping is not None:
             kwargs["early_stopping"] = beam_cfg.early_stopping
         kwargs["max_tokens"] = beam_cfg.max_tokens or config.max_output_tokens
+        if config.decoder.min_p is not None:
+            kwargs["min_p"] = config.decoder.min_p
         if beam_cfg.model_extra:
             kwargs.update(beam_cfg.model_extra)
         return BeamSearchParams(**kwargs)
