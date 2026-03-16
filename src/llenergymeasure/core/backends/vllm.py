@@ -210,9 +210,12 @@ class VLLMBackend:
             except Exception:
                 pass  # Stick with torch value
 
-        # Count tokens from RequestOutput objects
+        # Count tokens from RequestOutput objects.
+        # Sum across ALL outputs per request (n>1 or beam search produces multiple).
         input_token_count = sum(len(o.prompt_token_ids) for o in outputs)
-        output_token_count = sum(len(o.outputs[0].token_ids) for o in outputs if o.outputs)
+        output_token_count = sum(
+            len(out.token_ids) for o in outputs if o.outputs for out in o.outputs
+        )
 
         logger.debug(
             "vLLM inference complete: %d total tokens (in=%d, out=%d) in %.2fs",
