@@ -128,6 +128,35 @@ def test_pytorch_config_section_composition():
     assert config.pytorch.batch_size == 4
 
 
+# ---------------------------------------------------------------------------
+# PyTorchConfig.num_processes removal (M3 audit fix)
+# ---------------------------------------------------------------------------
+
+
+def test_pytorch_config_has_no_num_processes_field():
+    """PyTorchConfig does not have a num_processes field (removed in M3 audit)."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    assert "num_processes" not in PyTorchConfig.model_fields
+
+
+def test_pytorch_config_num_processes_not_a_declared_field():
+    """num_processes is not a declared field on PyTorchConfig.
+
+    PyTorchConfig uses extra='allow' for HuggingFace passthrough, so passing
+    num_processes as an extra kwarg does not raise a ValidationError, but it
+    is NOT a typed model field and will not be type-checked or validated.
+    """
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    # Verify it is absent from the declared model fields
+    assert "num_processes" not in PyTorchConfig.model_fields
+    # Extra kwargs are accepted (extra='allow') but go into __pydantic_extra__
+    config = PyTorchConfig(num_processes=4)  # type: ignore[call-arg]
+    # Not a typed field - no attribute access by name on the typed model
+    assert "num_processes" not in type(config).model_fields
+
+
 def test_pytorch_section_with_wrong_backend_rejected():
     """pytorch: section with backend='vllm' raises ValidationError (cross-validator)."""
     with pytest.raises(ValidationError, match=r"pytorch.*config section provided.*backend"):

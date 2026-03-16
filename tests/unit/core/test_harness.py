@@ -376,3 +376,149 @@ def test_harness_defaults_to_no_gpu_indices(minimal_config):
 
     _, pts_kwargs = mock_pts_cls.call_args
     assert pts_kwargs.get("gpu_indices") is None
+
+
+# ---------------------------------------------------------------------------
+# H2: Thermal floor ordering — start_tracking after thermal_floor_wait
+# ---------------------------------------------------------------------------
+
+
+def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
+    """start_tracking() must be called after thermal_floor_wait() (H2 ordering verification).
+
+    This verifies that energy measurement begins only after the thermal floor wait,
+    so idle GPU heat does not inflate the measured energy window.
+
+    We verify ordering by recording call order via side_effect on both
+    thermal_floor_wait and select_energy_backend (which is called just before
+    start_tracking). select_energy_backend returns None so no actual energy
+    measurement object is needed (avoids MagicMock comparison issues in _build_result).
+    """
+    call_order: list[str] = []
+
+    def fake_thermal_floor_wait(config):  # type: ignore[no-untyped-def]
+        call_order.append("thermal_floor_wait")
+        return 0.0
+
+    def fake_select_energy_backend(backend_name, *, gpu_indices=None):  # type: ignore[no-untyped-def]
+        call_order.append("select_energy_backend")
+        return None  # No tracker; avoids MagicMock total_j > 0 comparison in _build_result
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch(
+            "llenergymeasure.core.harness.collect_environment_snapshot",
+            return_value=None,
+        ),
+        patch("llenergymeasure.core.harness.measure_baseline_power", return_value=None),
+        patch(
+            "llenergymeasure.core.harness.select_energy_backend",
+            side_effect=fake_select_energy_backend,
+        ),
+        patch(
+            "llenergymeasure.core.harness.thermal_floor_wait",
+            side_effect=fake_thermal_floor_wait,
+        ),
+        patch("llenergymeasure.core.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.core.harness._cuda_sync"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.core.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.core.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        harness.run(backend, minimal_config)
+
+    # Both must have been called
+    assert "thermal_floor_wait" in call_order, "thermal_floor_wait was never called"
+    assert "select_energy_backend" in call_order, "select_energy_backend was never called"
+
+    # thermal_floor_wait (step 6) must precede select_energy_backend (step 7),
+    # which in turn immediately precedes start_tracking (step 8) in harness source.
+    tf_idx = call_order.index("thermal_floor_wait")
+    seb_idx = call_order.index("select_energy_backend")
+    assert tf_idx < seb_idx, (
+        f"thermal_floor_wait (pos {tf_idx}) must be called before "
+        f"select_energy_backend/start_tracking (pos {seb_idx})"
+    )
+
+
+# ---------------------------------------------------------------------------
+# M18: Per-device memory tracking — _capture_model_memory_mb(gpu_indices)
+# ---------------------------------------------------------------------------
+
+
+def test_capture_model_memory_mb_multi_gpu(minimal_config):
+    """_capture_model_memory_mb(gpu_indices=[0, 1]) queries each device and returns max.
+
+    Verifies that max_memory_allocated is called with device=0 and device=1,
+    and that the returned value is max(device_0_bytes, device_1_bytes) / (1024*1024).
+    """
+    harness = MeasurementHarness()
+
+    device_memory = {0: 512 * 1024 * 1024, 1: 768 * 1024 * 1024}  # 512 MB, 768 MB
+
+    def fake_max_memory_allocated(device=None):
+        return device_memory.get(device, 0)
+
+    mock_torch = MagicMock()
+    mock_torch.cuda.is_available.return_value = True
+    mock_torch.cuda.max_memory_allocated.side_effect = fake_max_memory_allocated
+
+    with (
+        patch("importlib.util.find_spec", return_value=MagicMock()),
+        patch("llenergymeasure.core.harness.importlib") as mock_importlib,
+    ):
+        mock_importlib.util.find_spec.return_value = MagicMock()
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            import importlib
+
+            with patch.object(importlib.util, "find_spec", return_value=MagicMock()):
+                result = harness._capture_model_memory_mb(gpu_indices=[0, 1])
+
+    # Should return max(512, 768) = 768 MB
+    assert result == pytest.approx(768.0)
+
+    # Verify called with both devices
+    calls = mock_torch.cuda.max_memory_allocated.call_args_list
+
+    def _get_device(call):
+        # max_memory_allocated is called as max_memory_allocated(device=idx)
+        if "device" in call.kwargs:
+            return call.kwargs["device"]
+        return call.args[0] if call.args else None
+
+    devices_called = {_get_device(c) for c in calls}
+    assert 0 in devices_called, f"device=0 not in calls: {calls}"
+    assert 1 in devices_called, f"device=1 not in calls: {calls}"
+
+
+def test_capture_model_memory_mb_defaults_to_gpu_zero(minimal_config):
+    """_capture_model_memory_mb() without gpu_indices defaults to querying device=0."""
+    harness = MeasurementHarness()
+
+    mock_torch = MagicMock()
+    mock_torch.cuda.is_available.return_value = True
+    mock_torch.cuda.max_memory_allocated.return_value = 256 * 1024 * 1024  # 256 MB
+
+    with patch.dict("sys.modules", {"torch": mock_torch}):
+        import importlib
+
+        with patch.object(importlib.util, "find_spec", return_value=MagicMock()):
+            result = harness._capture_model_memory_mb(gpu_indices=None)
+
+    assert result == pytest.approx(256.0)
+
+    # Must have been called with device=0 (not no-arg)
+    calls = mock_torch.cuda.max_memory_allocated.call_args_list
+    assert len(calls) == 1
+    call = calls[0]
+    device_arg = (
+        call.kwargs.get("device")
+        if "device" in call.kwargs
+        else (call.args[0] if call.args else None)
+    )
+    assert device_arg == 0, f"Expected device=0, got device={device_arg}"
