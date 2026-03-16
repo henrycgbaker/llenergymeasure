@@ -188,7 +188,9 @@ class VLLMBackend:
             # Heuristic: if peak matches gpu_memory_utilization * total_vram within 5%,
             # it's likely pre-allocation, not actual usage. Fall back to NVML.
             try:
-                total_vram = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+                total_vram = torch.cuda.get_device_properties(
+                    torch.cuda.current_device()
+                ).total_memory / (1024 * 1024)
                 vllm_cfg = config.vllm
                 gpu_util = 0.9  # vLLM default
                 if (

@@ -905,3 +905,30 @@ class TestMultiOutputTokenCounting:
         ]
         output_count = sum(len(out.token_ids) for o in outputs if o.outputs for out in o.outputs)
         assert output_count == 30  # 8 + 7 + 9 + 6
+
+
+# =============================================================================
+# Test Group 15: M15 — VRAM query uses current_device(), not hardcoded 0
+# =============================================================================
+
+
+class TestVramCurrentDevice:
+    """Verify that VRAM total-memory query uses torch.cuda.current_device()."""
+
+    def test_vram_query_calls_current_device(self):
+        """get_device_properties uses current_device(), not hardcoded 0.
+
+        Torch imports inside run_inference are lazy, so we inspect source to
+        confirm the correct call expression is present.
+        """
+        import inspect
+
+        import llenergymeasure.core.backends.vllm as vllm_mod
+
+        source = inspect.getsource(vllm_mod.VLLMBackend.run_inference)
+        assert "current_device()" in source, (
+            "run_inference must call torch.cuda.current_device() for VRAM query, not hardcode 0"
+        )
+        assert "get_device_properties(0)" not in source, (
+            "run_inference must not hardcode device 0 — use current_device()"
+        )
