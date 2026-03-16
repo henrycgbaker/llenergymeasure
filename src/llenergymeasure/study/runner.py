@@ -463,6 +463,7 @@ class StudyRunner:
         consumer.join()
 
         result = _collect_result(p, parent_conn, config, timeout)
+        parent_conn.close()
 
         # Update manifest based on outcome
         if isinstance(result, dict) and "type" in result:
