@@ -12,6 +12,7 @@ The only paths NOT covered here are:
 
 from __future__ import annotations
 
+import contextlib
 import queue
 import signal
 import threading
@@ -499,7 +500,7 @@ def test_sigint_second_ctrl_c_kills_immediately() -> None:
     proc = _make_mock_process(is_alive_after_join=True, exitcode=None, pid=12345)
     proc.is_alive.return_value = True
 
-    ctx = _make_mock_context(proc, pipe_has_data=False)
+    _make_mock_context(proc, pipe_has_data=False)
 
     with patch("llenergymeasure.study.runner.os.killpg") as mock_killpg:
         runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
@@ -694,9 +695,9 @@ def test_cycle_counter_increments_per_config_hash() -> None:
     assert len(call_args_list) == 4, f"Expected 4 mark_running calls, got {len(call_args_list)}"
 
     cycles_by_hash: dict[str, list[int]] = {}
-    for call in call_args_list:
-        h = call.args[0] if call.args else call.kwargs["config_hash"]
-        c = call.args[1] if len(call.args) > 1 else call.kwargs["cycle"]
+    for c_item in call_args_list:
+        h = c_item.args[0] if c_item.args else c_item.kwargs["config_hash"]
+        c = c_item.args[1] if len(c_item.args) > 1 else c_item.kwargs["cycle"]
         cycles_by_hash.setdefault(h, []).append(c)
 
     # hash_A and hash_B should each have cycles [1, 2]
@@ -964,9 +965,6 @@ def test_recv_before_join_ordering(study_config: StudyConfig) -> None:
     parent_conn = ctx.Pipe.return_value[0]
 
     # Track call order between poll/recv and join
-    original_poll = parent_conn.poll.side_effect
-    original_join = proc.join.side_effect
-
     def track_poll(*args, **kwargs):
         call_order.append("poll")
         return True  # data is available
@@ -1169,7 +1167,6 @@ def test_grace_period_uses_killpg(study_config: StudyConfig) -> None:
     manifest = MagicMock()
 
     # Process stays alive after initial 5s join AND 2s grace join
-    alive_calls: list[bool] = []
     proc = _make_mock_process(is_alive_after_join=True, exitcode=None, pid=33333)
 
     # After first join returns, is_alive=True; after SIGKILL join, is_alive=False
@@ -1203,11 +1200,11 @@ def test_grace_period_uses_killpg(study_config: StudyConfig) -> None:
             result = original_run_one(config, mp_ctx, index=index, total=total)
             return result
 
-        with patch.object(runner, "_run_one", side_effect=run_one_with_interrupt):
-            try:
-                runner.run()
-            except SystemExit:
-                pass  # Expected sys.exit(130) after interrupt
+        with (
+            patch.object(runner, "_run_one", side_effect=run_one_with_interrupt),
+            contextlib.suppress(SystemExit),
+        ):
+            runner.run()
 
     # SIGKILL must have been sent to the process group
     killpg_calls = [c for c in mock_killpg.call_args_list if c == call(33333, signal.SIGKILL)]
