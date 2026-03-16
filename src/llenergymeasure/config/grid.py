@@ -342,7 +342,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
             # Override list-valued backend with the specific backend string
             config_dict["backend"] = backend
 
-            for dim_key, value in zip(all_dim_keys, combo, strict=False):
+            for dim_key, value in zip(all_dim_keys, combo, strict=True):
                 if dim_key in backend_scoped:
                     # Backend-scoped parameter: recursively unflatten to handle multi-level paths.
                     # "engine.block_size" -> {"engine": {"block_size": value}}

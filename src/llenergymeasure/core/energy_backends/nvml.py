@@ -8,8 +8,11 @@ All pynvml imports are deferred — this module is safe to import on CPU-only ma
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -110,6 +113,21 @@ class NVMLBackend:
         if len(samples) >= 2:
             # Overall window duration from first to last sample timestamp across all GPUs
             duration_sec = samples[-1].timestamp - samples[0].timestamp
+
+            # Check for sampling rate drift: warn if any consecutive gap exceeds 200ms
+            # (2x the 100ms target interval), which would degrade energy accuracy.
+            timestamps = [s.timestamp for s in samples]
+            gaps_ms = [
+                (timestamps[i + 1] - timestamps[i]) * 1000.0 for i in range(len(timestamps) - 1)
+            ]
+            if gaps_ms:
+                max_gap_ms = max(gaps_ms)
+                if max_gap_ms > 200.0:
+                    logger.warning(
+                        "Power sampling gap of %.0fms detected (target: 100ms). "
+                        "Energy calculation may be less accurate.",
+                        max_gap_ms,
+                    )
 
             # Group samples by gpu_index for per-GPU integration
             by_gpu: dict[int, list[Any]] = {}

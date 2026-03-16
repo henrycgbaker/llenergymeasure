@@ -89,24 +89,33 @@ def _check_model_accessible(model_id: str) -> str | None:
         return None
 
 
-def _warn_if_persistence_mode_off() -> None:
-    """Log a warning if GPU persistence mode is disabled.
+def _warn_if_persistence_mode_off(gpu_indices: list[int] | None = None) -> None:
+    """Log a warning if GPU persistence mode is disabled on any specified GPU.
+
+    Checks all GPUs in gpu_indices (defaults to [0] when None). Warns once if
+    any GPU has persistence mode off.
 
     Never raises — always wrapped in a broad except.
+
+    Args:
+        gpu_indices: GPU device indices to check. Defaults to [0] when None.
     """
+    indices = gpu_indices if gpu_indices is not None else [0]
     try:
         import pynvml
 
         from llenergymeasure.core.gpu_info import nvml_context
 
         with nvml_context():
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
-            if mode == pynvml.NVML_FEATURE_DISABLED:
-                logger.warning(
-                    "GPU persistence mode is off. First experiment may have higher "
-                    "latency. Enable: sudo nvidia-smi -pm 1"
-                )
+            for idx in indices:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+                mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
+                if mode == pynvml.NVML_FEATURE_DISABLED:
+                    logger.warning(
+                        "GPU persistence mode is off on GPU %d. First experiment may have higher "
+                        "latency. Enable: sudo nvidia-smi -pm 1",
+                        idx,
+                    )
     except Exception:
         pass
 
