@@ -11,6 +11,8 @@ from typing import Any
 
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 from llenergymeasure.domain.metrics import (
     BatchEfficiencyMetrics,
     ExtendedEfficiencyMetrics,
