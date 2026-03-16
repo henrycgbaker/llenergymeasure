@@ -49,10 +49,17 @@ def test_get_backend_params_vllm_returns_params():
 
 
 def test_get_backend_params_tensorrt_returns_params():
-    """get_backend_params('tensorrt') returns params including tensorrt.max_batch_size."""
+    """get_backend_params('tensorrt') returns params including nested sub-config paths."""
     params = get_backend_params("tensorrt")
     assert isinstance(params, dict)
     assert "tensorrt.max_batch_size" in params
+    # Verify expanded nested sub-config params are registered
+    assert "tensorrt.quant.quant_algo" in params
+    assert "tensorrt.kv_cache.free_gpu_memory_fraction" in params
+    assert "tensorrt.scheduler.capacity_scheduling_policy" in params
+    assert "tensorrt.build_cache.max_records" in params
+    assert "tensorrt.sampling.return_perf_metrics" in params
+    assert len(params) >= 20
 
 
 def test_get_backend_params_unknown_backend_raises():
