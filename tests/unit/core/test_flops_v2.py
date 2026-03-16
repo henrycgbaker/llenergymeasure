@@ -20,8 +20,10 @@ from pydantic import ValidationError
 from llenergymeasure.core.flops import (
     FlopsEstimator,
     _count_non_embedding_params,
+    _count_params_from_config,
     estimate_flops,
     estimate_flops_palm,
+    estimate_flops_palm_from_config,
     get_flops_estimator,
 )
 from llenergymeasure.domain.metrics import FlopsResult
@@ -620,3 +622,133 @@ def test_estimate_flops_uses_singleton() -> None:
     # After calling estimate_flops, singleton should be created
     assert flops_mod._default_estimator is not None
     assert isinstance(flops_mod._default_estimator, FlopsEstimator)
+
+
+# =============================================================================
+# M5: _count_params_from_config — AutoConfig-based parameter extraction
+# =============================================================================
+
+
+def _make_autoconfig_mock(
+    hidden_size: int = 4096,
+    num_hidden_layers: int = 32,
+    intermediate_size: int | None = None,
+) -> MagicMock:
+    """Build a mock AutoConfig object with standard architecture fields."""
+    cfg = MagicMock()
+    cfg.hidden_size = hidden_size
+    cfg.num_hidden_layers = num_hidden_layers
+    if intermediate_size is not None:
+        cfg.intermediate_size = intermediate_size
+    else:
+        # getattr fallback: MagicMock will return a MagicMock for missing attrs,
+        # so we set it explicitly to simulate the fallback default
+        del cfg.intermediate_size  # Remove auto-attribute so getattr uses default
+    return cfg
+
+
+def test_count_params_from_config_success() -> None:
+    """_count_params_from_config returns correct count with known config values.
+
+    Formula: attn = 4 * h * h * layers; ffn = 2 * h * intermediate * layers
+    Total = attn + ffn
+    """
+    hidden = 64
+    layers = 4
+    intermediate = 256  # = hidden * 4
+
+    mock_cfg = MagicMock()
+    mock_cfg.hidden_size = hidden
+    mock_cfg.num_hidden_layers = layers
+    mock_cfg.intermediate_size = intermediate
+
+    mock_autoconfig_cls = MagicMock()
+    mock_autoconfig_cls.from_pretrained.return_value = mock_cfg
+
+    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+        result = _count_params_from_config("test/model")
+
+    expected_attn = 4 * hidden * hidden * layers  # 4 * 64 * 64 * 4 = 65_536
+    expected_ffn = 2 * hidden * intermediate * layers  # 2 * 64 * 256 * 4 = 131_072
+    expected = expected_attn + expected_ffn  # 196_608
+
+    assert result == expected, f"Expected {expected}, got {result}"
+
+
+def test_count_params_from_config_intermediate_size_default() -> None:
+    """_count_params_from_config uses hidden * 4 as default for intermediate_size."""
+    hidden = 128
+    layers = 2
+
+    mock_cfg = MagicMock(spec=["hidden_size", "num_hidden_layers"])
+    mock_cfg.hidden_size = hidden
+    mock_cfg.num_hidden_layers = layers
+
+    mock_autoconfig_cls = MagicMock()
+    mock_autoconfig_cls.from_pretrained.return_value = mock_cfg
+
+    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+        result = _count_params_from_config("test/model")
+
+    intermediate = hidden * 4  # default
+    expected = 4 * hidden * hidden * layers + 2 * hidden * intermediate * layers
+    assert result == expected
+
+
+def test_count_params_from_config_failure() -> None:
+    """_count_params_from_config returns None when AutoConfig.from_pretrained raises."""
+    mock_autoconfig_cls = MagicMock()
+    mock_autoconfig_cls.from_pretrained.side_effect = OSError("Model not found")
+
+    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+        result = _count_params_from_config("nonexistent/model")
+
+    assert result is None
+
+
+def test_count_params_from_config_import_error() -> None:
+    """_count_params_from_config returns None when transformers is not importable."""
+    with patch.dict(sys.modules, {"transformers": None}):
+        result = _count_params_from_config("test/model")
+
+    assert result is None
+
+
+def test_estimate_flops_palm_from_config_success() -> None:
+    """estimate_flops_palm_from_config returns FlopsResult with confidence='medium'."""
+    hidden = 64
+    layers = 4
+    intermediate = 256
+    n_input, n_output = 100, 50
+
+    mock_cfg = MagicMock()
+    mock_cfg.hidden_size = hidden
+    mock_cfg.num_hidden_layers = layers
+    mock_cfg.intermediate_size = intermediate
+
+    mock_autoconfig_cls = MagicMock()
+    mock_autoconfig_cls.from_pretrained.return_value = mock_cfg
+
+    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+        result = estimate_flops_palm_from_config("test/model", n_input, n_output)
+
+    assert result is not None
+    assert result.confidence == "medium"
+    assert result.method == "palm_formula"
+    assert result.value > 0
+
+    # Verify formula: 2 * n_params * total_tokens
+    n_params = 4 * hidden * hidden * layers + 2 * hidden * intermediate * layers
+    expected = 2 * n_params * (n_input + n_output)
+    assert result.value == float(expected)
+
+
+def test_estimate_flops_palm_from_config_none_on_failure() -> None:
+    """estimate_flops_palm_from_config returns None when config cannot be loaded."""
+    mock_autoconfig_cls = MagicMock()
+    mock_autoconfig_cls.from_pretrained.side_effect = ValueError("Bad config")
+
+    with patch.dict(sys.modules, {"transformers": MagicMock(AutoConfig=mock_autoconfig_cls)}):
+        result = estimate_flops_palm_from_config("bad/model", 100, 50)
+
+    assert result is None

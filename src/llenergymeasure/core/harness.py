@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import time
 from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path
@@ -131,6 +132,18 @@ def estimate_flops_palm(
     return _efp(model=model, n_input_tokens=n_input_tokens, n_output_tokens=n_output_tokens)
 
 
+def estimate_flops_palm_from_config(
+    model_name: str, n_input_tokens: int, n_output_tokens: int
+) -> FlopsResult | None:  # pragma: no cover
+    from llenergymeasure.core.flops import estimate_flops_palm_from_config as _efpc
+
+    return _efpc(
+        model_name=model_name,
+        n_input_tokens=n_input_tokens,
+        n_output_tokens=n_output_tokens,
+    )
+
+
 def write_timeseries_parquet(
     samples: list[PowerThermalSample], path: Path
 ) -> Path:  # pragma: no cover
@@ -233,7 +246,7 @@ class MeasurementHarness:
 
         # 4. Capture model memory baseline immediately after model load.
         # Must happen BEFORE warmup, which allocates KV cache.
-        model_memory_mb = self._capture_model_memory_mb()
+        model_memory_mb = self._capture_model_memory_mb(gpu_indices=gpu_indices)
 
         try:
             # 5. Warmup (CM-21, CM-24) — returns WarmupResult
@@ -254,6 +267,7 @@ class MeasurementHarness:
             # 9. CUDA sync BEFORE inference (CM-15 — Zeus best practice)
             _cuda_sync()
 
+            t_inference_start = time.perf_counter()  # Canonical timer start (H1)
             # 10. Record start time and run inference
             start_time = datetime.now()
 
@@ -261,11 +275,16 @@ class MeasurementHarness:
             with PowerThermalSampler(gpu_indices=gpu_indices) as sampler:
                 output = backend.run_inference(config, model)
 
+            t_inference_end = time.perf_counter()  # Canonical timer end (H1)
+
             thermal_info = sampler.get_thermal_throttle_info()
             timeseries_samples = sampler.get_samples()
 
             # 11. CUDA sync AFTER inference, before stopping energy (CM-15)
             _cuda_sync()
+
+            # Harness sets canonical inference timer (H1) — overrides backend's elapsed_time_sec
+            output.inference_time_sec = t_inference_end - t_inference_start
 
             # 12. Stop energy tracking
             energy_measurement = None
@@ -315,8 +334,13 @@ class MeasurementHarness:
     # Private helpers
     # -------------------------------------------------------------------------
 
-    def _capture_model_memory_mb(self) -> float:
-        """Query torch for current GPU max_memory_allocated() after model load.
+    def _capture_model_memory_mb(self, gpu_indices: list[int] | None = None) -> float:
+        """Query torch for GPU max_memory_allocated() after model load.
+
+        Iterates over gpu_indices (defaults to [0] when None), queries
+        max_memory_allocated(device=idx) per GPU, and returns the max across
+        all ranks. This ensures tensor-parallel experiments report the peak
+        across all participating GPUs (M18).
 
         Returns 0.0 if torch is unavailable or CUDA is not available.
         """
@@ -325,7 +349,9 @@ class MeasurementHarness:
                 import torch
 
                 if torch.cuda.is_available():
-                    return float(torch.cuda.max_memory_allocated() / (1024 * 1024))
+                    indices = gpu_indices if gpu_indices is not None else [0]
+                    peak = max(torch.cuda.max_memory_allocated(device=idx) for idx in indices)
+                    return float(peak / (1024 * 1024))
             except Exception:
                 pass
         return 0.0
@@ -338,23 +364,39 @@ class MeasurementHarness:
     ) -> Any:
         """Estimate FLOPs from model and token counts.
 
-        Backend plugins that expose a model object via extras['hf_model'] will
-        have FLOPs estimated using the PaLM formula. Otherwise returns None.
+        Fallback chain (M5):
+        1. AutoConfig path — uses estimate_flops_palm_from_config(config.model).
+           Works for ALL backends including vLLM and TensorRT-LLM (no model weights needed).
+        2. hf_model path — uses estimate_flops_palm(hf_model) when extras['hf_model'] is set.
+           Higher-confidence since it counts actual loaded parameters.
+        3. None — FLOPs unavailable.
         """
-        model_obj = output.extras.get("hf_model")
-        if model_obj is None:
-            # Try the backend's load_model result — backends may stash hf_model in extras.
-            # For backends that don't expose it, FLOPs is 0.0 (acceptable).
-            return None
+        # Step 1: AutoConfig path (works without loaded model weights)
         try:
-            return estimate_flops_palm(
-                model=model_obj,
+            result = estimate_flops_palm_from_config(
+                model_name=config.model,
                 n_input_tokens=output.input_tokens,
                 n_output_tokens=output.output_tokens,
             )
+            if result is not None:
+                return result
         except Exception as e:
-            logger.debug("FLOPs estimation failed: %s", e)
-            return None
+            logger.debug("AutoConfig FLOPs estimation failed: %s", e)
+
+        # Step 2: hf_model path (higher confidence — uses actual loaded parameters)
+        model_obj = output.extras.get("hf_model")
+        if model_obj is not None:
+            try:
+                return estimate_flops_palm(
+                    model=model_obj,
+                    n_input_tokens=output.input_tokens,
+                    n_output_tokens=output.output_tokens,
+                )
+            except Exception as e:
+                logger.debug("hf_model FLOPs estimation failed: %s", e)
+
+        # Step 3: FLOPs unavailable
+        return None
 
     def _collect_warnings(
         self,
@@ -432,7 +474,9 @@ class MeasurementHarness:
         experiment_id = f"{config.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 
         avg_tokens_per_second = (
-            output.total_tokens / output.elapsed_time_sec if output.elapsed_time_sec > 0 else 0.0
+            output.total_tokens / output.inference_time_sec
+            if output.inference_time_sec > 0
+            else 0.0
         )
 
         # Real energy values from measurement backend (CM-18, CM-19)
@@ -445,8 +489,13 @@ class MeasurementHarness:
             total_energy_j / output_tokens if (total_energy_j > 0 and output_tokens > 0) else 0.0
         )
 
-        # Energy breakdown with baseline adjustment
-        energy_breakdown = create_energy_breakdown(total_energy_j, baseline, duration_sec)
+        # Energy breakdown with baseline adjustment.
+        # H1: use energy backend's sampler window duration for baseline adjustment,
+        # not harness datetime duration, to avoid CUDA sync latency skew.
+        energy_duration = (
+            energy_measurement.duration_sec if energy_measurement is not None else duration_sec
+        )
+        energy_breakdown = create_energy_breakdown(total_energy_j, baseline, energy_duration)
 
         # FLOPs from PaLM formula (0.0 if estimation unavailable)
         total_flops = flops_result.value if flops_result is not None else 0.0
@@ -463,8 +512,8 @@ class MeasurementHarness:
             else None
         )
         flops_per_second = (
-            total_flops / output.elapsed_time_sec
-            if (total_flops > 0 and output.elapsed_time_sec > 0)
+            total_flops / output.inference_time_sec
+            if (total_flops > 0 and output.inference_time_sec > 0)
             else None
         )
 
@@ -495,7 +544,7 @@ class MeasurementHarness:
             ),
             total_tokens=output.total_tokens,
             total_energy_j=total_energy_j,
-            total_inference_time_sec=output.elapsed_time_sec,
+            total_inference_time_sec=output.inference_time_sec,
             avg_tokens_per_second=avg_tokens_per_second,
             avg_energy_per_token_j=avg_energy_per_token_j,
             total_flops=total_flops,

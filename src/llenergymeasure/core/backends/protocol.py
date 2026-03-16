@@ -25,6 +25,7 @@ class InferenceOutput:
     model_memory_mb: float
     batch_times: list[float] = field(default_factory=list)
     extras: dict[str, Any] = field(default_factory=dict)
+    inference_time_sec: float = 0.0  # Set by harness after perf_counter brackets (H1)
 
     @property
     def total_tokens(self) -> int:
