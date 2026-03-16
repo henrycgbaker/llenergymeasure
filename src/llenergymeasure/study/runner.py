@@ -9,12 +9,15 @@ Key design decisions (locked in .product/decisions/experiment-isolation.md):
 - daemon=False: clean CUDA teardown if parent exits unexpectedly (CP-4)
 - Pipe-only IPC: ExperimentResult fits in Pipe buffer for M2 experiment sizes
 - SIGKILL on timeout: SIGTERM may be ignored by hung CUDA operations
+- Process group kill: worker calls os.setpgrp() to become group leader so all
+  descendant processes (vLLM workers, MPI ranks, etc.) are killed together
 """
 
 from __future__ import annotations
 
 import contextlib
 import multiprocessing
+import os
 import signal
 import sys
 import threading
@@ -31,7 +34,13 @@ if TYPE_CHECKING:
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
-__all__ = ["StudyRunner", "_calculate_timeout", "_run_experiment_worker", "_save_and_record"]
+__all__ = [
+    "StudyRunner",
+    "_calculate_timeout",
+    "_kill_process_group",
+    "_run_experiment_worker",
+    "_save_and_record",
+]
 
 
 # =============================================================================
@@ -70,6 +79,17 @@ def _save_and_record(
         manifest.mark_completed(config_hash, cycle, result_file="")
 
 
+def _kill_process_group(pid: int, sig: int) -> None:
+    """Send signal to the entire process group rooted at pid.
+
+    Uses os.killpg so that all descendant processes (vLLM workers, MPI ranks, etc.)
+    receive the signal, not just the parent. Errors are suppressed because the
+    process group may already be dead by the time this is called.
+    """
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pid, sig)
+
+
 # =============================================================================
 # Worker function (runs inside child process)
 # =============================================================================
@@ -93,6 +113,10 @@ def _run_experiment_worker(
         On failure: sends {"type": ..., "message": ..., "traceback": ...} via conn.
         Progress events are put to progress_queue for the consumer thread.
     """
+    # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
+    # share this PGID. The parent can then kill the whole group via os.killpg().
+    os.setpgrp()
+
     # parent owns SIGINT; child ignores it
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -185,16 +209,29 @@ def _consume_progress_events(
 # Result collection (parent, after p.join)
 # =============================================================================
 
+# Sentinel object used to distinguish "no payload provided" from a None payload.
+_UNSET = object()
+
 
 def _collect_result(
     p: Any,  # multiprocessing.Process
     parent_conn: Any,  # multiprocessing.Connection (parent end)
     config: ExperimentConfig,
     timeout: int,
+    pipe_payload: Any = _UNSET,
 ) -> Any:
     """Inspect process outcome and return either a result or a failure dict.
 
-    Called after p.join(timeout=...) has returned.
+    Called after the pipe has been drained and p.join() has returned.
+
+    Args:
+        p: The child process.
+        parent_conn: Parent end of the Pipe (read-only).
+        config: Experiment configuration.
+        timeout: Timeout used for the experiment (for error messages).
+        pipe_payload: Pre-drained pipe value from the recv-before-join pattern
+            (H5 deadlock fix). When provided, skips calling recv() again.
+            Pass _UNSET (default) to fall back to reading from the pipe directly.
 
     Returns:
         ExperimentResult on success, dict with keys (type, message) on failure.
@@ -206,7 +243,7 @@ def _collect_result(
     if p.is_alive():
         # Timed out — kill with SIGKILL
         # SIGKILL: SIGTERM may be ignored by hung CUDA operations
-        p.kill()
+        _kill_process_group(p.pid, signal.SIGKILL)
         p.join()
         return {
             "type": "TimeoutError",
@@ -216,7 +253,13 @@ def _collect_result(
 
     if p.exitcode != 0:
         # Non-zero exit — try to read error payload from pipe
-        if parent_conn.poll():
+        # Use pre-drained payload if available; otherwise poll/recv
+        if pipe_payload is not _UNSET:
+            payload = pipe_payload
+            if isinstance(payload, dict) and "type" in payload:
+                payload["config_hash"] = config_hash
+                return payload
+        elif parent_conn.poll():
             try:
                 payload = parent_conn.recv()
                 if isinstance(payload, dict) and "type" in payload:
@@ -231,7 +274,23 @@ def _collect_result(
             "config_hash": config_hash,
         }
 
-    # Success path — read result from pipe
+    # Success path — use pre-drained payload if available
+    if pipe_payload is not _UNSET:
+        try:
+            payload = pipe_payload
+            # If payload is an error dict (exception in worker), treat as failure
+            if isinstance(payload, dict) and "type" in payload and "traceback" in payload:
+                payload["config_hash"] = config_hash
+                return payload
+            return payload
+        except Exception as exc:
+            return {
+                "type": "PipeError",
+                "message": f"Failed to process pre-drained pipe payload: {exc}",
+                "config_hash": config_hash,
+            }
+
+    # Fallback: read from pipe directly (no pre-drained payload)
     if parent_conn.poll():
         try:
             payload = parent_conn.recv()
@@ -329,11 +388,13 @@ class StudyRunner:
                     "(Ctrl+C again to force)..."
                 )
                 if self._active_process is not None and self._active_process.is_alive():
-                    self._active_process.terminate()  # SIGTERM — gentle first attempt
+                    _kill_process_group(
+                        self._active_process.pid, signal.SIGTERM
+                    )  # SIGTERM — gentle first attempt
             else:
                 print("\nForce-killing experiment subprocess...")
                 if self._active_process is not None and self._active_process.is_alive():
-                    self._active_process.kill()  # SIGKILL
+                    _kill_process_group(self._active_process.pid, signal.SIGKILL)  # SIGKILL
 
         original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
 
@@ -446,14 +507,26 @@ class StudyRunner:
 
         p.start()
         child_conn.close()
-        p.join(timeout=timeout)
+
+        # Drain pipe BEFORE join to prevent buffer deadlock (H5).
+        # If pickled ExperimentResult > 64 KB, child blocks on conn.send()
+        # while parent blocks in p.join() — classic deadlock.
+        pipe_payload = _UNSET
+        if parent_conn.poll(timeout=timeout):
+            try:
+                pipe_payload = parent_conn.recv()
+            except Exception:
+                pipe_payload = _UNSET
+
+        # Non-blocking join after pipe is drained (5s grace for teardown)
+        p.join(timeout=5)
 
         # SIGINT was received during join: SIGTERM was already sent by handler.
         # Give child 2s grace for clean CUDA teardown, then SIGKILL.
         if self._interrupt_event.is_set() and p.is_alive():
             p.join(timeout=2)  # 2s grace after SIGTERM
             if p.is_alive():
-                p.kill()
+                _kill_process_group(p.pid, signal.SIGKILL)
                 p.join()
 
         self._active_process = None
@@ -462,7 +535,7 @@ class StudyRunner:
         progress_queue.put(None)
         consumer.join()
 
-        result = _collect_result(p, parent_conn, config, timeout)
+        result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
 
         # Update manifest based on outcome
