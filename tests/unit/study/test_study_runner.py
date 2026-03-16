@@ -13,14 +13,20 @@ The only paths NOT covered here are:
 from __future__ import annotations
 
 import queue
+import signal
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.study.runner import StudyRunner, _calculate_timeout, _run_experiment_worker
+from llenergymeasure.study.runner import (
+    StudyRunner,
+    _calculate_timeout,
+    _kill_process_group,
+    _run_experiment_worker,
+)
 
 # =============================================================================
 # Fixtures
@@ -224,20 +230,22 @@ def test_study_runner_subprocess_exception(study_config: StudyConfig) -> None:
 
 
 def test_study_runner_timeout(study_config: StudyConfig) -> None:
-    """Timeout: p.is_alive() stays True after join; p.kill() is called (SIGKILL)."""
+    """Timeout: p.is_alive() stays True after join; os.killpg(pid, SIGKILL) is called."""
     manifest = MagicMock()
 
     # Process stays alive (timed-out)
-    proc = _make_mock_process(is_alive_after_join=True, exitcode=None)
+    proc = _make_mock_process(is_alive_after_join=True, exitcode=None, pid=12345)
     ctx = _make_mock_context(proc, pipe_has_data=False)
 
-    with patch("multiprocessing.get_context", return_value=ctx):
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.runner.os.killpg") as mock_killpg,
+    ):
         runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
         results = runner.run()
 
     assert len(results) == 1
-    proc.kill.assert_called_once()  # SIGKILL, not SIGTERM
-    proc.terminate.assert_not_called()
+    mock_killpg.assert_any_call(proc.pid, signal.SIGKILL)
     manifest.mark_failed.assert_called_once()
 
     # Verify error_type indicates timeout
@@ -484,32 +492,26 @@ def test_sigint_during_gap_exits_immediately() -> None:
 
 
 def test_sigint_second_ctrl_c_kills_immediately() -> None:
-    """Second Ctrl+C escalates to SIGKILL (p.kill()) immediately."""
+    """Second Ctrl+C escalates to SIGKILL via os.killpg(pid, SIGKILL)."""
     study = _make_sigint_study()
     manifest = MagicMock()
 
-    proc = _make_mock_process(is_alive_after_join=True, exitcode=None)
+    proc = _make_mock_process(is_alive_after_join=True, exitcode=None, pid=12345)
     proc.is_alive.return_value = True
 
     ctx = _make_mock_context(proc, pipe_has_data=False)
 
-    with patch("multiprocessing.get_context", return_value=ctx):
+    with patch("llenergymeasure.study.runner.os.killpg") as mock_killpg:
         runner = StudyRunner(study, manifest, Path("/tmp/test-study"))
-        # Directly set _active_process so the handler can reference it
         runner._active_process = proc
-
-        # Call the SIGINT handler twice to simulate second Ctrl+C
-        # We simulate by calling run() with interrupt pre-set AND by checking kill is called
-        # after two handler invocations.
         runner._interrupt_count = 1  # pretend first Ctrl+C already fired
-        runner._interrupt_event.set()
 
-        # Now simulate second Ctrl+C handler call
+        # Simulate second Ctrl+C: call the SIGKILL branch of the handler directly
         runner._interrupt_count += 1
         if runner._active_process is not None and runner._active_process.is_alive():
-            runner._active_process.kill()
+            _kill_process_group(runner._active_process.pid, signal.SIGKILL)
 
-    proc.kill.assert_called_once()
+    mock_killpg.assert_called_once_with(proc.pid, signal.SIGKILL)
 
 
 # =============================================================================
@@ -1063,3 +1065,154 @@ def test_parent_conn_closed_after_collect_result(study_config: StudyConfig) -> N
     assert close_called_after_collect == [False], (
         "parent_conn.close() was called before _collect_result returned"
     )
+
+
+# =============================================================================
+# Process group kill behaviour
+# =============================================================================
+
+
+def test_worker_calls_setpgrp(monkeypatch) -> None:
+    """_run_experiment_worker calls os.setpgrp() as the first line before any other work."""
+    from tests.conftest import make_result
+
+    config = ExperimentConfig(model="test/model", backend="pytorch", n=10)
+    fake_result = make_result()
+
+    setpgrp_calls: list[int] = []
+
+    def fake_setpgrp() -> None:
+        setpgrp_calls.append(1)
+
+    monkeypatch.setattr("llenergymeasure.study.runner.os.setpgrp", fake_setpgrp)
+    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: MagicMock())
+    monkeypatch.setattr("llenergymeasure.orchestration.preflight.run_preflight", lambda c: None)
+    monkeypatch.setattr(
+        "llenergymeasure.core.harness.MeasurementHarness.run",
+        lambda self, backend, config, **kwargs: fake_result,
+    )
+
+    mock_conn = MagicMock()
+    progress_q: queue.SimpleQueue = queue.SimpleQueue()
+
+    _run_experiment_worker(config, mock_conn, progress_q)
+
+    assert len(setpgrp_calls) == 1, f"Expected os.setpgrp() called once, got {len(setpgrp_calls)}"
+
+
+def test_kill_process_group_helper_suppresses_lookup_error() -> None:
+    """_kill_process_group silently ignores ProcessLookupError for dead PIDs."""
+    with patch("llenergymeasure.study.runner.os.killpg", side_effect=ProcessLookupError):
+        # Must not raise
+        _kill_process_group(999999, signal.SIGKILL)
+
+
+def test_kill_process_group_helper_calls_os_killpg() -> None:
+    """_kill_process_group forwards (pid, sig) to os.killpg."""
+    with patch("llenergymeasure.study.runner.os.killpg") as mock_killpg:
+        _kill_process_group(42, signal.SIGTERM)
+
+    mock_killpg.assert_called_once_with(42, signal.SIGTERM)
+
+
+def test_kill_process_group_helper_suppresses_permission_error() -> None:
+    """_kill_process_group silently ignores PermissionError."""
+    with patch("llenergymeasure.study.runner.os.killpg", side_effect=PermissionError):
+        # Must not raise
+        _kill_process_group(1, signal.SIGKILL)
+
+
+def test_timeout_uses_killpg(study_config: StudyConfig) -> None:
+    """Timeout path calls os.killpg(pid, SIGKILL), not proc.kill()."""
+    manifest = MagicMock()
+
+    proc = _make_mock_process(is_alive_after_join=True, exitcode=None, pid=77777)
+    ctx = _make_mock_context(proc, pipe_has_data=False)
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.runner.os.killpg") as mock_killpg,
+    ):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-timeout-killpg"))
+        runner.run()
+
+    mock_killpg.assert_any_call(77777, signal.SIGKILL)
+    # proc.kill() must NOT have been called directly
+    proc.kill.assert_not_called()
+
+
+def test_sigint_first_ctrl_c_sends_sigterm_to_group() -> None:
+    """First Ctrl+C sends SIGTERM to the process group via os.killpg."""
+    study = _make_sigint_study()
+    manifest = MagicMock()
+
+    proc = _make_mock_process(is_alive_after_join=True, exitcode=None, pid=22222)
+    proc.is_alive.return_value = True
+
+    with patch("llenergymeasure.study.runner.os.killpg") as mock_killpg:
+        runner = StudyRunner(study, manifest, Path("/tmp/test-sigterm-group"))
+        runner._active_process = proc
+        runner._interrupt_count = 0
+
+        # Simulate first Ctrl+C: call the SIGTERM branch directly
+        runner._interrupt_count += 1
+        if runner._active_process is not None and runner._active_process.is_alive():
+            _kill_process_group(runner._active_process.pid, signal.SIGTERM)
+
+    mock_killpg.assert_called_once_with(22222, signal.SIGTERM)
+    # Direct p.terminate() must NOT have been called
+    proc.terminate.assert_not_called()
+
+
+def test_grace_period_uses_killpg(study_config: StudyConfig) -> None:
+    """Grace period SIGKILL path uses os.killpg(pid, SIGKILL), not p.kill()."""
+    manifest = MagicMock()
+
+    # Process stays alive after initial 5s join AND 2s grace join
+    alive_calls: list[bool] = []
+    proc = _make_mock_process(is_alive_after_join=True, exitcode=None, pid=33333)
+
+    # After first join returns, is_alive=True; after SIGKILL join, is_alive=False
+    call_count = [0]
+
+    def is_alive_side_effect():
+        call_count[0] += 1
+        # First few checks: True (before grace kill); after killpg: False
+        # The grace period checks: interrupt_event.is_set() AND p.is_alive()
+        # We need at least 2 True answers to reach grace + SIGKILL branch
+        return call_count[0] <= 2
+
+    proc.is_alive.side_effect = is_alive_side_effect
+
+    ctx = _make_mock_context(proc, pipe_has_data=False)
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.runner.os.killpg") as mock_killpg,
+    ):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-grace-killpg"))
+        # Pre-set interrupt so the grace period path is taken
+        runner._interrupt_event.set()
+        runner._interrupt_count = 1
+
+        # Patch run() to skip the experiment loop and go directly to grace period
+        original_run_one = runner._run_one
+
+        def run_one_with_interrupt(config, mp_ctx, index=1, total=1):
+            # Start the process, then let the grace period logic fire
+            result = original_run_one(config, mp_ctx, index=index, total=total)
+            return result
+
+        with patch.object(runner, "_run_one", side_effect=run_one_with_interrupt):
+            try:
+                runner.run()
+            except SystemExit:
+                pass  # Expected sys.exit(130) after interrupt
+
+    # SIGKILL must have been sent to the process group
+    killpg_calls = [c for c in mock_killpg.call_args_list if c == call(33333, signal.SIGKILL)]
+    assert len(killpg_calls) >= 1, (
+        f"Expected os.killpg(33333, SIGKILL) at least once, got: {mock_killpg.call_args_list}"
+    )
+    # Direct p.kill() must NOT have been called
+    proc.kill.assert_not_called()
