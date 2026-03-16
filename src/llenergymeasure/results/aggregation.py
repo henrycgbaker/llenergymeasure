@@ -249,8 +249,9 @@ def aggregate_results(
     # Aggregate core metrics
     total_tokens = sum(r.inference_metrics.total_tokens for r in raw_results)
     total_energy_j = sum(r.energy_metrics.total_energy_j for r in raw_results)
-    total_inference_time = sum(r.inference_metrics.inference_time_sec for r in raw_results)
     total_flops = sum(r.compute_metrics.flops_total for r in raw_results)
+    total_input_tokens = sum(r.inference_metrics.input_tokens for r in raw_results)
+    total_output_tokens = sum(r.inference_metrics.output_tokens for r in raw_results)
 
     # Calculate averages
     avg_tokens_per_second = (
@@ -263,6 +264,7 @@ def aggregate_results(
     # Find time range (wall-clock)
     start_time = min(r.timestamps.start for r in raw_results)
     end_time = max(r.timestamps.end for r in raw_results)
+    wall_clock_duration = (end_time - start_time).total_seconds()
 
     # Build aggregation metadata
     metadata = AggregationMetadata(
@@ -353,6 +355,11 @@ def aggregate_results(
     if warmup_result is None:
         warmup_result = next((p.warmup_result for p in raw_results if p.warmup_result), None)
 
+    # Compute FLOPs-derived fields (C3)
+    flops_per_output_token = total_flops / total_output_tokens if total_output_tokens > 0 else None
+    flops_per_input_token = total_flops / total_input_tokens if total_input_tokens > 0 else None
+    flops_per_second = total_flops / wall_clock_duration if wall_clock_duration > 0 else None
+
     return ExperimentResult(
         schema_version="2.0",
         experiment_id=experiment_id,
@@ -363,10 +370,13 @@ def aggregate_results(
         steady_state_window=steady_state_window,
         total_tokens=total_tokens,
         total_energy_j=total_energy_j,
-        total_inference_time_sec=total_inference_time,
+        total_inference_time_sec=wall_clock_duration,
         avg_tokens_per_second=avg_tokens_per_second,
         avg_energy_per_token_j=avg_energy_per_token,
         total_flops=total_flops,
+        flops_per_output_token=flops_per_output_token,
+        flops_per_input_token=flops_per_input_token,
+        flops_per_second=flops_per_second,
         baseline_power_w=baseline_power_w,
         energy_adjusted_j=energy_adjusted_j,
         energy_per_device_j=energy_per_device_j,

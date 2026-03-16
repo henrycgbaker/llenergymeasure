@@ -332,3 +332,132 @@ def test_validate_process_completeness_duplicate(make_raw_result, tmp_path):
     assert report.is_complete is False
     assert 0 in report.duplicate_indices
     assert report.error_message is not None
+
+
+# ---------------------------------------------------------------------------
+# C2: Wall-clock inference time (not sum of per-process times)
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_uses_wall_clock_not_sum(make_raw_result):
+    """Aggregated inference time is wall-clock duration, not sum of per-process times.
+
+    Two processes each have inference_time_sec=10.0 (sum=20.0).
+    But they ran concurrently: start=14:00:00, end=14:00:12 -> wall-clock=12s.
+    The aggregated result must report 12.0, not 20.0.
+    """
+    raw0 = make_raw_result(
+        process_index=0,
+        gpu_id=0,
+        timestamps=Timestamps.from_times(
+            datetime(2026, 2, 26, 14, 0, 0),
+            datetime(2026, 2, 26, 14, 0, 12),
+        ),
+        inference_metrics=InferenceMetrics(
+            total_tokens=500,
+            input_tokens=100,
+            output_tokens=400,
+            inference_time_sec=10.0,
+            tokens_per_second=50.0,
+            latency_per_token_ms=2.0,
+        ),
+    )
+    raw1 = make_raw_result(
+        process_index=1,
+        gpu_id=1,
+        timestamps=Timestamps.from_times(
+            datetime(2026, 2, 26, 14, 0, 1),
+            datetime(2026, 2, 26, 14, 0, 12),
+        ),
+        inference_metrics=InferenceMetrics(
+            total_tokens=500,
+            input_tokens=100,
+            output_tokens=400,
+            inference_time_sec=10.0,
+            tokens_per_second=50.0,
+            latency_per_token_ms=2.0,
+        ),
+    )
+    result = aggregate_results(
+        raw_results=[raw0, raw1],
+        experiment_id="test-wall-clock",
+        measurement_config_hash="abc123def456abcd",
+    )
+
+    # Wall-clock is max(end) - min(start) = 14:00:12 - 14:00:00 = 12 seconds
+    assert result.total_inference_time_sec == pytest.approx(12.0)
+    # Definitely NOT the sum of per-process times (20.0)
+    assert result.total_inference_time_sec != pytest.approx(20.0)
+
+
+# ---------------------------------------------------------------------------
+# C3: FLOPs-derived fields populated in aggregated results
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_populates_flops_derived_fields(make_raw_result):
+    """Aggregated result has non-None flops_per_output_token, flops_per_input_token,
+    flops_per_second when FLOPs and token counts are available.
+
+    Process 0: flops=1e12, input_tokens=100, output_tokens=400, duration 10s
+    Process 1: flops=2e12, input_tokens=200, output_tokens=800, duration 10s
+    Wall-clock span: 10 seconds (concurrent).
+
+    Expected:
+      total_flops = 3e12
+      total_output_tokens = 1200
+      total_input_tokens = 300
+      flops_per_output_token = 3e12 / 1200 = 2.5e9
+      flops_per_input_token = 3e12 / 300 = 1e10
+      flops_per_second = 3e12 / 10 = 3e11
+    """
+    from llenergymeasure.domain.metrics import ComputeMetrics
+
+    raw0 = make_raw_result(
+        process_index=0,
+        gpu_id=0,
+        timestamps=Timestamps.from_times(
+            datetime(2026, 2, 26, 14, 0, 0),
+            datetime(2026, 2, 26, 14, 0, 10),
+        ),
+        inference_metrics=InferenceMetrics(
+            total_tokens=500,
+            input_tokens=100,
+            output_tokens=400,
+            inference_time_sec=10.0,
+            tokens_per_second=50.0,
+            latency_per_token_ms=2.0,
+        ),
+        compute_metrics=ComputeMetrics(flops_total=1e12),
+    )
+    raw1 = make_raw_result(
+        process_index=1,
+        gpu_id=1,
+        timestamps=Timestamps.from_times(
+            datetime(2026, 2, 26, 14, 0, 0),
+            datetime(2026, 2, 26, 14, 0, 10),
+        ),
+        inference_metrics=InferenceMetrics(
+            total_tokens=1000,
+            input_tokens=200,
+            output_tokens=800,
+            inference_time_sec=10.0,
+            tokens_per_second=100.0,
+            latency_per_token_ms=1.0,
+        ),
+        compute_metrics=ComputeMetrics(flops_total=2e12),
+    )
+
+    result = aggregate_results(
+        raw_results=[raw0, raw1],
+        experiment_id="test-flops-derived",
+        measurement_config_hash="abc123def456abcd",
+    )
+
+    assert result.flops_per_output_token is not None
+    assert result.flops_per_input_token is not None
+    assert result.flops_per_second is not None
+
+    assert result.flops_per_output_token == pytest.approx(3e12 / 1200)
+    assert result.flops_per_input_token == pytest.approx(3e12 / 300)
+    assert result.flops_per_second == pytest.approx(3e12 / 10)
