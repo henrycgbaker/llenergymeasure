@@ -379,7 +379,7 @@ class PyTorchBackend:
             max_length=config.max_input_tokens,
         )
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        input_token_count = inputs["input_ids"].shape[1] * len(batch)
+        input_token_count = int(inputs["attention_mask"].sum().item())
 
         t0 = time.perf_counter()
         with torch.inference_mode():
@@ -390,9 +390,11 @@ class PyTorchBackend:
             )
         elapsed = time.perf_counter() - t0
 
-        # Count only the newly generated tokens per sequence, then multiply by batch size
-        tokens_per_seq = outputs.shape[1] - (inputs["input_ids"].shape[1])
-        output_token_count = max(0, tokens_per_seq) * len(batch)
+        # Count only the newly generated tokens per sequence (handles padding correctly)
+        input_lengths = inputs["attention_mask"].sum(dim=1)  # shape: (batch,)
+        output_token_count = int(
+            sum(max(0, outputs.shape[1] - int(inp_len.item())) for inp_len in input_lengths)
+        )
         return input_token_count, output_token_count, elapsed
 
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict:
