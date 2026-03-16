@@ -160,6 +160,8 @@ class PyTorchBackend:
         batch_size = 1
         if config.pytorch is not None and config.pytorch.batch_size is not None:
             batch_size = config.pytorch.batch_size
+        else:
+            logger.debug("PyTorch batch_size not set, defaulting to 1")
 
         # Reset peak stats BEFORE the measurement loop so max_memory_allocated()
         # captures inference-window-only peak (KV cache + activations + batch buffers),
