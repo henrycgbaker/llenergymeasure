@@ -932,3 +932,67 @@ class TestVramCurrentDevice:
         assert "get_device_properties(0)" not in source, (
             "run_inference must not hardcode device 0 — use current_device()"
         )
+
+
+# =============================================================================
+# Test Group 16: M1 — flash_attn fields wired in _build_llm_kwargs
+# =============================================================================
+
+
+class TestFlashAttnFieldsWired:
+    """Verify flash_attn_version and flash_attn_max_num_splits_for_cuda_graph are forwarded."""
+
+    def test_flash_attn_version_wired(self):
+        """flash_attn_version=3 appears in LLM() kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=3))
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert kwargs["flash_attn_version"] == 3
+
+    def test_flash_attn_max_num_splits_wired(self):
+        """flash_attn_max_num_splits_for_cuda_graph=8 appears in LLM() kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(
+                attention=VLLMAttentionConfig(flash_attn_max_num_splits_for_cuda_graph=8)
+            )
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 8
+
+    def test_flash_attn_version_none_omitted(self):
+        """flash_attn_version=None is not added to kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=None))
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert "flash_attn_version" not in kwargs
+
+    def test_flash_attn_max_splits_none_omitted(self):
+        """flash_attn_max_num_splits_for_cuda_graph=None is not added to kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(
+                attention=VLLMAttentionConfig(flash_attn_max_num_splits_for_cuda_graph=None)
+            )
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert "flash_attn_max_num_splits_for_cuda_graph" not in kwargs
+
+    def test_both_flash_attn_fields_together(self):
+        """Both flash_attn fields forwarded simultaneously."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(
+                attention=VLLMAttentionConfig(
+                    flash_attn_version=2,
+                    flash_attn_max_num_splits_for_cuda_graph=16,
+                )
+            )
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert kwargs["flash_attn_version"] == 2
+        assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 16

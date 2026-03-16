@@ -325,6 +325,11 @@ class VLLMBackend:
                 attn = engine.attention
                 if attn.backend is not None:
                     kwargs["attention_backend"] = attn.backend
+                _set("flash_attn_version", attn.flash_attn_version)
+                _set(
+                    "flash_attn_max_num_splits_for_cuda_graph",
+                    attn.flash_attn_max_num_splits_for_cuda_graph,
+                )
                 _set("use_prefill_decode_attention", attn.use_prefill_decode_attention)
                 _set("use_prefill_query_quantization", attn.use_prefill_query_quantization)
                 _set("use_cudnn_prefill", attn.use_cudnn_prefill)
