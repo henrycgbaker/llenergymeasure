@@ -53,23 +53,32 @@ def _cuda_sync() -> None:
             pass  # Non-fatal — best effort sync
 
 
-def _check_persistence_mode() -> bool:
-    """Check whether GPU persistence mode is enabled.
+def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
+    """Check whether GPU persistence mode is enabled on all specified GPUs.
+
+    Checks every GPU in gpu_indices (defaults to [0] when None). Returns False
+    only if persistence mode is definitively off on at least one GPU.
+
+    Args:
+        gpu_indices: GPU device indices to check. Defaults to [0] when None.
 
     Returns:
-        True if persistence mode is on (or unknown), False if definitively off.
+        True if persistence mode is on (or unknown) for all GPUs,
+        False if definitively off on any GPU.
     """
+    indices = gpu_indices if gpu_indices is not None else [0]
     try:
         import pynvml
 
         from llenergymeasure.core.gpu_info import nvml_context
 
-        result: bool = True  # Default: unknown — don't generate spurious warning
         with nvml_context():
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
-            result = bool(mode != pynvml.NVML_FEATURE_DISABLED)
-        return result
+            for idx in indices:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+                mode = pynvml.nvmlDeviceGetPersistenceMode(handle)
+                if mode == pynvml.NVML_FEATURE_DISABLED:
+                    return False
+        return True
     except Exception:
         return True  # Unknown — don't generate spurious warning
 
@@ -282,7 +291,7 @@ class MeasurementHarness:
 
         # 15. Collect measurement quality warnings (CM-25 implied)
         duration_sec = (end_time - start_time).total_seconds()
-        measurement_warnings = self._collect_warnings(duration_sec, timeseries_samples)
+        measurement_warnings = self._collect_warnings(duration_sec, timeseries_samples, gpu_indices)
 
         # 16. Assemble ExperimentResult
         return self._build_result(
@@ -293,6 +302,7 @@ class MeasurementHarness:
             snapshot=snapshot,
             start_time=start_time,
             end_time=end_time,
+            duration_sec=duration_sec,
             thermal_info=thermal_info,
             energy_measurement=energy_measurement,
             baseline=baseline,
@@ -350,6 +360,7 @@ class MeasurementHarness:
         self,
         duration_sec: float,
         timeseries_samples: list[PowerThermalSample],
+        gpu_indices: list[int] | None = None,
     ) -> list[str]:
         """Collect measurement quality warnings from timeseries samples."""
         temp_start: float | None = None
@@ -360,7 +371,7 @@ class MeasurementHarness:
                 temp_start = temps[0]
                 temp_end = temps[-1]
 
-        persistence_on = _check_persistence_mode()
+        persistence_on = _check_persistence_mode(gpu_indices)
         nvml_count = len(timeseries_samples)
 
         return collect_measurement_warnings(
@@ -380,6 +391,7 @@ class MeasurementHarness:
         snapshot: Any,
         start_time: datetime,
         end_time: datetime,
+        duration_sec: float,
         thermal_info: Any,
         energy_measurement: Any,
         baseline: Any,
@@ -400,6 +412,7 @@ class MeasurementHarness:
             snapshot: EnvironmentSnapshot captured before model load.
             start_time: Measurement start time.
             end_time: Measurement end time.
+            duration_sec: Pre-computed (end_time - start_time).total_seconds().
             thermal_info: ThermalThrottleInfo from PowerThermalSampler.
             energy_measurement: EnergyMeasurement from energy backend, or None.
             baseline: BaselineCache from baseline measurement, or None.
@@ -424,7 +437,7 @@ class MeasurementHarness:
 
         # Real energy values from measurement backend (CM-18, CM-19)
         total_energy_j = energy_measurement.total_j if energy_measurement is not None else 0.0
-        duration_sec = (end_time - start_time).total_seconds()
+        # duration_sec is passed in from run() — computed once, not recalculated here
 
         # Energy per token (CM-25): output tokens only (input tokens are not "generated")
         output_tokens = output.output_tokens if output.output_tokens > 0 else output.total_tokens

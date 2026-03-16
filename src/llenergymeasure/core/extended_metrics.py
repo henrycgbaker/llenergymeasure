@@ -6,6 +6,7 @@ degradation - null values when data is unavailable, never errors.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -18,6 +19,8 @@ from llenergymeasure.domain.metrics import (
     MemoryEfficiencyMetrics,
     RequestLatencyMetrics,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def compute_extended_metrics(
@@ -52,6 +55,10 @@ def compute_extended_metrics(
         ExtendedEfficiencyMetrics with computed values (nulls where unavailable).
     """
     metrics = ExtendedEfficiencyMetrics()
+
+    if output_tokens == 0:
+        logger.warning("Output tokens is 0 — derived efficiency metrics will be unavailable")
+        return metrics
 
     # TPOT (Time Per Output Token) - industry standard alias for ITL mean
     if itl_mean_ms is not None:

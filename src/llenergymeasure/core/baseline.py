@@ -124,6 +124,17 @@ def measure_baseline_power(
         except Exception as e:
             logger.warning("Baseline: sampling failed: %s", e)
 
+    # Validate sample count against expected rate
+    actual_duration = time.monotonic() - start
+    expected_samples = int(actual_duration / interval) * len(resolved_indices)
+    total_collected = sum(len(s) for s in per_gpu_samples.values())
+    if expected_samples > 0 and total_collected < int(expected_samples * 0.8):
+        logger.warning(
+            "Baseline measurement got %d samples, expected ~%d. Results may be unreliable.",
+            total_collected,
+            expected_samples,
+        )
+
     # Compute mean power per GPU, then sum across GPUs
     per_gpu_means: list[float] = []
     total_samples = 0
@@ -138,7 +149,6 @@ def measure_baseline_power(
         return None
 
     mean_power = sum(per_gpu_means)
-    actual_duration = time.monotonic() - start
 
     result = BaselineCache(
         power_w=mean_power,
