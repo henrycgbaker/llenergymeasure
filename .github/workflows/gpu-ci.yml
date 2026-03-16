@@ -70,6 +70,26 @@ jobs:
             llenergymeasure-ci:pytorch \
             bash tests/integration/sigint_verify.sh
 
+      - name: Build vllm CI image
+        run: |
+          docker build \
+            -f docker/Dockerfile.vllm \
+            -t llenergymeasure-ci:vllm \
+            .
+          # Install test dependencies (not in production image)
+          docker run --name llem-vllm-ci-setup llenergymeasure-ci:vllm \
+            pip install --no-cache-dir pytest pytest-xdist
+          docker commit llem-vllm-ci-setup llenergymeasure-ci:vllm
+          docker rm llem-vllm-ci-setup
+
+      - name: vLLM killpg verification
+        run: |
+          docker run --rm --gpus all \
+            -v "${{ github.workspace }}/tests":/app/tests:ro \
+            -v "${{ github.workspace }}/results":/app/results \
+            llenergymeasure-ci:vllm \
+            bash tests/integration/killpg_verify.sh
+
       - name: Collect replay fixtures
         if: always()
         run: |
@@ -126,4 +146,6 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker rmi llenergymeasure-ci:pytorch 2>/dev/null || true
+        run: |
+          docker rmi llenergymeasure-ci:pytorch 2>/dev/null || true
+          docker rmi llenergymeasure-ci:vllm 2>/dev/null || true
