@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import time
 from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path
@@ -266,6 +267,7 @@ class MeasurementHarness:
             # 9. CUDA sync BEFORE inference (CM-15 — Zeus best practice)
             _cuda_sync()
 
+            t_inference_start = time.perf_counter()  # Canonical timer start (H1)
             # 10. Record start time and run inference
             start_time = datetime.now()
 
@@ -273,11 +275,16 @@ class MeasurementHarness:
             with PowerThermalSampler(gpu_indices=gpu_indices) as sampler:
                 output = backend.run_inference(config, model)
 
+            t_inference_end = time.perf_counter()  # Canonical timer end (H1)
+
             thermal_info = sampler.get_thermal_throttle_info()
             timeseries_samples = sampler.get_samples()
 
             # 11. CUDA sync AFTER inference, before stopping energy (CM-15)
             _cuda_sync()
+
+            # Harness sets canonical inference timer (H1) — overrides backend's elapsed_time_sec
+            output.inference_time_sec = t_inference_end - t_inference_start
 
             # 12. Stop energy tracking
             energy_measurement = None
@@ -467,7 +474,9 @@ class MeasurementHarness:
         experiment_id = f"{config.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 
         avg_tokens_per_second = (
-            output.total_tokens / output.elapsed_time_sec if output.elapsed_time_sec > 0 else 0.0
+            output.total_tokens / output.inference_time_sec
+            if output.inference_time_sec > 0
+            else 0.0
         )
 
         # Real energy values from measurement backend (CM-18, CM-19)
@@ -498,8 +507,8 @@ class MeasurementHarness:
             else None
         )
         flops_per_second = (
-            total_flops / output.elapsed_time_sec
-            if (total_flops > 0 and output.elapsed_time_sec > 0)
+            total_flops / output.inference_time_sec
+            if (total_flops > 0 and output.inference_time_sec > 0)
             else None
         )
 
@@ -530,7 +539,7 @@ class MeasurementHarness:
             ),
             total_tokens=output.total_tokens,
             total_energy_j=total_energy_j,
-            total_inference_time_sec=output.elapsed_time_sec,
+            total_inference_time_sec=output.inference_time_sec,
             avg_tokens_per_second=avg_tokens_per_second,
             avg_energy_per_token_j=avg_energy_per_token_j,
             total_flops=total_flops,
