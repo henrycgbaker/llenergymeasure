@@ -487,7 +487,6 @@ def get_backend_specific_params() -> dict[str, list[str]]:
             "pytorch.max_memory",
             "pytorch.revision",
             "pytorch.trust_remote_code",
-            "pytorch.num_processes",
         ],
         "vllm": [
             # Engine-level params (vllm.LLM() constructor args)
@@ -601,7 +600,6 @@ def get_param_skip_conditions() -> dict[str, str]:
     """
     return {
         # Multi-GPU params - skip if single GPU
-        "pytorch.num_processes>1": "Requires 2+ GPUs (data parallelism)",
         "vllm.engine.tensor_parallel_size>1": "Requires 2+ GPUs",
         "tensorrt.tp_size>1": "Requires 2+ GPUs",
         # Flash Attention 2 - requires flash-attn package
@@ -701,8 +699,8 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
             "tensorrt": "tp_size" in tensorrt_fields,
         },
         "data_parallel": {
-            # PyTorch uses data parallelism via Accelerate (num_processes)
-            "pytorch": "num_processes" in pytorch_fields,
+            # PyTorch data parallelism via Accelerate is not supported in this version
+            "pytorch": False,
             # vLLM/TensorRT manage parallelism internally
             "vllm": False,
             "tensorrt": False,
