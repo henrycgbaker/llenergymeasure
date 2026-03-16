@@ -227,3 +227,24 @@ class TestMainErrorHandling:
         assert error_files
         data = json.loads(error_files[0].read_text())
         assert set(data.keys()) >= {"type", "message", "traceback"}
+
+
+# ---------------------------------------------------------------------------
+# __main__ guard — MPI safety contract
+# ---------------------------------------------------------------------------
+
+
+class TestMainGuard:
+    def test_main_guard_exists_at_module_level(self):
+        """The __main__ guard prevents MPI workers from re-executing main().
+
+        When mpirun spawns worker ranks, they re-import the module but
+        __name__ is the dotted module path (not "__main__"), so main()
+        is not called. This test documents that contract.
+        """
+        import inspect
+
+        from llenergymeasure.infra import container_entrypoint
+
+        source = inspect.getsource(container_entrypoint)
+        assert 'if __name__ == "__main__":' in source
