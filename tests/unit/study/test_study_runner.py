@@ -992,7 +992,7 @@ def test_parent_conn_closed_after_collect_result(study_config: StudyConfig) -> N
 
     close_called_after_collect: list[bool] = []
 
-    def patched_collect(p, conn, config, timeout):
+    def patched_collect(p, conn, config, timeout, pipe_payload=None):
         # At this point close must NOT have been called yet
         close_called_after_collect.append(parent_conn.close.called)
         return fake_result

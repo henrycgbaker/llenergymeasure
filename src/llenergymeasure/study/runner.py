@@ -185,16 +185,29 @@ def _consume_progress_events(
 # Result collection (parent, after p.join)
 # =============================================================================
 
+# Sentinel object used to distinguish "no payload provided" from a None payload.
+_UNSET = object()
+
 
 def _collect_result(
     p: Any,  # multiprocessing.Process
     parent_conn: Any,  # multiprocessing.Connection (parent end)
     config: ExperimentConfig,
     timeout: int,
+    pipe_payload: Any = _UNSET,
 ) -> Any:
     """Inspect process outcome and return either a result or a failure dict.
 
-    Called after p.join(timeout=...) has returned.
+    Called after the pipe has been drained and p.join() has returned.
+
+    Args:
+        p: The child process.
+        parent_conn: Parent end of the Pipe (read-only).
+        config: Experiment configuration.
+        timeout: Timeout used for the experiment (for error messages).
+        pipe_payload: Pre-drained pipe value from the recv-before-join pattern
+            (H5 deadlock fix). When provided, skips calling recv() again.
+            Pass _UNSET (default) to fall back to reading from the pipe directly.
 
     Returns:
         ExperimentResult on success, dict with keys (type, message) on failure.
@@ -216,7 +229,13 @@ def _collect_result(
 
     if p.exitcode != 0:
         # Non-zero exit — try to read error payload from pipe
-        if parent_conn.poll():
+        # Use pre-drained payload if available; otherwise poll/recv
+        if pipe_payload is not _UNSET:
+            payload = pipe_payload
+            if isinstance(payload, dict) and "type" in payload:
+                payload["config_hash"] = config_hash
+                return payload
+        elif parent_conn.poll():
             try:
                 payload = parent_conn.recv()
                 if isinstance(payload, dict) and "type" in payload:
@@ -231,7 +250,23 @@ def _collect_result(
             "config_hash": config_hash,
         }
 
-    # Success path — read result from pipe
+    # Success path — use pre-drained payload if available
+    if pipe_payload is not _UNSET:
+        try:
+            payload = pipe_payload
+            # If payload is an error dict (exception in worker), treat as failure
+            if isinstance(payload, dict) and "type" in payload and "traceback" in payload:
+                payload["config_hash"] = config_hash
+                return payload
+            return payload
+        except Exception as exc:
+            return {
+                "type": "PipeError",
+                "message": f"Failed to process pre-drained pipe payload: {exc}",
+                "config_hash": config_hash,
+            }
+
+    # Fallback: read from pipe directly (no pre-drained payload)
     if parent_conn.poll():
         try:
             payload = parent_conn.recv()
@@ -446,7 +481,19 @@ class StudyRunner:
 
         p.start()
         child_conn.close()
-        p.join(timeout=timeout)
+
+        # Drain pipe BEFORE join to prevent buffer deadlock (H5).
+        # If pickled ExperimentResult > 64 KB, child blocks on conn.send()
+        # while parent blocks in p.join() — classic deadlock.
+        pipe_payload = _UNSET
+        if parent_conn.poll(timeout=timeout):
+            try:
+                pipe_payload = parent_conn.recv()
+            except Exception:
+                pipe_payload = _UNSET
+
+        # Non-blocking join after pipe is drained (5s grace for teardown)
+        p.join(timeout=5)
 
         # SIGINT was received during join: SIGTERM was already sent by handler.
         # Give child 2s grace for clean CUDA teardown, then SIGKILL.
@@ -462,7 +509,7 @@ class StudyRunner:
         progress_queue.put(None)
         consumer.join()
 
-        result = _collect_result(p, parent_conn, config, timeout)
+        result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
 
         # Update manifest based on outcome
