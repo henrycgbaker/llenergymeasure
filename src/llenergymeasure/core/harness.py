@@ -489,8 +489,13 @@ class MeasurementHarness:
             total_energy_j / output_tokens if (total_energy_j > 0 and output_tokens > 0) else 0.0
         )
 
-        # Energy breakdown with baseline adjustment
-        energy_breakdown = create_energy_breakdown(total_energy_j, baseline, duration_sec)
+        # Energy breakdown with baseline adjustment.
+        # H1: use energy backend's sampler window duration for baseline adjustment,
+        # not harness datetime duration, to avoid CUDA sync latency skew.
+        energy_duration = (
+            energy_measurement.duration_sec if energy_measurement is not None else duration_sec
+        )
+        energy_breakdown = create_energy_breakdown(total_energy_j, baseline, energy_duration)
 
         # FLOPs from PaLM formula (0.0 if estimation unavailable)
         total_flops = flops_result.value if flops_result is not None else 0.0

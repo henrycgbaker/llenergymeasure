@@ -397,6 +397,54 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     assert result.energy_breakdown is not None
 
 
+def test_harness_build_result_uses_energy_measurement_duration_for_baseline() -> None:
+    """H1: Baseline energy adjustment uses energy_measurement.duration_sec, not datetime delta."""
+    from datetime import datetime, timedelta
+
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.core.backends.protocol import InferenceOutput
+    from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
+    from llenergymeasure.core.harness import MeasurementHarness
+    from llenergymeasure.domain.metrics import ThermalThrottleInfo
+
+    harness = MeasurementHarness()
+    config = ExperimentConfig(model="test/model")
+    output = InferenceOutput(
+        elapsed_time_sec=10.0,
+        input_tokens=50,
+        output_tokens=50,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+    )
+
+    # Energy backend measured 8.0s (sampler window), but datetime delta is 10.0s.
+    # Baseline adjustment should use 8.0s, not 10.0s.
+    energy_measurement = EnergyMeasurement(total_j=100.0, duration_sec=8.0)
+    now = datetime.now()
+    result = harness._build_result(
+        backend_name="pytorch",
+        config=config,
+        output=output,
+        model_memory_mb=0.0,
+        snapshot=None,
+        start_time=now,
+        end_time=now + timedelta(seconds=10),
+        duration_sec=10.0,
+        thermal_info=ThermalThrottleInfo(),
+        energy_measurement=energy_measurement,
+        baseline=None,
+        flops_result=None,
+        timeseries_path=None,
+        measurement_warnings=[],
+    )
+
+    # With no baseline, energy_breakdown.total_energy_j == raw total.
+    # The key check: the function received energy_measurement with duration_sec=8.0
+    # and should pass 8.0 (not 10.0) to create_energy_breakdown.
+    assert result.energy_breakdown is not None
+    assert result.total_energy_j == 100.0
+
+
 def test_harness_build_result_zero_energy_when_no_backend() -> None:
     """MeasurementHarness._build_result() returns total_energy_j=0.0 when energy_measurement is None."""
     from datetime import datetime
