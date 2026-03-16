@@ -522,3 +522,84 @@ def test_capture_model_memory_mb_defaults_to_gpu_zero(minimal_config):
         else (call.args[0] if call.args else None)
     )
     assert device_arg == 0, f"Expected device=0, got device={device_arg}"
+
+
+# ---------------------------------------------------------------------------
+# H1: Harness-owned canonical inference timer (time.perf_counter)
+# ---------------------------------------------------------------------------
+
+
+def test_harness_sets_inference_time_sec(minimal_config):
+    """Harness must override output.inference_time_sec with perf_counter delta.
+
+    The backend returns elapsed_time_sec=99.0 (intentionally different).
+    The harness must set inference_time_sec to a real perf_counter delta,
+    NOT the backend's elapsed_time_sec.
+    """
+    custom_output = InferenceOutput(
+        elapsed_time_sec=99.0,  # Backend's own timer — harness must NOT use this
+        input_tokens=10,
+        output_tokens=20,
+        peak_memory_mb=512.0,
+        model_memory_mb=256.0,
+    )
+    backend = FakeBackend(inference_output=custom_output)
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        harness.run(backend, minimal_config)
+
+    # Harness must have written a non-zero value
+    assert custom_output.inference_time_sec > 0, "harness must set inference_time_sec > 0"
+    # Must NOT be the backend's elapsed_time_sec (proves harness override, not passthrough)
+    assert custom_output.inference_time_sec != 99.0, (
+        "inference_time_sec must be perf_counter delta, not backend's elapsed_time_sec"
+    )
+
+
+def test_inference_time_sec_used_in_result(minimal_config):
+    """total_inference_time_sec in ExperimentResult must come from harness perf_counter delta.
+
+    We mock time.perf_counter to return controlled values (100.0 then 105.0 → 5.0s delta).
+    The backend returns elapsed_time_sec=99.0. The result must show 5.0, not 99.0.
+    """
+    custom_output = InferenceOutput(
+        elapsed_time_sec=99.0,
+        input_tokens=10,
+        output_tokens=20,
+        peak_memory_mb=512.0,
+        model_memory_mb=256.0,
+    )
+    backend = FakeBackend(inference_output=custom_output)
+    harness = MeasurementHarness()
+
+    perf_counter_values = iter([100.0, 105.0])  # start=100, end=105 → delta=5.0
+
+    with (
+        _apply_patches(),
+        patch("llenergymeasure.core.harness.time") as mock_time,
+    ):
+        mock_time.perf_counter.side_effect = lambda: next(perf_counter_values)
+        result = harness.run(backend, minimal_config)
+
+    assert result.total_inference_time_sec == pytest.approx(5.0), (
+        f"Expected 5.0 from perf_counter delta, got {result.total_inference_time_sec}"
+    )
+
+
+def test_datetime_still_used_for_wall_clock(minimal_config):
+    """ExperimentResult.start_time and end_time must be datetime objects, not perf_counter values."""
+    from datetime import datetime as dt
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(backend, minimal_config)
+
+    assert isinstance(result.start_time, dt), (
+        f"start_time must be datetime, got {type(result.start_time)}"
+    )
+    assert isinstance(result.end_time, dt), (
+        f"end_time must be datetime, got {type(result.end_time)}"
+    )
