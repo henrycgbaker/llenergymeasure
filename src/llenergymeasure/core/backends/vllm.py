@@ -188,7 +188,9 @@ class VLLMBackend:
             # Heuristic: if peak matches gpu_memory_utilization * total_vram within 5%,
             # it's likely pre-allocation, not actual usage. Fall back to NVML.
             try:
-                total_vram = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+                total_vram = torch.cuda.get_device_properties(
+                    torch.cuda.current_device()
+                ).total_memory / (1024 * 1024)
                 vllm_cfg = config.vllm
                 gpu_util = 0.9  # vLLM default
                 if (
@@ -210,9 +212,12 @@ class VLLMBackend:
             except Exception:
                 pass  # Stick with torch value
 
-        # Count tokens from RequestOutput objects
+        # Count tokens from RequestOutput objects.
+        # Sum across ALL outputs per request (n>1 or beam search produces multiple).
         input_token_count = sum(len(o.prompt_token_ids) for o in outputs)
-        output_token_count = sum(len(o.outputs[0].token_ids) for o in outputs if o.outputs)
+        output_token_count = sum(
+            len(out.token_ids) for o in outputs if o.outputs for out in o.outputs
+        )
 
         logger.debug(
             "vLLM inference complete: %d total tokens (in=%d, out=%d) in %.2fs",
@@ -320,6 +325,11 @@ class VLLMBackend:
                 attn = engine.attention
                 if attn.backend is not None:
                     kwargs["attention_backend"] = attn.backend
+                _set("flash_attn_version", attn.flash_attn_version)
+                _set(
+                    "flash_attn_max_num_splits_for_cuda_graph",
+                    attn.flash_attn_max_num_splits_for_cuda_graph,
+                )
                 _set("use_prefill_decode_attention", attn.use_prefill_decode_attention)
                 _set("use_prefill_query_quantization", attn.use_prefill_query_quantization)
                 _set("use_cudnn_prefill", attn.use_cudnn_prefill)
@@ -406,6 +416,8 @@ class VLLMBackend:
         if beam_cfg.early_stopping is not None:
             kwargs["early_stopping"] = beam_cfg.early_stopping
         kwargs["max_tokens"] = beam_cfg.max_tokens or config.max_output_tokens
+        if config.decoder.min_p is not None:
+            kwargs["min_p"] = config.decoder.min_p
         if beam_cfg.model_extra:
             kwargs.update(beam_cfg.model_extra)
         return BeamSearchParams(**kwargs)

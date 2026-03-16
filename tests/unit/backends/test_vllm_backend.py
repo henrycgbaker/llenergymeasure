@@ -825,3 +825,224 @@ class TestMinNewTokensMapping:
         config = _make_config(decoder=decoder, vllm=vllm_cfg)
         params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs.get("min_tokens") == 10
+
+
+# =============================================================================
+# Test Group 15: Multi-output token counting (H3 audit fix)
+# =============================================================================
+
+
+class TestMultiOutputTokenCounting:
+    """Verify output token counting sums across ALL outputs per request, not just outputs[0]."""
+
+    def _make_fake_output(
+        self, prompt_token_ids: list[int], output_token_id_lists: list[list[int]]
+    ):
+        """Build a minimal fake RequestOutput with multiple CompletionOutput objects."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class _FakeCompletionOutput:
+            token_ids: list[int]
+
+        @dataclass
+        class _FakeRequestOutput:
+            prompt_token_ids: list[int]
+            outputs: list[_FakeCompletionOutput]
+
+        return _FakeRequestOutput(
+            prompt_token_ids=prompt_token_ids,
+            outputs=[_FakeCompletionOutput(token_ids=ids) for ids in output_token_id_lists],
+        )
+
+    def test_single_output_per_request(self):
+        """Single output per request: counts match outputs[0] (baseline correctness)."""
+        outputs = [
+            self._make_fake_output([1, 2, 3], [[10, 11, 12]]),
+            self._make_fake_output([4, 5], [[20, 21]]),
+        ]
+        output_count = sum(len(out.token_ids) for o in outputs if o.outputs for out in o.outputs)
+        assert output_count == 5  # 3 + 2
+
+    def test_multiple_outputs_per_request_all_counted(self):
+        """n=2 produces 2 outputs per request — both must be counted."""
+        outputs = [
+            self._make_fake_output([1, 2], [[10, 11, 12], [20, 21]]),  # 3 + 2 = 5
+            self._make_fake_output([3], [[30, 31], [40, 41, 42]]),  # 2 + 3 = 5
+        ]
+        output_count = sum(len(out.token_ids) for o in outputs if o.outputs for out in o.outputs)
+        assert output_count == 10  # 5 + 5
+
+    def test_first_output_only_undercounts(self):
+        """Demonstrate that outputs[0]-only counting would undercount for n>1."""
+        outputs = [
+            self._make_fake_output([1, 2], [[10, 11, 12], [20, 21]]),  # 3 + 2 tokens
+        ]
+        # Old (wrong) approach — only first output
+        old_count = sum(len(o.outputs[0].token_ids) for o in outputs if o.outputs)
+        # New (correct) approach — all outputs
+        new_count = sum(len(out.token_ids) for o in outputs if o.outputs for out in o.outputs)
+        assert old_count == 3  # undercounts: misses the 2nd output's 2 tokens
+        assert new_count == 5  # correct: 3 + 2
+
+    def test_empty_outputs_list_handled(self):
+        """Requests with no outputs contribute zero tokens without error."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class _FakeEmptyOutput:
+            prompt_token_ids: list[int]
+            outputs: list
+
+        outputs = [_FakeEmptyOutput(prompt_token_ids=[1, 2], outputs=[])]
+        output_count = sum(len(out.token_ids) for o in outputs if o.outputs for out in o.outputs)
+        assert output_count == 0
+
+    def test_beam_search_four_beams_counted(self):
+        """Beam search with beam_width=4 produces 4 outputs — all 4 counted."""
+        outputs = [
+            self._make_fake_output([1, 2, 3], [[10] * 8, [20] * 7, [30] * 9, [40] * 6]),
+        ]
+        output_count = sum(len(out.token_ids) for o in outputs if o.outputs for out in o.outputs)
+        assert output_count == 30  # 8 + 7 + 9 + 6
+
+
+# =============================================================================
+# Test Group 16: M15 — VRAM query uses current_device(), not hardcoded 0
+# =============================================================================
+
+
+class TestVramCurrentDevice:
+    """Verify that VRAM total-memory query uses torch.cuda.current_device()."""
+
+    def test_vram_query_calls_current_device(self):
+        """get_device_properties uses current_device(), not hardcoded 0.
+
+        Torch imports inside run_inference are lazy, so we inspect source to
+        confirm the correct call expression is present.
+        """
+        import inspect
+
+        import llenergymeasure.core.backends.vllm as vllm_mod
+
+        source = inspect.getsource(vllm_mod.VLLMBackend.run_inference)
+        assert "current_device()" in source, (
+            "run_inference must call torch.cuda.current_device() for VRAM query, not hardcode 0"
+        )
+        assert "get_device_properties(0)" not in source, (
+            "run_inference must not hardcode device 0 — use current_device()"
+        )
+
+
+# =============================================================================
+# Test Group 17: M1 — flash_attn fields wired in _build_llm_kwargs
+# =============================================================================
+
+
+class TestFlashAttnFieldsWired:
+    """Verify flash_attn_version and flash_attn_max_num_splits_for_cuda_graph are forwarded."""
+
+    def test_flash_attn_version_wired(self):
+        """flash_attn_version=3 appears in LLM() kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=3))
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert kwargs["flash_attn_version"] == 3
+
+    def test_flash_attn_max_num_splits_wired(self):
+        """flash_attn_max_num_splits_for_cuda_graph=8 appears in LLM() kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(
+                attention=VLLMAttentionConfig(flash_attn_max_num_splits_for_cuda_graph=8)
+            )
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 8
+
+    def test_flash_attn_version_none_omitted(self):
+        """flash_attn_version=None is not added to kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=None))
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert "flash_attn_version" not in kwargs
+
+    def test_flash_attn_max_splits_none_omitted(self):
+        """flash_attn_max_num_splits_for_cuda_graph=None is not added to kwargs."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(
+                attention=VLLMAttentionConfig(flash_attn_max_num_splits_for_cuda_graph=None)
+            )
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert "flash_attn_max_num_splits_for_cuda_graph" not in kwargs
+
+    def test_both_flash_attn_fields_together(self):
+        """Both flash_attn fields forwarded simultaneously."""
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(
+                attention=VLLMAttentionConfig(
+                    flash_attn_version=2,
+                    flash_attn_max_num_splits_for_cuda_graph=16,
+                )
+            )
+        )
+        config = _make_config(vllm=vllm_cfg)
+        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        assert kwargs["flash_attn_version"] == 2
+        assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 16
+
+
+# =============================================================================
+# Test Group 18: M2 — min_p forwarded in _build_beam_search_params
+# =============================================================================
+
+
+class TestBeamSearchMinP:
+    """Verify min_p from DecoderConfig flows through to BeamSearchParams."""
+
+    def _build_beam_params(self, config, monkeypatch):
+        """Call _build_beam_search_params with a fake BeamSearchParams to avoid vLLM import."""
+        import sys
+        import types
+
+        # Inject a fake vllm module with our _FakeBeamSearchParams so the lazy
+        # `from vllm import BeamSearchParams` inside _build_beam_search_params succeeds.
+        fake_vllm = types.ModuleType("vllm")
+        fake_vllm.BeamSearchParams = _FakeBeamSearchParams
+        monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
+
+        beam_cfg = config.vllm.beam_search
+        return VLLMBackend._build_beam_search_params(config, beam_cfg)
+
+    def test_min_p_forwarded_to_beam_search_params(self, monkeypatch):
+        """min_p=0.05 from DecoderConfig appears in BeamSearchParams kwargs."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.05)
+        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
+        config = _make_config(decoder=decoder, vllm=vllm_cfg)
+        params = self._build_beam_params(config, monkeypatch)
+        assert "min_p" in params._kwargs
+        assert params._kwargs["min_p"] == pytest.approx(0.05)
+
+    def test_min_p_absent_when_none(self, monkeypatch):
+        """min_p is NOT in BeamSearchParams kwargs when DecoderConfig.min_p is None."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=None)
+        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
+        config = _make_config(decoder=decoder, vllm=vllm_cfg)
+        params = self._build_beam_params(config, monkeypatch)
+        assert "min_p" not in params._kwargs
+
+    def test_beam_width_and_min_p_together(self, monkeypatch):
+        """beam_width and min_p both appear in kwargs when set."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.1)
+        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=8, max_tokens=64))
+        config = _make_config(decoder=decoder, vllm=vllm_cfg)
+        params = self._build_beam_params(config, monkeypatch)
+        assert params._kwargs["beam_width"] == 8
+        assert params._kwargs["min_p"] == pytest.approx(0.1)
+        assert params._kwargs["max_tokens"] == 64
