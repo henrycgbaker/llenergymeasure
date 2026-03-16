@@ -9,12 +9,15 @@ Key design decisions (locked in .product/decisions/experiment-isolation.md):
 - daemon=False: clean CUDA teardown if parent exits unexpectedly (CP-4)
 - Pipe-only IPC: ExperimentResult fits in Pipe buffer for M2 experiment sizes
 - SIGKILL on timeout: SIGTERM may be ignored by hung CUDA operations
+- Process group kill: worker calls os.setpgrp() to become group leader so all
+  descendant processes (vLLM workers, MPI ranks, etc.) are killed together
 """
 
 from __future__ import annotations
 
 import contextlib
 import multiprocessing
+import os
 import signal
 import sys
 import threading
@@ -31,7 +34,13 @@ if TYPE_CHECKING:
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
-__all__ = ["StudyRunner", "_calculate_timeout", "_run_experiment_worker", "_save_and_record"]
+__all__ = [
+    "StudyRunner",
+    "_calculate_timeout",
+    "_kill_process_group",
+    "_run_experiment_worker",
+    "_save_and_record",
+]
 
 
 # =============================================================================
@@ -70,6 +79,17 @@ def _save_and_record(
         manifest.mark_completed(config_hash, cycle, result_file="")
 
 
+def _kill_process_group(pid: int, sig: int) -> None:
+    """Send signal to the entire process group rooted at pid.
+
+    Uses os.killpg so that all descendant processes (vLLM workers, MPI ranks, etc.)
+    receive the signal, not just the parent. Errors are suppressed because the
+    process group may already be dead by the time this is called.
+    """
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pid, sig)
+
+
 # =============================================================================
 # Worker function (runs inside child process)
 # =============================================================================
@@ -93,6 +113,10 @@ def _run_experiment_worker(
         On failure: sends {"type": ..., "message": ..., "traceback": ...} via conn.
         Progress events are put to progress_queue for the consumer thread.
     """
+    # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
+    # share this PGID. The parent can then kill the whole group via os.killpg().
+    os.setpgrp()
+
     # parent owns SIGINT; child ignores it
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -219,7 +243,7 @@ def _collect_result(
     if p.is_alive():
         # Timed out — kill with SIGKILL
         # SIGKILL: SIGTERM may be ignored by hung CUDA operations
-        p.kill()
+        _kill_process_group(p.pid, signal.SIGKILL)
         p.join()
         return {
             "type": "TimeoutError",
@@ -364,11 +388,13 @@ class StudyRunner:
                     "(Ctrl+C again to force)..."
                 )
                 if self._active_process is not None and self._active_process.is_alive():
-                    self._active_process.terminate()  # SIGTERM — gentle first attempt
+                    _kill_process_group(
+                        self._active_process.pid, signal.SIGTERM
+                    )  # SIGTERM — gentle first attempt
             else:
                 print("\nForce-killing experiment subprocess...")
                 if self._active_process is not None and self._active_process.is_alive():
-                    self._active_process.kill()  # SIGKILL
+                    _kill_process_group(self._active_process.pid, signal.SIGKILL)  # SIGKILL
 
         original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
 
@@ -500,7 +526,7 @@ class StudyRunner:
         if self._interrupt_event.is_set() and p.is_alive():
             p.join(timeout=2)  # 2s grace after SIGTERM
             if p.is_alive():
-                p.kill()
+                _kill_process_group(p.pid, signal.SIGKILL)
                 p.join()
 
         self._active_process = None
