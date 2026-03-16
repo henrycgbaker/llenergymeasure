@@ -941,6 +941,58 @@ def test_docker_error_caught_and_converted_to_failure_dict(
 
 
 # =============================================================================
+# H5: recv-before-join ordering (pipe deadlock prevention)
+# =============================================================================
+
+
+def test_recv_before_join_ordering(study_config: StudyConfig) -> None:
+    """parent_conn.poll()/recv() is called before p.join() in _run_one().
+
+    Verifies that the pipe is drained BEFORE p.join() is called, preventing
+    the classic deadlock where a large pickled result (>64KB) fills the OS pipe
+    buffer and causes child to block on send() while parent blocks in join().
+    """
+    manifest = MagicMock()
+    fake_result = {"status": "ok"}
+
+    call_order: list[str] = []
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+    parent_conn = ctx.Pipe.return_value[0]
+
+    # Track call order between poll/recv and join
+    original_poll = parent_conn.poll.side_effect
+    original_join = proc.join.side_effect
+
+    def track_poll(*args, **kwargs):
+        call_order.append("poll")
+        return True  # data is available
+
+    def track_recv(*args, **kwargs):
+        call_order.append("recv")
+        return fake_result
+
+    def track_join(*args, **kwargs):
+        call_order.append("join")
+
+    parent_conn.poll.side_effect = track_poll
+    parent_conn.recv.side_effect = track_recv
+    proc.join.side_effect = track_join
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-recv-join"))
+        runner.run()
+
+    # poll (drain) must appear before at least one join call
+    assert "poll" in call_order, "parent_conn.poll() was never called"
+    assert "join" in call_order, "p.join() was never called"
+    first_poll = call_order.index("poll")
+    first_join = call_order.index("join")
+    assert first_poll < first_join, f"poll() must happen before join() — got order: {call_order}"
+
+
+# =============================================================================
 # Pipe direction regression test
 # =============================================================================
 
