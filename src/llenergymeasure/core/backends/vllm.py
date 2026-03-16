@@ -367,6 +367,12 @@ class VLLMBackend:
             if decoder.min_p is not None:
                 kwargs["min_p"] = decoder.min_p
 
+        # Map universal decoder.min_new_tokens to vLLM's min_tokens.
+        # This is placed before vllm_cfg overrides so that vllm.sampling.min_tokens
+        # can override the universal mapping if both are set.
+        if decoder.min_new_tokens is not None:
+            kwargs["min_tokens"] = decoder.min_new_tokens
+
         # Apply vLLM-specific sampling overrides
         if vllm_cfg is not None and vllm_cfg.sampling is not None:
             sampling = vllm_cfg.sampling
