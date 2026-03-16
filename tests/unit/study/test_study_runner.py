@@ -969,3 +969,45 @@ def test_pipe_direction_parent_reads_child_writes() -> None:
     finally:
         conn1.close()
         conn2.close()
+
+
+# =============================================================================
+# Pipe FD leak fix (C4)
+# =============================================================================
+
+
+def test_parent_conn_closed_after_collect_result(study_config: StudyConfig) -> None:
+    """parent_conn.close() is called after _collect_result returns (C4 FD leak fix).
+
+    The write-end (child_conn) is closed before p.start(); the read-end
+    (parent_conn) must be closed after result collection to avoid leaking
+    a file descriptor on every experiment.
+    """
+    manifest = MagicMock()
+    fake_result = {"status": "ok"}
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+    parent_conn = ctx.Pipe.return_value[0]
+
+    close_called_after_collect: list[bool] = []
+
+    def patched_collect(p, conn, config, timeout):
+        # At this point close must NOT have been called yet
+        close_called_after_collect.append(parent_conn.close.called)
+        return fake_result
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.runner._collect_result", side_effect=patched_collect),
+    ):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-fd-leak"))
+        runner.run()
+
+    # close() must have been called exactly once on parent_conn
+    parent_conn.close.assert_called_once()
+
+    # close() must NOT have been called before _collect_result returned
+    assert close_called_after_collect == [False], (
+        "parent_conn.close() was called before _collect_result returned"
+    )

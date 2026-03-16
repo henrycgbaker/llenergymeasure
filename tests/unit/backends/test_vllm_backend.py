@@ -789,3 +789,39 @@ class TestBeamSearchParams:
 
         with pytest.raises(pydantic.ValidationError):
             VLLMBeamSearchConfig(beam_width=0)
+
+
+# =============================================================================
+# Test Group 14: min_new_tokens -> min_tokens mapping (H4)
+# =============================================================================
+
+
+class TestMinNewTokensMapping:
+    def test_min_new_tokens_maps_to_min_tokens_sampling(self):
+        """decoder.min_new_tokens=5 flows through to kwargs['min_tokens']=5 (sampling path)."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=5)
+        config = _make_config(decoder=decoder)
+        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        assert params._kwargs.get("min_tokens") == 5
+
+    def test_min_new_tokens_maps_to_min_tokens_greedy(self):
+        """decoder.min_new_tokens=3 flows through to kwargs['min_tokens']=3 (greedy path)."""
+        decoder = DecoderConfig(temperature=0.0, do_sample=False, min_new_tokens=3)
+        config = _make_config(decoder=decoder)
+        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        assert params._kwargs.get("min_tokens") == 3
+
+    def test_min_new_tokens_absent_when_none(self):
+        """When decoder.min_new_tokens is None, min_tokens is NOT in kwargs."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=None)
+        config = _make_config(decoder=decoder)
+        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        assert "min_tokens" not in params._kwargs
+
+    def test_vllm_sampling_min_tokens_overrides_decoder_min_new_tokens(self):
+        """vllm.sampling.min_tokens=10 overrides decoder.min_new_tokens=5 (backend-specific wins)."""
+        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=5)
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(min_tokens=10))
+        config = _make_config(decoder=decoder, vllm=vllm_cfg)
+        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        assert params._kwargs.get("min_tokens") == 10
