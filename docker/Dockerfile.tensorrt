@@ -1,107 +1,45 @@
 # syntax=docker/dockerfile:1
-# =============================================================================
-# TensorRT-LLM Backend: High-performance compiled inference
-# =============================================================================
-# TensorRT-LLM backend for maximum throughput with compiled engines
+# ============================================================
+# TensorRT-LLM backend - llenergymeasure on NGC release container
+# ============================================================
+# Uses official NVIDIA NGC TensorRT-LLM release as base.
+# TRT-LLM, PyTorch, CUDA, MPI, NCCL all pre-installed by NVIDIA.
 #
 # Usage:
-#   docker build -f docker/Dockerfile.tensorrt \
-#     --build-arg BASE_IMAGE=llenergymeasure-base:latest \
-#     -t llenergymeasure:tensorrt .
+#   docker build -f docker/Dockerfile.tensorrt -t llenergymeasure-tensorrt .
 #
-# Note: TensorRT-LLM requires NVIDIA GPU with compute capability >= 8.0 (Ampere+)
-# and installs its own PyTorch version for CUDA compatibility.
-# =============================================================================
+# Version pin policy: update TRTLLM_VERSION on each milestone release.
+# Must be compatible with pyproject.toml tensorrt-llm>=0.12 constraint.
+# ============================================================
+ARG TRTLLM_VERSION=0.21.0
 
-ARG BASE_IMAGE=llenergymeasure-base:latest
+FROM nvcr.io/nvidia/tensorrt-llm/release:${TRTLLM_VERSION}
 
-# ============================================================================
-# Stage 1: Builder - Install TensorRT-LLM and dependencies
-# ============================================================================
-FROM ${BASE_IMAGE} AS builder
+# Reset upstream ENTRYPOINT - NGC container may set one
+# that conflicts with DockerRunner's command override pattern.
+ENTRYPOINT []
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install MPI libraries required by TensorRT-LLM for multi-GPU execution
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libopenmpi3 openmpi-bin openmpi-common \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-WORKDIR /build
-
-# Install TensorRT-LLM (brings its own compatible PyTorch and CUDA libraries)
-# Use 0.21.x series - compatible with CUDA 12.4 base image
-# Note: tensorrt-llm has strict CUDA version requirements
-# Requires NVIDIA PyPI index for the actual wheel download
-# Fix dependency versions: onnx 1.16.0 for graphsurgeon, cuda-python 12.4.0 for CUDA bindings
-RUN uv pip install --system --no-cache --extra-index-url https://pypi.nvidia.com/ "tensorrt-llm>=0.21.0,<1.0.0" \
-    && uv pip install --system --no-cache "onnx==1.16.0" "cuda-python==12.4.0"
-
-# Copy project files
+# Install llenergymeasure from source.
+# --no-deps on the package itself avoids re-installing torch/tensorrt-llm
+# which are already in the NGC image with correct CUDA bindings.
+# Then install remaining runtime deps not in the NGC image.
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-
-# Install the package with tensorrt extras (--no-deps to avoid torch conflict)
-# Then install remaining dependencies for HuggingFace compatibility
-# Includes: peft (LoRA), sentencepiece (Llama/Qwen tokenizers), safetensors (model loading)
 RUN uv pip install --system --no-cache --no-deps ".[tensorrt]" \
     && uv pip install --system --no-cache \
-        pydantic loguru typer codecarbon datasets schedule python-dotenv \
-        transformers accelerate huggingface_hub sentencepiece peft safetensors
+        pydantic typer pyyaml platformdirs nvidia-ml-py numpy \
+        pyarrow tqdm codecarbon datasets python-dotenv
 
-# ============================================================================
-# Stage 2: Runtime - Minimal production image
-# ============================================================================
-FROM ${BASE_IMAGE} AS runtime
-
-# Install MPI libraries required by TensorRT-LLM for multi-GPU execution
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libopenmpi3 openmpi-bin openmpi-common \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+# HuggingFace cache - writable for non-root users
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
 # TensorRT engine cache directory
 ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines
 RUN mkdir -p ${TRT_ENGINE_CACHE} && chmod 777 ${TRT_ENGINE_CACHE}
 
-# Use entrypoint with PUID/PGID support
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["lem", "--help"]
-
-# ============================================================================
-# Stage 3: Dev - For development with source mounting
-# ============================================================================
-FROM ${BASE_IMAGE} AS dev
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Install MPI libraries required by TensorRT-LLM for multi-GPU execution
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libopenmpi3 openmpi-bin openmpi-common \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install TensorRT-LLM (brings its own PyTorch)
-# Use 0.21.x series - compatible with CUDA 12.4 base image
-# Fix dependency versions: onnx 1.16.0 for graphsurgeon, cuda-python 12.4.0 for CUDA bindings
-RUN uv pip install --system --no-cache --extra-index-url https://pypi.nvidia.com/ "tensorrt-llm>=0.21.0,<1.0.0" \
-    && uv pip install --system --no-cache "onnx==1.16.0" "cuda-python==12.4.0"
-
-# Copy project files and install with tensorrt + dev extras
-# (--no-deps to avoid torch conflict, then install remaining deps)
-COPY pyproject.toml uv.lock README.md ./
-COPY src/ ./src/
-RUN uv pip install --system --no-cache --no-deps ".[tensorrt]" \
-    && uv pip install --system --no-cache \
-        pydantic loguru typer codecarbon datasets schedule python-dotenv \
-        transformers accelerate huggingface_hub sentencepiece peft safetensors \
-        pytest pytest-cov ruff mypy pre-commit
-
-# TensorRT engine cache directory
-ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines
-RUN mkdir -p ${TRT_ENGINE_CACHE}
-
-# Source can be mounted at runtime for editable install
-ENTRYPOINT []
-CMD ["/bin/bash"]
+CMD ["python3", "-m", "llenergymeasure.infra.container_entrypoint"]

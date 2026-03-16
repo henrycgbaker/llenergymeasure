@@ -8,7 +8,7 @@
 #   docker build -f docker/Dockerfile.base -t llenergymeasure-base:latest .
 # =============================================================================
 
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS base
+FROM nvidia/cuda:12.6.2-runtime-ubuntu22.04 AS base
 
 # System dependencies shared by all backends
 # gosu: for dropping privileges in entrypoint (PUID/PGID support)
