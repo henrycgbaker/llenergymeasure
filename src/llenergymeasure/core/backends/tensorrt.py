@@ -445,12 +445,14 @@ class TensorRTBackend:
         # Scheduler config
         if trt.scheduler is not None:
             try:
-                from tensorrt_llm.llmapi import SchedulerConfig
+                from tensorrt_llm.llmapi import CapacitySchedulerPolicy, SchedulerConfig
 
                 sc = trt.scheduler
                 sc_kwargs: dict[str, Any] = {}
                 if sc.capacity_scheduling_policy is not None:
-                    sc_kwargs["capacity_scheduling_policy"] = sc.capacity_scheduling_policy
+                    sc_kwargs["capacity_scheduling_policy"] = CapacitySchedulerPolicy[
+                        sc.capacity_scheduling_policy
+                    ]
                 if sc_kwargs:
                     kwargs["scheduler_config"] = SchedulerConfig(**sc_kwargs)
             except ImportError:
