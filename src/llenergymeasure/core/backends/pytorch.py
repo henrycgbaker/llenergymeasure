@@ -243,16 +243,10 @@ class PyTorchBackend:
         Args:
             model: Tuple of (model, tokenizer) from load_model().
         """
-        import torch
+        from llenergymeasure.core.backends._helpers import cleanup_model
 
         hf_model, _tokenizer = model
-        del hf_model
-        try:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                logger.debug("CUDA cache cleared")
-        except Exception:
-            logger.debug("CUDA cleanup failed", exc_info=True)
+        cleanup_model(hf_model, use_gc=False)
         logger.debug("Model cleanup complete")
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
