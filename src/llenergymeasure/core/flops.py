@@ -102,7 +102,7 @@ def _count_params_from_config(model_name: str) -> int | None:
         # Non-embedding params: attention (Q,K,V,O) + FFN (up,down) per layer
         attn = 4 * h * h * layers
         ffn = 2 * h * intermediate * layers
-        return attn + ffn
+        return int(attn + ffn)
     except Exception:
         return None
 
@@ -232,7 +232,9 @@ class FlopsEstimator:
         pytorch_cfg = config.pytorch
         if pytorch_cfg and (pytorch_cfg.load_in_4bit or pytorch_cfg.load_in_8bit):
             # BNB always dequantizes to FP16 (or bfloat16 for 4bit compute dtype)
-            return pytorch_cfg.bnb_4bit_compute_dtype if pytorch_cfg.load_in_4bit else "fp16"
+            if pytorch_cfg.load_in_4bit and pytorch_cfg.bnb_4bit_compute_dtype:
+                return pytorch_cfg.bnb_4bit_compute_dtype
+            return "fp16"
 
         # Use the config's precision field
         precision = config.precision.lower()

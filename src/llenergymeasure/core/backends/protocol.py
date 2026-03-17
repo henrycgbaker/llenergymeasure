@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.experiment import ExperimentResult
 from llenergymeasure.domain.metrics import WarmupResult
 
 
@@ -64,13 +63,3 @@ class BackendPlugin(Protocol):
     def validate_config(self, config: ExperimentConfig) -> list[str]:
         """Validate config against hardware capabilities. Returns error strings (empty = valid)."""
         ...
-
-
-@runtime_checkable
-class InferenceBackend(Protocol):
-    """Deprecated: use BackendPlugin. Kept during Phase 27 harness wiring."""
-
-    @property
-    def name(self) -> str: ...
-
-    def run(self, config: ExperimentConfig) -> ExperimentResult: ...

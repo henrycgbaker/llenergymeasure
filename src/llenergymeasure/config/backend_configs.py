@@ -153,7 +153,7 @@ class PyTorchConfig(BaseModel):
     device_map: str | None = Field(
         default=None, description="Device placement strategy (None -> 'auto')"
     )
-    max_memory: dict | None = Field(
+    max_memory: dict[str | int, str] | None = Field(
         default=None,
         description="Per-device memory limits, e.g. {0: '10GiB', 'cpu': '50GiB'}",
     )

@@ -15,7 +15,6 @@ hosts without vLLM or CUDA installed.
 from __future__ import annotations
 
 import contextlib
-import gc
 import logging
 from typing import Any
 
@@ -109,9 +108,10 @@ class VLLMBackend:
             logger.debug("Running vLLM warmup (1 prompt, 1 token)...")
             from vllm import SamplingParams as _SP
 
-            warmup_params = _SP(max_tokens=1, temperature=0.0)
+            from llenergymeasure.core.backends._helpers import warmup_single_token
+
             prompts = self._prepare_prompts(config)
-            llm.generate(prompts[:1], warmup_params)
+            warmup_single_token(llm, prompts, _SP, max_tokens=1)
             logger.debug("vLLM warmup complete")
 
         return WarmupResult(
@@ -254,17 +254,10 @@ class VLLMBackend:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        import torch
+        from llenergymeasure.core.backends._helpers import cleanup_model
 
         llm, _sampling_params = model
-        del llm
-        gc.collect()
-        try:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                logger.debug("CUDA cache cleared")
-        except Exception:
-            logger.debug("CUDA cleanup failed", exc_info=True)
+        cleanup_model(llm)
         logger.debug("vLLM model cleanup complete")
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:

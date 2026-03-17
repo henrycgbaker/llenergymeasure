@@ -2,10 +2,10 @@
 
 import importlib.util
 
-from llenergymeasure.core.backends.protocol import BackendPlugin, InferenceBackend
+from llenergymeasure.core.backends.protocol import BackendPlugin
 from llenergymeasure.exceptions import BackendError
 
-__all__ = ["BackendPlugin", "InferenceBackend", "detect_default_backend", "get_backend"]
+__all__ = ["BackendPlugin", "detect_default_backend", "get_backend"]
 
 
 def detect_default_backend() -> str:

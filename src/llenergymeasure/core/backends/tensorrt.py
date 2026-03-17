@@ -17,7 +17,6 @@ engine is ready.
 
 from __future__ import annotations
 
-import gc
 import hashlib
 import json
 import logging
@@ -161,9 +160,10 @@ class TensorRTBackend:
             logger.debug("Running TRT-LLM warmup (1 prompt, 1 token)...")
             from tensorrt_llm import SamplingParams as _SP
 
-            warmup_params = _SP(max_new_tokens=1, temperature=0.0)
+            from llenergymeasure.core.backends._helpers import warmup_single_token
+
             prompts = self._prepare_prompts(config)
-            llm.generate(prompts[:1], warmup_params)
+            warmup_single_token(llm, prompts, _SP, max_new_tokens=1)
             logger.debug("TRT-LLM warmup complete")
 
         return WarmupResult(
@@ -279,17 +279,10 @@ class TensorRTBackend:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        llm, _sampling_params = model
-        del llm
-        gc.collect()
-        try:
-            import torch
+        from llenergymeasure.core.backends._helpers import cleanup_model
 
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                logger.debug("CUDA cache cleared")
-        except Exception:
-            logger.debug("CUDA cleanup failed", exc_info=True)
+        llm, _sampling_params = model
+        cleanup_model(llm)
         logger.debug("TRT-LLM model cleanup complete")
 
     # -------------------------------------------------------------------------

@@ -77,16 +77,13 @@ def _patch_backend(monkeypatch: Any, mock_result: Any) -> None:
     """Patch get_backend and MeasurementHarness to return a pre-built result."""
     import llenergymeasure.core.backends as backends_module
     import llenergymeasure.core.harness as harness_module
-    from tests.fakes import FakeInferenceBackend
 
-    fake_backend = FakeInferenceBackend(result=mock_result)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: fake_backend)
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: MagicMock())
     monkeypatch.setattr(
         harness_module.MeasurementHarness,
         "run",
         lambda self, backend, config, **kw: mock_result,
     )
-    return fake_backend
 
 
 # =============================================================================

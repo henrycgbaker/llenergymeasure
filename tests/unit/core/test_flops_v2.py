@@ -568,8 +568,8 @@ def test_get_compute_precision_bnb_4bit_no_compute_dtype() -> None:
     mock_config.pytorch = mock_pytorch
 
     result = estimator._get_compute_precision(mock_config)
-    # Returns bnb_4bit_compute_dtype directly (None in this case)
-    assert result is None
+    # BNB defaults to FP16 when no explicit compute dtype is set
+    assert result == "fp16"
 
 
 # =============================================================================

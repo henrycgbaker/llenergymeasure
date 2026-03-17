@@ -73,7 +73,7 @@ class PyTorchBackend:
             mode = config.pytorch.torch_compile_mode or "default"
             backend = config.pytorch.torch_compile_backend or "inductor"
             try:
-                model = _torch.compile(model, mode=mode, backend=backend)
+                model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
                 logger.debug("torch.compile applied (mode=%s, backend=%s)", mode, backend)
             except Exception as e:
                 logger.warning("torch.compile failed (non-fatal, continuing without): %s", e)
@@ -243,16 +243,10 @@ class PyTorchBackend:
         Args:
             model: Tuple of (model, tokenizer) from load_model().
         """
-        import torch
+        from llenergymeasure.core.backends._helpers import cleanup_model
 
         hf_model, _tokenizer = model
-        del hf_model
-        try:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                logger.debug("CUDA cache cleared")
-        except Exception:
-            logger.debug("CUDA cleanup failed", exc_info=True)
+        cleanup_model(hf_model, use_gc=False)
         logger.debug("Model cleanup complete")
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
@@ -263,7 +257,7 @@ class PyTorchBackend:
     # Private: model loading helpers
     # -------------------------------------------------------------------------
 
-    def _model_load_kwargs(self, config: ExperimentConfig) -> dict:
+    def _model_load_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build the full kwargs dict for AutoModelForCausalLM.from_pretrained().
 
         This is the P0 fix location: passthrough_kwargs and pytorch config
@@ -275,7 +269,7 @@ class PyTorchBackend:
         Returns:
             Dict of kwargs ready for from_pretrained().
         """
-        kwargs: dict = {
+        kwargs: dict[str, Any] = {
             "torch_dtype": self._precision_to_dtype(config.precision),
         }
 
@@ -302,7 +296,7 @@ class PyTorchBackend:
             if pt.load_in_4bit or pt.load_in_8bit:
                 from transformers import BitsAndBytesConfig
 
-                bnb_kwargs: dict = {}
+                bnb_kwargs: dict[str, Any] = {}
                 if pt.load_in_4bit:
                     bnb_kwargs["load_in_4bit"] = True
                     if pt.bnb_4bit_compute_dtype is not None:
@@ -339,7 +333,7 @@ class PyTorchBackend:
         return kwargs
 
     @staticmethod
-    def _precision_to_dtype(precision: str):
+    def _precision_to_dtype(precision: str) -> Any:
         """Map precision string to torch dtype."""
         import torch
 
@@ -354,14 +348,11 @@ class PyTorchBackend:
     # -------------------------------------------------------------------------
 
     def _prepare_prompts(self, config: ExperimentConfig) -> list[str]:
-        """Prepare prompts for inference.
+        """Prepare prompts using the dataset loader."""
+        from llenergymeasure.datasets.loader import load_prompts
 
-        M1 placeholder: generates simple synthetic prompts.
-        """
-        words_per_prompt = max(1, config.max_input_tokens // 4)
-        base_prompt = ("Hello, " * words_per_prompt).strip()
-        prompts = [base_prompt] * config.n
-        logger.debug("Prepared %d prompts (M1 placeholder)", config.n)
+        prompts = load_prompts(config)
+        logger.debug("Prepared %d prompts via dataset loader", len(prompts))
         return prompts
 
     def _run_batch(
@@ -370,7 +361,7 @@ class PyTorchBackend:
         tokenizer: Any,
         config: ExperimentConfig,
         batch: list[str],
-        generate_kwargs: dict,
+        generate_kwargs: dict[str, Any],
     ) -> tuple[int, int, float]:
         """Run a single batch through model.generate() and return (input_tokens, output_tokens, time_sec)."""
         import time
@@ -403,10 +394,10 @@ class PyTorchBackend:
         )
         return input_token_count, output_token_count, elapsed
 
-    def _build_generate_kwargs(self, config: ExperimentConfig) -> dict:
+    def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build generation kwargs from DecoderConfig and PyTorchConfig."""
         decoder = config.decoder
-        kwargs: dict = {
+        kwargs: dict[str, Any] = {
             "do_sample": decoder.do_sample,
             "temperature": decoder.temperature,
             "top_k": decoder.top_k,

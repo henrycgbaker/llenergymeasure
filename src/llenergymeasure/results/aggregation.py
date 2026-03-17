@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -123,7 +123,7 @@ def aggregate_results(
     raw_results: list[RawProcessResult],
     experiment_id: str,
     measurement_config_hash: str,
-    measurement_methodology: str = "total",
+    measurement_methodology: Literal["total", "steady_state", "windowed"] = "total",
     steady_state_window: tuple[float, float] | None = None,
     baseline_power_w: float | None = None,
     energy_adjusted_j: float | None = None,
