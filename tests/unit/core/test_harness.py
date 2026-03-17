@@ -603,3 +603,122 @@ def test_datetime_still_used_for_wall_clock(minimal_config):
     assert isinstance(result.end_time, dt), (
         f"end_time must be datetime, got {type(result.end_time)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Dropped field wiring tests — warmup_result, energy_per_device_j, multi_gpu
+# ---------------------------------------------------------------------------
+
+
+def test_harness_warmup_result_wired_to_experiment_result(minimal_config):
+    """warmup_result from backend.warmup() must reach ExperimentResult.warmup_result."""
+
+    class WarmupTrackingBackend(FakeBackend):
+        def warmup(self, config: Any, model: Any) -> WarmupResult:
+            return WarmupResult(
+                converged=True,
+                final_cv=0.05,
+                iterations_completed=3,
+                target_cv=0.01,
+                max_prompts=10,
+            )
+
+    backend = WarmupTrackingBackend()
+    harness = MeasurementHarness()
+
+    with (
+        _apply_patches(),
+        patch(
+            "llenergymeasure.core.harness.thermal_floor_wait",
+            return_value=15.0,
+        ),
+    ):
+        result = harness.run(backend, minimal_config)
+
+    assert result.warmup_result is not None
+    assert result.warmup_result.converged is True
+    assert result.warmup_result.final_cv == pytest.approx(0.05)
+    assert result.warmup_result.thermal_floor_wait_s == pytest.approx(15.0)
+
+
+def test_harness_per_gpu_j_wired_to_energy_per_device_j(minimal_config):
+    """per_gpu_j from EnergyMeasurement must reach ExperimentResult.energy_per_device_j and multi_gpu."""
+    from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
+
+    fake_energy_measurement = EnergyMeasurement(
+        total_j=150.0,
+        duration_sec=10.0,
+        per_gpu_j={0: 70.0, 1: 80.0},
+    )
+
+    mock_energy_backend = MagicMock()
+    mock_energy_backend.start_tracking.return_value = MagicMock()
+    mock_energy_backend.stop_tracking.return_value = fake_energy_measurement
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch("llenergymeasure.core.harness.collect_environment_snapshot", return_value=None),
+        patch("llenergymeasure.core.harness.measure_baseline_power", return_value=None),
+        patch(
+            "llenergymeasure.core.harness.select_energy_backend",
+            return_value=mock_energy_backend,
+        ),
+        patch("llenergymeasure.core.harness.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.core.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.core.harness._cuda_sync"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.core.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.core.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        result = harness.run(backend, minimal_config)
+
+    assert result.energy_per_device_j == [70.0, 80.0]
+    assert result.multi_gpu is not None
+    assert result.multi_gpu.num_gpus == 2
+    assert result.multi_gpu.energy_per_gpu_j == [70.0, 80.0]
+    assert result.multi_gpu.energy_total_j == pytest.approx(150.0)
+
+
+def test_harness_single_gpu_no_multi_gpu_metrics(minimal_config):
+    """Single-GPU per_gpu_j must populate energy_per_device_j but leave multi_gpu as None."""
+    from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
+
+    fake_energy_measurement = EnergyMeasurement(
+        total_j=100.0,
+        duration_sec=8.0,
+        per_gpu_j={0: 100.0},
+    )
+
+    mock_energy_backend = MagicMock()
+    mock_energy_backend.start_tracking.return_value = MagicMock()
+    mock_energy_backend.stop_tracking.return_value = fake_energy_measurement
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch("llenergymeasure.core.harness.collect_environment_snapshot", return_value=None),
+        patch("llenergymeasure.core.harness.measure_baseline_power", return_value=None),
+        patch(
+            "llenergymeasure.core.harness.select_energy_backend",
+            return_value=mock_energy_backend,
+        ),
+        patch("llenergymeasure.core.harness.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.core.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.core.harness._cuda_sync"),
+        patch("llenergymeasure.core.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.core.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.core.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        result = harness.run(backend, minimal_config)
+
+    assert result.energy_per_device_j == [100.0]
+    assert result.multi_gpu is None
