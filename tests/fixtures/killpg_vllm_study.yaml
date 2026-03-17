@@ -1,0 +1,25 @@
+# Minimal vLLM config for killpg verification testing.
+# Uses facebook/opt-125m (smallest vLLM-compatible model) for fast loading.
+# High prompt count ensures the experiment won't finish before we kill it.
+# Warmup and baseline disabled to reduce pre-experiment wait time.
+# IMPORTANT: runner forced to local via LLEM_RUNNER_VLLM=local env var in script.
+
+name: killpg-test
+
+experiments:
+  - model: facebook/opt-125m
+    backend: vllm
+    n: 1000
+    max_output_tokens: 128
+    warmup:
+      enabled: false
+    baseline:
+      enabled: false
+    vllm:
+      engine:
+        enforce_eager: true
+        gpu_memory_utilization: 0.3
+
+execution:
+  n_cycles: 1
+  cycle_order: sequential
