@@ -1,8 +1,8 @@
 # Backend Configuration
 
 `llenergymeasure` supports multiple inference backends. Each backend uses a different runtime
-and requires different setup. Currently active: **PyTorch** (local) and **vLLM** (Docker).
-Planned: TensorRT-LLM (M4), SGLang (M5).
+and requires different setup. Currently active: **PyTorch** (local), **vLLM** (Docker), and
+**TensorRT-LLM** (Docker). Planned: SGLang (M5).
 
 ---
 
@@ -12,7 +12,7 @@ Planned: TensorRT-LLM (M4), SGLang (M5).
 |---------|--------|--------------|--------|
 | PyTorch | local | Yes | Active |
 | vLLM | docker | Yes | Active |
-| TensorRT-LLM | docker | Yes | Planned (M4) |
+| TensorRT-LLM | docker | Yes | Active |
 | SGLang | docker | Yes | Planned (M5) |
 
 **Runner** determines where the backend executes: `local` runs directly on the host,
@@ -260,6 +260,146 @@ vllm:
 
 ---
 
+## TensorRT-LLM (Docker)
+
+A maximum-performance inference backend using NVIDIA TensorRT engine compilation. TRT-LLM
+compiles a model into an optimised TensorRT engine on first use, then runs inference
+against that engine. Engines are cached on disk so subsequent runs skip compilation.
+Requires Docker with NVIDIA Container Toolkit. See [Docker Setup Guide](docker-setup.md)
+for installation instructions.
+
+**Minimal config:**
+
+```yaml
+model: meta-llama/Llama-2-7b-hf
+backend: tensorrt
+runners:
+  tensorrt: docker
+```
+
+**With TensorRT-LLM-specific options:**
+
+```yaml
+model: meta-llama/Llama-2-7b-hf
+backend: tensorrt
+n: 50
+precision: bf16
+runners:
+  tensorrt: docker
+tensorrt:
+  tp_size: 2
+  max_batch_size: 8
+  dtype: bfloat16
+  quant:
+    quant_algo: W4A16_AWQ
+  build_cache:
+    max_cache_storage_gb: 256
+```
+
+> **Engine compilation on first run.** The first run with a given config will compile a
+> TensorRT engine (which may take several minutes). Subsequent runs with the same config
+> use the cached engine and start much faster.
+
+### Compile-Time Parameters
+
+These parameters define the engine shape and cannot be changed without recompiling.
+Changing any **[recompile]** field invalidates the cached engine and triggers a new build.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `max_batch_size` | int | 8 | Maximum batch size the engine accepts. **[recompile]** |
+| `tp_size` | int | 1 | Tensor parallel degree (number of GPUs). **[recompile]** |
+| `max_input_len` | int | 1024 | Maximum input sequence length in tokens. **[recompile]** |
+| `max_seq_len` | int | 2048 | Maximum total sequence length (input + output). **[recompile]** |
+| `dtype` | `float16` \| `bfloat16` | auto | Model compute dtype. TRT-LLM is optimised for fp16/bf16; fp32 is not supported. **[recompile]** |
+| `fast_build` | bool | false | Enable fast engine build mode (reduced optimisation, faster compilation). **[recompile]** |
+| `backend` | `trt` | `trt` | TRT-LLM internal backend selector. This is the `LLM(backend=...)` parameter, not the `llem` backend field. Leave unset unless you have a specific reason to override. |
+| `engine_path` | str | null | Path to a pre-compiled engine directory. When set, skips compilation and loads the engine directly. |
+
+### tensorrt.quant: Quantization
+
+Quantization is applied at engine compile time — changing `quant_algo` triggers a recompile.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `quant_algo` | see below | null (no quantization) | Quantization algorithm (native QuantAlgo enum name) |
+| `kv_cache_quant_algo` | `FP8` \| `INT8` | null | KV cache quantization algorithm |
+
+**Valid `quant_algo` values:**
+
+| Value | Description |
+|-------|-------------|
+| `FP8` | FP8 weight and activation quantization. Requires SM >= 8.9 (Ada Lovelace or Hopper). **Not supported on A100 (SM 8.0).** |
+| `INT8` | INT8 smooth quantization |
+| `W4A16_AWQ` | 4-bit AWQ weight quantization, FP16 activations |
+| `W4A16_GPTQ` | 4-bit GPTQ weight quantization, FP16 activations |
+| `W8A16` | 8-bit weight quantization, FP16 activations |
+| `W8A16_GPTQ` | 8-bit GPTQ weight quantization, FP16 activations |
+| `W4A8_AWQ` | 4-bit AWQ weight, INT8 activations |
+| `NO_QUANT` | Explicitly disable quantization |
+
+> **A100 note:** A100 (SM 8.0) does not support FP8. Valid A100 quantization options:
+> `INT8`, `W4A16_AWQ`, `W4A16_GPTQ`, `W8A16`, `W8A16_GPTQ`, `W4A8_AWQ`, `NO_QUANT`.
+
+### tensorrt.calib: PTQ Calibration
+
+Only relevant when `quant_algo` requires post-training quantization (PTQ) calibration
+(e.g. `INT8`, `W4A16_AWQ`).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `calib_batches` | int | 512 | Number of calibration batches |
+| `calib_dataset` | str | `cnn_dailymail` | Calibration dataset name or HuggingFace path |
+| `calib_max_seq_length` | int | 512 | Max sequence length for calibration samples |
+
+### tensorrt.kv_cache: KV Cache
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enable_block_reuse` | bool | false | Enable KV cache block reuse across requests |
+| `free_gpu_memory_fraction` | float [0.0, 1.0] | 0.9 | Fraction of free GPU memory to allocate for KV cache |
+| `max_tokens` | int | auto | Maximum total tokens in the KV cache |
+| `host_cache_size` | int | 0 | Host (CPU) cache size in bytes for KV cache offloading (0 = disabled) |
+
+### tensorrt.scheduler: Scheduler
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `capacity_scheduling_policy` | `GUARANTEED_NO_EVICT` \| `MAX_UTILIZATION` \| `STATIC_BATCH` | `GUARANTEED_NO_EVICT` | Scheduling capacity policy |
+
+**Policy descriptions:**
+- `GUARANTEED_NO_EVICT` — guarantees no request eviction; may reduce throughput
+- `MAX_UTILIZATION` — maximises GPU utilisation; may evict requests under memory pressure
+- `STATIC_BATCH` — fixed batch size; useful for reproducible benchmarking
+
+### tensorrt.build_cache: Engine Build Cache
+
+Engine caching is enabled by default even without an explicit `build_cache:` section.
+Compiled engines are stored in `~/.cache/tensorrt_llm` and reused across runs.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `cache_root` | str | `~/.cache/tensorrt_llm` | Root directory for engine cache storage |
+| `max_records` | int | 10 | Maximum number of cached engine records |
+| `max_cache_storage_gb` | float | 256 | Maximum total cache size in GB |
+
+### tensorrt.sampling: TRT-LLM-Specific Sampling
+
+These are TRT-LLM-specific extensions to `SamplingParams`. Universal sampling parameters
+(temperature, top_p, top_k, repetition_penalty) live in `decoder:` and are shared across
+all backends.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `min_tokens` | int | 0 | Minimum output tokens before EOS is allowed |
+| `n` | int | 1 | Number of output sequences per prompt |
+| `ignore_eos` | bool | false | Continue generating past EOS token (forces full `max_output_tokens` generation) |
+| `return_perf_metrics` | bool | false | Return TRT-LLM internal performance metrics in output |
+
+For advanced TRT-LLM parameters, see the [TensorRT-LLM documentation](https://nvidia.github.io/TensorRT-LLM/).
+
+---
+
 ## Switching Between Backends
 
 Change the `backend:` field and add the required runner config. The model and measurement
@@ -283,9 +423,19 @@ runners:
   vllm: docker
 ```
 
+```yaml
+# Same experiment — TensorRT-LLM (Docker)
+model: gpt2
+backend: tensorrt
+n: 100
+precision: bf16
+runners:
+  tensorrt: docker
+```
+
 Changing `backend:` switches the inference engine. Backend-specific sections (`pytorch:`,
-`vllm:`) are ignored when not running that backend. Universal parameters (`n`, `precision`,
-`decoder:`, etc.) apply to all backends.
+`vllm:`, `tensorrt:`) are ignored when not running that backend. Universal parameters (`n`,
+`precision`, `decoder:`, etc.) apply to all backends.
 
 ---
 
@@ -386,11 +536,24 @@ These parameters live in `ExperimentConfig` and are shared across all backends:
 | `vllm.sampling.frequency_penalty` | N/A | Yes | N/A | Frequency penalty |
 | `vllm.beam_search.beam_width` | N/A | Yes | N/A | vLLM beam search |
 
-### TensorRT-LLM Parameters (Planned — M4)
+### TensorRT-LLM-Specific Parameters
 
 | Parameter | PyTorch | vLLM | TensorRT-LLM | Notes |
 |-----------|---------|------|--------------|-------|
 | `tensorrt.max_batch_size` | N/A | N/A | Yes | Compile-time constant |
-| `tensorrt.tp_size` | N/A | N/A | Yes | Tensor parallel size |
-| `tensorrt.quantization` | N/A | N/A | Yes | `int8_sq`, `int4_awq`, `fp8` |
+| `tensorrt.tp_size` | N/A | N/A | Yes | Tensor parallel size (compile-time) |
+| `tensorrt.max_input_len` | N/A | N/A | Yes | Max input tokens (compile-time) |
+| `tensorrt.max_seq_len` | N/A | N/A | Yes | Max total sequence length (compile-time) |
+| `tensorrt.dtype` | N/A | N/A | Yes | Model compute dtype (compile-time) |
+| `tensorrt.fast_build` | N/A | N/A | Yes | Fast build mode (compile-time) |
 | `tensorrt.engine_path` | N/A | N/A | Yes | Pre-compiled engine path |
+| `tensorrt.quant.quant_algo` | N/A | N/A | Yes | FP8, INT8, W4A16_AWQ, W4A16_GPTQ, W8A16, etc. |
+| `tensorrt.quant.kv_cache_quant_algo` | N/A | N/A | Yes | KV cache quantization: FP8 or INT8 |
+| `tensorrt.kv_cache.free_gpu_memory_fraction` | N/A | N/A | Yes | KV cache memory fraction |
+| `tensorrt.kv_cache.enable_block_reuse` | N/A | N/A | Yes | KV cache block reuse |
+| `tensorrt.scheduler.capacity_scheduling_policy` | N/A | N/A | Yes | GUARANTEED_NO_EVICT / MAX_UTILIZATION / STATIC_BATCH |
+| `tensorrt.build_cache.max_cache_storage_gb` | N/A | N/A | Yes | Engine cache size limit |
+| `tensorrt.build_cache.cache_root` | N/A | N/A | Yes | Engine cache directory |
+| `tensorrt.sampling.min_tokens` | N/A | N/A | Yes | Minimum output tokens |
+| `tensorrt.sampling.ignore_eos` | N/A | N/A | Yes | Force full generation past EOS |
+| `tensorrt.sampling.return_perf_metrics` | N/A | N/A | Yes | TRT-LLM internal perf metrics |
