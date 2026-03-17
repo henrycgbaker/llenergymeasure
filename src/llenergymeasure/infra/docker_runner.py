@@ -148,7 +148,9 @@ class DockerRunner:
             # Secrets are passed via a temp env-file (mode 0600) that is deleted after
             # subprocess.run completes — they never appear in the command argument list.
             with _env_file(secrets) as env_path:
-                cmd = self._build_docker_cmd(config_hash, str(exchange_dir), env_path=env_path)
+                cmd = self._build_docker_cmd(
+                    config, config_hash, str(exchange_dir), env_path=env_path
+                )
                 logger.debug("Running docker command: %s", _mask_secrets(str(cmd), secrets))
                 try:
                     proc = subprocess.run(
@@ -205,11 +207,22 @@ class DockerRunner:
     # ------------------------------------------------------------------
 
     def _build_docker_cmd(
-        self, config_hash: str, exchange_dir: str, env_path: Path | None = None
+        self,
+        config: Any,
+        config_hash: str,
+        exchange_dir: str,
+        env_path: Path | None = None,
     ) -> list[str]:
         """Build the ``docker run`` command list.
 
+        For TRT-LLM tensor parallelism (tp_size > 1), ``mpirun -n {tp_size}
+        --allow-run-as-root`` is injected between the image name and ``python3``.
+        MPI worker ranks re-import the module but do not call ``main()`` because
+        ``container_entrypoint.py`` is guarded by ``if __name__ == "__main__"``.
+
         Args:
+            config:       ExperimentConfig for the current experiment. Used to
+                          detect TRT-LLM backend and read ``tensorrt.tp_size``.
             config_hash:  Hash prefix for config/result file names.
             exchange_dir: Host path of the temporary exchange directory.
             env_path:     Path to a temp env-file (written by ``_env_file``), or None.
@@ -238,14 +251,20 @@ class DockerRunner:
         if env_path is not None:
             cmd.extend(["--env-file", str(env_path)])
 
-        cmd.extend(
-            [
-                self.image,
-                "python3",
-                "-m",
-                "llenergymeasure.infra.container_entrypoint",
-            ]
-        )
+        # Determine TRT-LLM tensor parallel size for MPI injection
+        tp_size = None
+        if config.backend == "tensorrt" and config.tensorrt is not None:
+            tp_size = config.tensorrt.tp_size
+
+        cmd.append(self.image)
+
+        # Inject mpirun for TRT-LLM tensor parallelism > 1.
+        # MPI workers re-import the module but don't hit the __main__ guard,
+        # so only rank 0 runs the experiment. See container_entrypoint.py.
+        if tp_size is not None and tp_size > 1:
+            cmd.extend(["mpirun", "-n", str(tp_size), "--allow-run-as-root"])
+
+        cmd.extend(["python3", "-m", "llenergymeasure.infra.container_entrypoint"])
 
         return cmd
 
