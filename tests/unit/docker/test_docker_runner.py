@@ -745,3 +745,99 @@ class TestMpirunInjection:
         cmd = self._capture_cmd(config, tmp_path)
 
         assert "mpirun" not in cmd
+
+
+# ---------------------------------------------------------------------------
+# Test 14: Extra volume mounts
+# ---------------------------------------------------------------------------
+
+
+class TestExtraMounts:
+    """Verify extra_mounts produce correct -v flags and TRT-LLM auto-cache-mount works."""
+
+    def _build_cmd(self, config, tmp_path, runner: DockerRunner) -> list[str]:
+        """Call _build_docker_cmd directly on the runner (no subprocess needed)."""
+        return runner._build_docker_cmd(config, "abc123", "/tmp/llem-test")
+
+    def test_extra_mounts_appear_in_docker_cmd(self, tmp_path):
+        """-v flags for extra_mounts appear in command before image name."""
+        config = make_config()
+        runner = DockerRunner(image=IMAGE, extra_mounts=[("/host/cache", "/root/.cache")])
+        cmd = self._build_cmd(config, tmp_path, runner)
+
+        assert "-v" in cmd
+        assert "/host/cache:/root/.cache" in cmd
+
+        # Mount must appear BEFORE the image name
+        mount_idx = cmd.index("/host/cache:/root/.cache")
+        image_idx = cmd.index(IMAGE)
+        assert mount_idx < image_idx
+
+    def test_multiple_extra_mounts(self, tmp_path):
+        """Multiple extra mounts all appear in the command."""
+        config = make_config()
+        runner = DockerRunner(
+            image=IMAGE,
+            extra_mounts=[("/host/a", "/container/a"), ("/host/b", "/container/b")],
+        )
+        cmd = self._build_cmd(config, tmp_path, runner)
+
+        assert "/host/a:/container/a" in cmd
+        assert "/host/b:/container/b" in cmd
+
+    def test_no_extra_mounts_no_extra_volumes(self, tmp_path):
+        """Without extra_mounts, only the exchange_dir -v mount is present."""
+        config = make_config()
+        runner = DockerRunner(image=IMAGE)
+        cmd = self._build_cmd(config, tmp_path, runner)
+
+        # Only one -v flag: the exchange dir
+        v_count = cmd.count("-v")
+        assert v_count == 1
+        assert "/tmp/llem-test:/run/llem" in cmd
+
+    def test_tensorrt_auto_cache_mount(self, tmp_path):
+        """TRT-LLM backend auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""
+        from llenergymeasure.config.backend_configs import TensorRTConfig
+
+        config = make_config(backend="tensorrt", tensorrt=TensorRTConfig(tp_size=1))
+        runner = DockerRunner(image=IMAGE)
+
+        with patch(
+            "llenergymeasure.infra.docker_runner.Path.home",
+            return_value=Path("/home/testuser"),
+        ):
+            cmd = self._build_cmd(config, tmp_path, runner)
+
+        assert "-v" in cmd
+        assert "/home/testuser/.cache/trt-llm:/root/.cache/trt-llm" in cmd
+
+    def test_tensorrt_auto_cache_mount_not_duplicated(self, tmp_path):
+        """User's custom /root/.cache/trt-llm path prevents auto-mount duplication."""
+        from llenergymeasure.config.backend_configs import TensorRTConfig
+
+        config = make_config(backend="tensorrt", tensorrt=TensorRTConfig(tp_size=1))
+        runner = DockerRunner(
+            image=IMAGE,
+            extra_mounts=[("/custom/cache", "/root/.cache/trt-llm")],
+        )
+
+        with patch(
+            "llenergymeasure.infra.docker_runner.Path.home",
+            return_value=Path("/home/testuser"),
+        ):
+            cmd = self._build_cmd(config, tmp_path, runner)
+
+        # /root/.cache/trt-llm appears as a container path exactly once
+        trt_mounts = [arg for arg in cmd if ":/root/.cache/trt-llm" in arg]
+        assert len(trt_mounts) == 1
+        # And it's the user's custom host path, not the auto-generated one
+        assert "/custom/cache:/root/.cache/trt-llm" in cmd
+
+    def test_non_tensorrt_no_auto_cache_mount(self, tmp_path):
+        """PyTorch backend does not get the TRT-LLM auto-cache mount."""
+        config = make_config()  # backend="pytorch"
+        runner = DockerRunner(image=IMAGE)
+        cmd = self._build_cmd(config, tmp_path, runner)
+
+        assert not any("trt-llm" in arg for arg in cmd)

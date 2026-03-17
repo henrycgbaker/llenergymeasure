@@ -591,6 +591,7 @@ class StudyRunner:
             image=image,
             timeout=_calculate_timeout(config),
             source=spec.source,
+            extra_mounts=spec.extra_mounts,
         )
 
         # Pre-dispatch GPU memory residual check (same as local path)

@@ -33,6 +33,7 @@ from llenergymeasure import (
 )
 from llenergymeasure.domain.experiment import AggregationMetadata
 from llenergymeasure.exceptions import BackendError, PreFlightError
+from tests.conftest import make_config
 
 _EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
@@ -1018,4 +1019,55 @@ class TestResolveGpuIndices:
         from llenergymeasure._api import _resolve_gpu_indices
 
         config = ExperimentConfig(model="gpt2", backend="vllm")
+        assert _resolve_gpu_indices(config) == [0]
+
+
+# ---------------------------------------------------------------------------
+# MEAS-02: Energy scope is self-documenting through data
+# ---------------------------------------------------------------------------
+# The per_gpu_j data flow is already wired:
+#   NVMLBackend.stop_tracking() -> EnergyMeasurement.per_gpu_j
+#   MeasurementHarness._build_result() -> ExperimentResult.energy_per_device_j + multi_gpu
+# With _resolve_gpu_indices returning correct indices for TRT-LLM,
+# multi-GPU energy is automatically summed across all TP ranks.
+# No methodology_notes string needed - data is self-documenting:
+#   effective_config.tensorrt.tp_size + multi_gpu.num_gpus + multi_gpu.energy_per_gpu_j
+
+
+class TestResolveGpuIndicesTensorrt:
+    """Unit tests for _resolve_gpu_indices() tensorrt branch."""
+
+    def test_tensorrt_tp1_returns_single_index(self):
+        """tp_size=1 -> [0] (single GPU)."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = make_config(backend="tensorrt", tensorrt={"tp_size": 1})
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_tensorrt_tp2_returns_two_indices(self):
+        """tp_size=2 -> [0, 1] (two GPUs for energy monitoring)."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = make_config(backend="tensorrt", tensorrt={"tp_size": 2})
+        assert _resolve_gpu_indices(config) == [0, 1]
+
+    def test_tensorrt_tp4_returns_four_indices(self):
+        """tp_size=4 -> [0, 1, 2, 3]."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = make_config(backend="tensorrt", tensorrt={"tp_size": 4})
+        assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
+
+    def test_tensorrt_tp_none_returns_single_index(self):
+        """tp_size=None (default) -> [0] (single GPU)."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = make_config(backend="tensorrt", tensorrt={})
+        assert _resolve_gpu_indices(config) == [0]
+
+    def test_tensorrt_no_config_returns_single_index(self):
+        """backend=tensorrt but tensorrt=None -> [0] (fallback)."""
+        from llenergymeasure._api import _resolve_gpu_indices
+
+        config = make_config(backend="tensorrt")
         assert _resolve_gpu_indices(config) == [0]

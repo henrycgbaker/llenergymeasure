@@ -342,3 +342,25 @@ class TestResolveStudyRunners:
 
         assert "tensorrt" in result
         assert result["tensorrt"].source == "auto_detected"
+
+
+# ---------------------------------------------------------------------------
+# RunnerSpec.extra_mounts
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerSpecExtraMounts:
+    def test_extra_mounts_defaults_to_empty_list(self):
+        """RunnerSpec.extra_mounts defaults to empty list when not specified."""
+        spec = RunnerSpec(mode="local", image=None, source="default")
+        assert spec.extra_mounts == []
+
+    def test_extra_mounts_populated(self):
+        """RunnerSpec.extra_mounts stores user-provided mount pairs correctly."""
+        spec = RunnerSpec(
+            mode="docker",
+            image="img",
+            source="yaml",
+            extra_mounts=[("/host/a", "/container/a")],
+        )
+        assert spec.extra_mounts == [("/host/a", "/container/a")]
