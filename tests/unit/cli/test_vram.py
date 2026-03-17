@@ -247,7 +247,7 @@ def test_get_gpu_vram_gb_success():
 
     with (
         patch.dict("sys.modules", {"pynvml": mock_pynvml}),
-        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+        patch("llenergymeasure.device.gpu_info.nvml_context", mock_nvml_context),
     ):
         result = get_gpu_vram_gb()
 
@@ -265,7 +265,7 @@ def test_get_gpu_vram_gb_nvml_error():
 
     with (
         patch.dict("sys.modules", {"pynvml": mock_pynvml}),
-        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+        patch("llenergymeasure.device.gpu_info.nvml_context", mock_nvml_context),
     ):
         result = get_gpu_vram_gb()
 

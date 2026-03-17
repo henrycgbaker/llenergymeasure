@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from llenergymeasure.backends.vllm import VLLMBackend
 from llenergymeasure.config.backend_configs import (
     VLLMAttentionConfig,
     VLLMBeamSearchConfig,
@@ -29,8 +30,7 @@ from llenergymeasure.config.backend_configs import (
     VLLMSamplingConfig,
 )
 from llenergymeasure.config.models import DecoderConfig, ExperimentConfig
-from llenergymeasure.core.backends.vllm import VLLMBackend
-from llenergymeasure.exceptions import BackendError
+from llenergymeasure.utils.exceptions import BackendError
 
 # =============================================================================
 # Helpers
@@ -93,14 +93,14 @@ class TestProtocolCompliance:
 
     def test_vllm_backend_satisfies_plugin_protocol(self):
         """VLLMBackend satisfies the runtime_checkable BackendPlugin protocol."""
-        from llenergymeasure.core.backends.protocol import BackendPlugin
+        from llenergymeasure.backends.protocol import BackendPlugin
 
         backend = VLLMBackend()
         assert isinstance(backend, BackendPlugin)
 
     def test_get_backend_returns_vllm_instance(self):
         """get_backend('vllm') returns a VLLMBackend with name 'vllm'."""
-        from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.backends import get_backend
 
         backend = get_backend("vllm")
         assert backend.name == "vllm"
@@ -108,14 +108,14 @@ class TestProtocolCompliance:
 
     def test_get_backend_unknown_mentions_vllm_in_error(self):
         """get_backend('unknown') error message lists vllm as available."""
-        from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.backends import get_backend
 
         with pytest.raises(BackendError, match="vllm"):
             get_backend("unknown")
 
     def test_get_backend_unknown_raises_backend_error(self):
         """get_backend with unknown name raises BackendError (not KeyError, etc.)."""
-        from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.backends import get_backend
 
         with pytest.raises(BackendError, match="Unknown backend"):
             get_backend("does_not_exist")
@@ -932,7 +932,7 @@ class TestVramCurrentDevice:
         """
         import inspect
 
-        import llenergymeasure.core.backends.vllm as vllm_mod
+        import llenergymeasure.backends.vllm as vllm_mod
 
         source = inspect.getsource(vllm_mod.VLLMBackend.run_inference)
         assert "current_device()" in source, (

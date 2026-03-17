@@ -199,7 +199,7 @@ def load_user_config(config_path: Path | None = None) -> UserConfig:
     Returns:
         UserConfig with file values merged over defaults, env vars applied on top.
     """
-    from llenergymeasure.exceptions import ConfigError
+    from llenergymeasure.utils.exceptions import ConfigError
 
     path = config_path or get_user_config_path()
 

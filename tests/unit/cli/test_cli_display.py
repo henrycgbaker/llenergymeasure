@@ -20,7 +20,7 @@ from llenergymeasure.cli._display import (
     print_study_summary,
 )
 from llenergymeasure.cli._vram import DTYPE_BYTES
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
 # _sig3 tests
@@ -179,7 +179,7 @@ def test_format_error_includes_class_name():
 
 def test_format_error_subclass():
     """format_error works for any LLEMError subclass."""
-    from llenergymeasure.exceptions import BackendError
+    from llenergymeasure.utils.exceptions import BackendError
 
     err = BackendError("GPU OOM")
     result = format_error(err, verbose=False)
@@ -189,7 +189,7 @@ def test_format_error_subclass():
 
 def test_format_error_verbose_with_traceback():
     """format_error with verbose=True includes traceback when exception is active."""
-    from llenergymeasure.exceptions import ExperimentError
+    from llenergymeasure.utils.exceptions import ExperimentError
 
     try:
         raise ExperimentError("inference crashed")

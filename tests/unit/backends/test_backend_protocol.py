@@ -15,8 +15,8 @@ import pytest
 
 def test_tensorrt_backend_satisfies_plugin_protocol():
     """TensorRTBackend must satisfy the BackendPlugin Protocol."""
-    from llenergymeasure.core.backends.protocol import BackendPlugin
-    from llenergymeasure.core.backends.tensorrt import TensorRTBackend
+    from llenergymeasure.backends.protocol import BackendPlugin
+    from llenergymeasure.backends.tensorrt import TensorRTBackend
 
     backend = TensorRTBackend()
     assert isinstance(backend, BackendPlugin)
@@ -30,8 +30,8 @@ def test_tensorrt_backend_satisfies_plugin_protocol():
 
 def test_pytorch_backend_satisfies_plugin_protocol():
     """PyTorchBackend must satisfy the BackendPlugin Protocol."""
-    from llenergymeasure.core.backends.protocol import BackendPlugin
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+    from llenergymeasure.backends.protocol import BackendPlugin
+    from llenergymeasure.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     assert isinstance(backend, BackendPlugin)
@@ -45,7 +45,7 @@ def test_pytorch_backend_satisfies_plugin_protocol():
 
 def test_get_backend_pytorch():
     """get_backend('pytorch') returns a PyTorchBackend with name 'pytorch'."""
-    from llenergymeasure.core.backends import get_backend
+    from llenergymeasure.backends import get_backend
 
     backend = get_backend("pytorch")
     assert backend.name == "pytorch"
@@ -53,7 +53,7 @@ def test_get_backend_pytorch():
 
 def test_get_backend_tensorrt():
     """get_backend('tensorrt') returns a TensorRTBackend with name 'tensorrt'."""
-    from llenergymeasure.core.backends import get_backend
+    from llenergymeasure.backends import get_backend
 
     backend = get_backend("tensorrt")
     assert backend.name == "tensorrt"
@@ -61,8 +61,8 @@ def test_get_backend_tensorrt():
 
 def test_get_backend_unknown_raises_backend_error():
     """get_backend with unknown name raises BackendError."""
-    from llenergymeasure.core.backends import get_backend
-    from llenergymeasure.exceptions import BackendError
+    from llenergymeasure.backends import get_backend
+    from llenergymeasure.utils.exceptions import BackendError
 
     with pytest.raises(BackendError, match="Unknown backend"):
         get_backend("nonexistent")
@@ -70,8 +70,8 @@ def test_get_backend_unknown_raises_backend_error():
 
 def test_get_backend_unknown_message_contains_backend_name():
     """Error message includes the unknown backend name."""
-    from llenergymeasure.core.backends import get_backend
-    from llenergymeasure.exceptions import BackendError
+    from llenergymeasure.backends import get_backend
+    from llenergymeasure.utils.exceptions import BackendError
 
     with pytest.raises(BackendError, match="'badbackend'"):
         get_backend("badbackend")
@@ -84,7 +84,7 @@ def test_get_backend_unknown_message_contains_backend_name():
 
 def test_detect_default_backend_returns_pytorch():
     """detect_default_backend returns 'pytorch' when transformers is installed."""
-    from llenergymeasure.core.backends import detect_default_backend
+    from llenergymeasure.backends import detect_default_backend
 
     # transformers must be installed in the test environment
     assert importlib.util.find_spec("transformers") is not None, (
@@ -97,16 +97,14 @@ def test_detect_default_backend_returns_tensorrt_when_only_trt():
     """detect_default_backend returns 'tensorrt' when only tensorrt_llm is installed."""
     from unittest.mock import patch
 
-    import llenergymeasure.core.backends as backends_mod
+    import llenergymeasure.backends as backends_mod
 
     def mock_find_spec(name):
         if name == "tensorrt_llm":
             return True  # truthy = installed
         return None  # transformers and vllm not installed
 
-    with patch(
-        "llenergymeasure.core.backends.importlib.util.find_spec", side_effect=mock_find_spec
-    ):
+    with patch("llenergymeasure.backends.importlib.util.find_spec", side_effect=mock_find_spec):
         result = backends_mod.detect_default_backend()
         assert result == "tensorrt"
 
@@ -115,12 +113,12 @@ def test_detect_default_backend_raises_when_no_backends():
     """detect_default_backend raises BackendError when no backends are installed."""
     from unittest.mock import patch
 
-    import llenergymeasure.core.backends as backends_mod
-    from llenergymeasure.exceptions import BackendError
+    import llenergymeasure.backends as backends_mod
+    from llenergymeasure.utils.exceptions import BackendError
 
     # Patch find_spec inside the backends module so all backend checks return None
     with (
-        patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None),
+        patch("llenergymeasure.backends.importlib.util.find_spec", return_value=None),
         pytest.raises(BackendError, match="No inference backend"),
     ):
         backends_mod.detect_default_backend()
@@ -130,12 +128,12 @@ def test_detect_default_backend_error_message_has_install_hint():
     """Error message from detect_default_backend includes install hint."""
     from unittest.mock import patch
 
-    import llenergymeasure.core.backends as backends_mod
-    from llenergymeasure.exceptions import BackendError
+    import llenergymeasure.backends as backends_mod
+    from llenergymeasure.utils.exceptions import BackendError
 
     # Patch find_spec inside the backends module so all backend checks return None
     with (
-        patch("llenergymeasure.core.backends.importlib.util.find_spec", return_value=None),
+        patch("llenergymeasure.backends.importlib.util.find_spec", return_value=None),
         pytest.raises(BackendError, match="pip install"),
     ):
         backends_mod.detect_default_backend()
@@ -148,8 +146,8 @@ def test_detect_default_backend_error_message_has_install_hint():
 
 def test_model_load_kwargs_contains_base_keys():
     """_model_load_kwargs always includes torch_dtype, device_map, trust_remote_code."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(model="gpt2")
@@ -162,8 +160,8 @@ def test_model_load_kwargs_contains_base_keys():
 
 def test_model_load_kwargs_passthrough_kwargs_merged():
     """passthrough_kwargs are merged into model load kwargs (core P0 fix)."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(model="gpt2", passthrough_kwargs={"custom_key": "custom_value"})
@@ -175,8 +173,8 @@ def test_model_load_kwargs_passthrough_kwargs_merged():
 
 def test_model_load_kwargs_passthrough_can_override_defaults():
     """passthrough_kwargs can override backend defaults (intentional escape hatch)."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     # Override device_map via passthrough
@@ -188,8 +186,8 @@ def test_model_load_kwargs_passthrough_can_override_defaults():
 
 def test_model_load_kwargs_no_passthrough_when_none():
     """No extra keys added when passthrough_kwargs is None."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(model="gpt2")  # passthrough_kwargs=None by default
@@ -201,9 +199,9 @@ def test_model_load_kwargs_no_passthrough_when_none():
 
 def test_model_load_kwargs_pytorch_config_attn_implementation():
     """PyTorchConfig.attn_implementation is included in kwargs."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.backend_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(
@@ -219,9 +217,9 @@ def test_model_load_kwargs_pytorch_config_load_in_4bit():
     """PyTorchConfig.load_in_4bit=True produces a BitsAndBytesConfig quantization_config."""
     from transformers import BitsAndBytesConfig
 
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.backend_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(
@@ -240,9 +238,9 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
     """PyTorchConfig.load_in_8bit=True produces a BitsAndBytesConfig quantization_config."""
     from transformers import BitsAndBytesConfig
 
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.backend_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(
@@ -259,9 +257,9 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
 
 def test_model_load_kwargs_pytorch_config_none_values_not_included():
     """None values from PyTorchConfig are NOT included in kwargs."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.backend_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(
@@ -278,8 +276,8 @@ def test_model_load_kwargs_pytorch_config_none_values_not_included():
 
 def test_model_load_kwargs_no_pytorch_section():
     """When config.pytorch is None, only base keys are present."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(model="gpt2")  # pytorch=None by default
@@ -299,7 +297,7 @@ def test_precision_to_dtype_fp32():
     """fp32 maps to torch.float32."""
     import torch
 
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+    from llenergymeasure.backends.pytorch import PyTorchBackend
 
     assert PyTorchBackend._precision_to_dtype("fp32") == torch.float32
 
@@ -308,7 +306,7 @@ def test_precision_to_dtype_fp16():
     """fp16 maps to torch.float16."""
     import torch
 
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+    from llenergymeasure.backends.pytorch import PyTorchBackend
 
     assert PyTorchBackend._precision_to_dtype("fp16") == torch.float16
 
@@ -317,14 +315,14 @@ def test_precision_to_dtype_bf16():
     """bf16 maps to torch.bfloat16."""
     import torch
 
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+    from llenergymeasure.backends.pytorch import PyTorchBackend
 
     assert PyTorchBackend._precision_to_dtype("bf16") == torch.bfloat16
 
 
 def test_precision_to_dtype_unknown_raises():
     """Unknown precision string raises KeyError."""
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+    from llenergymeasure.backends.pytorch import PyTorchBackend
 
     with pytest.raises(KeyError):
         PyTorchBackend._precision_to_dtype("int8")
@@ -337,8 +335,8 @@ def test_precision_to_dtype_unknown_raises():
 
 def test_build_generate_kwargs_defaults():
     """Default decoder config produces expected generate kwargs."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(model="gpt2")
@@ -353,8 +351,8 @@ def test_build_generate_kwargs_defaults():
 
 def test_build_generate_kwargs_greedy_decoding():
     """Greedy decoding (temperature=0) removes sampling params."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import DecoderConfig, ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(
@@ -376,7 +374,7 @@ def test_build_generate_kwargs_greedy_decoding():
 
 def test_backend_plugin_protocol_has_required_methods():
     """BackendPlugin Protocol defines all 5 required methods plus name property and validate_config."""
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+    from llenergymeasure.backends.pytorch import PyTorchBackend
 
     obj = PyTorchBackend()
     assert hasattr(obj, "name")
@@ -389,8 +387,8 @@ def test_backend_plugin_protocol_has_required_methods():
 
 def test_backend_plugin_protocol_is_runtime_checkable():
     """BackendPlugin is @runtime_checkable (isinstance works)."""
-    from llenergymeasure.core.backends.protocol import BackendPlugin
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+    from llenergymeasure.backends.protocol import BackendPlugin
+    from llenergymeasure.backends.pytorch import PyTorchBackend
 
     # runtime_checkable means isinstance() works and confirms protocol conformance
     assert isinstance(PyTorchBackend(), BackendPlugin) is True
@@ -398,7 +396,7 @@ def test_backend_plugin_protocol_is_runtime_checkable():
 
 def test_non_conforming_object_fails_plugin_protocol_check():
     """An object without the 4 plugin methods does not satisfy BackendPlugin."""
-    from llenergymeasure.core.backends.protocol import BackendPlugin
+    from llenergymeasure.backends.protocol import BackendPlugin
 
     class NotABackend:
         pass
@@ -413,8 +411,8 @@ def test_non_conforming_object_fails_plugin_protocol_check():
 
 def test_pytorch_validate_config_returns_empty():
     """PyTorchBackend.validate_config returns empty list."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     config = ExperimentConfig(model="gpt2")
     assert PyTorchBackend().validate_config(config) == []
@@ -422,8 +420,8 @@ def test_pytorch_validate_config_returns_empty():
 
 def test_vllm_validate_config_returns_empty():
     """VLLMBackend.validate_config returns empty list."""
+    from llenergymeasure.backends.vllm import VLLMBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.vllm import VLLMBackend
 
     config = ExperimentConfig(model="gpt2", backend="vllm")
     assert VLLMBackend().validate_config(config) == []
@@ -436,8 +434,8 @@ def test_vllm_validate_config_returns_empty():
 
 def test_get_backend_unknown_message_lists_tensorrt():
     """Error message from get_backend lists 'tensorrt' as an available backend."""
-    from llenergymeasure.core.backends import get_backend
-    from llenergymeasure.exceptions import BackendError
+    from llenergymeasure.backends import get_backend
+    from llenergymeasure.utils.exceptions import BackendError
 
     with pytest.raises(BackendError, match="tensorrt"):
         get_backend("badbackend")

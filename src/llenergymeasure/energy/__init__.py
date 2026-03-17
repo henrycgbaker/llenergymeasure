@@ -7,7 +7,7 @@ Backend priority for auto-selection: Zeus > NVML > CodeCarbon > None.
 
 Usage (v2.0 API)::
 
-    from llenergymeasure.core.energy_backends import select_energy_backend
+    from llenergymeasure.energy import select_energy_backend
 
     # Auto-select best available backend
     backend = select_energy_backend("auto")
@@ -34,19 +34,19 @@ from __future__ import annotations
 import importlib.util
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.core.energy_backends.base import EnergyBackend  # canonical definition
-from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement, NVMLBackend
-from llenergymeasure.core.energy_backends.zeus import ZeusBackend
-from llenergymeasure.exceptions import ConfigError, ConfigurationError
+from llenergymeasure.energy.base import EnergyBackend  # canonical definition
+from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLBackend
+from llenergymeasure.energy.zeus import ZeusBackend
+from llenergymeasure.utils.exceptions import ConfigError, ConfigurationError
 
 if TYPE_CHECKING:
-    from llenergymeasure.core.energy_backends.codecarbon import (
+    from llenergymeasure.energy.codecarbon import (
         CodeCarbonBackend as CodeCarbonBackend,
     )
-    from llenergymeasure.core.energy_backends.codecarbon import (
+    from llenergymeasure.energy.codecarbon import (
         CodeCarbonData as CodeCarbonData,
     )
-    from llenergymeasure.core.energy_backends.codecarbon import (
+    from llenergymeasure.energy.codecarbon import (
         warm_up as warm_up,
     )
 
@@ -113,7 +113,7 @@ def _register_default_backends() -> None:
     register_backend("nvml", NVMLBackend)
     # CodeCarbon requires torch — register lazily only if available
     if importlib.util.find_spec("codecarbon") is not None:
-        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+        from llenergymeasure.energy.codecarbon import CodeCarbonBackend
 
         register_backend("codecarbon", CodeCarbonBackend)
 
@@ -192,7 +192,7 @@ def _auto_select(gpu_indices: list[int] | None = None) -> EnergyBackend | None:
 
     # CodeCarbon — software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
     if importlib.util.find_spec("codecarbon") is not None:
-        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+        from llenergymeasure.energy.codecarbon import CodeCarbonBackend
 
         cc_backend = CodeCarbonBackend()
         if cc_backend.is_available():
@@ -220,7 +220,7 @@ def _instantiate(name: str, gpu_indices: list[int] | None = None) -> EnergyBacke
     if name == "zeus":
         return ZeusBackend(gpu_indices=gpu_indices)
     if name == "codecarbon":
-        from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+        from llenergymeasure.energy.codecarbon import CodeCarbonBackend
 
         return CodeCarbonBackend()
 

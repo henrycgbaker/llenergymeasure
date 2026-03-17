@@ -16,7 +16,7 @@ Error categories:
 
 from __future__ import annotations
 
-from llenergymeasure.exceptions import DockerError
+from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = [
     "DockerContainerError",

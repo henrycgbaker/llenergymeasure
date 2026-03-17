@@ -1,7 +1,7 @@
 """Protocol conformance tests for EnergyBackend.
 
 Tests that FakeEnergyBackend satisfies the runtime_checkable EnergyBackend
-Protocol interface defined in llenergymeasure.core.energy_backends.base.
+Protocol interface defined in llenergymeasure.energy.base.
 
 INF-10 compliance: no unittest.mock.patch on internal modules. Fakes are
 injected via constructor args and satisfy isinstance() checks at runtime.
@@ -9,7 +9,7 @@ injected via constructor args and satisfy isinstance() checks at runtime.
 
 from __future__ import annotations
 
-from llenergymeasure.core.energy_backends.base import EnergyBackend
+from llenergymeasure.energy.base import EnergyBackend
 from tests.fakes import FakeEnergyBackend
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ def test_fake_energy_backend_satisfies_protocol():
 
 def test_fake_energy_backend_lifecycle():
     """start_tracking() then stop_tracking() returns an EnergyMeasurement."""
-    from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
+    from llenergymeasure.energy.nvml import EnergyMeasurement
 
     fake = FakeEnergyBackend(total_j=50.0, duration_sec=10.0)
     tracker = fake.start_tracking()

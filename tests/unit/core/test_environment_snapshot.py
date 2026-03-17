@@ -245,7 +245,7 @@ def test_collect_environment_snapshot_async_returns_future(monkeypatch: pytest.M
     hardware = _make_hardware()
 
     monkeypatch.setattr(
-        "llenergymeasure.core.environment.collect_environment_metadata",
+        "llenergymeasure.infra.environment.collect_environment_metadata",
         lambda: hardware,
     )
     monkeypatch.setattr(
@@ -272,7 +272,7 @@ def test_collect_environment_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Mock core/environment collect function
     monkeypatch.setattr(
-        "llenergymeasure.core.environment.collect_environment_metadata",
+        "llenergymeasure.infra.environment.collect_environment_metadata",
         lambda: hardware,
     )
 

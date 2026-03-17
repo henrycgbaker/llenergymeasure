@@ -24,10 +24,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.core.backends.protocol import InferenceOutput
 from llenergymeasure.domain.metrics import WarmupResult
-from llenergymeasure.exceptions import BackendError
+from llenergymeasure.utils.exceptions import BackendError
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class TensorRTBackend:
             json.dumps(kwargs, default=str, sort_keys=True).encode()
         ).hexdigest()[:16]
 
-        from llenergymeasure.core.gpu_info import get_gpu_architecture
+        from llenergymeasure.device.gpu_info import get_gpu_architecture
 
         gpu_arch = get_gpu_architecture()
 
@@ -160,7 +160,7 @@ class TensorRTBackend:
             logger.debug("Running TRT-LLM warmup (1 prompt, 1 token)...")
             from tensorrt_llm import SamplingParams as _SP
 
-            from llenergymeasure.core.backends._helpers import warmup_single_token
+            from llenergymeasure.backends._helpers import warmup_single_token
 
             prompts = self._prepare_prompts(config)
             warmup_single_token(llm, prompts, _SP, max_new_tokens=1)
@@ -279,7 +279,7 @@ class TensorRTBackend:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        from llenergymeasure.core.backends._helpers import cleanup_model
+        from llenergymeasure.backends._helpers import cleanup_model
 
         llm, _sampling_params = model
         cleanup_model(llm)
@@ -302,7 +302,7 @@ class TensorRTBackend:
         Returns:
             List of error strings. Empty list means config is valid.
         """
-        from llenergymeasure.core.gpu_info import get_compute_capability
+        from llenergymeasure.device.gpu_info import get_compute_capability
 
         sm = get_compute_capability()
         if sm is None:

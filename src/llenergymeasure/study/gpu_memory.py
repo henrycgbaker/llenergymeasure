@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from llenergymeasure.core.gpu_info import nvml_context
+from llenergymeasure.device.gpu_info import nvml_context
 
 logger = logging.getLogger(__name__)
 

@@ -18,10 +18,10 @@ import contextlib
 import logging
 from typing import Any
 
+from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.core.backends.protocol import InferenceOutput
 from llenergymeasure.domain.metrics import WarmupResult
-from llenergymeasure.exceptions import BackendError
+from llenergymeasure.utils.exceptions import BackendError
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class VLLMBackend:
             logger.debug("Running vLLM warmup (1 prompt, 1 token)...")
             from vllm import SamplingParams as _SP
 
-            from llenergymeasure.core.backends._helpers import warmup_single_token
+            from llenergymeasure.backends._helpers import warmup_single_token
 
             prompts = self._prepare_prompts(config)
             warmup_single_token(llm, prompts, _SP, max_tokens=1)
@@ -254,7 +254,7 @@ class VLLMBackend:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        from llenergymeasure.core.backends._helpers import cleanup_model
+        from llenergymeasure.backends._helpers import cleanup_model
 
         llm, _sampling_params = model
         cleanup_model(llm)
@@ -437,7 +437,7 @@ class VLLMBackend:
         try:
             import pynvml
 
-            from llenergymeasure.core.gpu_info import nvml_context
+            from llenergymeasure.device.gpu_info import nvml_context
 
             mem_mb: float | None = None
             with nvml_context():

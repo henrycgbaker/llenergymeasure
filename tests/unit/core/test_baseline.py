@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.core.baseline import (
+from llenergymeasure.harness.baseline import (
     BaselineCache,
     _baseline_cache,
     adjust_energy_for_baseline,
@@ -88,7 +88,7 @@ def _make_expired_cache_entry(
 
 
 # Patch target constants
-_MODULE = "llenergymeasure.core.baseline"
+_MODULE = "llenergymeasure.harness.baseline"
 
 
 # =============================================================================

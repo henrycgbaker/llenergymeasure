@@ -2,8 +2,8 @@
 
 import importlib.util
 
-from llenergymeasure.core.backends.protocol import BackendPlugin
-from llenergymeasure.exceptions import BackendError
+from llenergymeasure.backends.protocol import BackendPlugin
+from llenergymeasure.utils.exceptions import BackendError
 
 __all__ = ["BackendPlugin", "detect_default_backend", "get_backend"]
 
@@ -43,15 +43,15 @@ def get_backend(name: str) -> BackendPlugin:
         BackendError: If the backend name is unknown.
     """
     if name == "pytorch":
-        from llenergymeasure.core.backends.pytorch import PyTorchBackend
+        from llenergymeasure.backends.pytorch import PyTorchBackend
 
         return PyTorchBackend()
     if name == "vllm":
-        from llenergymeasure.core.backends.vllm import VLLMBackend
+        from llenergymeasure.backends.vllm import VLLMBackend
 
         return VLLMBackend()
     if name == "tensorrt":
-        from llenergymeasure.core.backends.tensorrt import TensorRTBackend
+        from llenergymeasure.backends.tensorrt import TensorRTBackend
 
         return TensorRTBackend()
     raise BackendError(f"Unknown backend: {name!r}. Available: pytorch, vllm, tensorrt")

@@ -15,21 +15,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.core.backends.protocol import BackendPlugin, InferenceOutput
-from llenergymeasure.core.warmup import thermal_floor_wait
+from llenergymeasure.backends.protocol import BackendPlugin, InferenceOutput
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
     compute_measurement_config_hash,
 )
+from llenergymeasure.harness.warmup import thermal_floor_wait
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.baseline import BaselineCache
-    from llenergymeasure.core.energy_backends import EnergyBackend
-    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.device.power_thermal import PowerThermalSample
     from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.metrics import FlopsResult
+    from llenergymeasure.energy import EnergyBackend
+    from llenergymeasure.harness.baseline import BaselineCache
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
     try:
         import pynvml
 
-        from llenergymeasure.core.gpu_info import nvml_context
+        from llenergymeasure.device.gpu_info import nvml_context
 
         with nvml_context():
             for idx in indices:
@@ -110,7 +110,7 @@ def measure_baseline_power(
     duration_sec: float,
     gpu_indices: list[int] | None = None,
 ) -> BaselineCache | None:  # pragma: no cover
-    from llenergymeasure.core.baseline import measure_baseline_power as _mbp
+    from llenergymeasure.harness.baseline import measure_baseline_power as _mbp
 
     return _mbp(duration_sec=duration_sec, gpu_indices=gpu_indices)
 
@@ -119,7 +119,7 @@ def select_energy_backend(
     explicit: str | None,
     gpu_indices: list[int] | None = None,
 ) -> EnergyBackend | None:  # pragma: no cover
-    from llenergymeasure.core.energy_backends import select_energy_backend as _seb
+    from llenergymeasure.energy import select_energy_backend as _seb
 
     return _seb(explicit, gpu_indices=gpu_indices)
 
@@ -127,7 +127,7 @@ def select_energy_backend(
 def estimate_flops_palm(
     model: Any, n_input_tokens: int, n_output_tokens: int
 ) -> FlopsResult:  # pragma: no cover
-    from llenergymeasure.core.flops import estimate_flops_palm as _efp
+    from llenergymeasure.harness.flops import estimate_flops_palm as _efp
 
     return _efp(model=model, n_input_tokens=n_input_tokens, n_output_tokens=n_output_tokens)
 
@@ -135,7 +135,7 @@ def estimate_flops_palm(
 def estimate_flops_palm_from_config(
     model_name: str, n_input_tokens: int, n_output_tokens: int
 ) -> FlopsResult | None:  # pragma: no cover
-    from llenergymeasure.core.flops import estimate_flops_palm_from_config as _efpc
+    from llenergymeasure.harness.flops import estimate_flops_palm_from_config as _efpc
 
     return _efpc(
         model_name=model_name,
@@ -147,7 +147,7 @@ def estimate_flops_palm_from_config(
 def write_timeseries_parquet(
     samples: list[PowerThermalSample], path: Path
 ) -> Path:  # pragma: no cover
-    from llenergymeasure.core.timeseries import write_timeseries_parquet as _wts
+    from llenergymeasure.harness.timeseries import write_timeseries_parquet as _wts
 
     return _wts(samples, path)
 
@@ -159,7 +159,7 @@ def collect_measurement_warnings(
     temp_end_c: float | None,
     nvml_sample_count: int,
 ) -> list[str]:  # pragma: no cover
-    from llenergymeasure.core.measurement_warnings import (
+    from llenergymeasure.harness.measurement_warnings import (
         collect_measurement_warnings as _cmw,
     )
 
@@ -173,10 +173,10 @@ def collect_measurement_warnings(
 
 
 class PowerThermalSampler:  # pragma: no cover
-    """Thin re-export so tests can patch llenergymeasure.core.harness.PowerThermalSampler."""
+    """Thin re-export so tests can patch llenergymeasure.harness.PowerThermalSampler."""
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
-        from llenergymeasure.core.power_thermal import PowerThermalSampler as _PTS
+        from llenergymeasure.device.power_thermal import PowerThermalSampler as _PTS
 
         return _PTS(*args, **kwargs)
 
@@ -468,12 +468,12 @@ class MeasurementHarness:
         Returns:
             Fully assembled ExperimentResult.
         """
-        from llenergymeasure.core.baseline import create_energy_breakdown
         from llenergymeasure.domain.metrics import (
             ExtendedEfficiencyMetrics,
             MemoryEfficiencyMetrics,
             MultiGPUMetrics,
         )
+        from llenergymeasure.harness.baseline import create_energy_breakdown
 
         experiment_id = f"{config.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 

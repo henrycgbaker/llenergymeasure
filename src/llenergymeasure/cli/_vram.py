@@ -127,7 +127,7 @@ def get_gpu_vram_gb() -> float | None:
     try:
         import pynvml
 
-        from llenergymeasure.core.gpu_info import nvml_context
+        from llenergymeasure.device.gpu_info import nvml_context
 
         vram_gb: float | None = None
         with nvml_context():

@@ -13,10 +13,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.core.backends.protocol import InferenceOutput
 from llenergymeasure.domain.metrics import WarmupResult
-from llenergymeasure.exceptions import BackendError
+from llenergymeasure.utils.exceptions import BackendError
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class PyTorchBackend:
             WarmupResult with convergence status and iteration count.
             thermal_floor_wait_s is left at default 0.0 (set by harness).
         """
-        from llenergymeasure.core.warmup import (
+        from llenergymeasure.harness.warmup import (
             create_warmup_inference_fn,
             warmup_until_converged,
         )
@@ -243,7 +243,7 @@ class PyTorchBackend:
         Args:
             model: Tuple of (model, tokenizer) from load_model().
         """
-        from llenergymeasure.core.backends._helpers import cleanup_model
+        from llenergymeasure.backends._helpers import cleanup_model
 
         hf_model, _tokenizer = model
         cleanup_model(hf_model, use_gc=False)

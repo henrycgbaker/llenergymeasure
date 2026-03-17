@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import PreFlightError
+from llenergymeasure.utils.exceptions import PreFlightError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserRunnersConfig
@@ -104,7 +104,7 @@ def _warn_if_persistence_mode_off(gpu_indices: list[int] | None = None) -> None:
     try:
         import pynvml
 
-        from llenergymeasure.core.gpu_info import nvml_context
+        from llenergymeasure.device.gpu_info import nvml_context
 
         with nvml_context():
             for idx in indices:
@@ -155,7 +155,7 @@ def run_preflight(config: ExperimentConfig) -> None:
 
     # Check 4: Backend config validation (hardware x config cross-checks)
     try:
-        from llenergymeasure.core.backends import get_backend
+        from llenergymeasure.backends import get_backend
 
         backend = get_backend(config.backend)
         backend_errors = backend.validate_config(config)

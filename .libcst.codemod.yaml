@@ -1,0 +1,4 @@
+# .libcst.codemod.yaml
+modules:
+  - "libcst.codemod.commands"
+repo_root: "."

@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from llenergymeasure.core.gpu_info import nvml_context
+from llenergymeasure.device.gpu_info import nvml_context
 from llenergymeasure.domain.metrics import EnergyBreakdown
 
 logger = logging.getLogger(__name__)

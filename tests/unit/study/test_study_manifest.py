@@ -319,7 +319,7 @@ def test_create_study_dir_layout(tmp_path: Path) -> None:
 
 
 def test_create_study_dir_raises_study_error_on_failure(tmp_path: Path) -> None:
-    from llenergymeasure.exceptions import StudyError
+    from llenergymeasure.utils.exceptions import StudyError
 
     with (
         patch.object(Path, "mkdir", side_effect=PermissionError("no write")),

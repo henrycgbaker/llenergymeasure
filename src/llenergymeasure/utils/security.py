@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.utils.exceptions import ConfigError
 
 
 def validate_path(path: Path, must_exist: bool = False, allow_relative: bool = True) -> Path:

@@ -14,10 +14,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import llenergymeasure.orchestration.preflight as preflight_module
+import llenergymeasure.api.preflight
+from llenergymeasure.api.preflight import run_preflight, run_study_preflight
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import PreFlightError
-from llenergymeasure.orchestration.preflight import run_preflight, run_study_preflight
+from llenergymeasure.utils.exceptions import PreFlightError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -32,9 +32,13 @@ def _make_config(
 
 def _patch_all_checks_pass(monkeypatch: pytest.MonkeyPatch) -> None:
     """Monkeypatch all three checks to succeed."""
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +48,9 @@ def _patch_all_checks_pass(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_preflight_passes_when_all_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_all_checks_pass(monkeypatch)
-    monkeypatch.setattr(preflight_module, "_warn_if_persistence_mode_off", lambda: None)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_warn_if_persistence_mode_off", lambda: None
+    )
     config = _make_config()
     # Should not raise
     run_preflight(config)
@@ -56,10 +62,12 @@ def test_preflight_passes_when_all_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_preflight_collects_all_failures(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: False)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: False)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: False)
     monkeypatch.setattr(
-        preflight_module,
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: False
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight,
         "_check_model_accessible",
         lambda model_id: f"{model_id} not found on HuggingFace Hub",
     )
@@ -82,9 +90,13 @@ def test_preflight_collects_all_failures(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_preflight_cuda_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: False)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: False)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
 
     config = _make_config()
     with pytest.raises(PreFlightError) as exc_info:
@@ -99,9 +111,13 @@ def test_preflight_cuda_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_preflight_backend_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: False)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: False
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
 
     config = _make_config(backend="pytorch")
     with pytest.raises(PreFlightError) as exc_info:
@@ -116,10 +132,12 @@ def test_preflight_backend_not_installed(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_preflight_gated_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        preflight_module,
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight,
         "_check_model_accessible",
         lambda model_id: f"{model_id} gated model — no HF_TOKEN → export HF_TOKEN=<your_token>",
     )
@@ -139,10 +157,12 @@ def test_preflight_gated_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_preflight_model_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
-        preflight_module,
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight,
         "_check_model_accessible",
         lambda model_id: f"{model_id} not found on HuggingFace Hub",
     )
@@ -161,7 +181,9 @@ def test_preflight_model_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_preflight_local_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _patch_all_checks_pass(monkeypatch)
-    monkeypatch.setattr(preflight_module, "_warn_if_persistence_mode_off", lambda: None)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_warn_if_persistence_mode_off", lambda: None
+    )
 
     # Provide a real path — shouldn't raise
     config = _make_config(model=str(tmp_path))
@@ -174,8 +196,10 @@ def test_preflight_local_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
 
 def test_preflight_local_model_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
 
     # Do NOT monkeypatch _check_model_accessible — use real implementation
     non_existent = "/definitely/does/not/exist/model"
@@ -196,22 +220,26 @@ def test_preflight_persistence_mode_warning_not_blocking(
 ) -> None:
     """Persistence mode off produces a warning but does NOT raise PreFlightError."""
     # Patch all three checks to pass
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
 
     # Simulate pynvml reporting persistence mode off — do NOT reload the module.
     # Instead we mock _warn_if_persistence_mode_off to log the expected warning.
     def fake_warn() -> None:
-        logging.getLogger("llenergymeasure.orchestration.preflight").warning(
+        logging.getLogger("llenergymeasure.api.preflight").warning(
             "GPU persistence mode is off. First experiment may have higher "
             "latency. Enable: sudo nvidia-smi -pm 1"
         )
 
-    monkeypatch.setattr(preflight_module, "_warn_if_persistence_mode_off", fake_warn)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_warn_if_persistence_mode_off", fake_warn)
 
     config = _make_config()
-    with caplog.at_level(logging.WARNING, logger="llenergymeasure.orchestration.preflight"):
+    with caplog.at_level(logging.WARNING, logger="llenergymeasure.api.preflight"):
         # Should NOT raise a PreFlightError
         run_preflight(config)
 
@@ -226,9 +254,13 @@ def test_preflight_persistence_mode_warning_not_blocking(
 
 def test_preflight_error_format(monkeypatch: pytest.MonkeyPatch) -> None:
     """Trigger 2 failures and check the formatted error string."""
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: False)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: False)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: False)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: False
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
 
     config = _make_config()
     with pytest.raises(PreFlightError) as exc_info:
@@ -250,8 +282,10 @@ def test_preflight_error_format(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_check_cuda_available_no_torch(monkeypatch: pytest.MonkeyPatch) -> None:
     """_check_cuda_available() returns False when torch is not importable."""
-    monkeypatch.setattr(preflight_module.importlib.util, "find_spec", lambda name: None)
-    result = preflight_module._check_cuda_available()
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight.importlib.util, "find_spec", lambda name: None
+    )
+    result = llenergymeasure.api.preflight._check_cuda_available()
     assert result is False
 
 
@@ -259,33 +293,37 @@ def test_check_backend_installed_pytorch(monkeypatch: pytest.MonkeyPatch) -> Non
     """_check_backend_installed() delegates to find_spec for transformers."""
     mock_spec = MagicMock()  # truthy
     monkeypatch.setattr(
-        preflight_module.importlib.util,
+        llenergymeasure.api.preflight.importlib.util,
         "find_spec",
         lambda name: mock_spec if name == "transformers" else None,
     )
-    assert preflight_module._check_backend_installed("pytorch") is True
+    assert llenergymeasure.api.preflight._check_backend_installed("pytorch") is True
 
 
 def test_check_backend_installed_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(preflight_module.importlib.util, "find_spec", lambda name: None)
-    assert preflight_module._check_backend_installed("vllm") is False
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight.importlib.util, "find_spec", lambda name: None
+    )
+    assert llenergymeasure.api.preflight._check_backend_installed("vllm") is False
 
 
 def test_check_model_accessible_local_exists(tmp_path: Path) -> None:
-    result = preflight_module._check_model_accessible(str(tmp_path))
+    result = llenergymeasure.api.preflight._check_model_accessible(str(tmp_path))
     assert result is None
 
 
 def test_check_model_accessible_local_missing() -> None:
-    result = preflight_module._check_model_accessible("/absolutely/nonexistent/path")
+    result = llenergymeasure.api.preflight._check_model_accessible("/absolutely/nonexistent/path")
     assert result is not None
     assert "/absolutely/nonexistent/path" in result
 
 
 def test_check_model_accessible_no_hf_hub(monkeypatch: pytest.MonkeyPatch) -> None:
     """Returns None (skip) when huggingface_hub is not installed."""
-    monkeypatch.setattr(preflight_module.importlib.util, "find_spec", lambda name: None)
-    result = preflight_module._check_model_accessible("some/hub-model")
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight.importlib.util, "find_spec", lambda name: None
+    )
+    result = llenergymeasure.api.preflight._check_model_accessible("some/hub-model")
     assert result is None
 
 
@@ -306,9 +344,11 @@ def test_check_model_accessible_gated(monkeypatch: pytest.MonkeyPatch) -> None:
             return MagicMock()  # truthy
         return original_find_spec(name)
 
-    monkeypatch.setattr(preflight_module.importlib.util, "find_spec", patched_find_spec)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight.importlib.util, "find_spec", patched_find_spec
+    )
 
-    result = preflight_module._check_model_accessible("meta-llama/Llama-2-7b-hf")
+    result = llenergymeasure.api.preflight._check_model_accessible("meta-llama/Llama-2-7b-hf")
     assert result is not None
     assert "gated model" in result
     assert "HF_TOKEN" in result
@@ -330,9 +370,11 @@ def test_check_model_accessible_404(monkeypatch: pytest.MonkeyPatch) -> None:
             return MagicMock()
         return original_find_spec(name)
 
-    monkeypatch.setattr(preflight_module.importlib.util, "find_spec", patched_find_spec)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight.importlib.util, "find_spec", patched_find_spec
+    )
 
-    result = preflight_module._check_model_accessible("some/nonexistent-model")
+    result = llenergymeasure.api.preflight._check_model_accessible("some/nonexistent-model")
     assert result is not None
     assert "not found" in result
 
@@ -353,9 +395,11 @@ def test_check_model_accessible_network_error(monkeypatch: pytest.MonkeyPatch) -
             return MagicMock()
         return original_find_spec(name)
 
-    monkeypatch.setattr(preflight_module.importlib.util, "find_spec", patched_find_spec)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight.importlib.util, "find_spec", patched_find_spec
+    )
 
-    result = preflight_module._check_model_accessible("some/model")
+    result = llenergymeasure.api.preflight._check_model_accessible("some/model")
     assert result is None  # Network errors are non-blocking
 
 
@@ -392,7 +436,7 @@ def test_run_study_preflight_multi_backend_docker_available_auto_elevates(
         "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
     )
     study = _make_study(["pytorch", "vllm"])
-    with caplog.at_level(logging.INFO, logger="llenergymeasure.orchestration.preflight"):
+    with caplog.at_level(logging.INFO, logger="llenergymeasure.api.preflight"):
         # Should not raise
         run_study_preflight(study)
 
@@ -444,9 +488,13 @@ def test_run_study_preflight_error_message_contains_backends(
 
 def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """run_preflight collects validate_config errors into PreFlightError."""
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
 
     class _FakeBackend:
         name = "tensorrt"
@@ -454,7 +502,7 @@ def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.Monke
         def validate_config(self, config):
             return ["SM too low for TRT-LLM", "FP8 not supported on this GPU"]
 
-    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: _FakeBackend())
+    monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: _FakeBackend())
 
     config = ExperimentConfig(model="test-model", backend="tensorrt")
     with pytest.raises(PreFlightError) as exc_info:
@@ -467,10 +515,16 @@ def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.Monke
 
 def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     """run_preflight succeeds when validate_config returns no errors."""
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
-    monkeypatch.setattr(preflight_module, "_warn_if_persistence_mode_off", lambda: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_warn_if_persistence_mode_off", lambda: None
+    )
 
     class _FakeBackend:
         name = "pytorch"
@@ -478,7 +532,7 @@ def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.Mon
         def validate_config(self, config):
             return []
 
-    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: _FakeBackend())
+    monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: _FakeBackend())
 
     config = ExperimentConfig(model="test-model", backend="pytorch")
     # Should not raise
@@ -487,15 +541,21 @@ def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.Mon
 
 def test_run_preflight_handles_validate_config_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     """run_preflight does not crash if get_backend raises during validate_config."""
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
-    monkeypatch.setattr(preflight_module, "_warn_if_persistence_mode_off", lambda: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_warn_if_persistence_mode_off", lambda: None
+    )
 
     def raise_error(name):
         raise ImportError("tensorrt_llm not installed")
 
-    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", raise_error)
+    monkeypatch.setattr("llenergymeasure.backends.get_backend", raise_error)
 
     config = ExperimentConfig(model="test-model", backend="tensorrt")
     # Should not raise — the try/except in preflight catches ImportError from get_backend
@@ -506,9 +566,13 @@ def test_run_preflight_validate_config_errors_counted_correctly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """validate_config errors contribute to the total issue count in PreFlightError."""
-    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
-    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
-    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(llenergymeasure.api.preflight, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_backend_installed", lambda backend: True
+    )
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
+    )
 
     class _FakeBackend:
         name = "tensorrt"
@@ -516,7 +580,7 @@ def test_run_preflight_validate_config_errors_counted_correctly(
         def validate_config(self, config):
             return ["FP8 requires SM >= 8.9 but this GPU has SM 8.0"]
 
-    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: _FakeBackend())
+    monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: _FakeBackend())
 
     config = ExperimentConfig(model="test-model", backend="tensorrt")
     with pytest.raises(PreFlightError) as exc_info:
@@ -533,7 +597,7 @@ def test_run_preflight_validate_config_errors_counted_correctly(
 
 def test_get_compute_capability_returns_tuple_or_none() -> None:
     """get_compute_capability returns (major, minor) tuple or None — never raises."""
-    from llenergymeasure.core.gpu_info import get_compute_capability
+    from llenergymeasure.device.gpu_info import get_compute_capability
 
     result = get_compute_capability()
     assert result is None or (isinstance(result, tuple) and len(result) == 2)

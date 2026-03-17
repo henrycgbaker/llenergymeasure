@@ -17,9 +17,9 @@ from tests.conftest import make_config, make_result
 
 # Patch targets: patch the source modules, not container_entrypoint references,
 # because container_entrypoint imports these inside function scope.
-_PATCH_PREFLIGHT = "llenergymeasure.orchestration.preflight.run_preflight"
-_PATCH_GET_BACKEND = "llenergymeasure.core.backends.get_backend"
-_PATCH_HARNESS_RUN = "llenergymeasure.core.harness.MeasurementHarness.run"
+_PATCH_PREFLIGHT = "llenergymeasure.api.preflight.run_preflight"
+_PATCH_GET_BACKEND = "llenergymeasure.backends.get_backend"
+_PATCH_HARNESS_RUN = "llenergymeasure.harness.MeasurementHarness.run"
 
 
 # ---------------------------------------------------------------------------

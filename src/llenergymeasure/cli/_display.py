@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
-from llenergymeasure.exceptions import LLEMError
+from llenergymeasure.utils.exceptions import LLEMError
 
 
 def _sig3(value: float) -> str:

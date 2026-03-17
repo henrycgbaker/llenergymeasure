@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from llenergymeasure.api.preflight import run_study_preflight
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import PreFlightError
-from llenergymeasure.orchestration.preflight import run_study_preflight
+from llenergymeasure.utils.exceptions import PreFlightError
 
 
 def test_single_backend_passes():

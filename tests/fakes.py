@@ -27,7 +27,7 @@ class FakeEnergyBackend:
 
     def stop_tracking(self, tracker: Any) -> Any:
         self._tracking = False
-        from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
+        from llenergymeasure.energy.nvml import EnergyMeasurement
 
         return EnergyMeasurement(total_j=self._total_j, duration_sec=self._duration_sec)
 
