@@ -1,4 +1,4 @@
-"""GPU-free tests for the InferenceBackend Protocol, factory, and detection.
+"""GPU-free tests for the BackendPlugin Protocol, factory, and detection.
 
 All tests run without a GPU. torch is imported only for dtype comparison in
 test_precision_to_dtype (no CUDA calls). Everything else is pure Python.

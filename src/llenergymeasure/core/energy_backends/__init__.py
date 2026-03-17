@@ -34,7 +34,7 @@ from __future__ import annotations
 import importlib.util
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.core.energy_backends.base import EnergyBackend
+from llenergymeasure.core.energy_backends.base import EnergyBackend  # canonical definition
 from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement, NVMLBackend
 from llenergymeasure.core.energy_backends.zeus import ZeusBackend
 from llenergymeasure.exceptions import ConfigError, ConfigurationError

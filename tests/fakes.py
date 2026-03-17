@@ -8,27 +8,7 @@ internal modules.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-
-from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.experiment import ExperimentResult
-
-
-class FakeInferenceBackend:
-    """Minimal InferenceBackend fake -- returns a pre-built ExperimentResult."""
-
-    name = "fake"
-
-    def __init__(self, result: ExperimentResult | None = None):
-        self._result = result
-        self.run_calls: list[ExperimentConfig] = []
-
-    def run(self, config: ExperimentConfig) -> ExperimentResult:
-        self.run_calls.append(config)
-        if self._result is None:
-            raise ValueError("FakeInferenceBackend: set result before calling run()")
-        return self._result
 
 
 class FakeEnergyBackend:
@@ -53,22 +33,3 @@ class FakeEnergyBackend:
 
     def is_available(self) -> bool:
         return True
-
-
-class FakeResultsRepository:
-    """Minimal ResultsRepository fake -- stores results in memory, keyed by path."""
-
-    def __init__(self):
-        self._store: dict[Path, ExperimentResult] = {}
-        self.saved: list[tuple[ExperimentResult, Path]] = []
-
-    def save(self, result: ExperimentResult, output_dir: Path) -> Path:
-        path = output_dir / "result.json"
-        self._store[path] = result
-        self.saved.append((result, output_dir))
-        return path
-
-    def load(self, path: Path) -> ExperimentResult:
-        if path not in self._store:
-            raise FileNotFoundError(f"No result at {path}")
-        return self._store[path]
