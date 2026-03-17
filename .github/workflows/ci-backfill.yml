@@ -1,0 +1,142 @@
+name: CI Backfill
+
+# One-shot workflow for backfilling CI check runs on rewritten commits.
+# Mirrors the main CI workflow but handles missing files gracefully:
+#   - Pre-uv.lock commits: resolves deps without frozen lockfile
+#   - Pre-docs-scripts commits: skips docs-freshness checks
+# Delete this workflow once backfill is complete.
+
+on:
+  workflow_dispatch:
+
+env:
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      frozen_flag: ${{ steps.check.outputs.frozen_flag }}
+      has_docs_scripts: ${{ steps.check.outputs.has_docs_scripts }}
+      available_extras: ${{ steps.check.outputs.available_extras }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect codebase capabilities
+        id: check
+        run: |
+          # uv.lock presence -> pass --frozen flag (env var is buggy with "false")
+          if [ -f uv.lock ]; then
+            echo "frozen_flag=--frozen" >> "$GITHUB_OUTPUT"
+          else
+            echo "frozen_flag=" >> "$GITHUB_OUTPUT"
+          fi
+
+          # docs generation scripts
+          if [ -f scripts/generate_config_docs.py ] && \
+             [ -f scripts/generate_cli_reference.py ] && \
+             [ -f scripts/generate_invalid_combos_doc.py ]; then
+            echo "has_docs_scripts=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_docs_scripts=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # detect available extras in pyproject.toml
+          EXTRAS=""
+          for extra in pytorch codecarbon zeus webhooks; do
+            if grep -qP "^${extra}\s*=" pyproject.toml 2>/dev/null; then
+              EXTRAS="${EXTRAS} --extra ${extra}"
+            fi
+          done
+          echo "available_extras=${EXTRAS}" >> "$GITHUB_OUTPUT"
+
+          # Log what was detected
+          echo "::notice::uv.lock=$([ -f uv.lock ] && echo 'present' || echo 'missing')"
+          echo "::notice::docs scripts=$([ -f scripts/generate_cli_reference.py ] && echo 'present' || echo 'missing')"
+          echo "::notice::extras=${EXTRAS:-'(none)'}"
+
+  lint:
+    needs: detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync --dev ${{ needs.detect.outputs.frozen_flag }}
+      - name: Ruff lint
+        run: uv run ruff check src/ tests/
+      - name: Ruff format check
+        run: uv run ruff format --check src/ tests/
+
+  type-check:
+    needs: detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync --dev ${{ needs.detect.outputs.frozen_flag }}
+      - name: mypy
+        run: uv run mypy src/
+
+  test:
+    needs: detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --dev ${{ needs.detect.outputs.available_extras }} ${{ needs.detect.outputs.frozen_flag }}
+      - name: Unit + integration tests
+        run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short
+      - name: Import validation
+        run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
+
+  package-validation:
+    needs: detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv build --wheel
+      - name: Install and validate
+        run: |
+          python -m venv /tmp/pkg-check
+          /tmp/pkg-check/bin/pip install dist/*.whl --quiet
+          /tmp/pkg-check/bin/python -c "
+          from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult
+          print('Package install OK')
+          "
+      - name: Version sync check
+        run: |
+          PYPROJECT_VER=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); print(tomllib.load(f)['project']['version'])")
+          INIT_VER=$(python3 -c "import re; s=open('src/llenergymeasure/__init__.py').read(); print(re.search(r'__version__[^=]*=\s*\"([^\"]+)\"', s).group(1))")
+          echo "pyproject.toml: ${PYPROJECT_VER}"
+          echo "__init__.py:    ${INIT_VER}"
+          [ "$PYPROJECT_VER" = "$INIT_VER" ] || { echo "ERROR: Version mismatch"; exit 1; }
+
+  docs-freshness:
+    needs: detect
+    if: needs.detect.outputs.has_docs_scripts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync --dev ${{ needs.detect.outputs.frozen_flag }}
+      - name: Verify doc generation scripts
+        run: |
+          uv run python scripts/generate_config_docs.py > /dev/null
+          uv run python scripts/generate_cli_reference.py > /dev/null
+          uv run python scripts/generate_invalid_combos_doc.py > /dev/null
