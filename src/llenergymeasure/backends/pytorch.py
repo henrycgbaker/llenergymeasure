@@ -99,7 +99,7 @@ class PyTorchBackend:
             WarmupResult with convergence status and iteration count.
             thermal_floor_wait_s is left at default 0.0 (set by harness).
         """
-        from llenergymeasure.harness.warmup import (
+        from llenergymeasure.backends._helpers import (
             create_warmup_inference_fn,
             warmup_until_converged,
         )

@@ -12,7 +12,7 @@ from typing import Any
 
 
 class FakeEnergyBackend:
-    """Minimal EnergyBackend fake -- returns fixed EnergyMeasurement."""
+    """Minimal EnergySampler fake -- returns fixed EnergyMeasurement."""
 
     name = "fake-energy"
 

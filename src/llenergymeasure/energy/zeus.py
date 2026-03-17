@@ -14,11 +14,11 @@ from typing import Any
 from llenergymeasure.energy.nvml import EnergyMeasurement
 
 
-class ZeusBackend:
-    """Energy backend using the Zeus GPU energy monitor.
+class ZeusSampler:
+    """Energy sampler using the Zeus GPU energy monitor.
 
     Wraps ``zeus.monitor.ZeusMonitor`` to track per-GPU energy over a named
-    measurement window.  Zeus is the preferred backend when available, as it
+    measurement window.  Zeus is the preferred sampler when available, as it
     reads hardware energy registers directly.
 
     All zeus imports are deferred — safe to import without zeus installed.

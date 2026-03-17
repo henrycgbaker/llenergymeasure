@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class EnergyMeasurement:
     """Energy measurement result from a tracking session.
 
-    Shared dataclass used by both NVMLBackend and ZeusBackend.
+    Shared dataclass used by both NVMLSampler and ZeusSampler.
 
     Attributes:
         total_j: Total energy consumed in joules.
@@ -34,8 +34,8 @@ class EnergyMeasurement:
     per_gpu_j: dict[int, float] | None = None
 
 
-class NVMLBackend:
-    """Energy backend using NVML via PowerThermalSampler.
+class NVMLSampler:
+    """Energy sampler using NVML via PowerThermalSampler.
 
     Polls GPU power at 100ms intervals during the measurement window and
     integrates consecutive sample pairs using the trapezoidal rule to produce

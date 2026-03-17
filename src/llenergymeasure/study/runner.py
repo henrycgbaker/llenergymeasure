@@ -137,7 +137,7 @@ def _run_experiment_worker(
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
-        from llenergymeasure.api._impl import _resolve_gpu_indices
+        from llenergymeasure.api._gpu import _resolve_gpu_indices
 
         gpu_indices = _resolve_gpu_indices(config)
         result = harness.run(backend, config, snapshot=snapshot, gpu_indices=gpu_indices)
@@ -192,15 +192,15 @@ def _consume_progress_events(
 
         event_type = event.get("event")
         if event_type == "started":
-            from llenergymeasure.cli._display import print_study_progress
+            from llenergymeasure.study._progress import print_study_progress
 
             print_study_progress(index, total, config, status="running")
         elif event_type == "completed":
-            from llenergymeasure.cli._display import print_study_progress
+            from llenergymeasure.study._progress import print_study_progress
 
             print_study_progress(index, total, config, status="completed")
         elif event_type == "failed":
-            from llenergymeasure.cli._display import print_study_progress
+            from llenergymeasure.study._progress import print_study_progress
 
             print_study_progress(index, total, config, status="failed")
 
@@ -578,9 +578,9 @@ class StudyRunner:
         Returns:
             ExperimentResult on success, or a failure dict on error.
         """
-        from llenergymeasure.cli._display import print_study_progress
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.study._progress import print_study_progress
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
         from llenergymeasure.utils.exceptions import DockerError
 
