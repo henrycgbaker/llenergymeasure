@@ -153,6 +153,16 @@ def run_preflight(config: ExperimentConfig) -> None:
     if model_error is not None:
         failures.append(model_error)
 
+    # Check 4: Backend config validation (hardware x config cross-checks)
+    try:
+        from llenergymeasure.core.backends import get_backend
+
+        backend = get_backend(config.backend)
+        backend_errors = backend.validate_config(config)
+        failures.extend(backend_errors)
+    except Exception:
+        pass  # get_backend may fail if backend not installed — already caught by Check 2
+
     if failures:
         n = len(failures)
         lines = "\n".join(f"  \u2717 {f}" for f in failures)
