@@ -44,7 +44,7 @@ def _check_cuda_available() -> bool:
         return False
     import torch
 
-    return torch.cuda.is_available()
+    return bool(torch.cuda.is_available())
 
 
 def _check_backend_installed(backend: str) -> bool:

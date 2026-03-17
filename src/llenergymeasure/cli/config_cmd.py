@@ -55,7 +55,7 @@ def _probe_backend_version(backend: str) -> str | None:
         if backend == "pytorch":
             import torch
 
-            return torch.__version__
+            return str(torch.__version__)
         elif backend == "vllm":
             import vllm
 
