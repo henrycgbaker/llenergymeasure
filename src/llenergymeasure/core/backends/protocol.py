@@ -61,6 +61,10 @@ class BackendPlugin(Protocol):
         """Release model from memory and clear CUDA cache."""
         ...
 
+    def validate_config(self, config: ExperimentConfig) -> list[str]:
+        """Validate config against hardware capabilities. Returns error strings (empty = valid)."""
+        ...
+
 
 @runtime_checkable
 class InferenceBackend(Protocol):
