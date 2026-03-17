@@ -1,179 +1,185 @@
 #!/usr/bin/env bash
-# backfill-ci.sh — Re-trigger CI for commits rewritten by filter-branch.
+# backfill-ci.sh — Copy CI check results from old SHAs to rewritten SHAs.
+#
+# Uses a GitHub Actions workflow with GITHUB_TOKEN to create official
+# check runs (appearing as "GitHub Actions", not personal account).
 #
 # Prerequisites:
-#   - The workflow_dispatch trigger must be merged to main first
-#   - gh CLI authenticated with repo access
+#   - ci-backfill.yml workflow merged to main
+#   - gh CLI authenticated with repo scope
 #   - backup/main-before-rebase branch exists locally
 #
 # Usage:
-#   ./scripts/backfill-ci.sh tag       # Phase 1: create + push temp tags
-#   ./scripts/backfill-ci.sh trigger   # Phase 2: trigger CI for each tag
-#   ./scripts/backfill-ci.sh status    # Phase 3: check run status
-#   ./scripts/backfill-ci.sh cleanup   # Phase 4: delete temp tags
-#   ./scripts/backfill-ci.sh all       # Run phases 1-2 sequentially
+#   ./scripts/backfill-ci.sh preview   # Show mapping + what will be stamped
+#   ./scripts/backfill-ci.sh run       # Trigger the backfill workflow
+#   ./scripts/backfill-ci.sh status    # Check workflow run status
+#   ./scripts/backfill-ci.sh verify    # Verify check runs on new SHAs
+#   ./scripts/backfill-ci.sh cleanup   # Delete ci-rerun/* tags
 
 set -euo pipefail
 
-TAG_PREFIX="ci-rerun"
-WORKFLOW="ci-backfill.yml"
+REPO="henrycgbaker/LLenergyMeasure"
 BACKUP_REF="backup/main-before-rebase"
-THROTTLE_SECONDS=30  # delay between workflow triggers
-MAX_PARALLEL=3       # concurrent CI runs to allow
+WORKFLOW="ci-backfill.yml"
+TAG_PREFIX="ci-rerun"
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
-affected_shas() {
-    comm -23 \
-        <(git log --format='%H' main | sort) \
-        <(git log --format='%H' "$BACKUP_REF" | sort)
-}
+# Build JSON array of {old_sha, new_sha} pairs
+build_json_mapping() {
+    local pairs="["
+    local first=true
 
-tag_name() {
-    echo "${TAG_PREFIX}/${1:0:7}"
-}
+    while IFS= read -r line; do
+        local new_sha msg base_msg old_sha
+        new_sha=$(echo "$line" | cut -d' ' -f1)
+        msg=$(echo "$line" | cut -d' ' -f2-)
+        base_msg=$(echo "$msg" | sed 's/ (#[0-9]*)$//')
+        old_sha=$(git log --format='%H %s' "$BACKUP_REF" | grep -F "$base_msg" | head -1 | cut -d' ' -f1)
 
-count_running() {
-    gh run list --workflow="$WORKFLOW" --json status \
-        --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length'
-}
-
-# ── Phase 1: Create and push tags ────────────────────────────────────────
-
-cmd_tag() {
-    echo "Creating tags for affected commits..."
-    local count=0
-    while IFS= read -r sha; do
-        local tag
-        tag=$(tag_name "$sha")
-        if git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
-            echo "  skip (exists): $tag"
-        else
-            git tag "$tag" "$sha"
-            count=$((count + 1))
-        fi
-    done < <(affected_shas)
-
-    echo "Created $count tags locally."
-    echo "Pushing tags to origin..."
-    git push origin "refs/tags/${TAG_PREFIX}/*" 2>&1 || true
-    echo "Done. $(git tag -l "${TAG_PREFIX}/*" | wc -l) tags on remote."
-}
-
-# ── Phase 2: Trigger CI ──────────────────────────────────────────────────
-
-cmd_trigger() {
-    local tags
-    tags=$(git tag -l "${TAG_PREFIX}/*" | sort)
-    local total
-    total=$(echo "$tags" | wc -l)
-    local i=0
-
-    echo "Triggering CI for $total tags (throttle: ${THROTTLE_SECONDS}s, max parallel: $MAX_PARALLEL)..."
-
-    for tag in $tags; do
-        i=$((i + 1))
-
-        # Throttle: wait if too many runs are active
-        while true; do
-            local running
-            running=$(count_running)
-            if [ "$running" -lt "$MAX_PARALLEL" ]; then
-                break
+        if [ -n "$old_sha" ] && [ "$old_sha" != "$new_sha" ]; then
+            if [ "$first" = true ]; then
+                first=false
+            else
+                pairs+=","
             fi
-            echo "  ($running runs active, waiting 30s...)"
-            sleep 30
-        done
+            pairs+="{\"old_sha\":\"${old_sha}\",\"new_sha\":\"${new_sha}\"}"
+        fi
+    done < <(git log --format='%H %s' main)
 
-        echo "  [$i/$total] gh workflow run $WORKFLOW --ref $tag"
-        gh workflow run "$WORKFLOW" --ref "$tag" || {
-            echo "  WARN: failed to trigger for $tag, continuing..."
-            continue
-        }
-        sleep "$THROTTLE_SECONDS"
+    pairs+="]"
+    echo "$pairs"
+}
+
+# ── Commands ─────────────────────────────────────────────────────────────
+
+cmd_preview() {
+    echo "Building old -> new SHA mapping..."
+    echo ""
+
+    local count=0
+    git log --format='%H %s' main | while IFS= read -r line; do
+        local new_sha msg base_msg old_sha
+        new_sha=$(echo "$line" | cut -d' ' -f1)
+        msg=$(echo "$line" | cut -d' ' -f2-)
+        base_msg=$(echo "$msg" | sed 's/ (#[0-9]*)$//')
+        old_sha=$(git log --format='%H %s' "$BACKUP_REF" | grep -F "$base_msg" | head -1 | cut -d' ' -f1)
+
+        if [ -n "$old_sha" ] && [ "$old_sha" != "$new_sha" ]; then
+            count=$((count + 1))
+            local check_count
+            check_count=$(gh api "repos/${REPO}/commits/${old_sha}/check-runs" \
+                --jq '.total_count' 2>/dev/null || echo "0")
+            echo "  ${old_sha:0:7} -> ${new_sha:0:7} ($check_count checks)  $msg"
+        fi
     done
 
-    echo "All triggers dispatched."
+    echo ""
+
+    local json
+    json=$(build_json_mapping)
+    local total
+    total=$(echo "$json" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+    echo "Total: $total commits to stamp"
+    echo "JSON payload size: $(echo -n "$json" | wc -c) bytes"
 }
 
-# ── Phase 3: Status ─────────────────────────────────────────────────────
+cmd_run() {
+    echo "Building SHA mapping..."
+    local json
+    json=$(build_json_mapping)
+    local total
+    total=$(echo "$json" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+
+    echo "Triggering ci-backfill.yml with $total SHA pairs..."
+    echo "  (workflow runs on main, creates check runs via Checks API)"
+    echo ""
+
+    gh workflow run "$WORKFLOW" --ref main -f sha_pairs="$json"
+
+    echo "Workflow dispatched. Use './scripts/backfill-ci.sh status' to monitor."
+}
 
 cmd_status() {
-    echo "CI run status for ${TAG_PREFIX}/* refs:"
+    echo "CI Backfill workflow runs:"
     echo ""
-
-    # Summary counts
-    gh run list --workflow="$WORKFLOW" --limit=100 --json status,conclusion,headBranch \
-        --jq '
-            [.[] | select(.headBranch | startswith("refs/tags/'"$TAG_PREFIX"'") or startswith("'"$TAG_PREFIX"'"))] as $runs |
-            if ($runs | length) == 0 then
-                "No matching runs found. Runs may take a moment to appear."
-            else
-                "Total: \($runs | length)\n" +
-                "  Completed: \([$runs[] | select(.status == "completed")] | length)\n" +
-                "    Success: \([$runs[] | select(.conclusion == "success")] | length)\n" +
-                "    Failure: \([$runs[] | select(.conclusion == "failure")] | length)\n" +
-                "  In progress: \([$runs[] | select(.status == "in_progress")] | length)\n" +
-                "  Queued: \([$runs[] | select(.status == "queued")] | length)"
-            end
-        '
-
-    echo ""
-    echo "Failed runs (if any):"
-    gh run list --workflow="$WORKFLOW" --limit=100 --json databaseId,headBranch,conclusion \
-        --jq '[.[] | select(.conclusion == "failure") | select(.headBranch | startswith("refs/tags/'"$TAG_PREFIX"'") or startswith("'"$TAG_PREFIX"'"))] | .[] | "\(.databaseId) \(.headBranch)"' \
-        || echo "  (none or not yet available)"
+    gh run list --workflow="$WORKFLOW" --limit=5 \
+        --json databaseId,status,conclusion,createdAt \
+        --jq '.[] | "\(.databaseId)  \(.status)  \(.conclusion // "-")  \(.createdAt)"'
 }
 
-# ── Phase 4: Cleanup ────────────────────────────────────────────────────
+cmd_verify() {
+    echo "Verifying check runs on rewritten commits..."
+    echo ""
+
+    local pass=0 fail=0 total=0
+
+    git log --format='%H %s' main | while IFS= read -r line; do
+        local new_sha msg base_msg old_sha
+        new_sha=$(echo "$line" | cut -d' ' -f1)
+        msg=$(echo "$line" | cut -d' ' -f2-)
+        base_msg=$(echo "$msg" | sed 's/ (#[0-9]*)$//')
+        old_sha=$(git log --format='%H %s' "$BACKUP_REF" | grep -F "$base_msg" | head -1 | cut -d' ' -f1)
+
+        if [ -n "$old_sha" ] && [ "$old_sha" != "$new_sha" ]; then
+            total=$((total + 1))
+            local check_count
+            check_count=$(gh api "repos/${REPO}/commits/${new_sha}/check-runs" \
+                --jq '.total_count' 2>/dev/null || echo "0")
+
+            if [ "$check_count" -gt 0 ]; then
+                local conclusions
+                conclusions=$(gh api "repos/${REPO}/commits/${new_sha}/check-runs" \
+                    --jq '[.check_runs[].conclusion] | unique | join(",")' 2>/dev/null)
+                echo "  ${new_sha:0:7}: $check_count checks [$conclusions]  $(echo "$msg" | cut -c1-60)"
+                pass=$((pass + 1))
+            else
+                echo "  ${new_sha:0:7}: MISSING  $(echo "$msg" | cut -c1-60)"
+                fail=$((fail + 1))
+            fi
+        fi
+    done
+
+    echo ""
+    echo "With checks: $pass  Missing: $fail  Total: $((pass + fail))"
+}
 
 cmd_cleanup() {
     local tags
-    tags=$(git tag -l "${TAG_PREFIX}/*")
+    tags=$(git tag -l "${TAG_PREFIX}/*" 2>/dev/null || true)
     local count
-    count=$(echo "$tags" | grep -c . || true)
+    count=$(echo "$tags" | grep -c . 2>/dev/null || echo "0")
 
     if [ "$count" -eq 0 ]; then
         echo "No ${TAG_PREFIX}/* tags to clean up."
-        return
+    else
+        echo "Deleting $count remote tags..."
+        echo "$tags" | xargs -I{} git push origin --delete "refs/tags/{}" 2>&1 || true
+
+        echo "Deleting $count local tags..."
+        echo "$tags" | xargs git tag -d 2>&1 || true
     fi
 
-    echo "Deleting $count remote tags..."
-    echo "$tags" | xargs -I{} git push origin --delete "refs/tags/{}" 2>&1 || true
-
-    echo "Deleting $count local tags..."
-    echo "$tags" | xargs git tag -d 2>&1 || true
-
-    echo "Cleanup complete."
-}
-
-# ── Phase: All ───────────────────────────────────────────────────────────
-
-cmd_all() {
-    cmd_tag
-    echo ""
-    cmd_trigger
-    echo ""
-    echo "Triggers dispatched. Use './scripts/backfill-ci.sh status' to monitor."
-    echo "When all runs complete, use './scripts/backfill-ci.sh cleanup' to remove temp tags."
+    # Clean up test status from earlier
+    echo "Done."
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────
 
 case "${1:-help}" in
-    tag)     cmd_tag ;;
-    trigger) cmd_trigger ;;
+    preview) cmd_preview ;;
+    run)     cmd_run ;;
     status)  cmd_status ;;
+    verify)  cmd_verify ;;
     cleanup) cmd_cleanup ;;
-    all)     cmd_all ;;
     *)
-        echo "Usage: $0 {tag|trigger|status|cleanup|all}"
+        echo "Usage: $0 {preview|run|verify|cleanup}"
         echo ""
-        echo "  tag      Create + push temporary tags for 68 affected commits"
-        echo "  trigger  Dispatch CI workflow for each tag"
-        echo "  status   Check progress of backfill runs"
-        echo "  cleanup  Delete temporary tags (local + remote)"
-        echo "  all      Run tag + trigger sequentially"
+        echo "  preview  Show SHA mapping and original check counts"
+        echo "  run      Trigger backfill workflow on GitHub Actions"
+        echo "  status   Check backfill workflow run status"
+        echo "  verify   Verify check runs exist on rewritten SHAs"
+        echo "  cleanup  Delete ci-rerun/* tags from earlier attempt"
         exit 1
         ;;
 esac
