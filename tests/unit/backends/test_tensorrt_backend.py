@@ -82,6 +82,17 @@ class _MockKvCacheConfig:
             setattr(self, k, v)
 
 
+class _MockCapacitySchedulerPolicy:
+    """Mock for tensorrt_llm.llmapi.CapacitySchedulerPolicy enum."""
+
+    GUARANTEED_NO_EVICT = "GUARANTEED_NO_EVICT"
+    MAX_UTILIZATION = "MAX_UTILIZATION"
+    STATIC_BATCH = "STATIC_BATCH"
+
+    def __class_getitem__(cls, item):
+        return getattr(cls, item)
+
+
 class _MockSchedulerConfig:
     """Mock for tensorrt_llm.llmapi.SchedulerConfig."""
 
@@ -112,6 +123,7 @@ def _make_fake_tensorrt_llm_module() -> types.ModuleType:
     mock_llmapi.BuildCacheConfig = _MockBuildCacheConfig  # type: ignore[attr-defined]
     mock_llmapi.KvCacheConfig = _MockKvCacheConfig  # type: ignore[attr-defined]
     mock_llmapi.SchedulerConfig = _MockSchedulerConfig  # type: ignore[attr-defined]
+    mock_llmapi.CapacitySchedulerPolicy = _MockCapacitySchedulerPolicy  # type: ignore[attr-defined]
 
     mock_trt.llmapi = mock_llmapi  # type: ignore[attr-defined]
     return mock_trt
@@ -290,7 +302,10 @@ class TestBuildLlmKwargs:
 
         assert "scheduler_config" in kwargs
         assert isinstance(kwargs["scheduler_config"], _MockSchedulerConfig)
-        assert kwargs["scheduler_config"]._kwargs["capacity_scheduling_policy"] == "MAX_UTILIZATION"
+        assert (
+            kwargs["scheduler_config"]._kwargs["capacity_scheduling_policy"]
+            == _MockCapacitySchedulerPolicy.MAX_UTILIZATION
+        )
 
     def test_build_llm_kwargs_model_always_present(self):
         """model key is always present regardless of tensorrt config."""
