@@ -71,18 +71,7 @@ ignore_missing_imports = true
 disallow_untyped_calls = false
 # Allow unused type: ignore comments (needed for cross-environment compatibility)
 warn_unused_ignores = false
-exclude = [
-    # Pending type annotation fixes (PR 5)
-    "core/warmup\\.py",
-    "core/flops\\.py",
-    "core/gpu_info\\.py",
-    "core/state\\.py",
-    "cli/config_cmd\\.py",
-    "cli/_vram\\.py",
-    "results/aggregation\\.py",
-    "core/timeseries\\.py",
-    "core/backends/pytorch\\.py",
-]
+exclude = []
 
 [[tool.uv.index]]
 name = "nvidia"

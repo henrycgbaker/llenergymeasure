@@ -11,13 +11,13 @@ grouped by (bucket_idx, gpu_index).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from llenergymeasure.core.power_thermal import PowerThermalSample
 
 
-def _timeseries_schema():
+def _timeseries_schema() -> Any:
     """Return the locked Parquet schema for timeseries data.
 
     Schema is locked per CONTEXT.md — do not change column names or types
@@ -93,7 +93,7 @@ def write_timeseries_parquet(
     for bucket_idx, gpu_idx in sorted(buckets.keys()):
         bucket_samples = buckets[(bucket_idx, gpu_idx)]
 
-        def _mean(values: list) -> float | None:
+        def _mean(values: list[float | None]) -> float | None:
             valid = [v for v in values if v is not None]
             return sum(valid) / len(valid) if valid else None
 
