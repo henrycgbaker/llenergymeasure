@@ -15,9 +15,8 @@ import pytest
 
 def test_tensorrt_backend_satisfies_plugin_protocol():
     """TensorRTBackend must satisfy the BackendPlugin Protocol."""
-    from llenergymeasure.core.backends.tensorrt import TensorRTBackend
-
     from llenergymeasure.core.backends.protocol import BackendPlugin
+    from llenergymeasure.core.backends.tensorrt import TensorRTBackend
 
     backend = TensorRTBackend()
     assert isinstance(backend, BackendPlugin)
