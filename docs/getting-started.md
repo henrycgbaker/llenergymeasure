@@ -2,10 +2,11 @@
 
 **Prerequisites:** Complete [Installation](installation.md) first.
 
-This guide has two tracks. Choose one based on your setup:
+This guide has three tracks. Choose one based on your setup:
 
 - **Quick Start (Local PyTorch)** — No Docker required. Get running in minutes.
 - **Recommended Start (Docker + vLLM)** — Full measurement experience with vLLM backend.
+- **TensorRT-LLM Start (Docker)** — Maximum performance with TensorRT engine compilation.
 
 ---
 
@@ -123,6 +124,73 @@ The output format is the same as the PyTorch track. The key difference is `backe
 
 ---
 
+## Track 3: TensorRT-LLM (Docker)
+
+TensorRT-LLM compiles models into optimised TensorRT engines, then runs inference against
+those engines. The first run compiles the engine (which may take several minutes); subsequent
+runs with the same config load the cached engine and are much faster.
+
+### Prerequisites
+
+- Docker + NVIDIA Container Toolkit installed — see [Docker Setup](docker-setup.md)
+- `llenergymeasure[pytorch]` installed (base + pytorch needed even for Docker dispatch)
+- NVIDIA GPU with SM >= 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
+
+### 1. Create a config file
+
+Create `experiment.yaml`:
+
+```yaml
+model: meta-llama/Llama-2-7b-hf
+backend: tensorrt
+n: 50
+runners:
+  tensorrt: docker
+```
+
+For a quantized run with engine caching configured explicitly:
+
+```yaml
+model: meta-llama/Llama-2-7b-hf
+backend: tensorrt
+n: 50
+runners:
+  tensorrt: docker
+tensorrt:
+  max_batch_size: 8
+  dtype: bfloat16
+  quant:
+    quant_algo: W4A16_AWQ
+  build_cache:
+    max_cache_storage_gb: 100
+```
+
+### 2. Run the experiment
+
+```bash
+llem run experiment.yaml
+```
+
+What happens:
+
+1. Pre-flight checks run: Docker CLI, NVIDIA Container Toolkit, GPU visibility, SM version check.
+2. The TensorRT-LLM Docker image is pulled on first run (`ghcr.io/henrycgbaker/llenergymeasure/tensorrt:0.10.0-cuda12`).
+3. The container compiles the TensorRT engine from the model weights. **First run only — this takes several minutes.** Progress is shown in the terminal.
+4. The compiled engine is cached on disk (`~/.cache/tensorrt_llm` inside the container, mounted from the host).
+5. Inference runs against the compiled engine.
+6. Results are printed to stdout and saved to `results/`.
+
+> **Engine caching.** The compiled engine is keyed to your config (model, dtype, max_batch_size,
+> tp_size, etc.). Running the same experiment config again skips compilation and starts
+> inference immediately. Changing any compile-time parameter triggers a new build.
+
+### 3. Read the results
+
+The output format is the same as other backends. The result file will include `backend: tensorrt`
+and a `build_metadata` section with engine compilation time, GPU architecture, and TRT-LLM version.
+
+---
+
 ## Using a Config File
 
 For repeatability, store your experiment configuration in a YAML file.
@@ -152,4 +220,5 @@ For study sweeps (running multiple configurations), see the [Study Configuration
 
 - [Study Configuration](study-config.md) — run parameter sweeps across models, backends, and configurations
 - [Docker Setup](docker-setup.md) — set up Docker + NVIDIA Container Toolkit for vLLM/TensorRT-LLM
+- [Backend Configuration](backends.md) — configure vLLM, TensorRT-LLM, and switch between backends
 - [CLI Reference](cli-reference.md) — all `llem run` and `llem config` flags
