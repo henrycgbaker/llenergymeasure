@@ -16,7 +16,7 @@
 set -euo pipefail
 
 TAG_PREFIX="ci-rerun"
-WORKFLOW="ci.yml"
+WORKFLOW="ci-backfill.yml"
 BACKUP_REF="backup/main-before-rebase"
 THROTTLE_SECONDS=30  # delay between workflow triggers
 MAX_PARALLEL=3       # concurrent CI runs to allow
