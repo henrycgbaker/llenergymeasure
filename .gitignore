@@ -31,6 +31,9 @@ emissions.csv
 .state
 /results
 
+# import-linter
+.import_linter_cache/
+
 # Project workflow (local only)
 .planning/
 .product/

@@ -362,8 +362,8 @@ def test_print_study_progress():
     from io import StringIO
     from unittest.mock import patch
 
-    from llenergymeasure.cli._display import print_study_progress
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.study._progress import print_study_progress
 
     config = ExperimentConfig(model="test/model", backend="pytorch")
     with patch("sys.stderr", new_callable=StringIO) as mock_stderr:

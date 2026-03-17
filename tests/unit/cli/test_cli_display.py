@@ -16,10 +16,10 @@ from llenergymeasure.cli._display import (
     print_dry_run,
     print_experiment_header,
     print_result_summary,
-    print_study_progress,
     print_study_summary,
 )
 from llenergymeasure.cli._vram import DTYPE_BYTES
+from llenergymeasure.study._progress import print_study_progress
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
