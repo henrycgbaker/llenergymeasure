@@ -1,6 +1,6 @@
 # Docker Setup Guide
 
-`llenergymeasure` uses Docker to run vLLM (and future TensorRT-LLM and SGLang) backends in
+`llenergymeasure` uses Docker to run vLLM and TensorRT-LLM (and future SGLang) backends in
 isolated containers with GPU access. This guide walks through setting up Docker with GPU support
 from scratch on a Linux host.
 
@@ -180,6 +180,27 @@ llem run experiment.yaml
 the experiment inside it, and return the results. See [Getting Started](getting-started.md) for
 an annotated walkthrough.
 
+**Run a TensorRT-LLM experiment** by creating a YAML file:
+
+```yaml
+# experiment.yaml
+model: meta-llama/Llama-2-7b-hf
+backend: tensorrt
+n: 50
+runners:
+  tensorrt: docker
+```
+
+Then run it:
+
+```bash
+llem run experiment.yaml
+```
+
+`llem` will pull the TensorRT-LLM Docker image, compile a TensorRT engine (first run only —
+takes several minutes), cache the engine on disk, then run inference. See [Getting Started](getting-started.md)
+for the full TensorRT-LLM walkthrough.
+
 ---
 
 ## Image Management
@@ -193,7 +214,8 @@ ghcr.io/henrycgbaker/llenergymeasure/{backend}:{version}-cuda{cuda_major}
 
 For example:
 ```
-ghcr.io/henrycgbaker/llenergymeasure/vllm:0.8.0-cuda12
+ghcr.io/henrycgbaker/llenergymeasure/vllm:0.10.0-cuda12
+ghcr.io/henrycgbaker/llenergymeasure/tensorrt:0.10.0-cuda12
 ```
 
 **Auto-pull on first use.** When you run a backend for the first time, `llem` automatically
@@ -202,14 +224,15 @@ pulls the correct image. No manual `docker pull` is needed.
 **Pre-fetch an image** (optional, useful for offline environments):
 
 ```bash
-docker pull ghcr.io/henrycgbaker/llenergymeasure/vllm:0.8.0-cuda12
+docker pull ghcr.io/henrycgbaker/llenergymeasure/vllm:0.10.0-cuda12
+docker pull ghcr.io/henrycgbaker/llenergymeasure/tensorrt:0.10.0-cuda12
 ```
 
-Replace `0.8.0` with your installed `llenergymeasure` version and `12` with your CUDA major
+Replace `0.10.0` with your installed `llenergymeasure` version and `12` with your CUDA major
 version. Run `llem config` to see which version is installed.
 
-**Future backends.** TensorRT-LLM (M4) and SGLang (M5) images will follow the same naming
-convention and auto-pull behaviour. No additional setup is needed when these backends ship.
+**Future backends.** SGLang (M5) images will follow the same naming convention and auto-pull
+behaviour. No additional setup is needed when SGLang ships.
 
 ---
 
@@ -295,5 +318,5 @@ llem run experiment.yaml --skip-preflight
 
 ## Next Steps
 
-- [Getting Started](getting-started.md) — run your first vLLM experiment
-- [Backend Configuration](backends.md) — configure vLLM and switch between backends
+- [Getting Started](getting-started.md) — run your first vLLM or TensorRT-LLM experiment
+- [Backend Configuration](backends.md) — configure vLLM, TensorRT-LLM, and switch between backends
