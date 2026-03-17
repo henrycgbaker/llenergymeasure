@@ -354,14 +354,11 @@ class PyTorchBackend:
     # -------------------------------------------------------------------------
 
     def _prepare_prompts(self, config: ExperimentConfig) -> list[str]:
-        """Prepare prompts for inference.
+        """Prepare prompts using the dataset loader."""
+        from llenergymeasure.datasets.loader import load_prompts
 
-        M1 placeholder: generates simple synthetic prompts.
-        """
-        words_per_prompt = max(1, config.max_input_tokens // 4)
-        base_prompt = ("Hello, " * words_per_prompt).strip()
-        prompts = [base_prompt] * config.n
-        logger.debug("Prepared %d prompts (M1 placeholder)", config.n)
+        prompts = load_prompts(config)
+        logger.debug("Prepared %d prompts via dataset loader", len(prompts))
         return prompts
 
     def _run_batch(
