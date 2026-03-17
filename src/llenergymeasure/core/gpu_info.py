@@ -475,6 +475,27 @@ def get_device_mig_info(cuda_device_index: int) -> dict[str, Any]:
         }
 
 
+def get_compute_capability(gpu_index: int = 0) -> tuple[int, int] | None:
+    """Return (major, minor) SM version via pynvml, or None on failure.
+
+    Args:
+        gpu_index: NVML device index (default: 0).
+
+    Returns:
+        Tuple of (major, minor) SM version, e.g. (8, 0) for A100.
+        Returns None if pynvml is unavailable or query fails.
+    """
+    try:
+        import pynvml
+
+        with nvml_context():
+            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+            major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
+            return (major, minor)
+    except Exception:
+        return None
+
+
 def get_gpu_architecture(device_index: int = 0) -> str:
     """Get GPU compute capability string (e.g., "sm_80" for A100).
 

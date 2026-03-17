@@ -267,6 +267,10 @@ class VLLMBackend:
             logger.debug("CUDA cleanup failed", exc_info=True)
         logger.debug("vLLM model cleanup complete")
 
+    def validate_config(self, config: ExperimentConfig) -> list[str]:
+        """No hardware validation required for vLLM backend."""
+        return []
+
     # -------------------------------------------------------------------------
     # Private: model loading helpers
     # -------------------------------------------------------------------------

@@ -255,6 +255,10 @@ class PyTorchBackend:
             logger.debug("CUDA cleanup failed", exc_info=True)
         logger.debug("Model cleanup complete")
 
+    def validate_config(self, config: ExperimentConfig) -> list[str]:
+        """No hardware validation required for PyTorch backend."""
+        return []
+
     # -------------------------------------------------------------------------
     # Private: model loading helpers
     # -------------------------------------------------------------------------
