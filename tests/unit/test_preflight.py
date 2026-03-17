@@ -435,3 +435,105 @@ def test_run_study_preflight_error_message_contains_backends(
     # Both backend names must appear in the error message
     assert "pytorch" in msg
     assert "tensorrt" in msg
+
+
+# ---------------------------------------------------------------------------
+# validate_config integration (Check 4 in run_preflight)
+# ---------------------------------------------------------------------------
+
+
+def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_preflight collects validate_config errors into PreFlightError."""
+    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
+    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+
+    class _FakeBackend:
+        name = "tensorrt"
+
+        def validate_config(self, config):
+            return ["SM too low for TRT-LLM", "FP8 not supported on this GPU"]
+
+    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: _FakeBackend())
+
+    config = ExperimentConfig(model="test-model", backend="tensorrt")
+    with pytest.raises(PreFlightError) as exc_info:
+        run_preflight(config)
+
+    msg = str(exc_info.value)
+    assert "SM too low" in msg
+    assert "FP8 not supported" in msg
+
+
+def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_preflight succeeds when validate_config returns no errors."""
+    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
+    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(preflight_module, "_warn_if_persistence_mode_off", lambda: None)
+
+    class _FakeBackend:
+        name = "pytorch"
+
+        def validate_config(self, config):
+            return []
+
+    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: _FakeBackend())
+
+    config = ExperimentConfig(model="test-model", backend="pytorch")
+    # Should not raise
+    run_preflight(config)
+
+
+def test_run_preflight_handles_validate_config_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_preflight does not crash if get_backend raises during validate_config."""
+    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
+    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+    monkeypatch.setattr(preflight_module, "_warn_if_persistence_mode_off", lambda: None)
+
+    def raise_error(name):
+        raise ImportError("tensorrt_llm not installed")
+
+    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", raise_error)
+
+    config = ExperimentConfig(model="test-model", backend="tensorrt")
+    # Should not raise — the try/except in preflight catches ImportError from get_backend
+    run_preflight(config)
+
+
+def test_run_preflight_validate_config_errors_counted_correctly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """validate_config errors contribute to the total issue count in PreFlightError."""
+    monkeypatch.setattr(preflight_module, "_check_cuda_available", lambda: True)
+    monkeypatch.setattr(preflight_module, "_check_backend_installed", lambda backend: True)
+    monkeypatch.setattr(preflight_module, "_check_model_accessible", lambda model_id: None)
+
+    class _FakeBackend:
+        name = "tensorrt"
+
+        def validate_config(self, config):
+            return ["FP8 requires SM >= 8.9 but this GPU has SM 8.0"]
+
+    monkeypatch.setattr("llenergymeasure.core.backends.get_backend", lambda name: _FakeBackend())
+
+    config = ExperimentConfig(model="test-model", backend="tensorrt")
+    with pytest.raises(PreFlightError) as exc_info:
+        run_preflight(config)
+
+    msg = str(exc_info.value)
+    assert "1 issue(s) found" in msg
+
+
+# ---------------------------------------------------------------------------
+# get_compute_capability — basic contract test
+# ---------------------------------------------------------------------------
+
+
+def test_get_compute_capability_returns_tuple_or_none() -> None:
+    """get_compute_capability returns (major, minor) tuple or None — never raises."""
+    from llenergymeasure.core.gpu_info import get_compute_capability
+
+    result = get_compute_capability()
+    assert result is None or (isinstance(result, tuple) and len(result) == 2)
