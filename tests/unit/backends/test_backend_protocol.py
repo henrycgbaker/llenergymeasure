@@ -9,6 +9,21 @@ import importlib.util
 import pytest
 
 # =============================================================================
+# Protocol satisfaction — TensorRTBackend (BACK-01)
+# =============================================================================
+
+
+def test_tensorrt_backend_satisfies_plugin_protocol():
+    """TensorRTBackend must satisfy the BackendPlugin Protocol."""
+    from llenergymeasure.core.backends.protocol import BackendPlugin
+    from llenergymeasure.core.backends.tensorrt import TensorRTBackend
+
+    backend = TensorRTBackend()
+    assert isinstance(backend, BackendPlugin)
+    assert backend.name == "tensorrt"
+
+
+# =============================================================================
 # Protocol satisfaction
 # =============================================================================
 
@@ -34,6 +49,14 @@ def test_get_backend_pytorch():
 
     backend = get_backend("pytorch")
     assert backend.name == "pytorch"
+
+
+def test_get_backend_tensorrt():
+    """get_backend('tensorrt') returns a TensorRTBackend with name 'tensorrt'."""
+    from llenergymeasure.core.backends import get_backend
+
+    backend = get_backend("tensorrt")
+    assert backend.name == "tensorrt"
 
 
 def test_get_backend_unknown_raises_backend_error():
@@ -68,6 +91,24 @@ def test_detect_default_backend_returns_pytorch():
         "transformers must be installed for this test to be meaningful"
     )
     assert detect_default_backend() == "pytorch"
+
+
+def test_detect_default_backend_returns_tensorrt_when_only_trt():
+    """detect_default_backend returns 'tensorrt' when only tensorrt_llm is installed."""
+    from unittest.mock import patch
+
+    import llenergymeasure.core.backends as backends_mod
+
+    def mock_find_spec(name):
+        if name == "tensorrt_llm":
+            return True  # truthy = installed
+        return None  # transformers and vllm not installed
+
+    with patch(
+        "llenergymeasure.core.backends.importlib.util.find_spec", side_effect=mock_find_spec
+    ):
+        result = backends_mod.detect_default_backend()
+        assert result == "tensorrt"
 
 
 def test_detect_default_backend_raises_when_no_backends():
@@ -334,7 +375,7 @@ def test_build_generate_kwargs_greedy_decoding():
 
 
 def test_backend_plugin_protocol_has_required_methods():
-    """BackendPlugin Protocol defines all 4 required methods plus name property."""
+    """BackendPlugin Protocol defines all 5 required methods plus name property and validate_config."""
     from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     obj = PyTorchBackend()
@@ -343,6 +384,7 @@ def test_backend_plugin_protocol_has_required_methods():
     assert hasattr(obj, "warmup")
     assert hasattr(obj, "run_inference")
     assert hasattr(obj, "cleanup")
+    assert hasattr(obj, "validate_config")
 
 
 def test_backend_plugin_protocol_is_runtime_checkable():
@@ -362,3 +404,40 @@ def test_non_conforming_object_fails_plugin_protocol_check():
         pass
 
     assert not isinstance(NotABackend(), BackendPlugin)
+
+
+# =============================================================================
+# validate_config stubs — PyTorch and vLLM return []
+# =============================================================================
+
+
+def test_pytorch_validate_config_returns_empty():
+    """PyTorchBackend.validate_config returns empty list."""
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.core.backends.pytorch import PyTorchBackend
+
+    config = ExperimentConfig(model="gpt2")
+    assert PyTorchBackend().validate_config(config) == []
+
+
+def test_vllm_validate_config_returns_empty():
+    """VLLMBackend.validate_config returns empty list."""
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.core.backends.vllm import VLLMBackend
+
+    config = ExperimentConfig(model="gpt2", backend="vllm")
+    assert VLLMBackend().validate_config(config) == []
+
+
+# =============================================================================
+# Error message lists available backends (includes tensorrt)
+# =============================================================================
+
+
+def test_get_backend_unknown_message_lists_tensorrt():
+    """Error message from get_backend lists 'tensorrt' as an available backend."""
+    from llenergymeasure.core.backends import get_backend
+    from llenergymeasure.exceptions import BackendError
+
+    with pytest.raises(BackendError, match="tensorrt"):
+        get_backend("badbackend")

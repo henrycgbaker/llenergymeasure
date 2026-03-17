@@ -11,14 +11,17 @@ __all__ = ["BackendPlugin", "InferenceBackend", "detect_default_backend", "get_b
 def detect_default_backend() -> str:
     """Detect the default available backend.
 
-    Returns 'pytorch' if transformers is installed, 'vllm' if vllm is installed.
-    PyTorch takes priority over vLLM if both are installed.
+    Returns 'pytorch' if transformers is installed, 'tensorrt' if tensorrt_llm is
+    installed (and not transformers), 'vllm' if vllm is installed.
+    Priority: pytorch > tensorrt > vllm.
 
     Raises:
         BackendError: If no supported backend is installed.
     """
     if importlib.util.find_spec("transformers") is not None:
         return "pytorch"
+    if importlib.util.find_spec("tensorrt_llm") is not None:
+        return "tensorrt"
     if importlib.util.find_spec("vllm") is not None:
         return "vllm"
     raise BackendError(
@@ -47,4 +50,8 @@ def get_backend(name: str) -> BackendPlugin:
         from llenergymeasure.core.backends.vllm import VLLMBackend
 
         return VLLMBackend()
-    raise BackendError(f"Unknown backend: {name!r}. Available: pytorch, vllm")
+    if name == "tensorrt":
+        from llenergymeasure.core.backends.tensorrt import TensorRTBackend
+
+        return TensorRTBackend()
+    raise BackendError(f"Unknown backend: {name!r}. Available: pytorch, vllm, tensorrt")
