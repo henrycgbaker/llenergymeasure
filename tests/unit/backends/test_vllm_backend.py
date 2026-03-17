@@ -375,12 +375,21 @@ class TestNoStreamingCode:
 
 
 class TestShmSizeInDockerRunner:
+    def _make_mock_config(self):
+        """Create a minimal mock config for _build_docker_cmd."""
+        from unittest.mock import MagicMock
+
+        config = MagicMock()
+        config.backend = "vllm"
+        config.tensorrt = None
+        return config
+
     def test_docker_cmd_includes_shm_size_flag(self):
         """DockerRunner._build_docker_cmd includes --shm-size flag (VLLM-03)."""
         from llenergymeasure.infra.docker_runner import DockerRunner
 
         runner = DockerRunner(image="test-image")
-        cmd = runner._build_docker_cmd("test_hash", "/tmp/test-exchange")
+        cmd = runner._build_docker_cmd(self._make_mock_config(), "test_hash", "/tmp/test-exchange")
         assert "--shm-size" in cmd
 
     def test_docker_cmd_shm_size_value_is_8g(self):
@@ -388,7 +397,7 @@ class TestShmSizeInDockerRunner:
         from llenergymeasure.infra.docker_runner import DockerRunner
 
         runner = DockerRunner(image="test-image")
-        cmd = runner._build_docker_cmd("test_hash", "/tmp/test-exchange")
+        cmd = runner._build_docker_cmd(self._make_mock_config(), "test_hash", "/tmp/test-exchange")
 
         shm_idx = cmd.index("--shm-size")
         assert cmd[shm_idx + 1] == "8g"
@@ -398,7 +407,7 @@ class TestShmSizeInDockerRunner:
         from llenergymeasure.infra.docker_runner import DockerRunner
 
         runner = DockerRunner(image="test-image")
-        cmd = runner._build_docker_cmd("test_hash", "/tmp/test-exchange")
+        cmd = runner._build_docker_cmd(self._make_mock_config(), "test_hash", "/tmp/test-exchange")
 
         # Confirm neither "--shm-size=8g" nor "--shm-size 8g" as one string
         assert "--shm-size=8g" not in cmd
