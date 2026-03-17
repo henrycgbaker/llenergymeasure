@@ -23,7 +23,11 @@ Usage in YAML:
     backend: tensorrt
     tensorrt:
       tp_size: 2
-      quantization: fp8
+      dtype: bfloat16
+      quant:
+        quant_algo: FP8
+      build_cache:
+        max_cache_storage_gb: 256
 """
 
 from __future__ import annotations
@@ -649,31 +653,243 @@ class VLLMConfig(BaseModel):
 
 
 # =============================================================================
-# TensorRT-LLM Backend Configuration (M1 minimal)
+# TensorRT-LLM Backend Configuration
 # =============================================================================
+
+
+class TensorRTQuantConfig(BaseModel):
+    """TRT-LLM quantisation configuration.
+
+    Maps to tensorrt_llm.llmapi.QuantConfig. Uses native QuantAlgo enum names
+    as Literal values (not custom string aliases).
+    All fields default to None - None means "use TRT-LLM's own default".
+    """
+
+    model_config = {"extra": "allow"}
+
+    quant_algo: (
+        Literal[
+            "FP8",
+            "INT8",
+            "W4A16_AWQ",
+            "W4A16_GPTQ",
+            "W8A16",
+            "W8A16_GPTQ",
+            "W4A8_AWQ",
+            "NO_QUANT",
+        ]
+        | None
+    ) = Field(default=None, description="Quantisation algorithm (native QuantAlgo enum name)")
+    kv_cache_quant_algo: Literal["FP8", "INT8"] | None = Field(
+        default=None,
+        description="KV cache quantisation algorithm (None -> no KV cache quantisation)",
+    )
+
+
+class TensorRTCalibConfig(BaseModel):
+    """TRT-LLM PTQ calibration configuration.
+
+    Maps to tensorrt_llm.llmapi.CalibConfig.
+    Only relevant when quant_algo requires calibration (INT8, W4A16_AWQ, etc.).
+    """
+
+    model_config = {"extra": "allow"}
+
+    calib_batches: int | None = Field(
+        default=None, ge=1, description="Number of calibration batches (None -> 512)"
+    )
+    calib_dataset: str | None = Field(
+        default=None, description="Calibration dataset name or path (None -> 'cnn_dailymail')"
+    )
+    calib_max_seq_length: int | None = Field(
+        default=None, ge=1, description="Max sequence length for calibration (None -> 512)"
+    )
+
+
+class TensorRTKvCacheConfig(BaseModel):
+    """TRT-LLM KV cache configuration."""
+
+    model_config = {"extra": "allow"}
+
+    enable_block_reuse: bool | None = Field(
+        default=None, description="Enable KV cache block reuse (None -> False)"
+    )
+    free_gpu_memory_fraction: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of free GPU memory for KV cache (None -> 0.9)",
+    )
+    max_tokens: int | None = Field(
+        default=None, ge=1, description="Maximum tokens in KV cache (None -> auto)"
+    )
+    host_cache_size: int | None = Field(
+        default=None,
+        ge=0,
+        description="Host (CPU) cache size in bytes for KV cache offloading (None -> 0, disabled)",
+    )
+
+
+class TensorRTSchedulerConfig(BaseModel):
+    """TRT-LLM scheduler configuration."""
+
+    model_config = {"extra": "allow"}
+
+    capacity_scheduling_policy: (
+        Literal[
+            "GUARANTEED_NO_EVICT",
+            "MAX_UTILIZATION",
+            "STATIC_BATCH",
+        ]
+        | None
+    ) = Field(default=None, description="Scheduling capacity policy (None -> GUARANTEED_NO_EVICT)")
+
+
+class TensorRTBuildCacheConfig(BaseModel):
+    """TRT-LLM engine build cache configuration.
+
+    Maps to tensorrt_llm.llmapi.BuildCacheConfig.
+    """
+
+    model_config = {"extra": "allow"}
+
+    cache_root: str | None = Field(
+        default=None,
+        description="Root directory for engine cache (None -> ~/.cache/tensorrt_llm)",
+    )
+    max_records: int | None = Field(
+        default=None, ge=1, description="Maximum cached engine records (None -> 10)"
+    )
+    max_cache_storage_gb: float | None = Field(
+        default=None, ge=0.0, description="Maximum cache storage in GB (None -> 256)"
+    )
+
+
+class TensorRTSamplingConfig(BaseModel):
+    """TRT-LLM sampling configuration.
+
+    Maps to tensorrt_llm.SamplingParams (TRT-LLM-specific extensions only).
+    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
+    live in DecoderConfig and are shared across all backends.
+    """
+
+    model_config = {"extra": "allow"}
+
+    min_tokens: int | None = Field(
+        default=None, ge=0, description="Minimum output tokens before EOS allowed (None -> 0)"
+    )
+    n: int | None = Field(
+        default=None, ge=1, description="Number of output sequences per prompt (None -> 1)"
+    )
+    ignore_eos: bool | None = Field(
+        default=None, description="Continue generating past EOS token (None -> False)"
+    )
+    return_perf_metrics: bool | None = Field(
+        default=None, description="Return performance metrics in output (None -> False)"
+    )
 
 
 class TensorRTConfig(BaseModel):
     """TensorRT-LLM backend configuration.
 
-    All fields default to None — None means "use TRT-LLM's own default".
-    TensorRT requires engine compilation; max_batch_size is a compile-time constant.
+    All fields default to None - None means "use TRT-LLM's own default".
+    TensorRT requires engine compilation; max_batch_size, max_input_len,
+    max_seq_len are compile-time constants that affect engine shape.
 
-    M1 scope: fields used by the M1 TensorRT backend implementation.
-    Phase 4.1 will audit and expand.
-    Unknown fields are forwarded to TensorRT-LLM APIs via extra="allow".
+    Nested structure mirrors TRT-LLM's own API separation:
+    - quant: QuantConfig (quantisation algorithm + KV cache quantisation)
+    - kv_cache: KvCacheConfig (block reuse, memory fraction)
+    - scheduler: SchedulerConfig (capacity policy)
+    - calib: CalibConfig (PTQ calibration parameters)
+    - build_cache: BuildCacheConfig (engine cache persistence)
+    - sampling: SamplingParams (TRT-LLM-specific extensions only)
+
+    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
+    live in DecoderConfig and are shared across all backends.
+
+    Example YAML:
+        backend: tensorrt
+        tensorrt:
+          tp_size: 2
+          max_batch_size: 8
+          dtype: bfloat16
+          quant:
+            quant_algo: W4A16_AWQ
+          build_cache:
+            max_cache_storage_gb: 256
     """
 
     model_config = {"extra": "allow"}
+
+    # -------------------------------------------------------------------------
+    # Compile-time parameters (LLM() constructor)
+    # -------------------------------------------------------------------------
 
     max_batch_size: int | None = Field(
         default=None, ge=1, description="Max batch size (compile-time constant, None -> 8)"
     )
     tp_size: int | None = Field(default=None, ge=1, description="Tensor parallel size (None -> 1)")
-    quantization: Literal["int8_sq", "int4_awq", "fp8"] | None = Field(
+    max_input_len: int | None = Field(
         default=None,
-        description="Quantization method",
+        ge=1,
+        description="Max input sequence length (compile-time constant, None -> 1024)",
     )
+    max_seq_len: int | None = Field(
+        default=None,
+        ge=1,
+        description="Max total sequence length (input + output, compile-time constant, None -> 2048)",
+    )
+    dtype: Literal["float16", "bfloat16"] | None = Field(
+        default=None,
+        description=(
+            "Model dtype (None -> auto). TRT-LLM is optimised for fp16/bf16; fp32 not supported."
+        ),
+    )
+    fast_build: bool | None = Field(
+        default=None,
+        description="Enable fast engine build mode (reduced optimisation, None -> False)",
+    )
+
+    # -------------------------------------------------------------------------
+    # TRT-LLM internal backend selection
+    # -------------------------------------------------------------------------
+
+    backend: Literal["trt"] | None = Field(
+        default=None,
+        description=(
+            "TRT-LLM internal backend: 'trt' for TensorRT engine (None -> 'trt'). "
+            "This is the TRT-LLM LLM(backend=...) parameter, not the llem backend field."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Engine path (pre-compiled engine)
+    # -------------------------------------------------------------------------
+
     engine_path: str | None = Field(
         default=None, description="Pre-compiled engine path (skip compilation)"
+    )
+
+    # -------------------------------------------------------------------------
+    # Nested sub-configs
+    # -------------------------------------------------------------------------
+
+    quant: TensorRTQuantConfig | None = Field(
+        default=None, description="Quantisation configuration (QuantConfig)"
+    )
+    kv_cache: TensorRTKvCacheConfig | None = Field(
+        default=None, description="KV cache configuration"
+    )
+    scheduler: TensorRTSchedulerConfig | None = Field(
+        default=None, description="Scheduler configuration"
+    )
+    calib: TensorRTCalibConfig | None = Field(
+        default=None, description="PTQ calibration configuration (CalibConfig)"
+    )
+    build_cache: TensorRTBuildCacheConfig | None = Field(
+        default=None, description="Engine build cache configuration (BuildCacheConfig)"
+    )
+    sampling: TensorRTSamplingConfig | None = Field(
+        default=None,
+        description="Sampling configuration (TRT-LLM-specific SamplingParams extensions)",
     )

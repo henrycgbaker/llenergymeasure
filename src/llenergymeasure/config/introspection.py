@@ -206,6 +206,20 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         # VLLMBeamSearchConfig: Phase 19.2 new model
         "vllm.beam_search.beam_width": [0],  # ge=1: 0 violates ge
         "vllm.beam_search.max_tokens": [0],  # ge=1: 0 violates ge
+        # TensorRTConfig: compile-time params
+        "tensorrt.max_batch_size": [0],  # ge=1: 0 violates ge
+        "tensorrt.tp_size": [0],  # ge=1: 0 violates ge
+        "tensorrt.max_input_len": [0],  # ge=1: 0 violates ge
+        "tensorrt.max_seq_len": [0],  # ge=1: 0 violates ge
+        # TensorRTCalibConfig: calibration params
+        "tensorrt.calib.calib_batches": [0],  # ge=1: 0 violates ge
+        "tensorrt.calib.calib_max_seq_length": [0],  # ge=1: 0 violates ge
+        # TensorRTKvCacheConfig: cache params
+        "tensorrt.kv_cache.max_tokens": [0],  # ge=1: 0 violates ge
+        # TensorRTBuildCacheConfig: engine cache params
+        "tensorrt.build_cache.max_records": [0],  # ge=1: 0 violates ge
+        # TensorRTSamplingConfig: sampling params
+        "tensorrt.sampling.n": [0],  # ge=1: 0 violates ge
     }
 
 
@@ -452,8 +466,8 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         # vLLM beam_search vs sampling sections (cross-section mutual exclusion)
         "vllm.beam_search": ["vllm.sampling"],
         "vllm.sampling": ["vllm.beam_search"],
-        # TensorRT: quantization method is exclusive
-        "tensorrt.quantization": [],  # Handled by Literal type constraint
+        # TensorRT: quantisation method is exclusive
+        "tensorrt.quant.quant_algo": [],  # Handled by Literal type constraint
     }
 
 
@@ -539,10 +553,40 @@ def get_backend_specific_params() -> dict[str, list[str]]:
             "vllm.beam_search.max_tokens",
         ],
         "tensorrt": [
+            # Compile-time parameters (LLM() constructor)
             "tensorrt.max_batch_size",
             "tensorrt.tp_size",
-            "tensorrt.quantization",
+            "tensorrt.max_input_len",
+            "tensorrt.max_seq_len",
+            "tensorrt.dtype",
+            "tensorrt.fast_build",
+            # TRT-LLM internal backend selection
+            "tensorrt.backend",
+            # Engine path
             "tensorrt.engine_path",
+            # Quantisation sub-config
+            "tensorrt.quant.quant_algo",
+            "tensorrt.quant.kv_cache_quant_algo",
+            # Calibration sub-config
+            "tensorrt.calib.calib_batches",
+            "tensorrt.calib.calib_dataset",
+            "tensorrt.calib.calib_max_seq_length",
+            # KV cache sub-config
+            "tensorrt.kv_cache.enable_block_reuse",
+            "tensorrt.kv_cache.free_gpu_memory_fraction",
+            "tensorrt.kv_cache.max_tokens",
+            "tensorrt.kv_cache.host_cache_size",
+            # Scheduler sub-config
+            "tensorrt.scheduler.capacity_scheduling_policy",
+            # Build cache sub-config
+            "tensorrt.build_cache.cache_root",
+            "tensorrt.build_cache.max_records",
+            "tensorrt.build_cache.max_cache_storage_gb",
+            # Sampling sub-config
+            "tensorrt.sampling.min_tokens",
+            "tensorrt.sampling.n",
+            "tensorrt.sampling.ignore_eos",
+            "tensorrt.sampling.return_perf_metrics",
         ],
     }
 
@@ -560,9 +604,9 @@ def get_special_test_models() -> dict[str, str]:
         # vLLM quantization methods requiring pre-quantized models
         "vllm.engine.quantization=awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
         "vllm.engine.quantization=gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
-        # TensorRT quantization methods requiring pre-quantized models
-        "tensorrt.quantization=int4_awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
-        "tensorrt.quantization=int4_gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
+        # TensorRT quantisation methods requiring pre-quantized models
+        "tensorrt.quant.quant_algo=W4A16_AWQ": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
+        "tensorrt.quant.quant_algo=W4A16_GPTQ": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
     }
 
 
@@ -578,7 +622,7 @@ def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> 
     # These features require Ampere (8.0) or newer GPUs
     ampere_required = [
         "vllm.engine.quantization=fp8",
-        "tensorrt.quantization=fp8",
+        "tensorrt.quant.quant_algo=FP8",
         "pytorch.attn_implementation=flash_attention_2",
     ]
 
@@ -610,7 +654,10 @@ def get_param_skip_conditions() -> dict[str, str]:
         "pytorch.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
         # FP8 - Ampere or newer
         "vllm.engine.quantization=fp8": "Requires Ampere+ GPU",
-        "tensorrt.quantization=fp8": "Requires Ampere+ GPU",
+        "tensorrt.quant.quant_algo=FP8": "Requires Ada Lovelace+ GPU (SM >= 8.9)",
+        # TensorRT quantisation - requires pre-quantized models
+        "tensorrt.quant.quant_algo=W4A16_AWQ": "Requires AWQ-quantized model",
+        "tensorrt.quant.quant_algo=W4A16_GPTQ": "Requires GPTQ-quantized model",
         # Quantization - requires pre-quantized models (see get_special_test_models)
         "vllm.engine.quantization=awq": "Requires AWQ-quantized model",
         "vllm.engine.quantization=gptq": "Requires GPTQ-quantized model",
@@ -663,6 +710,7 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
     from llenergymeasure.config.backend_configs import (
         PyTorchConfig,
         TensorRTConfig,
+        TensorRTQuantConfig,
         VLLMEngineConfig,
     )
 
@@ -684,12 +732,16 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
                 if inner_args:
                     vllm_quant_options = [a for a in inner_args if a is not None]
 
-    trt_quant_field = TensorRTConfig.model_fields.get("quantization")
+    trt_quant_field = TensorRTQuantConfig.model_fields.get("quant_algo")
     trt_quant_options: list[str] = []
     if trt_quant_field and trt_quant_field.annotation:
         args = get_args(trt_quant_field.annotation)
-        if args:
-            trt_quant_options = [a for a in args if a != "none"]
+        # Filter out None from Optional[Literal[...]]
+        for arg in args:
+            if arg is not type(None):
+                inner_args = get_args(arg)
+                if inner_args:
+                    trt_quant_options = [a for a in inner_args if a is not None]
 
     return {
         "tensor_parallel": {
@@ -718,7 +770,7 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
         "native_quantization": {
             "pytorch": False,  # PyTorch relies on bitsandbytes, not native
             "vllm": "AWQ/GPTQ/FP8" if vllm_quant_options else False,
-            "tensorrt": "INT8/INT4/FP8" if trt_quant_options else False,
+            "tensorrt": "INT8/W4A16_AWQ/W4A16_GPTQ/FP8" if trt_quant_options else False,
         },
         "float32_precision": {
             "pytorch": True,
