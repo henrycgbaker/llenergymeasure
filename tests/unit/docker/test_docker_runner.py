@@ -651,3 +651,97 @@ class TestHFTokenSecure:
             {"KEY": "abcd"},
         )
         assert "abcd" in result_short
+
+
+# ---------------------------------------------------------------------------
+# Test 13: mpirun injection for TRT-LLM tensor parallelism
+# ---------------------------------------------------------------------------
+
+
+class TestMpirunInjection:
+    """Verify mpirun is injected iff backend=tensorrt and tp_size > 1."""
+
+    def _capture_cmd(self, config, tmp_path) -> list[str]:
+        """Run DockerRunner.run() with a fake subprocess and capture the docker cmd."""
+        exchange_dir = tmp_path / "llem-mpi"
+        exchange_dir.mkdir()
+
+        captured_cmds: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            captured_cmds.append(cmd)
+            return _make_proc(1, stderr="No such image")
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch("llenergymeasure.infra.docker_runner.subprocess.run", side_effect=fake_run),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerImagePullError):
+                runner.run(config)
+
+        return captured_cmds[0]
+
+    def test_mpirun_injected_for_tensorrt_tp2(self, tmp_path):
+        """TRT-LLM with tp_size=2 gets mpirun -n 2 --allow-run-as-root before python3."""
+        from llenergymeasure.config.backend_configs import TensorRTConfig
+
+        config = make_config(backend="tensorrt", tensorrt=TensorRTConfig(tp_size=2))
+        cmd = self._capture_cmd(config, tmp_path)
+
+        assert "mpirun" in cmd
+        assert "-n" in cmd
+        assert "2" in cmd
+        assert "--allow-run-as-root" in cmd
+
+        # mpirun must appear after the image name and before python3
+        image_idx = cmd.index(IMAGE)
+        mpirun_idx = cmd.index("mpirun")
+        python_idx = cmd.index("python3")
+        assert image_idx < mpirun_idx < python_idx
+
+    def test_mpirun_injected_for_tensorrt_tp4(self, tmp_path):
+        """TRT-LLM with tp_size=4 gets mpirun -n 4 with correct stringified count."""
+        from llenergymeasure.config.backend_configs import TensorRTConfig
+
+        config = make_config(backend="tensorrt", tensorrt=TensorRTConfig(tp_size=4))
+        cmd = self._capture_cmd(config, tmp_path)
+
+        assert "mpirun" in cmd
+        n_idx = cmd.index("-n")
+        assert cmd[n_idx + 1] == "4"
+
+    def test_no_mpirun_for_tensorrt_tp1(self, tmp_path):
+        """TRT-LLM with tp_size=1 does NOT get mpirun (single-GPU path)."""
+        from llenergymeasure.config.backend_configs import TensorRTConfig
+
+        config = make_config(backend="tensorrt", tensorrt=TensorRTConfig(tp_size=1))
+        cmd = self._capture_cmd(config, tmp_path)
+
+        assert "mpirun" not in cmd
+
+    def test_no_mpirun_for_tensorrt_tp_none(self, tmp_path):
+        """TRT-LLM with tp_size=None (default) does NOT get mpirun."""
+        from llenergymeasure.config.backend_configs import TensorRTConfig
+
+        config = make_config(backend="tensorrt", tensorrt=TensorRTConfig(tp_size=None))
+        cmd = self._capture_cmd(config, tmp_path)
+
+        assert "mpirun" not in cmd
+
+    def test_no_mpirun_for_vllm(self, tmp_path):
+        """vLLM backend never gets mpirun regardless of any config."""
+        config = make_config(backend="vllm")
+        cmd = self._capture_cmd(config, tmp_path)
+
+        assert "mpirun" not in cmd
+
+    def test_no_mpirun_for_pytorch(self, tmp_path):
+        """PyTorch backend (default) never gets mpirun."""
+        config = make_config()  # backend="pytorch" by default
+        cmd = self._capture_cmd(config, tmp_path)
+
+        assert "mpirun" not in cmd
