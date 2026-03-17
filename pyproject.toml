@@ -26,16 +26,13 @@ dependencies = [
 pytorch = [
     "torch>=2.5",
     "transformers>=4.49",
-    "accelerate>=1.4",
     "bitsandbytes>=0.45",
     "calflops>=0.2",
-    "peft>=0.18",
 ]
 vllm = ["vllm>=0.6"]
 tensorrt = ["tensorrt-llm>=0.12"]
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
-webhooks = ["httpx>=0.23"]
 
 [dependency-groups]
 dev = [
@@ -75,26 +72,13 @@ disallow_untyped_calls = false
 # Allow unused type: ignore comments (needed for cross-environment compatibility)
 warn_unused_ignores = false
 exclude = [
-    "experiment_core_utils",
-    "experiment_orchestration_utils",
-    "configs",
-    # v1.x legacy modules — will be replaced/deleted by subsequent PRs
+    # Pending type annotation fixes (PR 5)
     "core/warmup\\.py",
-    "core/model_loader\\.py",
     "core/flops\\.py",
-    "core/dataset_loader\\.py",
     "core/gpu_info\\.py",
     "core/state\\.py",
-    "core/inference_backends/",
-    "config/validation\\.py",
-    "cli/config\\.py",
-    "cli/display",
-    "cli/experiment\\.py",
-    "cli/results\\.py",
     "cli/config_cmd\\.py",
     "cli/_vram\\.py",
-    "orchestration/",
-    "results/exporters\\.py",
     "results/aggregation\\.py",
     "core/timeseries\\.py",
     "core/backends/pytorch\\.py",
