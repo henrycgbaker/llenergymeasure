@@ -100,10 +100,12 @@ class DockerRunner:
         image: str,
         timeout: int | None = None,
         source: str = "unknown",
+        extra_mounts: list[tuple[str, str]] | None = None,
     ) -> None:
         self.image = image
         self.timeout = timeout
         self.source = source
+        self.extra_mounts = extra_mounts or []
 
     # ------------------------------------------------------------------
     # Public API
@@ -250,6 +252,18 @@ class DockerRunner:
         # Propagate secrets via --env-file (never as -e KEY=VALUE CLI args)
         if env_path is not None:
             cmd.extend(["--env-file", str(env_path)])
+
+        # TRT-LLM engine cache: persist compiled engines across ephemeral containers
+        if config.backend == "tensorrt":
+            cache_host = str(Path.home() / ".cache" / "trt-llm")
+            cache_container = "/root/.cache/trt-llm"
+            # Only add if not already in extra_mounts (user may override path)
+            if not any(cp == cache_container for _, cp in self.extra_mounts):
+                cmd.extend(["-v", f"{cache_host}:{cache_container}"])
+
+        # Extra volume mounts (engine cache, model cache, etc.)
+        for host_path, container_path in self.extra_mounts:
+            cmd.extend(["-v", f"{host_path}:{container_path}"])
 
         # Determine TRT-LLM tensor parallel size for MPI injection
         tp_size = None

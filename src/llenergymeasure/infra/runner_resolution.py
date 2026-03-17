@@ -21,7 +21,7 @@ import functools
 import logging
 import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -85,6 +85,7 @@ class RunnerSpec:
     mode: Literal["local", "docker"]
     image: str | None
     source: str
+    extra_mounts: list[tuple[str, str]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
