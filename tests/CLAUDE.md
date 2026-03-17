@@ -4,9 +4,9 @@ Unit and integration tests for v2.0.
 
 ## Structure
 
-- **Unit tests**: `unit/` — fast, GPU-free tests using protocol injection fakes
-- **Integration tests**: `integration/` — tests marked `@pytest.mark.gpu`, require GPU hardware
-- **Fixtures**: `fixtures/` — shared test data; `fixtures/replay/` holds Tier 2 ExperimentResult JSON
+- **Unit tests**: `unit/` - fast, GPU-free tests using protocol injection fakes
+- **Integration tests**: `integration/` - tests marked `@pytest.mark.gpu`, require GPU hardware
+- **Fixtures**: `fixtures/` - shared test data; `fixtures/replay/` holds Tier 2 ExperimentResult JSON
 
 ## Running Tests
 
@@ -36,11 +36,11 @@ pytest tests/integration/ -m gpu
 ## Shared Test Infrastructure
 
 ```python
-# tests/conftest.py — factories available to all tests
+# tests/conftest.py - factories available to all tests
 from tests.conftest import make_config, make_result
 
-# tests/fakes.py — protocol injection fakes (no MagicMock)
-from tests.fakes import FakeInferenceBackend, FakeEnergyBackend, FakeResultsRepository
+# tests/fakes.py - protocol injection fakes (no MagicMock)
+from tests.fakes import FakeEnergyBackend
 ```
 
 ## Unit Test Organisation
@@ -63,7 +63,7 @@ Tests are organised in domain subdirectories that mirror `src/llenergymeasure/`:
 | File                        | Covers                                |
 | --------------------------- | ------------------------------------- |
 | `test_api.py`               | Public API surface (`run_experiment`, `run_study`) |
-| `test_protocols.py`         | Protocol definitions                  |
+| `test_protocols.py`         | EnergyBackend protocol conformance    |
 | `test_exceptions.py`        | Exception hierarchy                   |
 | `test_state_machine.py`     | State machine                         |
 | `test_runner_resolution.py` | Runner resolution                     |
@@ -74,15 +74,15 @@ Tests are organised in domain subdirectories that mirror `src/llenergymeasure/`:
 
 ## Key Patterns
 
-- **Protocol injection**: Inject `FakeInferenceBackend` via constructor args — no `unittest.mock.patch` on internals
+- **Protocol injection**: Inject `FakeEnergyBackend` via constructor args - no `unittest.mock.patch` on internals
 - **No GPU in unit tests**: All unit tests run without CUDA hardware
 - **GPU mark**: Integration tests use `@pytest.mark.gpu` to declare GPU requirement
 - **Docker mark**: Tests requiring Docker runtime use `@pytest.mark.docker`
-- **Factories**: Use `make_config()` and `make_result()` from `conftest.py` — override only what you care about
+- **Factories**: Use `make_config()` and `make_result()` from `conftest.py` - override only what you care about
 
 ## See Also
 
-- `tests/fakes.py` — protocol fakes
-- `tests/conftest.py` — shared fixtures and factories
-- `tests/fixtures/replay/` — Tier 2 ExperimentResult JSON fixtures (scaffold)
-- `pyproject.toml` — pytest configuration and marker registration
+- `tests/fakes.py` - protocol fakes
+- `tests/conftest.py` - shared fixtures and factories
+- `tests/fixtures/replay/` - Tier 2 ExperimentResult JSON fixtures (scaffold)
+- `pyproject.toml` - pytest configuration and marker registration
