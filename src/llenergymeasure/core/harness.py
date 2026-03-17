@@ -328,6 +328,7 @@ class MeasurementHarness:
             flops_result=flops_result,
             timeseries_path=timeseries_path,
             measurement_warnings=measurement_warnings,
+            warmup_result=warmup_result,
         )
 
     # -------------------------------------------------------------------------
@@ -440,6 +441,7 @@ class MeasurementHarness:
         flops_result: Any,
         timeseries_path: str | None,
         measurement_warnings: list[str],
+        warmup_result: Any = None,
     ) -> ExperimentResult:
         """Assemble ExperimentResult from measurement data.
 
@@ -461,6 +463,7 @@ class MeasurementHarness:
             flops_result: FlopsResult from estimate_flops_palm(), or None.
             timeseries_path: Relative path to Parquet sidecar, or None.
             measurement_warnings: List of quality warning strings.
+            warmup_result: WarmupResult from backend.warmup(), or None.
 
         Returns:
             Fully assembled ExperimentResult.
@@ -469,6 +472,7 @@ class MeasurementHarness:
         from llenergymeasure.domain.metrics import (
             ExtendedEfficiencyMetrics,
             MemoryEfficiencyMetrics,
+            MultiGPUMetrics,
         )
 
         experiment_id = f"{config.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
@@ -496,6 +500,22 @@ class MeasurementHarness:
             energy_measurement.duration_sec if energy_measurement is not None else duration_sec
         )
         energy_breakdown = create_energy_breakdown(total_energy_j, baseline, energy_duration)
+
+        # Per-GPU energy breakdown from EnergyMeasurement.per_gpu_j
+        energy_per_device_j = None
+        multi_gpu = None
+        if energy_measurement is not None and energy_measurement.per_gpu_j:
+            sorted_indices = sorted(energy_measurement.per_gpu_j.keys())
+            energy_per_device_j = [energy_measurement.per_gpu_j[i] for i in sorted_indices]
+            if len(sorted_indices) > 1:
+                multi_gpu = MultiGPUMetrics(
+                    num_gpus=len(sorted_indices),
+                    energy_per_gpu_j=energy_per_device_j,
+                    energy_total_j=total_energy_j,
+                    energy_per_output_token_j=(
+                        total_energy_j / output_tokens if output_tokens > 0 else 0.0
+                    ),
+                )
 
         # FLOPs from PaLM formula (0.0 if estimation unavailable)
         total_flops = flops_result.value if flops_result is not None else 0.0
@@ -561,6 +581,9 @@ class MeasurementHarness:
             effective_config=config.model_dump(),
             baseline_power_w=energy_breakdown.baseline_power_w if energy_breakdown else None,
             energy_adjusted_j=energy_breakdown.adjusted_j if energy_breakdown else None,
+            energy_per_device_j=energy_per_device_j,
+            multi_gpu=multi_gpu,
+            warmup_result=warmup_result,
             measurement_warnings=measurement_warnings,
             extended_metrics=extended_metrics,
         )
