@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llenergymeasure.api.preflight import run_study_preflight
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.utils.exceptions import PreFlightError
 
 

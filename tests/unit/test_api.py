@@ -347,8 +347,9 @@ def _patch_harness(monkeypatch, result: ExperimentResult) -> None:
 def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     """_run() calls run_preflight once for the single in-process experiment."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     preflight_calls: list = []
 
@@ -359,7 +360,7 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
@@ -383,8 +384,9 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
 def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
     """_run() calls get_backend with the experiment's backend name."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = _make_experiment_result()
     mock_backend = _MockBackend(mock_result)
@@ -396,7 +398,7 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
         return mock_backend
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
@@ -420,14 +422,15 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
 def test_run_returns_study_result(monkeypatch, tmp_path):
     """_run() returns a StudyResult containing the experiment results."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = _make_experiment_result(experiment_id="wired-001")
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
@@ -453,14 +456,15 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
 def test_run_propagates_preflight_error(monkeypatch, tmp_path):
     """_run() propagates PreFlightError without catching it."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     def failing_preflight(config):
         raise PreFlightError(["CUDA not available"])
 
     monkeypatch.setattr(pf_module, "run_preflight", failing_preflight)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     mock_result = _make_experiment_result()
     monkeypatch.setattr(backends_module, "get_backend", lambda name: _MockBackend(mock_result))
     _patch_harness(monkeypatch, mock_result)
@@ -479,15 +483,16 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
 def test_run_propagates_backend_error(monkeypatch, tmp_path):
     """_run() propagates BackendError without catching it."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
     import llenergymeasure.harness as harness_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     def _failing_harness_run(self, backend, config, **kw):
         raise BackendError("GPU out of memory")
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(
         backends_module, "get_backend", lambda name: _MockBackend(_make_experiment_result())
     )
@@ -506,14 +511,15 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
 
 def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
     """run_experiment() flows through the real _run() pipeline (mocked backend) and returns ExperimentResult."""
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     expected_result = _make_experiment_result(experiment_id="e2e-test")
     mock_backend = _MockBackend(expected_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, expected_result)
     monkeypatch.setattr(
@@ -539,14 +545,15 @@ def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
 
 def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     """run_study(StudyConfig) returns StudyResult with populated summary."""
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = _make_experiment_result(experiment_id="study-test")
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)
     # Avoid real disk writes by patching create_study_dir and save_result
@@ -570,8 +577,9 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
 
 def test_run_study_accepts_path(tmp_path, monkeypatch):
     """run_study(str path) loads YAML and returns StudyResult."""
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     yaml_content = "experiments:\n  - model: gpt2\n"
     yaml_path = tmp_path / "study.yaml"
@@ -581,7 +589,7 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
@@ -601,8 +609,9 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
 def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
     """Single experiment + n_cycles=1 bypasses StudyRunner (in-process path)."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.study.runner import StudyRunner
 
     mock_result = _make_experiment_result(experiment_id="inproc-test")
@@ -616,7 +625,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
         original_runner_init(self, *args, **kwargs)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
@@ -659,7 +668,8 @@ def test_run_study_returns_study_result_type():
 def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     """_run() resolves runners via resolve_study_runners and passes runner_specs to StudyRunner."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
     mock_result = _make_experiment_result(experiment_id="runner-wired")
@@ -676,7 +686,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
         captured_runner_specs.append(runner_specs)
         return original_run_via_runner(study, manifest, study_dir, runner_specs=runner_specs)
 
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.resolve_study_runners",
         lambda backends, yaml_runners=None, user_config=None: resolved_specs,
@@ -728,8 +738,8 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
 def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
     """_run_in_process() calls check_gpu_memory_residual before running the experiment."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
 
     gpu_check_calls: list[int] = []
 
@@ -772,8 +782,9 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     import logging
 
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
     import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
     mixed_specs = {
@@ -784,7 +795,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     mock_result = _make_experiment_result()
     mock_backend = _MockBackend(mock_result)
 
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)
@@ -830,7 +841,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     unique_configurations must be 2 (6 / 3).
     """
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.api.preflight as pf_module
+    import llenergymeasure.study.preflight as study_pf_module
 
     # Build 6 mock results (2 configs x 3 cycles, already cycle-expanded)
     mock_results = [_make_experiment_result(experiment_id=f"b3-{i}") for i in range(6)]
@@ -840,7 +851,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
         result_files = [str(tmp_path / f"result-{i}.json") for i in range(6)]
         return result_files, mock_results, []
 
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.resolve_study_runners",
         lambda backends, yaml_runners=None, user_config=None: {},

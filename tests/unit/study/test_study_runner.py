@@ -528,7 +528,7 @@ def test_worker_no_longer_stub(monkeypatch) -> None:
     fake_result = make_result()
 
     monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: MagicMock())
-    monkeypatch.setattr("llenergymeasure.api.preflight.run_preflight", lambda c: None)
+    monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.harness.MeasurementHarness.run",
         lambda self, backend, config, **kwargs: fake_result,
@@ -560,7 +560,7 @@ def test_worker_calls_get_backend(monkeypatch) -> None:
         return MagicMock()
 
     monkeypatch.setattr("llenergymeasure.backends.get_backend", fake_get_backend)
-    monkeypatch.setattr("llenergymeasure.api.preflight.run_preflight", lambda c: None)
+    monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.harness.MeasurementHarness.run",
         lambda self, backend, config, snapshot=None, **kw: fake_result,
@@ -1084,7 +1084,7 @@ def test_worker_calls_setpgrp(monkeypatch) -> None:
 
     monkeypatch.setattr("llenergymeasure.study.runner.os.setpgrp", fake_setpgrp)
     monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: MagicMock())
-    monkeypatch.setattr("llenergymeasure.api.preflight.run_preflight", lambda c: None)
+    monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.harness.MeasurementHarness.run",
         lambda self, backend, config, **kwargs: fake_result,

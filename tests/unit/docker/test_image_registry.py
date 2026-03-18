@@ -73,7 +73,7 @@ class TestGetDefaultImage:
     def test_fallback_to_latest_when_version_empty(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        with patch("llenergymeasure.__version__", ""):
+        with patch("llenergymeasure._version.__version__", ""):
             image = get_default_image("pytorch")
 
         assert image.endswith(":vlatest")
