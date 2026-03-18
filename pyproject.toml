@@ -37,6 +37,7 @@ codecarbon = ["codecarbon>=2.8"]
 
 [dependency-groups]
 dev = [
+    "llenergymeasure[pytorch]",
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.8.0",
@@ -74,6 +75,12 @@ disallow_untyped_calls = false
 # Allow unused type: ignore comments (needed for cross-environment compatibility)
 warn_unused_ignores = false
 exclude = []
+
+[[tool.mypy.overrides]]
+module = "transformers.*"
+# transformers re-exports (AutoConfig, AutoTokenizer, etc.) are not explicitly
+# typed in their __init__.py stubs, causing attr-defined errors.
+no_implicit_reexport = false
 
 [[tool.uv.index]]
 name = "nvidia"

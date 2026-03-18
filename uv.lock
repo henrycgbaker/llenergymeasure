@@ -2509,6 +2509,7 @@ codecarbon = [
     { name = "codecarbon" },
 ]
 pytorch = [
+    { name = "accelerate" },
     { name = "bitsandbytes" },
     { name = "calflops" },
     { name = "torch" },
@@ -2527,6 +2528,7 @@ zeus = [
 [package.dev-dependencies]
 dev = [
     { name = "import-linter" },
+    { name = "llenergymeasure", extra = ["pytorch"] },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -2538,6 +2540,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "accelerate", marker = "extra == 'pytorch'", specifier = ">=1.4" },
     { name = "bitsandbytes", marker = "extra == 'pytorch'", specifier = ">=0.45" },
     { name = "calflops", marker = "extra == 'pytorch'", specifier = ">=0.2" },
     { name = "codecarbon", marker = "extra == 'codecarbon'", specifier = ">=2.8" },
@@ -2560,6 +2563,7 @@ provides-extras = ["pytorch", "vllm", "tensorrt", "zeus", "codecarbon"]
 [package.metadata.requires-dev]
 dev = [
     { name = "import-linter", specifier = ">=2.9" },
+    { name = "llenergymeasure", extras = ["pytorch"] },
     { name = "mypy", specifier = ">=1.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=4.0" },

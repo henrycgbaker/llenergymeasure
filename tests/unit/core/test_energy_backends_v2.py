@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from llenergymeasure.energy import select_energy_sampler
-from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLSampler
 from llenergymeasure.energy.zeus import ZeusSampler
 from llenergymeasure.utils.exceptions import ConfigError
@@ -215,6 +214,8 @@ def test_select_backend_auto_priority_nvml_when_no_zeus() -> None:
 
 def test_select_backend_auto_priority_codecarbon_fallback() -> None:
     """Auto-selection returns CodeCarbon when neither zeus nor NVML is available."""
+    pytest.importorskip("torch")
+    from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 
     def fake_find_spec(name: str) -> object:
         if name == "zeus":

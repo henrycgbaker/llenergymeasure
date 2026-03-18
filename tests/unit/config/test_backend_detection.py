@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from llenergymeasure.config.backend_detection import (
     KNOWN_BACKENDS,
     get_available_backends,
@@ -27,7 +29,7 @@ from llenergymeasure.config.backend_detection import (
 
 class TestIsBackendAvailable:
     def test_returns_true_when_torch_importable(self):
-        # pytorch is available on the test host (torch is installed)
+        pytest.importorskip("torch")
         result = is_backend_available("pytorch")
         assert result is True
 
