@@ -60,7 +60,10 @@ tensorrt:
   # backend: trt            # TRT-LLM LLM(backend=...) param — not the llem backend field
 
   # Pre-compiled engine (skip compilation)
-  # engine_path: null       # Path to pre-compiled engine directory; null = compile fresh
+  # When set, skips engine compilation and loads directly from the engine directory.
+  # The directory must contain config.json + rank{N}.engine files.
+  # All compile-time params above (max_batch_size, tp_size, etc.) are ignored.
+  # engine_path: /path/to/pre-compiled/engine
 
   # --- Quantisation ---
   # Uncomment to enable post-training quantisation.
