@@ -17,7 +17,7 @@ from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
-__version__: str = "0.9.0"
+from llenergymeasure._version import __version__
 
 __all__ = [
     "ExperimentConfig",
