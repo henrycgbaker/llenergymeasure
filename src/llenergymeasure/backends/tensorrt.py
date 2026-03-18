@@ -28,7 +28,7 @@ from typing import Any
 from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.metrics import WarmupResult
-from llenergymeasure.utils.exceptions import BackendError
+from llenergymeasure.utils.exceptions import BackendError, ConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -124,15 +124,6 @@ class TensorRTBackend:
         _trt_mod = require_import("tensorrt_llm", "tensorrt")
         LLM = _trt_mod.LLM
 
-        # Warn about engine_path (forward-compatible, not yet implemented)
-        trt = config.tensorrt
-        if trt is not None and getattr(trt, "engine_path", None) is not None:
-            logger.warning(
-                "engine_path not yet supported; compiling from model weights. "
-                "engine_path=%r will be ignored.",
-                trt.engine_path,
-            )
-
         kwargs = self._build_llm_kwargs(config)
         logger.info("Loading TRT-LLM model %r (kwargs: %s)", config.model, list(kwargs.keys()))
 
@@ -175,6 +166,10 @@ class TensorRTBackend:
             "config_hash": config_hash,
             "built_at": datetime.now(timezone.utc).isoformat(),
         }
+
+        trt = config.tensorrt
+        if trt is not None and trt.engine_path is not None:
+            self._build_metadata["engine_path"] = trt.engine_path
 
         sampling_params = self._build_sampling_params(config)
         return llm, sampling_params
@@ -380,6 +375,9 @@ class TensorRTBackend:
 
         Starts with {"model": config.model, "backend": "trt"} and applies
         all non-None fields from TensorRTConfig.
+
+        When engine_path is set, returns early with only {"model": engine_path, "backend": "trt"}.
+        Compile-time kwargs are baked into the engine and must not be re-specified.
         """
         kwargs: dict[str, Any] = {
             "model": config.model,
@@ -387,6 +385,19 @@ class TensorRTBackend:
         }
 
         trt = config.tensorrt
+
+        # engine_path early-return: pass engine dir as model, skip all compile-time kwargs
+        if trt is not None and trt.engine_path is not None:
+            engine_path = Path(trt.engine_path)
+            tp_size = trt.tp_size if trt.tp_size is not None else 1
+            errors = _validate_engine_directory(engine_path, tp_size=tp_size)
+            if errors:
+                raise ConfigError(f"engine_path validation failed: {'; '.join(errors)}")
+            # Pass engine dir as model - TRT-LLM auto-detects TLLM_ENGINE format.
+            # Compile-time kwargs are baked into the engine; don't pass them.
+            # enable_build_cache is not set - engine format bypasses it.
+            return {"model": str(trt.engine_path), "backend": "trt"}
+
         if trt is None:
             # No tensorrt section — use defaults + enable build cache
             kwargs["enable_build_cache"] = True
