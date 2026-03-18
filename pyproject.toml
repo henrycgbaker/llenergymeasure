@@ -76,6 +76,12 @@ disallow_untyped_calls = false
 warn_unused_ignores = false
 exclude = []
 
+[[tool.mypy.overrides]]
+module = "transformers.*"
+# transformers re-exports (AutoConfig, AutoTokenizer, etc.) are not explicitly
+# typed in their __init__.py stubs, causing attr-defined errors.
+no_implicit_reexport = false
+
 [[tool.uv.index]]
 name = "nvidia"
 url = "https://pypi.nvidia.com/"
