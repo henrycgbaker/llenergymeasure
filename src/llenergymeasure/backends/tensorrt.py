@@ -439,8 +439,6 @@ class TensorRTBackend:
         # Build cache config
         if trt.build_cache is not None:
             try:
-                from pathlib import Path
-
                 from tensorrt_llm.llmapi import BuildCacheConfig
 
                 bc = trt.build_cache
