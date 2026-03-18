@@ -7,39 +7,34 @@ Main package for the LLM efficiency measurement framework.
 ```
 llenergymeasure/
 ├── __init__.py         # Public API (run_experiment, run_study)
-├── _api.py             # API implementation
-├── constants.py        # Global constants
-├── exceptions.py       # Exception hierarchy
-├── protocols.py        # Protocol definitions (interfaces for DI)
-├── security.py         # Path sanitisation, validation
+├── api/                # API implementation (_impl.py, _gpu.py, preflight.py)
+├── backends/           # Backend plugins (pytorch, vllm, tensorrt) + protocol
 ├── cli/                # Typer CLI (run, config)
 ├── config/             # Configuration system (SSOT models)
-├── core/               # Inference engine, metrics, energy backends
 ├── datasets/           # Built-in prompt datasets
+├── device/             # GPU info and power/thermal querying
 ├── domain/             # Domain models (ExperimentResult, etc.)
+├── energy/             # Energy samplers (NVML, Zeus, CodeCarbon)
+├── harness/            # MeasurementHarness, warmup, energy selection
 ├── infra/              # Docker runner, image registry, entrypoint
-├── orchestration/      # Experiment preflight checks
 ├── results/            # Results persistence, aggregation
-├── state/              # Experiment state machine
-└── study/              # Study (sweep) runner, grid expansion
+├── study/              # Study (sweep) runner, grid expansion
+└── utils/              # Shared exceptions, constants, security
 ```
 
 ## Key Files
+
+### api/
+Public Python API entry point:
+- `run_experiment(config, **kwargs)` — single experiment
+- `run_study(config)` — multi-experiment sweep
 
 ### cli/
 Modular Typer CLI with two commands:
 - `llem run [config.yaml]` — run single experiment or multi-experiment study
 - `llem config [-v]` — show environment, GPU, backend, and energy status
 
-### protocols.py
-Protocol definitions for dependency injection:
-- `ModelLoader` — load model and tokeniser
-- `InferenceEngine` — run inference
-- `EnergyBackend` — energy tracking (Zeus, NVML, CodeCarbon)
-- `MetricsCollector` — collect metrics
-- `ResultsRepository` — persist results
-
-### exceptions.py
+### utils/exceptions.py
 Exception hierarchy rooted at `LLEMError`:
 - `ConfigError` — config loading/validation
 - `BackendError` — inference backend failures
@@ -48,25 +43,28 @@ Exception hierarchy rooted at `LLEMError`:
 - `StudyError` — study orchestration errors
 - `DockerError` — Docker container dispatch errors
 
-### security.py
+### utils/security.py
 Security utilities:
 - `sanitize_experiment_id()` — sanitise IDs for filesystem
 - `is_safe_path()` — prevent path traversal
 
 ## Submodules
 
-| Module           | Description                                              |
-|------------------|----------------------------------------------------------|
-| `cli/`           | Typer CLI commands (run, config)                         |
-| `config/`        | Configuration loading, SSOT models, introspection        |
-| `core/`          | Inference backends, model loading, FLOPs, energy, GPU    |
-| `datasets/`      | Built-in prompt datasets                                 |
-| `domain/`        | Pydantic models for experiments and results              |
-| `infra/`         | Docker runner, image registry, container entrypoint      |
-| `orchestration/` | Experiment preflight checks                              |
-| `results/`       | FileSystemRepository, aggregation logic                  |
-| `state/`         | Experiment state machine                                 |
-| `study/`         | Study runner, grid expansion, manifest, preflight        |
+| Module        | Description                                              |
+|---------------|----------------------------------------------------------|
+| `api/`        | Public Python API (run_experiment, run_study)            |
+| `backends/`   | Inference backend plugins (pytorch, vllm, tensorrt)      |
+| `cli/`        | Typer CLI commands (run, config)                         |
+| `config/`     | Configuration loading, SSOT models, introspection        |
+| `datasets/`   | Built-in prompt datasets                                 |
+| `device/`     | GPU info, power/thermal querying                         |
+| `domain/`     | Pydantic models for experiments and results              |
+| `energy/`     | Energy samplers (NVML, Zeus, CodeCarbon)                 |
+| `harness/`    | MeasurementHarness, warmup, energy selection             |
+| `infra/`      | Docker runner, image registry, container entrypoint      |
+| `results/`    | FileSystemRepository, aggregation logic                  |
+| `study/`      | Study runner, grid expansion, manifest, preflight        |
+| `utils/`      | Shared exceptions, constants, security utilities         |
 
 ## Usage
 
@@ -80,4 +78,4 @@ from llenergymeasure.domain import ExperimentResult
 
 - See `cli/CLAUDE.md` for CLI architecture
 - See `config/README.md` for configuration system
-- See `core/README.md` for inference engine details
+- See `CLAUDE.md` for layered architecture and import rules

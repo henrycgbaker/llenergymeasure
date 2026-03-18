@@ -715,7 +715,7 @@ Results include `effective_config` and `cli_overrides` fields for full reproduci
 
 ## Related
 
-- See `../cli.py` for CLI commands (`config validate`, `config show`, `config new`, `config generate-grid`)
-- See `../core/inference.py` for config usage in inference
-- See `../constants.py` for preset definitions
+- See `../cli/` for CLI commands (`llem run`, `llem config`)
+- See `../harness/__init__.py` for config usage in inference
+- See `../utils/constants.py` for shared constants
 - See `../domain/experiment.py` for result models with config tracking

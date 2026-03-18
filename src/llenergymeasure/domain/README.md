@@ -164,7 +164,7 @@ QuantizationSpec(
 
 Results include `schema_version` (currently "2.0.0") for forward compatibility:
 ```python
-from llenergymeasure.constants import SCHEMA_VERSION
+from llenergymeasure.utils.constants import SCHEMA_VERSION
 ```
 
 ## Related
