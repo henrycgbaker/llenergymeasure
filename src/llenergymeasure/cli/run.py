@@ -255,7 +255,7 @@ def _run_impl(
 
     # Save output if output_dir specified
     if experiment_config.output_dir:
-        from llenergymeasure.results.persistence import save_result
+        from llenergymeasure.api import save_result
 
         output_dir = Path(experiment_config.output_dir)
         ts_source = output_dir / result.timeseries if result.timeseries else None

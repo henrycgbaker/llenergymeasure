@@ -444,7 +444,7 @@ def test_run_saves_to_output_dir(tmp_path):
         patch("llenergymeasure.cli.run.print_experiment_header"),
         patch("llenergymeasure.cli.run.print_result_summary"),
         patch("llenergymeasure.cli.run.tqdm") as mock_tqdm,
-        patch("llenergymeasure.results.persistence.save_result") as mock_save_result,
+        patch("llenergymeasure.api.save_result") as mock_save_result,
     ):
         mock_tqdm.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tqdm.return_value.__exit__ = MagicMock(return_value=False)
