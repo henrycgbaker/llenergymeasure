@@ -44,6 +44,7 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.0",
     "types-pyyaml>=6.0.12",
+    "import-linter>=2.9",
 ]
 
 [project.scripts]
@@ -108,8 +109,8 @@ markers = [
 [tool.coverage.run]
 source = ["llenergymeasure"]
 omit = [
-    "*/core/backends/vllm.py",
-    "*/core/backends/tensorrt.py",
+    "*/backends/vllm.py",
+    "*/backends/tensorrt.py",
     "*/infra/docker_runner.py",
     "*/infra/container_entrypoint.py",
 ]
@@ -123,3 +124,114 @@ exclude_lines = [
     "@abstractmethod",
 ]
 show_missing = true
+
+[tool.importlinter]
+root_packages = ["llenergymeasure"]
+include_external_packages = false
+exclude_type_checking_imports = true
+unmatched_ignore_imports_alerting = "warn"
+
+[[tool.importlinter.contracts]]
+id = "main-layers"
+name = "Main architectural layers"
+type = "layers"
+layers = [
+    "llenergymeasure.cli",
+    "llenergymeasure.api",
+    "llenergymeasure.study",
+    "llenergymeasure.harness | llenergymeasure.results",
+    "llenergymeasure.backends | llenergymeasure.energy | llenergymeasure.datasets",
+    "llenergymeasure.infra",
+    "llenergymeasure.config | llenergymeasure.domain",
+    "llenergymeasure.device | llenergymeasure.utils",
+]
+ignore_imports = [
+    # device/power_thermal needs ThermalThrottleInfo (domain model, returned by device layer)
+    "llenergymeasure.device.power_thermal -> llenergymeasure.domain.metrics",
+    # backends load prompts from datasets (same-layer, architecturally intentional)
+    "llenergymeasure.backends.pytorch -> llenergymeasure.datasets.loader",
+    "llenergymeasure.backends.vllm -> llenergymeasure.datasets.loader",
+    "llenergymeasure.backends.tensorrt -> llenergymeasure.datasets.loader",
+    # results calls harness for extended_metrics aggregation (same-layer, lazy import)
+    "llenergymeasure.results.aggregation -> llenergymeasure.harness.extended_metrics",
+    # container_entrypoint is the in-container runner: by design calls api/harness/backends
+    "llenergymeasure.infra.container_entrypoint -> llenergymeasure.api._gpu",
+    "llenergymeasure.infra.container_entrypoint -> llenergymeasure.api.preflight",
+    "llenergymeasure.infra.container_entrypoint -> llenergymeasure.backends",
+    "llenergymeasure.infra.container_entrypoint -> llenergymeasure.harness",
+    # image_registry imports package root only for __version__
+    "llenergymeasure.infra.image_registry -> llenergymeasure",
+    # domain.environment collects runtime env metadata (lazy import inside method)
+    "llenergymeasure.domain.environment -> llenergymeasure.infra.environment",
+    # domain.environment imports package root only for __version__ (lazy import inside method)
+    "llenergymeasure.domain.environment -> llenergymeasure",
+    # domain.experiment has convenience save()/from_json() methods using lazy imports
+    "llenergymeasure.domain.experiment -> llenergymeasure.results.persistence",
+    # study runner spawns subprocess: calls api utilities directly inside spawned function
+    "llenergymeasure.study.runner -> llenergymeasure.api.preflight",
+    "llenergymeasure.study.runner -> llenergymeasure.api._gpu",
+    # study.manifest imports package root only for __version__ (lazy import inside method)
+    "llenergymeasure.study.manifest -> llenergymeasure",
+]
+
+[[tool.importlinter.contracts]]
+id = "cli-boundary"
+name = "CLI must not import harness or infrastructure directly"
+type = "forbidden"
+source_modules = ["llenergymeasure.cli"]
+forbidden_modules = [
+    "llenergymeasure.harness",
+    "llenergymeasure.backends",
+    "llenergymeasure.energy",
+    "llenergymeasure.infra",
+    "llenergymeasure.study",
+    "llenergymeasure.results",
+    "llenergymeasure.datasets",
+]
+ignore_imports = [
+    # cli/__init__.py imports llenergymeasure root for __version__; api._impl is a
+    # transitive dependency (not a direct CLI import). All violations below route
+    # through llenergymeasure.__init__ -> api._impl -> lower layers.
+    "llenergymeasure.cli -> llenergymeasure",
+    # cli.run also imports llenergymeasure root directly (for run_experiment)
+    "llenergymeasure.cli.run -> llenergymeasure",
+    # domain.environment collects runtime env metadata (lazy import inside method)
+    "llenergymeasure.domain.environment -> llenergymeasure.infra.environment",
+    # domain.environment imports package root for __version__ (lazy import inside method)
+    # this breaks the transitive chain: cli._display -> domain.environment -> llenergymeasure -> api._impl
+    "llenergymeasure.domain.environment -> llenergymeasure",
+    # domain.experiment has lazy imports of results.persistence at lines 309/324
+    "llenergymeasure.domain.experiment -> llenergymeasure.results.persistence",
+]
+
+[[tool.importlinter.contracts]]
+id = "foundation-independence"
+name = "Config, domain, device, utils must not import upper layers"
+type = "forbidden"
+source_modules = [
+    "llenergymeasure.config",
+    "llenergymeasure.domain",
+    "llenergymeasure.device",
+    "llenergymeasure.utils",
+]
+forbidden_modules = [
+    "llenergymeasure.cli",
+    "llenergymeasure.api",
+    "llenergymeasure.study",
+    "llenergymeasure.harness",
+    "llenergymeasure.backends",
+    "llenergymeasure.energy",
+    "llenergymeasure.infra",
+    "llenergymeasure.results",
+    "llenergymeasure.datasets",
+]
+ignore_imports = [
+    # domain.environment collects runtime env metadata (lazy import inside method)
+    "llenergymeasure.domain.environment -> llenergymeasure.infra.environment",
+    # domain.environment/manifest import package root for __version__ (lazy import inside method)
+    "llenergymeasure.domain.environment -> llenergymeasure",
+    # domain.experiment has convenience save()/from_json() methods using lazy imports
+    "llenergymeasure.domain.experiment -> llenergymeasure.results.persistence",
+    # device/power_thermal returns ThermalThrottleInfo (domain model, device layer concern)
+    "llenergymeasure.device.power_thermal -> llenergymeasure.domain.metrics",
+]

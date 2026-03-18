@@ -52,6 +52,8 @@ jobs:
         run: uv run ruff check src/ tests/
       - name: Ruff format check
         run: uv run ruff format --check src/ tests/
+      - name: Architecture lint
+        run: uv run lint-imports
 
   type-check:
     runs-on: ubuntu-latest
