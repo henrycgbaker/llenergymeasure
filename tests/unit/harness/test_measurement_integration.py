@@ -326,7 +326,7 @@ def test_pytorch_backend_warmup_returns_warmup_result() -> None:
     )
 
     # model is a tuple (hf_model, tokenizer) in the new interface
-    result = backend.warmup(config, (MagicMock(), MagicMock()))
+    result = backend.warmup(config, (MagicMock(), MagicMock()), ["test prompt"])
     assert isinstance(result, WarmupResult)
     assert result.iterations_completed == 0
     assert result.converged is True
@@ -343,7 +343,7 @@ def test_pytorch_backend_warmup_disabled_path() -> None:
         warmup=WarmupConfig(enabled=False),
     )
 
-    result = backend.warmup(config, (MagicMock(), MagicMock()))
+    result = backend.warmup(config, (MagicMock(), MagicMock()), ["test prompt"])
     assert result.iterations_completed == 0
     assert result.converged is True
     assert result.final_cv == 0.0

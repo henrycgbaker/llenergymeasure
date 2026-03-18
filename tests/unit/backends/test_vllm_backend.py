@@ -12,7 +12,7 @@ Coverage:
   - _build_sampling_params: greedy, sampling, top_k sentinel mapping
   - No streaming code (CM-07 structurally resolved)
   - --shm-size 8g present in DockerRunner._build_docker_cmd (VLLM-03)
-  - _prepare_prompts returns config.n prompt strings
+  - Prompt loading (covered by tests/unit/test_datasets.py; harness passes prompts to backends)
 """
 
 from __future__ import annotations
@@ -409,59 +409,6 @@ class TestShmSizeInDockerRunner:
         assert "--shm-size=8g" not in cmd
         assert "--shm-size" in cmd
         assert "8g" in cmd
-
-
-# =============================================================================
-# Test Group 7: _prepare_prompts
-# =============================================================================
-
-
-class TestPreparePrompts:
-    def test_returns_n_prompts(self):
-        """_prepare_prompts returns exactly config.n prompt strings."""
-        config = make_config(**_VLLM_DEFAULTS, n=5)
-        backend = VLLMBackend()
-        prompts = backend._prepare_prompts(config)
-
-        assert len(prompts) == 5
-
-    def test_all_prompts_are_strings(self):
-        """Every returned prompt is a non-empty string."""
-        config = make_config(**_VLLM_DEFAULTS, n=3)
-        backend = VLLMBackend()
-        prompts = backend._prepare_prompts(config)
-
-        assert all(isinstance(p, str) and len(p) > 0 for p in prompts)
-
-    def test_n_equals_one(self):
-        """_prepare_prompts handles n=1 correctly."""
-        config = make_config(**_VLLM_DEFAULTS, n=1)
-        backend = VLLMBackend()
-        prompts = backend._prepare_prompts(config)
-
-        assert len(prompts) == 1
-        assert isinstance(prompts[0], str)
-
-    def test_n_equals_100(self):
-        """_prepare_prompts handles n=100 (default) correctly."""
-        config = make_config(**_VLLM_DEFAULTS, n=100)
-        backend = VLLMBackend()
-        prompts = backend._prepare_prompts(config)
-
-        assert len(prompts) == 100
-
-    def test_prompts_are_real_text(self):
-        """_prepare_prompts returns real prompts from the dataset, not M1 placeholder."""
-        config = make_config(**_VLLM_DEFAULTS, n=1)
-        backend = VLLMBackend()
-        prompts = backend._prepare_prompts(config)
-
-        # Should return a real non-empty string (not "Hello, " repeated)
-        assert len(prompts) == 1
-        assert isinstance(prompts[0], str)
-        assert len(prompts[0]) > 0
-        # Should not be the old M1 placeholder pattern
-        assert prompts[0] != ("Hello, " * (512 // 4)).strip()
 
 
 # =============================================================================

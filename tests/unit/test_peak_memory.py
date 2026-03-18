@@ -115,18 +115,13 @@ def test_peak_memory_reset_precedes_measurement():
         ),
         patch.object(
             PyTorchBackend,
-            "_prepare_prompts",
-            return_value=["test prompt"],
-        ),
-        patch.object(
-            PyTorchBackend,
             "_run_batch",
             return_value=(10, 20, 0.5),
         ),
     ):
         backend = PyTorchBackend()
         config = ExperimentConfig(model="test-model", backend="pytorch", n=1)
-        backend.run_inference(config, (fake_model, FakeTokenizer()))
+        backend.run_inference(config, (fake_model, FakeTokenizer()), ["test prompt"])
 
     assert "reset" in call_log, "reset_peak_memory_stats must be called in run_inference"
     assert "max_alloc" in call_log, "max_memory_allocated must be called in run_inference"

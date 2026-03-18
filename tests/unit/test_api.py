@@ -308,14 +308,14 @@ class _MockBackend:
     def load_model(self, config: ExperimentConfig):
         return object()  # Opaque model object
 
-    def warmup(self, config: ExperimentConfig, model):
+    def warmup(self, config: ExperimentConfig, model, prompts: list[str] | None = None):
         from llenergymeasure.domain.metrics import WarmupResult
 
         return WarmupResult(
             converged=True, final_cv=0.0, iterations_completed=0, target_cv=0.01, max_prompts=1
         )
 
-    def run_inference(self, config: ExperimentConfig, model):
+    def run_inference(self, config: ExperimentConfig, model, prompts: list[str] | None = None):
         from llenergymeasure.backends.protocol import InferenceOutput
 
         self.run_inference_calls.append(config)
