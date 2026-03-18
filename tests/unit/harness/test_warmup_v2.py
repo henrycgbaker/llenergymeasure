@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from llenergymeasure.backends._helpers import warmup_until_converged
 from llenergymeasure.config.models import WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
-from llenergymeasure.harness.warmup import warmup_until_converged
 
 # =============================================================================
 # WarmupConfig defaults and constraints

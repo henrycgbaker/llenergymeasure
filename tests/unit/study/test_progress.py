@@ -5,12 +5,12 @@ All tests run GPU-free. Output is captured via capsys (writes to stderr).
 
 from __future__ import annotations
 
-from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study._progress import (
     _format_duration,
     _sig3,
     print_study_progress,
 )
+from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
 # _sig3 helper
@@ -76,13 +76,9 @@ def test_format_duration_exactly_60():
 # ---------------------------------------------------------------------------
 
 
-def _make_config(model: str = "gpt2", backend: str = "pytorch") -> ExperimentConfig:
-    return ExperimentConfig(model=model, backend=backend)
-
-
 def test_print_study_progress_running_status(capsys):
     """Running status outputs '...' icon."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(1, 5, config, status="running")
     captured = capsys.readouterr()
     assert "..." in captured.err
@@ -91,7 +87,7 @@ def test_print_study_progress_running_status(capsys):
 
 def test_print_study_progress_completed_status(capsys):
     """Completed status outputs 'OK' icon."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(3, 10, config, status="completed")
     captured = capsys.readouterr()
     assert "OK" in captured.err
@@ -100,7 +96,7 @@ def test_print_study_progress_completed_status(capsys):
 
 def test_print_study_progress_failed_status(capsys):
     """Failed status outputs 'FAIL' icon."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(2, 4, config, status="failed")
     captured = capsys.readouterr()
     assert "FAIL" in captured.err
@@ -108,7 +104,7 @@ def test_print_study_progress_failed_status(capsys):
 
 def test_print_study_progress_unknown_status(capsys):
     """Unknown status outputs '?' icon."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(1, 1, config, status="weirdstatus")
     captured = capsys.readouterr()
     assert "?" in captured.err
@@ -116,7 +112,7 @@ def test_print_study_progress_unknown_status(capsys):
 
 def test_print_study_progress_includes_model_and_backend(capsys):
     """Output line includes model name and backend."""
-    config = _make_config(model="meta-llama/Llama-3-8B", backend="vllm")
+    config = make_config(model="meta-llama/Llama-3-8B", backend="vllm")
     print_study_progress(1, 1, config, status="running")
     captured = capsys.readouterr()
     assert "meta-llama/Llama-3-8B" in captured.err
@@ -125,7 +121,7 @@ def test_print_study_progress_includes_model_and_backend(capsys):
 
 def test_print_study_progress_with_elapsed(capsys):
     """Elapsed time is included when provided."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(1, 5, config, status="completed", elapsed=30.5)
     captured = capsys.readouterr()
     assert "30.5s" in captured.err
@@ -134,7 +130,7 @@ def test_print_study_progress_with_elapsed(capsys):
 
 def test_print_study_progress_without_elapsed(capsys):
     """No '--' separator or elapsed time when elapsed is None."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(1, 5, config, status="running", elapsed=None)
     captured = capsys.readouterr()
     assert "--" not in captured.err
@@ -142,7 +138,7 @@ def test_print_study_progress_without_elapsed(capsys):
 
 def test_print_study_progress_with_energy(capsys):
     """Energy in joules is included when provided."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(1, 5, config, status="completed", elapsed=10.0, energy=150.5)
     captured = capsys.readouterr()
     assert "J" in captured.err
@@ -150,7 +146,7 @@ def test_print_study_progress_with_energy(capsys):
 
 def test_print_study_progress_without_energy(capsys):
     """No '(...)' energy term when energy is None."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(1, 5, config, status="running")
     captured = capsys.readouterr()
     # Should not contain any parenthesised energy value
@@ -159,7 +155,7 @@ def test_print_study_progress_without_energy(capsys):
 
 def test_print_study_progress_writes_to_stderr(capsys):
     """Output goes to stderr, not stdout."""
-    config = _make_config()
+    config = make_config()
     print_study_progress(1, 3, config, status="running")
     captured = capsys.readouterr()
     assert captured.out == ""

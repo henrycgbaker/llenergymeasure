@@ -28,18 +28,13 @@ from llenergymeasure.config.backend_configs import (
     TensorRTSamplingConfig,
     TensorRTSchedulerConfig,
 )
-from llenergymeasure.config.models import ExperimentConfig
+from tests.conftest import make_config
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
-
-def _make_config(**overrides) -> ExperimentConfig:
-    """Return a minimal valid ExperimentConfig with backend='tensorrt'."""
-    defaults: dict = {"model": "test-model", "backend": "tensorrt"}
-    defaults.update(overrides)
-    return ExperimentConfig(**defaults)
+_TRT_DEFAULTS = {"model": "test-model", "backend": "tensorrt"}
 
 
 class _MockQuantAlgo:
@@ -165,7 +160,7 @@ class TestProtocolCompliance:
 class TestBuildLlmKwargs:
     def test_build_llm_kwargs_minimal(self):
         """No tensorrt config → kwargs has model and backend='trt' and enable_build_cache."""
-        config = _make_config()
+        config = make_config(**_TRT_DEFAULTS)
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -175,7 +170,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_tp_size(self):
         """tp_size=2 maps to tensor_parallel_size=2."""
-        config = _make_config(tensorrt=TensorRTConfig(tp_size=2))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=2))
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -183,7 +178,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_max_batch_size(self):
         """max_batch_size maps directly."""
-        config = _make_config(tensorrt=TensorRTConfig(max_batch_size=16))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(max_batch_size=16))
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -191,7 +186,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_dtype(self):
         """dtype='float16' maps directly."""
-        config = _make_config(tensorrt=TensorRTConfig(dtype="float16"))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(dtype="float16"))
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -199,7 +194,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_fast_build(self):
         """fast_build=True maps directly."""
-        config = _make_config(tensorrt=TensorRTConfig(fast_build=True))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(fast_build=True))
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -207,7 +202,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_none_values_not_included(self):
         """None fields from TensorRTConfig are NOT in kwargs."""
-        config = _make_config(tensorrt=TensorRTConfig())  # all fields None
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig())  # all fields None
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -219,7 +214,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_default_build_cache_when_no_build_cache_section(self):
         """When no build_cache section, enable_build_cache=True is set."""
-        config = _make_config(tensorrt=TensorRTConfig(tp_size=1))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=1))
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -231,7 +226,9 @@ class TestBuildLlmKwargs:
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8")))
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8"))
+        )
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
 
@@ -245,14 +242,15 @@ class TestBuildLlmKwargs:
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        config = _make_config(
+        config = make_config(
+            **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
                 build_cache=TensorRTBuildCacheConfig(
                     cache_root="/tmp/trt_cache",
                     max_records=5,
                     max_cache_storage_gb=128.0,
                 )
-            )
+            ),
         )
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
@@ -268,13 +266,14 @@ class TestBuildLlmKwargs:
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        config = _make_config(
+        config = make_config(
+            **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
                 kv_cache=TensorRTKvCacheConfig(
                     enable_block_reuse=True,
                     free_gpu_memory_fraction=0.8,
                 )
-            )
+            ),
         )
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
@@ -290,12 +289,13 @@ class TestBuildLlmKwargs:
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        config = _make_config(
+        config = make_config(
+            **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
                 scheduler=TensorRTSchedulerConfig(
                     capacity_scheduling_policy="MAX_UTILIZATION",
                 )
-            )
+            ),
         )
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
@@ -309,7 +309,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_model_always_present(self):
         """model key is always present regardless of tensorrt config."""
-        config = _make_config()
+        config = make_config(**_TRT_DEFAULTS)
         backend = TensorRTBackend()
         kwargs = backend._build_llm_kwargs(config)
         assert kwargs["model"] == "test-model"
@@ -327,7 +327,7 @@ class TestBuildSamplingParams:
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        config = _make_config()
+        config = make_config(**_TRT_DEFAULTS)
         backend = TensorRTBackend()
         params = backend._build_sampling_params(config)
 
@@ -342,7 +342,7 @@ class TestBuildSamplingParams:
 
         from llenergymeasure.config.models import DecoderConfig
 
-        config = _make_config(decoder=DecoderConfig(temperature=0.0))
+        config = make_config(**_TRT_DEFAULTS, decoder=DecoderConfig(temperature=0.0))
         backend = TensorRTBackend()
         params = backend._build_sampling_params(config)
 
@@ -358,7 +358,7 @@ class TestBuildSamplingParams:
 
         from llenergymeasure.config.models import DecoderConfig
 
-        config = _make_config(decoder=DecoderConfig(temperature=0.7))
+        config = make_config(**_TRT_DEFAULTS, decoder=DecoderConfig(temperature=0.7))
         backend = TensorRTBackend()
         params = backend._build_sampling_params(config)
 
@@ -370,14 +370,15 @@ class TestBuildSamplingParams:
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        config = _make_config(
+        config = make_config(
+            **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
                 sampling=TensorRTSamplingConfig(
                     n=3,
                     ignore_eos=True,
                     min_tokens=5,
                 )
-            )
+            ),
         )
         backend = TensorRTBackend()
         params = backend._build_sampling_params(config)
@@ -399,7 +400,7 @@ class TestValidateConfigSMChecks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
-        config = _make_config()
+        config = make_config(**_TRT_DEFAULTS)
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
         assert errors == []
@@ -410,7 +411,7 @@ class TestValidateConfigSMChecks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (7, 0),
         )
-        config = _make_config()
+        config = make_config(**_TRT_DEFAULTS)
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
 
@@ -424,7 +425,7 @@ class TestValidateConfigSMChecks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (7, 5),
         )
-        config = _make_config()
+        config = make_config(**_TRT_DEFAULTS)
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
         assert errors == []
@@ -435,7 +436,7 @@ class TestValidateConfigSMChecks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: None,
         )
-        config = _make_config()
+        config = make_config(**_TRT_DEFAULTS)
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
         assert errors == []
@@ -453,7 +454,9 @@ class TestValidateConfigFP8Checks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
-        config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")))
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
+        )
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
 
@@ -467,7 +470,9 @@ class TestValidateConfigFP8Checks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 9),
         )
-        config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")))
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
+        )
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
         assert errors == []
@@ -478,7 +483,9 @@ class TestValidateConfigFP8Checks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (9, 0),
         )
-        config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")))
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
+        )
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
         assert errors == []
@@ -489,8 +496,9 @@ class TestValidateConfigFP8Checks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
-        config = _make_config(
-            tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(kv_cache_quant_algo="FP8"))
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(kv_cache_quant_algo="FP8")),
         )
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
@@ -505,7 +513,9 @@ class TestValidateConfigFP8Checks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
-        config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8")))
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8"))
+        )
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
         assert errors == []
@@ -516,10 +526,11 @@ class TestValidateConfigFP8Checks:
             "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
-        config = _make_config(
+        config = make_config(
+            **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
                 quant=TensorRTQuantConfig(quant_algo="FP8", kv_cache_quant_algo="FP8")
-            )
+            ),
         )
         backend = TensorRTBackend()
         errors = backend.validate_config(config)
@@ -577,7 +588,7 @@ class TestBuildMetadata:
         import hashlib
         import json
 
-        config = _make_config(tensorrt=TensorRTConfig(tp_size=2, max_batch_size=8))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=2, max_batch_size=8))
         backend = TensorRTBackend()
 
         # Reproduce the hash computation from load_model

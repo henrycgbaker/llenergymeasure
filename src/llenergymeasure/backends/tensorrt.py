@@ -72,13 +72,10 @@ class TensorRTBackend:
         Raises:
             BackendError: If TRT-LLM is not installed or model loading fails.
         """
-        try:
-            from tensorrt_llm import LLM
-        except ImportError as e:
-            raise BackendError(
-                "TensorRT-LLM is not installed. Install it with: "
-                "pip install llenergymeasure[tensorrt]"
-            ) from e
+        from llenergymeasure.backends._helpers import require_import
+
+        _trt_mod = require_import("tensorrt_llm", "tensorrt")
+        LLM = _trt_mod.LLM
 
         # Warn about engine_path (forward-compatible, not yet implemented)
         trt = config.tensorrt
@@ -112,8 +109,6 @@ class TensorRTBackend:
         build_start = time.perf_counter()
 
         try:
-            from tensorrt_llm import LLM
-
             llm = LLM(**kwargs)
         except Exception as e:
             raise BackendError(f"TensorRT-LLM model loading failed: {e}") from e
@@ -199,13 +194,9 @@ class TensorRTBackend:
         prompts = self._prepare_prompts(config)
 
         # Reset peak stats before the measurement loop
-        try:
-            import torch
+        from llenergymeasure.backends._helpers import reset_cuda_peak_memory
 
-            if torch.cuda.is_available():
-                torch.cuda.reset_peak_memory_stats()
-        except Exception:
-            pass
+        reset_cuda_peak_memory()
 
         logger.info(
             "Starting TRT-LLM offline batch inference: %d prompts, max_tokens=%d",
@@ -218,23 +209,18 @@ class TensorRTBackend:
             outputs = llm.generate(prompts, sampling_params)
             elapsed = time.perf_counter() - t0
         except Exception as e:
-            if "out of memory" in str(e).lower():
-                raise BackendError(
-                    f"TRT-LLM CUDA out of memory. Try: reduce n, "
-                    f"use a smaller max_batch_size, or use a smaller model. "
-                    f"Original error: {e}"
-                ) from e
-            raise BackendError(f"TRT-LLM inference failed: {e}") from e
+            from llenergymeasure.backends._helpers import raise_backend_error
+
+            raise_backend_error(
+                e,
+                "TRT-LLM",
+                hint="reduce n, use a smaller max_batch_size, or use a smaller model.",
+            )
 
         # Capture peak memory
-        peak_mb = 0.0
-        try:
-            import torch
+        from llenergymeasure.backends._helpers import get_cuda_peak_memory_mb
 
-            if torch.cuda.is_available():
-                peak_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
-        except Exception:
-            pass
+        peak_mb = get_cuda_peak_memory_mb()
 
         # Count tokens from RequestOutput objects (same pattern as vLLM)
         input_token_count = sum(

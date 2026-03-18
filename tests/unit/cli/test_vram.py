@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
-from llenergymeasure.config.models import ExperimentConfig
+from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -23,12 +23,7 @@ from llenergymeasure.config.models import ExperimentConfig
 # Llama-2-7B parameter count from safetensors metadata
 _LLAMA_7B_PARAMS = 6_738_415_616
 
-
-def _make_config(**kwargs) -> ExperimentConfig:
-    """Return a minimal ExperimentConfig. Precision defaults to fp16."""
-    defaults = {"model": "meta-llama/Llama-2-7b-hf", "backend": "pytorch", "precision": "fp16"}
-    defaults.update(kwargs)
-    return ExperimentConfig(**defaults)
+_VRAM_DEFAULTS = {"model": "meta-llama/Llama-2-7b-hf"}
 
 
 def _make_model_info(param_count: int | None = _LLAMA_7B_PARAMS, with_config: bool = True):
@@ -86,7 +81,7 @@ def _patch_hfapi(model_info_return=None, side_effect=None):
 
 def test_estimate_vram_fp16():
     """fp16 weights use 2 bytes/param; returns correct breakdown dict."""
-    config = _make_config(precision="fp16")
+    config = make_config(**_VRAM_DEFAULTS, precision="fp16")
     model_info = _make_model_info()
 
     ctx, _ = _patch_hfapi(model_info_return=model_info)
@@ -105,7 +100,7 @@ def test_estimate_vram_fp16():
 
 def test_estimate_vram_fp32():
     """fp32 weights use 4 bytes/param — double the fp16 size."""
-    config = _make_config(precision="fp32")
+    config = make_config(**_VRAM_DEFAULTS, precision="fp32")
     model_info = _make_model_info()
 
     ctx, _ = _patch_hfapi(model_info_return=model_info)
@@ -119,7 +114,7 @@ def test_estimate_vram_fp32():
 
 def test_estimate_vram_bf16():
     """bf16 weights use 2 bytes/param — same size as fp16."""
-    config = _make_config(precision="bf16")
+    config = make_config(**_VRAM_DEFAULTS, precision="bf16")
     model_info = _make_model_info()
 
     ctx, _ = _patch_hfapi(model_info_return=model_info)
@@ -133,8 +128,8 @@ def test_estimate_vram_bf16():
 
 def test_estimate_vram_fp32_double_fp16():
     """fp32 uses 4 bytes/param, which is exactly 2x the fp16 (2 bytes/param) weight size."""
-    config_fp16 = _make_config(precision="fp16")
-    config_fp32 = _make_config(precision="fp32")
+    config_fp16 = make_config(**_VRAM_DEFAULTS, precision="fp16")
+    config_fp32 = make_config(**_VRAM_DEFAULTS, precision="fp32")
     model_info = _make_model_info()
 
     ctx16, _ = _patch_hfapi(model_info_return=model_info)
@@ -156,7 +151,7 @@ def test_estimate_vram_fp32_double_fp16():
 
 def test_estimate_vram_network_failure_returns_none():
     """Any exception from HfApi.model_info returns None (non-blocking)."""
-    config = _make_config(precision="fp16")
+    config = make_config(**_VRAM_DEFAULTS, precision="fp16")
 
     ctx, _ = _patch_hfapi(side_effect=Exception("Network unreachable"))
     with ctx:
@@ -167,7 +162,7 @@ def test_estimate_vram_network_failure_returns_none():
 
 def test_estimate_vram_no_safetensors_returns_none():
     """Model info with safetensors=None returns None (param count unavailable)."""
-    config = _make_config(precision="fp16")
+    config = make_config(**_VRAM_DEFAULTS, precision="fp16")
     model_info = _make_model_info(param_count=None)  # safetensors is None
 
     ctx, _ = _patch_hfapi(model_info_return=model_info)
@@ -179,7 +174,7 @@ def test_estimate_vram_no_safetensors_returns_none():
 
 def test_estimate_vram_no_architecture_config_still_returns():
     """Model info with params but no config dict still returns dict; kv_cache_gb == 0.0."""
-    config = _make_config(precision="fp16")
+    config = make_config(**_VRAM_DEFAULTS, precision="fp16")
     model_info = _make_model_info(param_count=_LLAMA_7B_PARAMS, with_config=False)
 
     ctx, _ = _patch_hfapi(model_info_return=model_info)
@@ -193,7 +188,7 @@ def test_estimate_vram_no_architecture_config_still_returns():
 
 def test_estimate_vram_socket_timeout_restored():
     """Socket timeout is set to 5 s during the call and restored afterwards."""
-    config = _make_config(precision="fp16")
+    config = make_config(**_VRAM_DEFAULTS, precision="fp16")
     original_timeout = socket.getdefaulttimeout()
     timeouts_seen: list[float | None] = []
 
@@ -218,7 +213,7 @@ def test_estimate_vram_socket_timeout_restored():
 
 def test_estimate_vram_kv_cache_nonzero_with_architecture():
     """KV cache is > 0 when architecture config is present and max_input_tokens > 0."""
-    config = _make_config(precision="fp16")
+    config = make_config(**_VRAM_DEFAULTS, precision="fp16")
     model_info = _make_model_info(with_config=True)
 
     ctx, _ = _patch_hfapi(model_info_return=model_info)

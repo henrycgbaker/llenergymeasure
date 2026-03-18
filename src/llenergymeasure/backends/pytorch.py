@@ -16,7 +16,6 @@ from typing import Any
 from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.metrics import WarmupResult
-from llenergymeasure.utils.exceptions import BackendError
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +149,6 @@ class PyTorchBackend:
         Raises:
             BackendError: On CUDA OOM or other inference failures.
         """
-        import torch
-
         hf_model, tokenizer = model
 
         # Prepare prompts (M1 placeholder — generates synthetic prompts)
@@ -166,8 +163,9 @@ class PyTorchBackend:
         # Reset peak stats BEFORE the measurement loop so max_memory_allocated()
         # captures inference-window-only peak (KV cache + activations + batch buffers),
         # NOT model weights already allocated by load_model().
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
+        from llenergymeasure.backends._helpers import reset_cuda_peak_memory
+
+        reset_cuda_peak_memory()
 
         generate_kwargs = self._build_generate_kwargs(config)
         total_input_tokens = 0
@@ -202,18 +200,18 @@ class PyTorchBackend:
                     batch_time,
                 )
             except Exception as e:
-                if "out of memory" in str(e).lower() or type(e).__name__ == "OutOfMemoryError":
-                    raise BackendError(
-                        f"CUDA out of memory. Try: reduce batch_size, "
-                        f"use precision=fp16, or use a smaller model. "
-                        f"Original error: {e}"
-                    ) from e
-                raise BackendError(f"Inference failed: {e}") from e
+                from llenergymeasure.backends._helpers import raise_backend_error
+
+                raise_backend_error(
+                    e,
+                    "PyTorch",
+                    hint="reduce batch_size, use precision=fp16, or use a smaller model.",
+                )
 
         # Track peak GPU memory (inference window only — reset above)
-        peak_memory_mb = 0.0
-        if torch.cuda.is_available():
-            peak_memory_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
+        from llenergymeasure.backends._helpers import get_cuda_peak_memory_mb
+
+        peak_memory_mb = get_cuda_peak_memory_mb()
 
         # model_memory_mb is queried by the harness after load_model(); we report 0.0 here
         # as the harness captures it before warmup (before this method is called).
