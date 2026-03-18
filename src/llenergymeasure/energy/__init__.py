@@ -41,9 +41,6 @@ if TYPE_CHECKING:
     from llenergymeasure.energy.codecarbon import (
         CodeCarbonSampler as CodeCarbonSampler,
     )
-    from llenergymeasure.energy.codecarbon import (
-        warm_up as warm_up,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -162,5 +159,4 @@ __all__ = [
     "NVMLSampler",
     "ZeusSampler",
     "select_energy_sampler",
-    "warm_up",
 ]
