@@ -20,7 +20,7 @@ Invocation::
 
 or directly for testing::
 
-    python -m llenergymeasure.infra.container_entrypoint
+    python -m llenergymeasure.entrypoints.container
 """
 
 from __future__ import annotations
@@ -53,12 +53,12 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
         ``main()`` can catch it and write an error payload.
     """
     # Lazy imports — only needed at runtime, not import time
-    from llenergymeasure.api._gpu import _resolve_gpu_indices
-    from llenergymeasure.api.preflight import run_preflight
     from llenergymeasure.backends import get_backend
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.device.gpu_info import _resolve_gpu_indices
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
     from llenergymeasure.harness import MeasurementHarness
+    from llenergymeasure.harness.preflight import run_preflight
 
     # --- Deserialise config ---
     raw = json.loads(config_path.read_text(encoding="utf-8"))

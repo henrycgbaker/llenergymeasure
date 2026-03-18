@@ -37,4 +37,4 @@ RUN uv pip install --system --no-cache --no-deps ".[vllm]" \
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
-CMD ["python3", "-m", "llenergymeasure.infra.container_entrypoint"]
+CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]

@@ -35,14 +35,15 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     - create_study_dir + ManifestWriter (disk manifest writes)
     - save_result (per-experiment disk writes)
     """
-    import llenergymeasure.api.preflight
+    import llenergymeasure.harness.preflight
+    import llenergymeasure.study.preflight
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
     monkeypatch.setattr(
-        llenergymeasure.api.preflight, "run_study_preflight", lambda study, **kw: None
+        llenergymeasure.study.preflight, "run_study_preflight", lambda study, **kw: None
     )
-    monkeypatch.setattr(llenergymeasure.api.preflight, "run_preflight", lambda config: None)
+    monkeypatch.setattr(llenergymeasure.harness.preflight, "run_preflight", lambda config: None)
     monkeypatch.setattr(
         "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
         lambda **kw: None,

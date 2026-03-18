@@ -6,7 +6,6 @@ import functools
 import hashlib
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
@@ -290,40 +289,6 @@ class ExperimentResult(BaseModel):
         if self.total_energy_j > 0:
             return self.total_tokens / self.total_energy_j
         return 0.0
-
-    def save(
-        self,
-        output_dir: Path,
-        timeseries_source: Path | None = None,
-    ) -> Path:
-        """Save result to {output_dir}/{model}_{backend}_{timestamp}/ directory.
-
-        Returns the path to result.json (for from_json() round-trip).
-
-        Args:
-            output_dir: Parent directory for the output subdirectory.
-            timeseries_source: Optional .parquet file to copy into the output dir.
-        """
-        from pathlib import Path as _Path
-
-        from llenergymeasure.results.persistence import save_result
-
-        return save_result(self, _Path(output_dir), timeseries_source=timeseries_source)
-
-    @classmethod
-    def from_json(cls, path: Path) -> ExperimentResult:
-        """Load ExperimentResult from result.json path.
-
-        Auto-discovers timeseries.parquet from the same directory.
-        If sidecar missing, loads successfully with timeseries field preserved
-        and emits a UserWarning.
-
-        Args:
-            path: Path to result.json (as returned by save()).
-        """
-        from llenergymeasure.results.persistence import load_result
-
-        return load_result(path)
 
 
 class StudySummary(BaseModel):

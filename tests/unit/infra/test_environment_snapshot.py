@@ -16,11 +16,14 @@ from unittest.mock import MagicMock
 import pytest
 
 import llenergymeasure.domain.environment as env_module
+import llenergymeasure.harness.environment as harness_env_module
 from llenergymeasure.domain.environment import (
     EnvironmentSnapshot,
+    detect_cuda_version_with_source,
+)
+from llenergymeasure.harness.environment import (
     _collect_installed_packages,
     collect_environment_snapshot_async,
-    detect_cuda_version_with_source,
 )
 
 # ---------------------------------------------------------------------------
@@ -245,11 +248,11 @@ def test_collect_environment_snapshot_async_returns_future(monkeypatch: pytest.M
     hardware = _make_hardware()
 
     monkeypatch.setattr(
-        "llenergymeasure.infra.environment.collect_environment_metadata",
+        "llenergymeasure.harness.environment.collect_environment_metadata",
         lambda: hardware,
     )
     monkeypatch.setattr(
-        env_module,
+        harness_env_module,
         "detect_cuda_version_with_source",
         lambda: ("12.4", "torch"),
     )
@@ -272,19 +275,19 @@ def test_collect_environment_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Mock core/environment collect function
     monkeypatch.setattr(
-        "llenergymeasure.infra.environment.collect_environment_metadata",
+        "llenergymeasure.harness.environment.collect_environment_metadata",
         lambda: hardware,
     )
 
     # Mock CUDA detection to return a known result
     monkeypatch.setattr(
-        env_module,
+        harness_env_module,
         "detect_cuda_version_with_source",
         lambda: ("12.4", "torch"),
     )
 
     # Import and call the function
-    from llenergymeasure.domain.environment import collect_environment_snapshot
+    from llenergymeasure.harness.environment import collect_environment_snapshot
 
     snap = collect_environment_snapshot()
 

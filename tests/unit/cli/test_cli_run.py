@@ -432,7 +432,7 @@ def test_run_study_routing_experiments_yaml(tmp_path):
 
 
 def test_run_saves_to_output_dir(tmp_path):
-    """When output_dir is set on the config, result.save is called."""
+    """When output_dir is set on the config, save_result is called."""
     mock_config = _make_mock_config()
     mock_config.output_dir = str(tmp_path / "out")
     mock_result = _make_mock_result()
@@ -444,13 +444,14 @@ def test_run_saves_to_output_dir(tmp_path):
         patch("llenergymeasure.cli.run.print_experiment_header"),
         patch("llenergymeasure.cli.run.print_result_summary"),
         patch("llenergymeasure.cli.run.tqdm") as mock_tqdm,
+        patch("llenergymeasure.api.save_result") as mock_save_result,
     ):
         mock_tqdm.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_tqdm.return_value.__exit__ = MagicMock(return_value=False)
         result = runner.invoke(app, ["run", "--model", "gpt2", "--output", str(tmp_path / "out")])
 
     assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    mock_result.save.assert_called_once()
+    mock_save_result.assert_called_once()
 
 
 def test_run_study_cli_defaults_applied(tmp_path):

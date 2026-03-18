@@ -4,12 +4,9 @@ Captures the hardware and software environment at experiment time,
 enabling post-hoc analysis of environmental factors affecting measurements.
 """
 
-import importlib.metadata
 import importlib.util
 import logging
-import platform
 import subprocess
-from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -211,60 +208,3 @@ def detect_cuda_version_with_source() -> tuple[str | None, str | None]:
 
     # Source 4: Give up
     return None, None
-
-
-# ---------------------------------------------------------------------------
-# Package enumeration (in-process, replaces subprocess pip freeze / conda list)
-# ---------------------------------------------------------------------------
-
-
-def _collect_installed_packages() -> list[str]:
-    """Enumerate installed packages in-process. Covers pip, conda, manual installs."""
-    result = []
-    for dist in importlib.metadata.distributions():
-        name = dist.metadata["Name"]
-        version = dist.metadata["Version"]
-        if name and version:
-            result.append(f"{name}=={version}")
-    return sorted(result)
-
-
-# ---------------------------------------------------------------------------
-# Collection function
-# ---------------------------------------------------------------------------
-
-
-def collect_environment_snapshot() -> "EnvironmentSnapshot":
-    """Capture a full environment snapshot before experiment start.
-
-    Collects hardware metadata (via core/environment.py), Python version,
-    pip freeze, optional conda list, tool version, and CUDA version.
-    """
-    # Deferred import to avoid circular dependency (core -> domain -> core)
-    # Deferred import of __version__ to avoid circular import
-    from llenergymeasure import __version__ as tool_version
-    from llenergymeasure.infra.environment import collect_environment_metadata
-
-    hardware = collect_environment_metadata()
-    cuda_version, cuda_version_source = detect_cuda_version_with_source()
-
-    return EnvironmentSnapshot(
-        hardware=hardware,
-        python_version=platform.python_version(),
-        installed_packages=_collect_installed_packages(),
-        tool_version=tool_version,
-        cuda_version=cuda_version,
-        cuda_version_source=cuda_version_source,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Background-threaded snapshot collection
-# ---------------------------------------------------------------------------
-
-_snapshot_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="env-snapshot")
-
-
-def collect_environment_snapshot_async() -> Future[EnvironmentSnapshot]:
-    """Start background collection. Call .result(timeout=10) before writing results."""
-    return _snapshot_executor.submit(collect_environment_snapshot)

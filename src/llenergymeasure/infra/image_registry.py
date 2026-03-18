@@ -130,7 +130,7 @@ def get_default_image(backend: str) -> str:
         Full image reference string, e.g.
         ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"``.
     """
-    from llenergymeasure import __version__
+    from llenergymeasure._version import __version__
 
     version = __version__ if __version__ else "latest"
 

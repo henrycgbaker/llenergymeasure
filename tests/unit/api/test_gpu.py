@@ -9,8 +9,8 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
-from llenergymeasure.api._gpu import _resolve_gpu_indices
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
 # ---------------------------------------------------------------------------
 # Default backend: falls through to [0]

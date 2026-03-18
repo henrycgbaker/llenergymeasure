@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from llenergymeasure import __version__
+from llenergymeasure._version import __version__
 
 app = typer.Typer(
     name="llem",

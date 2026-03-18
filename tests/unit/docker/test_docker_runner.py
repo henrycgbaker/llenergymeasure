@@ -358,7 +358,7 @@ class TestDockerCommandStructure:
         assert any("LLEM_CONFIG_PATH" in arg for arg in cmd)
 
         # Entrypoint module
-        assert "llenergymeasure.infra.container_entrypoint" in joined
+        assert "llenergymeasure.entrypoints.container" in joined
 
         # Image tag
         assert IMAGE in cmd

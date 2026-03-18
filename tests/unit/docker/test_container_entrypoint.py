@@ -17,7 +17,7 @@ from tests.conftest import make_config, make_result
 
 # Patch targets: patch the source modules, not container_entrypoint references,
 # because container_entrypoint imports these inside function scope.
-_PATCH_PREFLIGHT = "llenergymeasure.api.preflight.run_preflight"
+_PATCH_PREFLIGHT = "llenergymeasure.harness.preflight.run_preflight"
 _PATCH_GET_BACKEND = "llenergymeasure.backends.get_backend"
 _PATCH_HARNESS_RUN = "llenergymeasure.harness.MeasurementHarness.run"
 
@@ -63,7 +63,7 @@ class TestRunContainerExperiment:
             mock_preflight.return_value = None
             mock_get_backend.return_value = MagicMock()
 
-            from llenergymeasure.infra.container_entrypoint import run_container_experiment
+            from llenergymeasure.entrypoints.container import run_container_experiment
 
             result_path = run_container_experiment(config_path, result_dir)
 
@@ -99,7 +99,7 @@ class TestRunContainerExperiment:
             mock_preflight.side_effect = track_preflight
             mock_get_backend.side_effect = track_get_backend
 
-            from llenergymeasure.infra.container_entrypoint import run_container_experiment
+            from llenergymeasure.entrypoints.container import run_container_experiment
 
             run_container_experiment(config_path, result_dir)
 
@@ -117,7 +117,7 @@ class TestRunContainerExperiment:
         ):
             mock_get_backend.return_value = MagicMock()
 
-            from llenergymeasure.infra.container_entrypoint import run_container_experiment
+            from llenergymeasure.entrypoints.container import run_container_experiment
 
             result_path = run_container_experiment(config_path, new_result_dir)
 
@@ -134,7 +134,7 @@ class TestRunContainerExperiment:
         ):
             mock_get_backend.return_value = MagicMock()
 
-            from llenergymeasure.infra.container_entrypoint import run_container_experiment
+            from llenergymeasure.entrypoints.container import run_container_experiment
 
             with pytest.raises(RuntimeError, match="GPU exploded"):
                 run_container_experiment(config_path, result_dir)
@@ -160,7 +160,7 @@ class TestMainErrorHandling:
         ):
             mock_get_backend.return_value = MagicMock()
 
-            from llenergymeasure.infra.container_entrypoint import main
+            from llenergymeasure.entrypoints.container import main
 
             # main() re-raises the exception after writing the error file
             with pytest.raises(ValueError, match="model not found"):
@@ -189,7 +189,7 @@ class TestMainErrorHandling:
         ):
             mock_get_backend.return_value = MagicMock()
 
-            from llenergymeasure.infra.container_entrypoint import main
+            from llenergymeasure.entrypoints.container import main
 
             main()  # should not raise
 
@@ -199,7 +199,7 @@ class TestMainErrorHandling:
     def test_main_raises_if_env_var_missing(self, monkeypatch):
         monkeypatch.delenv("LLEM_CONFIG_PATH", raising=False)
 
-        from llenergymeasure.infra.container_entrypoint import main
+        from llenergymeasure.entrypoints.container import main
 
         with pytest.raises(RuntimeError, match="LLEM_CONFIG_PATH"):
             main()
@@ -218,7 +218,7 @@ class TestMainErrorHandling:
         ):
             mock_get_backend.return_value = MagicMock()
 
-            from llenergymeasure.infra.container_entrypoint import main
+            from llenergymeasure.entrypoints.container import main
 
             with pytest.raises(Exception, match="boom"):
                 main()
@@ -244,7 +244,7 @@ class TestMainGuard:
         """
         import inspect
 
-        from llenergymeasure.infra import container_entrypoint
+        from llenergymeasure.entrypoints import container
 
-        source = inspect.getsource(container_entrypoint)
+        source = inspect.getsource(container)
         assert 'if __name__ == "__main__":' in source
