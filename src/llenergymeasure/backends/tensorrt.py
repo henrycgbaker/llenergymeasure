@@ -22,6 +22,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from llenergymeasure.backends.protocol import InferenceOutput
@@ -30,6 +31,52 @@ from llenergymeasure.domain.metrics import WarmupResult
 from llenergymeasure.utils.exceptions import BackendError
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_engine_directory(engine_path: Path, tp_size: int) -> list[str]:
+    """Pre-flight validation for TRT-LLM engine directory.
+
+    Checks directory exists, config.json exists, tp_size matches, and
+    rank{N}.engine files exist. Returns list of error strings (empty = valid).
+    Does NOT re-implement TRT-LLM's format detection.
+
+    Args:
+        engine_path: Path to the engine directory.
+        tp_size: Expected tensor-parallel size (number of rank files to check).
+
+    Returns:
+        List of error strings. Empty list means the directory is valid.
+    """
+    errors: list[str] = []
+
+    if not engine_path.is_dir():
+        errors.append(f"engine_path does not exist or is not a directory: {engine_path}")
+        return errors
+
+    config_path = engine_path / "config.json"
+    if not config_path.exists():
+        errors.append(f"config.json not found in engine directory: {engine_path}")
+    else:
+        try:
+            with config_path.open() as f:
+                config_data = json.load(f)
+            engine_tp_size = (
+                config_data.get("pretrained_config", {}).get("mapping", {}).get("tp_size")
+            )
+            if engine_tp_size is not None and engine_tp_size != tp_size:
+                errors.append(
+                    f"tp_size mismatch: engine was built with tp_size={engine_tp_size} "
+                    f"but config requests tp_size={tp_size}"
+                )
+        except (json.JSONDecodeError, OSError) as exc:
+            errors.append(f"Failed to parse config.json in engine directory: {exc}")
+
+    for rank in range(tp_size):
+        rank_file = engine_path / f"rank{rank}.engine"
+        if not rank_file.exists():
+            errors.append(f"rank{rank}.engine not found in engine directory: {engine_path}")
+
+    return errors
 
 
 class TensorRTBackend:
