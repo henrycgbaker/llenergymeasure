@@ -153,12 +153,6 @@ layers = [
     "llenergymeasure.config | llenergymeasure.domain",
     "llenergymeasure.utils",
 ]
-ignore_imports = [
-    # backends load prompts from datasets (same-layer peer, Phase 40 addresses this)
-    "llenergymeasure.backends.pytorch -> llenergymeasure.datasets.loader",
-    "llenergymeasure.backends.vllm -> llenergymeasure.datasets.loader",
-    "llenergymeasure.backends.tensorrt -> llenergymeasure.datasets.loader",
-]
 
 [[tool.importlinter.contracts]]
 id = "cli-boundary"
