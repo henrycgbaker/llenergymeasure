@@ -453,7 +453,7 @@ def _aggregate_extended_metrics_from_results(
     Returns:
         Aggregated ExtendedEfficiencyMetrics, or None if aggregation fails.
     """
-    from llenergymeasure.harness.extended_metrics import aggregate_extended_metrics
+    from llenergymeasure.results.extended_metrics import aggregate_extended_metrics
 
     # Collect raw data from all processes for late aggregation
     all_request_latencies: list[float] = []

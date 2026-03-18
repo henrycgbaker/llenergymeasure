@@ -92,7 +92,7 @@ def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
 
 
 def collect_environment_snapshot() -> EnvironmentSnapshot:  # pragma: no cover
-    from llenergymeasure.domain.environment import (
+    from llenergymeasure.harness.environment import (
         collect_environment_snapshot as _snap,
     )
 
@@ -100,7 +100,7 @@ def collect_environment_snapshot() -> EnvironmentSnapshot:  # pragma: no cover
 
 
 def collect_environment_snapshot_async() -> Future[EnvironmentSnapshot]:  # pragma: no cover
-    from llenergymeasure.domain.environment import (
+    from llenergymeasure.harness.environment import (
         collect_environment_snapshot_async as _snap_async,
     )
 

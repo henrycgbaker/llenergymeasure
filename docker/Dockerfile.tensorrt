@@ -42,4 +42,4 @@ RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines
 RUN mkdir -p ${TRT_ENGINE_CACHE} && chmod 777 ${TRT_ENGINE_CACHE}
 
-CMD ["python3", "-m", "llenergymeasure.infra.container_entrypoint"]
+CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]

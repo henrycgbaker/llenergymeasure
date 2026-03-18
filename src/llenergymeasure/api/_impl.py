@@ -13,11 +13,11 @@ if TYPE_CHECKING:
     pass
 
 # ---------------------------------------------------------------------------
-# GPU index resolution (moved to api/_gpu.py)
+# GPU index resolution
 # ---------------------------------------------------------------------------
-from llenergymeasure.api._gpu import _resolve_gpu_indices
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -176,11 +176,11 @@ def _run(study: StudyConfig, skip_preflight: bool = False) -> StudyResult:
     """
     import logging
 
-    from llenergymeasure.api.preflight import run_study_preflight
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.domain.experiment import StudySummary
     from llenergymeasure.infra.runner_resolution import resolve_study_runners
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
+    from llenergymeasure.study.preflight import run_study_preflight
 
     _api_logger = logging.getLogger(__name__)
 
@@ -335,9 +335,9 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
-        from llenergymeasure.api.preflight import run_preflight
         from llenergymeasure.backends import get_backend
         from llenergymeasure.harness import MeasurementHarness
+        from llenergymeasure.harness.preflight import run_preflight
 
         run_preflight(config)
         backend = get_backend(config.backend)

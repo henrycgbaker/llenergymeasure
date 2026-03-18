@@ -230,7 +230,7 @@ class ManifestWriter:
 
     def _build_manifest(self, study: StudyConfig) -> StudyManifest:
         """Build initial StudyManifest from a StudyConfig."""
-        from llenergymeasure import __version__
+        from llenergymeasure._version import __version__
 
         entries = self._build_entries(study)
         return StudyManifest(

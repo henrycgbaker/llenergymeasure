@@ -84,7 +84,7 @@ class DockerRunner:
         3. ``docker run --rm --gpus all -v {exchange_dir}:/run/llem``
                ``-e LLEM_CONFIG_PATH=/run/llem/{config_hash}_config.json``
                ``--shm-size 8g {image}``
-               ``python3 -m llenergymeasure.infra.container_entrypoint``
+               ``python3 -m llenergymeasure.entrypoints.container``
         4. Read ``{config_hash}_result.json`` from exchange dir
         5. Clean up temp dir on success; preserve on failure with debug path logged
 
@@ -274,11 +274,11 @@ class DockerRunner:
 
         # Inject mpirun for TRT-LLM tensor parallelism > 1.
         # MPI workers re-import the module but don't hit the __main__ guard,
-        # so only rank 0 runs the experiment. See container_entrypoint.py.
+        # so only rank 0 runs the experiment. See entrypoints/container.py.
         if tp_size is not None and tp_size > 1:
             cmd.extend(["mpirun", "-n", str(tp_size), "--allow-run-as-root"])
 
-        cmd.extend(["python3", "-m", "llenergymeasure.infra.container_entrypoint"])
+        cmd.extend(["python3", "-m", "llenergymeasure.entrypoints.container"])
 
         return cmd
 

@@ -11,7 +11,7 @@ import typer
 from pydantic import ValidationError
 from tqdm.auto import tqdm
 
-from llenergymeasure import run_experiment
+from llenergymeasure.api import run_experiment
 from llenergymeasure.cli._display import (
     format_error,
     format_validation_error,
@@ -255,9 +255,11 @@ def _run_impl(
 
     # Save output if output_dir specified
     if experiment_config.output_dir:
+        from llenergymeasure.results.persistence import save_result
+
         output_dir = Path(experiment_config.output_dir)
         ts_source = output_dir / result.timeseries if result.timeseries else None
-        result.save(output_dir, timeseries_source=ts_source)
+        save_result(result, output_dir, timeseries_source=ts_source)
         # Clean up stale flat timeseries file after copy into subdirectory
         if ts_source is not None:
             ts_source.unlink(missing_ok=True)

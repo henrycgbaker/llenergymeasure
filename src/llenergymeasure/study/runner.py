@@ -127,9 +127,9 @@ def _run_experiment_worker(
         progress_queue.put({"event": "started", "config_hash": config_hash})
 
         # Run the actual experiment in-process (within the spawned subprocess)
-        from llenergymeasure.api.preflight import run_preflight
         from llenergymeasure.backends import get_backend
         from llenergymeasure.harness import MeasurementHarness
+        from llenergymeasure.harness.preflight import run_preflight
 
         # Pre-flight inside subprocess: CUDA availability must be checked in the
         # process that will use the GPU.
@@ -137,7 +137,7 @@ def _run_experiment_worker(
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
-        from llenergymeasure.api._gpu import _resolve_gpu_indices
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         gpu_indices = _resolve_gpu_indices(config)
         result = harness.run(backend, config, snapshot=snapshot, gpu_indices=gpu_indices)
@@ -446,7 +446,7 @@ class StudyRunner:
         return the resolved snapshot immediately (study-level cache).
         """
         if self._env_snapshot_future is None:
-            from llenergymeasure.domain.environment import collect_environment_snapshot_async
+            from llenergymeasure.harness.environment import collect_environment_snapshot_async
 
             self._env_snapshot_future = collect_environment_snapshot_async()
         return self._env_snapshot_future.result(timeout=10)
