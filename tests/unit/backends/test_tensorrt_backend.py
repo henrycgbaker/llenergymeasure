@@ -19,6 +19,7 @@ from __future__ import annotations
 import sys
 import types
 
+from llenergymeasure.backends.tensorrt import TensorRTBackend
 from llenergymeasure.config.backend_configs import (
     TensorRTBuildCacheConfig,
     TensorRTConfig,
@@ -28,7 +29,6 @@ from llenergymeasure.config.backend_configs import (
     TensorRTSchedulerConfig,
 )
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.core.backends.tensorrt import TensorRTBackend
 
 # =============================================================================
 # Helpers
@@ -137,7 +137,7 @@ def _make_fake_tensorrt_llm_module() -> types.ModuleType:
 class TestProtocolCompliance:
     def test_tensorrt_backend_satisfies_plugin_protocol(self):
         """TensorRTBackend must satisfy the BackendPlugin Protocol."""
-        from llenergymeasure.core.backends.protocol import BackendPlugin
+        from llenergymeasure.backends.protocol import BackendPlugin
 
         backend = TensorRTBackend()
         assert isinstance(backend, BackendPlugin)
@@ -396,7 +396,7 @@ class TestValidateConfigSMChecks:
     def test_validate_config_sm_above_7_5_passes(self, monkeypatch):
         """SM 8.0 (A100) passes the SM >= 7.5 check."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
         config = _make_config()
@@ -407,7 +407,7 @@ class TestValidateConfigSMChecks:
     def test_validate_config_sm_below_7_5_fails(self, monkeypatch):
         """SM 7.0 (V100) fails with an error containing 'SM >= 7.5'."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (7, 0),
         )
         config = _make_config()
@@ -421,7 +421,7 @@ class TestValidateConfigSMChecks:
     def test_validate_config_sm_exactly_7_5_passes(self, monkeypatch):
         """SM 7.5 (Turing T4) is exactly the minimum — should pass."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (7, 5),
         )
         config = _make_config()
@@ -432,7 +432,7 @@ class TestValidateConfigSMChecks:
     def test_validate_config_sm_none_skips(self, monkeypatch):
         """When SM detection returns None, no errors are returned (don't block containers)."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: None,
         )
         config = _make_config()
@@ -450,7 +450,7 @@ class TestValidateConfigFP8Checks:
     def test_validate_config_fp8_on_sm_80_fails(self, monkeypatch):
         """FP8 quant on SM 8.0 (A100) raises an error mentioning FP8 and SM >= 8.9."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
         config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")))
@@ -464,7 +464,7 @@ class TestValidateConfigFP8Checks:
     def test_validate_config_fp8_on_sm_89_passes(self, monkeypatch):
         """FP8 quant on SM 8.9 (L40, RTX 4090) passes."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 9),
         )
         config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")))
@@ -475,7 +475,7 @@ class TestValidateConfigFP8Checks:
     def test_validate_config_fp8_on_sm_90_passes(self, monkeypatch):
         """FP8 quant on SM 9.0 (H100) passes."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (9, 0),
         )
         config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")))
@@ -486,7 +486,7 @@ class TestValidateConfigFP8Checks:
     def test_validate_config_fp8_kv_cache_on_sm_80_fails(self, monkeypatch):
         """FP8 KV cache quant on SM 8.0 (A100) raises an error."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
         config = _make_config(
@@ -502,7 +502,7 @@ class TestValidateConfigFP8Checks:
     def test_validate_config_non_fp8_quant_on_sm_80_passes(self, monkeypatch):
         """INT8 quant on SM 8.0 (A100) passes — only FP8 is blocked."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
         config = _make_config(tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8")))
@@ -513,7 +513,7 @@ class TestValidateConfigFP8Checks:
     def test_validate_config_both_fp8_errors_collected(self, monkeypatch):
         """FP8 weight quant AND FP8 KV cache on SM 8.0 produces 2 errors."""
         monkeypatch.setattr(
-            "llenergymeasure.core.gpu_info.get_compute_capability",
+            "llenergymeasure.device.gpu_info.get_compute_capability",
             lambda gpu_index=0: (8, 0),
         )
         config = _make_config(

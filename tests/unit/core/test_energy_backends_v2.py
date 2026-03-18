@@ -10,10 +10,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.core.energy_backends import select_energy_backend
-from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement, NVMLBackend
-from llenergymeasure.core.energy_backends.zeus import ZeusBackend
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.energy import select_energy_backend
+from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLBackend
+from llenergymeasure.energy.zeus import ZeusBackend
+from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
 # NVMLBackend name
@@ -66,7 +66,7 @@ def test_zeus_backend_name() -> None:
 def test_nvml_is_available_no_gpu() -> None:
     """is_available() returns False when pynvml raises on init."""
     with patch(
-        "llenergymeasure.core.energy_backends.nvml.NVMLBackend.is_available",
+        "llenergymeasure.energy.nvml.NVMLBackend.is_available",
         return_value=False,
     ):
         backend = NVMLBackend()
@@ -149,7 +149,7 @@ def test_select_backend_null_returns_none() -> None:
 def test_select_backend_explicit_unavailable_raises() -> None:
     """Requesting an explicit backend that is not available raises ConfigError."""
     with patch(
-        "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+        "llenergymeasure.energy.NVMLBackend.is_available",
         return_value=False,
     ):
         with pytest.raises(ConfigError) as exc_info:
@@ -161,7 +161,7 @@ def test_select_backend_explicit_unavailable_raises() -> None:
 def test_select_backend_explicit_zeus_unavailable_raises() -> None:
     """Requesting zeus when not installed raises ConfigError with guidance."""
     with patch(
-        "llenergymeasure.core.energy_backends.ZeusBackend.is_available",
+        "llenergymeasure.energy.ZeusBackend.is_available",
         return_value=False,
     ):
         with pytest.raises(ConfigError) as exc_info:
@@ -185,7 +185,7 @@ def test_select_backend_auto_priority_zeus_first() -> None:
     with (
         patch("importlib.util.find_spec", return_value=MagicMock()) as _mock_find,
         patch(
-            "llenergymeasure.core.energy_backends.ZeusBackend.is_available",
+            "llenergymeasure.energy.ZeusBackend.is_available",
             return_value=True,
         ),
     ):
@@ -204,7 +204,7 @@ def test_select_backend_auto_priority_nvml_when_no_zeus() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
         patch(
-            "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLBackend.is_available",
             return_value=True,
         ),
     ):
@@ -214,7 +214,7 @@ def test_select_backend_auto_priority_nvml_when_no_zeus() -> None:
 
 def test_select_backend_auto_priority_codecarbon_fallback() -> None:
     """Auto-selection returns CodeCarbon when neither zeus nor NVML is available."""
-    from llenergymeasure.core.energy_backends.codecarbon import CodeCarbonBackend
+    from llenergymeasure.energy.codecarbon import CodeCarbonBackend
 
     def fake_find_spec(name: str) -> object:
         if name == "zeus":
@@ -226,11 +226,11 @@ def test_select_backend_auto_priority_codecarbon_fallback() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
         patch(
-            "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLBackend.is_available",
             return_value=False,
         ),
         patch(
-            "llenergymeasure.core.energy_backends.codecarbon.CodeCarbonBackend.is_available",
+            "llenergymeasure.energy.codecarbon.CodeCarbonBackend.is_available",
             return_value=True,
         ),
     ):
@@ -243,7 +243,7 @@ def test_select_backend_auto_returns_none_when_nothing_available() -> None:
     with (
         patch("importlib.util.find_spec", return_value=None),
         patch(
-            "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLBackend.is_available",
             return_value=False,
         ),
     ):
@@ -259,7 +259,7 @@ def test_select_backend_auto_returns_none_when_nothing_available() -> None:
 def test_select_backend_forwards_gpu_indices_nvml() -> None:
     """select_energy_backend('nvml', gpu_indices=[0, 1]) returns NVMLBackend with those indices."""
     with patch(
-        "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+        "llenergymeasure.energy.NVMLBackend.is_available",
         return_value=True,
     ):
         result = select_energy_backend("nvml", gpu_indices=[0, 1])
@@ -271,7 +271,7 @@ def test_select_backend_forwards_gpu_indices_nvml() -> None:
 def test_select_backend_forwards_gpu_indices_zeus() -> None:
     """select_energy_backend('zeus', gpu_indices=[0, 1]) returns ZeusBackend with those indices."""
     with patch(
-        "llenergymeasure.core.energy_backends.ZeusBackend.is_available",
+        "llenergymeasure.energy.ZeusBackend.is_available",
         return_value=True,
     ):
         result = select_energy_backend("zeus", gpu_indices=[0, 1])
@@ -291,7 +291,7 @@ def test_select_backend_auto_forwards_gpu_indices() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
         patch(
-            "llenergymeasure.core.energy_backends.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLBackend.is_available",
             return_value=True,
         ),
     ):
@@ -312,7 +312,7 @@ def test_nvml_trapezoidal_integration() -> None:
     3 samples at t=0.0, 0.1, 0.2 all with power_w=100.0 W.
     Expected energy = 100.0 W * 0.2 s = 20.0 J.
     """
-    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.device.power_thermal import PowerThermalSample
 
     # Build synthetic samples (single GPU 0)
     sample_data = [
@@ -336,7 +336,7 @@ def test_nvml_trapezoidal_integration() -> None:
 
 def test_nvml_trapezoidal_skips_none_power() -> None:
     """Trapezoidal integration skips sample pairs where power_w is None."""
-    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.device.power_thermal import PowerThermalSample
 
     # Middle sample has None power — pairs (0,1) and (1,2) both involve None
     sample_data = [
@@ -357,7 +357,7 @@ def test_nvml_trapezoidal_skips_none_power() -> None:
 
 def test_nvml_trapezoidal_single_sample() -> None:
     """Single sample produces zero energy (no interval to integrate)."""
-    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.device.power_thermal import PowerThermalSample
 
     mock_sampler = MagicMock()
     mock_sampler.get_samples.return_value = [
@@ -384,7 +384,7 @@ def test_nvml_multi_gpu_trapezoidal_integration() -> None:
 
     Samples are interleaved (as produced by _sample_loop).
     """
-    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.device.power_thermal import PowerThermalSample
 
     # Interleaved samples from GPU 0 and GPU 1
     sample_data = [
@@ -411,7 +411,7 @@ def test_nvml_multi_gpu_trapezoidal_integration() -> None:
 
 def test_nvml_multi_gpu_energy_per_gpu_dict_populated() -> None:
     """per_gpu_j dict contains an entry for each GPU that had samples."""
-    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.device.power_thermal import PowerThermalSample
 
     sample_data = [
         PowerThermalSample(timestamp=0.0, power_w=50.0, gpu_index=0),

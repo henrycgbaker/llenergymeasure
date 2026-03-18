@@ -27,7 +27,7 @@ from llenergymeasure.config.grid import (
     expand_grid,
 )
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.utils.exceptions import ConfigError
 
 __all__ = ["deep_merge", "load_experiment_config", "load_study_config"]
 

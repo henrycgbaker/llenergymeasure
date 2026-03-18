@@ -17,7 +17,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.core.flops import (
+from llenergymeasure.domain.metrics import FlopsResult
+from llenergymeasure.harness.flops import (
     FlopsEstimator,
     _count_non_embedding_params,
     _count_params_from_config,
@@ -26,7 +27,6 @@ from llenergymeasure.core.flops import (
     estimate_flops_palm_from_config,
     get_flops_estimator,
 )
-from llenergymeasure.domain.metrics import FlopsResult
 
 # =============================================================================
 # Mock model helpers
@@ -611,7 +611,7 @@ def test_estimate_flops_delegates_to_estimator() -> None:
 
 def test_estimate_flops_uses_singleton() -> None:
     """estimate_flops() uses the module-level singleton estimator."""
-    import llenergymeasure.core.flops as flops_mod
+    import llenergymeasure.harness.flops
 
     model = _MockModelNoConfig(param_count=1_000_000)
     input_ids = _MockInputIds(seq_len=128)
@@ -620,8 +620,8 @@ def test_estimate_flops_uses_singleton() -> None:
         estimate_flops(model, input_ids)
 
     # After calling estimate_flops, singleton should be created
-    assert flops_mod._default_estimator is not None
-    assert isinstance(flops_mod._default_estimator, FlopsEstimator)
+    assert llenergymeasure.harness.flops._default_estimator is not None
+    assert isinstance(llenergymeasure.harness.flops._default_estimator, FlopsEstimator)
 
 
 # =============================================================================

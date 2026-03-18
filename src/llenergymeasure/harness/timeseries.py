@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from llenergymeasure.core.power_thermal import PowerThermalSample
+    from llenergymeasure.device.power_thermal import PowerThermalSample
 
 
 def _timeseries_schema() -> Any:

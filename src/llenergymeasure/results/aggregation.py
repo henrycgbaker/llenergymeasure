@@ -9,7 +9,6 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import BaseModel, Field
 
-from llenergymeasure.constants import COMPLETION_MARKER_PREFIX
 from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
@@ -25,7 +24,8 @@ from llenergymeasure.domain.metrics import (
     ThermalThrottleInfo,
     WarmupResult,
 )
-from llenergymeasure.exceptions import AggregationError
+from llenergymeasure.utils.constants import COMPLETION_MARKER_PREFIX
+from llenergymeasure.utils.exceptions import AggregationError
 
 logger = logging.getLogger(__name__)
 
@@ -453,7 +453,7 @@ def _aggregate_extended_metrics_from_results(
     Returns:
         Aggregated ExtendedEfficiencyMetrics, or None if aggregation fails.
     """
-    from llenergymeasure.core.extended_metrics import aggregate_extended_metrics
+    from llenergymeasure.harness.extended_metrics import aggregate_extended_metrics
 
     # Collect raw data from all processes for late aggregation
     all_request_latencies: list[float] = []

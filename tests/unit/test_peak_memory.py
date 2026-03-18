@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 def test_inference_memory_is_peak_minus_model():
     """inference_memory_mb = peak_memory_mb - model_memory_mb when peak > model."""
-    from llenergymeasure.core.backends.protocol import InferenceOutput
+    from llenergymeasure.backends.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -41,7 +41,7 @@ def test_inference_memory_clamped_to_zero_when_peak_less_than_model():
     This edge case arises when measurement uncertainty or GPU driver accounting
     causes the reported peak to be lower than the model baseline.
     """
-    from llenergymeasure.core.backends.protocol import InferenceOutput
+    from llenergymeasure.backends.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -56,7 +56,7 @@ def test_inference_memory_clamped_to_zero_when_peak_less_than_model():
 
 def test_inference_memory_zero_when_peak_equals_model():
     """inference_memory_mb is 0.0 when peak_memory_mb == model_memory_mb exactly."""
-    from llenergymeasure.core.backends.protocol import InferenceOutput
+    from llenergymeasure.backends.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -82,8 +82,8 @@ def test_peak_memory_reset_precedes_measurement():
     inference-only (not including model weights).
     """
 
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     call_log: list[str] = []
 

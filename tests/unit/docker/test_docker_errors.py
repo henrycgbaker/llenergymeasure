@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.exceptions import DockerError, LLEMError
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerGPUAccessError,
@@ -15,6 +14,7 @@ from llenergymeasure.infra.docker_errors import (
     capture_stderr_snippet,
     translate_docker_error,
 )
+from llenergymeasure.utils.exceptions import DockerError, LLEMError
 
 # ---------------------------------------------------------------------------
 # Inheritance

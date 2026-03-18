@@ -64,7 +64,7 @@ class NVMLBackend:
         try:
             import pynvml
 
-            from llenergymeasure.core.gpu_info import nvml_context
+            from llenergymeasure.device.gpu_info import nvml_context
 
             # Use a sentinel to detect whether nvml_context yielded successfully
             # (nvml_context silently yields even on failure — we probe via nvmlDeviceGetCount)
@@ -80,7 +80,7 @@ class NVMLBackend:
         Returns:
             A running PowerThermalSampler instance.
         """
-        from llenergymeasure.core.power_thermal import PowerThermalSampler
+        from llenergymeasure.device.power_thermal import PowerThermalSampler
 
         sampler = PowerThermalSampler(
             gpu_indices=self._gpu_indices,

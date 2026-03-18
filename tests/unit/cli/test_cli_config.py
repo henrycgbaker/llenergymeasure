@@ -125,7 +125,7 @@ def test_config_verbose_gpu_driver() -> None:
     with (
         patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=mock_gpu),
         patch.dict("sys.modules", {"pynvml": mock_pynvml}),
-        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+        patch("llenergymeasure.device.gpu_info.nvml_context", mock_nvml_context),
     ):
         result = runner.invoke(app, ["config", "-v"])
 
@@ -276,7 +276,7 @@ def test_probe_gpu_returns_list_with_gpu_info() -> None:
 
     with (
         patch.dict("sys.modules", {"pynvml": mock_pynvml}),
-        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+        patch("llenergymeasure.device.gpu_info.nvml_context", mock_nvml_context),
     ):
         result = _probe_gpu()
 
@@ -334,7 +334,7 @@ def test_config_verbose_driver_exception_handled() -> None:
     with (
         patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=mock_gpu),
         patch.dict("sys.modules", {"pynvml": mock_pynvml}),
-        patch("llenergymeasure.core.gpu_info.nvml_context", mock_nvml_context),
+        patch("llenergymeasure.device.gpu_info.nvml_context", mock_nvml_context),
     ):
         result = runner.invoke(app, ["config", "-v"])
 

@@ -127,9 +127,9 @@ def _run_experiment_worker(
         progress_queue.put({"event": "started", "config_hash": config_hash})
 
         # Run the actual experiment in-process (within the spawned subprocess)
-        from llenergymeasure.core.backends import get_backend
-        from llenergymeasure.core.harness import MeasurementHarness
-        from llenergymeasure.orchestration.preflight import run_preflight
+        from llenergymeasure.api.preflight import run_preflight
+        from llenergymeasure.backends import get_backend
+        from llenergymeasure.harness import MeasurementHarness
 
         # Pre-flight inside subprocess: CUDA availability must be checked in the
         # process that will use the GPU.
@@ -137,7 +137,7 @@ def _run_experiment_worker(
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
-        from llenergymeasure._api import _resolve_gpu_indices
+        from llenergymeasure.api._impl import _resolve_gpu_indices
 
         gpu_indices = _resolve_gpu_indices(config)
         result = harness.run(backend, config, snapshot=snapshot, gpu_indices=gpu_indices)
@@ -579,10 +579,10 @@ class StudyRunner:
             ExperimentResult on success, or a failure dict on error.
         """
         from llenergymeasure.cli._display import print_study_progress
-        from llenergymeasure.exceptions import DockerError
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
+        from llenergymeasure.utils.exceptions import DockerError
 
         # Resolve image — use explicit image from spec or fall back to built-in default
         image = spec.image if spec.image is not None else get_default_image(config.backend)

@@ -131,8 +131,8 @@ class TestDockerRunnerIntegration:
 
     def test_docker_error_on_missing_image(self, tmp_path):
         """Non-existent image raises DockerContainerError or DockerImagePullError."""
-        from llenergymeasure.exceptions import DockerError
         from llenergymeasure.infra.docker_runner import DockerRunner
+        from llenergymeasure.utils.exceptions import DockerError
 
         config = self._make_config(tmp_path)
         runner = DockerRunner(image="llenergymeasure-nonexistent:latest", timeout=60, source="test")

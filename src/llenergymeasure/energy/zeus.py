@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
+from llenergymeasure.energy.nvml import EnergyMeasurement
 
 
 class ZeusBackend:

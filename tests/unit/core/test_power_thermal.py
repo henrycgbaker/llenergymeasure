@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.core.power_thermal import (
+from llenergymeasure.device.power_thermal import (
     PowerThermalResult,
     PowerThermalSample,
     PowerThermalSampler,

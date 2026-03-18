@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from llenergymeasure.config.models import WarmupConfig
-from llenergymeasure.core.warmup import warmup_until_converged
 from llenergymeasure.domain.metrics import WarmupResult
+from llenergymeasure.harness.warmup import warmup_until_converged
 
 # =============================================================================
 # WarmupConfig defaults and constraints

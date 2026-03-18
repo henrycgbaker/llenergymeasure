@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
 # GPU index resolution
@@ -229,10 +229,10 @@ def _run(study: StudyConfig, skip_preflight: bool = False) -> StudyResult:
     """
     import logging
 
+    from llenergymeasure.api.preflight import run_study_preflight
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.domain.experiment import StudySummary
     from llenergymeasure.infra.runner_resolution import resolve_study_runners
-    from llenergymeasure.orchestration.preflight import run_study_preflight
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
 
     _api_logger = logging.getLogger(__name__)
@@ -360,9 +360,9 @@ def _run_in_process(
 
     if spec is not None and spec.mode == "docker":
         # Docker path: dispatch to container directly (no subprocess)
-        from llenergymeasure.exceptions import DockerError
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.utils.exceptions import DockerError
 
         image = spec.image if spec.image is not None else get_default_image(config.backend)
         from llenergymeasure.study.runner import _calculate_timeout
@@ -388,9 +388,9 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
-        from llenergymeasure.core.backends import get_backend
-        from llenergymeasure.core.harness import MeasurementHarness
-        from llenergymeasure.orchestration.preflight import run_preflight
+        from llenergymeasure.api.preflight import run_preflight
+        from llenergymeasure.backends import get_backend
+        from llenergymeasure.harness import MeasurementHarness
 
         run_preflight(config)
         backend = get_backend(config.backend)

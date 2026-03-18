@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.exceptions import (
+from llenergymeasure.utils.exceptions import (
     BackendError,
     ConfigError,
     ExperimentError,

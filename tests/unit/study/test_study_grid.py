@@ -22,7 +22,7 @@ from llenergymeasure.config.grid import (
     format_preflight_summary,
 )
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
 # ExecutionConfig model tests

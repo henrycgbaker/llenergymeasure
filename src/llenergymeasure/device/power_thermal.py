@@ -15,7 +15,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from llenergymeasure.core.gpu_info import nvml_context
+from llenergymeasure.device.gpu_info import nvml_context
 from llenergymeasure.domain.metrics import ThermalThrottleInfo
 
 logger = logging.getLogger(__name__)

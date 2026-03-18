@@ -6,7 +6,7 @@ low NVML sample count, and sub-100ms thermal throttle blind spot.
 
 from __future__ import annotations
 
-from llenergymeasure.core.measurement_warnings import collect_measurement_warnings
+from llenergymeasure.harness.measurement_warnings import collect_measurement_warnings
 
 # ---------------------------------------------------------------------------
 # Warning 1: Short measurement duration

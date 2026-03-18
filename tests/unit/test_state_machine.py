@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-from llenergymeasure.core.state import (
+from llenergymeasure.harness.state import (
     ExperimentPhase,
     ExperimentState,
     StateManager,
     compute_config_hash,
 )
-from llenergymeasure.exceptions import InvalidStateTransitionError
+from llenergymeasure.utils.exceptions import InvalidStateTransitionError
 
 # ---------------------------------------------------------------------------
 # ExperimentPhase enum

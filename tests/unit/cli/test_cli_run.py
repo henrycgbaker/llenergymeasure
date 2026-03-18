@@ -104,7 +104,7 @@ def test_run_no_args_exits_2():
 
 def test_run_config_error_exits_2():
     """ConfigError raised by load_experiment_config exits with code 2."""
-    from llenergymeasure.exceptions import ConfigError
+    from llenergymeasure.utils.exceptions import ConfigError
 
     with patch("llenergymeasure.cli.run.load_experiment_config") as mock_load:
         mock_load.side_effect = ConfigError("bad config: unknown field 'foop'")
@@ -128,7 +128,7 @@ def test_run_validation_error_exits_2():
 
 def test_run_preflight_error_exits_1():
     """PreFlightError raised by run_experiment exits with code 1."""
-    from llenergymeasure.exceptions import PreFlightError
+    from llenergymeasure.utils.exceptions import PreFlightError
 
     mock_config = _make_mock_config()
 
@@ -147,7 +147,7 @@ def test_run_preflight_error_exits_1():
 
 def test_run_experiment_error_exits_1():
     """ExperimentError raised during run exits with code 1."""
-    from llenergymeasure.exceptions import ExperimentError
+    from llenergymeasure.utils.exceptions import ExperimentError
 
     mock_config = _make_mock_config()
 
@@ -496,7 +496,7 @@ def test_run_no_model_no_config_error_message():
 
 def test_run_backend_error_exits_1():
     """BackendError raised by run_experiment exits with code 1."""
-    from llenergymeasure.exceptions import BackendError
+    from llenergymeasure.utils.exceptions import BackendError
 
     mock_config = _make_mock_config()
 

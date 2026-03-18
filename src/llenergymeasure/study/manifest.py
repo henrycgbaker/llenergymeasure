@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from llenergymeasure.exceptions import StudyError
 from llenergymeasure.results.persistence import _atomic_write
+from llenergymeasure.utils.exceptions import StudyError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig

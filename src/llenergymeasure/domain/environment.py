@@ -243,7 +243,7 @@ def collect_environment_snapshot() -> "EnvironmentSnapshot":
     # Deferred import to avoid circular dependency (core -> domain -> core)
     # Deferred import of __version__ to avoid circular import
     from llenergymeasure import __version__ as tool_version
-    from llenergymeasure.core.environment import collect_environment_metadata
+    from llenergymeasure.infra.environment import collect_environment_metadata
 
     hardware = collect_environment_metadata()
     cuda_version, cuda_version_source = detect_cuda_version_with_source()

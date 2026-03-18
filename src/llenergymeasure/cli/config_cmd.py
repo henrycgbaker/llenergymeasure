@@ -25,7 +25,7 @@ def _probe_gpu() -> list[dict[str, Any]] | None:
     try:
         import pynvml
 
-        from llenergymeasure.core.gpu_info import nvml_context
+        from llenergymeasure.device.gpu_info import nvml_context
 
         gpus: list[dict[str, Any]] = []
         with nvml_context():
@@ -94,7 +94,7 @@ def config_command(
             try:
                 import pynvml
 
-                from llenergymeasure.core.gpu_info import nvml_context
+                from llenergymeasure.device.gpu_info import nvml_context
 
                 driver: str | None = None
                 with nvml_context():

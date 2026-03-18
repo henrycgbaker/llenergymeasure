@@ -24,7 +24,7 @@ import logging
 import shutil
 import subprocess
 
-from llenergymeasure.exceptions import DockerPreFlightError
+from llenergymeasure.utils.exceptions import DockerPreFlightError
 
 __all__ = ["run_docker_preflight"]
 

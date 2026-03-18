@@ -35,12 +35,14 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     - create_study_dir + ManifestWriter (disk manifest writes)
     - save_result (per-experiment disk writes)
     """
-    import llenergymeasure.orchestration.preflight as pf_module
+    import llenergymeasure.api.preflight
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
-    monkeypatch.setattr(pf_module, "run_study_preflight", lambda study, **kw: None)
-    monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
+    monkeypatch.setattr(
+        llenergymeasure.api.preflight, "run_study_preflight", lambda study, **kw: None
+    )
+    monkeypatch.setattr(llenergymeasure.api.preflight, "run_preflight", lambda config: None)
     monkeypatch.setattr(
         "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
         lambda **kw: None,
@@ -75,8 +77,8 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
 
 def _patch_backend(monkeypatch: Any, mock_result: Any) -> None:
     """Patch get_backend and MeasurementHarness to return a pre-built result."""
-    import llenergymeasure.core.backends as backends_module
-    import llenergymeasure.core.harness as harness_module
+    import llenergymeasure.backends as backends_module
+    import llenergymeasure.harness as harness_module
 
     monkeypatch.setattr(backends_module, "get_backend", lambda name: MagicMock())
     monkeypatch.setattr(
@@ -219,10 +221,10 @@ class TestPipelineErrorPropagation:
         _patch_infra forces resolve_study_runners to return a local spec so the
         in-process path is exercised (not Docker dispatch, which catches errors differently).
         """
-        import llenergymeasure.core.backends as backends_module
-        import llenergymeasure.core.harness as harness_module
+        import llenergymeasure.backends as backends_module
+        import llenergymeasure.harness as harness_module
         from llenergymeasure import run_experiment
-        from llenergymeasure.exceptions import BackendError
+        from llenergymeasure.utils.exceptions import BackendError
 
         yaml_path = tmp_path / "experiment.yaml"
         yaml_path.write_text("model: gpt2\nbackend: pytorch\n")
@@ -242,7 +244,7 @@ class TestPipelineErrorPropagation:
     def test_config_error_on_invalid_yaml(self, tmp_path: Path) -> None:
         """ConfigError raised for YAML with unknown fields (real loader validation)."""
         from llenergymeasure.config.loader import load_experiment_config
-        from llenergymeasure.exceptions import ConfigError
+        from llenergymeasure.utils.exceptions import ConfigError
 
         yaml_path = tmp_path / "bad.yaml"
         yaml_path.write_text("model: gpt2\nunknown_field: value\n")
@@ -253,7 +255,7 @@ class TestPipelineErrorPropagation:
     def test_config_error_on_missing_file(self, tmp_path: Path) -> None:
         """ConfigError raised when config file does not exist."""
         from llenergymeasure.config.loader import load_experiment_config
-        from llenergymeasure.exceptions import ConfigError
+        from llenergymeasure.utils.exceptions import ConfigError
 
         with pytest.raises(ConfigError, match="not found"):
             load_experiment_config(path=tmp_path / "nonexistent.yaml")
@@ -266,7 +268,7 @@ class TestPipelineDryRun:
         """CLI --dry-run validates config and prints output without calling backend."""
         from typer.testing import CliRunner
 
-        import llenergymeasure.core.backends as backends_module
+        import llenergymeasure.backends as backends_module
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
@@ -373,6 +375,8 @@ class TestCLIE2EStudy:
         # run_study is imported lazily inside _run_study_impl via `from llenergymeasure import run_study`
         # Patch at the source module so the lazy import picks up our mock
         import llenergymeasure
+        import llenergymeasure.api
+        import llenergymeasure.utils
 
         monkeypatch.setattr(llenergymeasure, "run_study", lambda config, **kw: mock_study_result)
 
@@ -416,13 +420,13 @@ class TestCLIE2EErrorExitCodes:
         """llem run exits with correct code when run_experiment raises an error."""
         from typer.testing import CliRunner
 
-        import llenergymeasure.exceptions as exc_module
+        import llenergymeasure.utils.exceptions
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
         yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
 
-        error_cls = getattr(exc_module, error_class)
+        error_cls = getattr(llenergymeasure.utils.exceptions, error_class)
         exc_instance = error_cls(f"test {error_class}")
 
         monkeypatch.setattr(

@@ -75,7 +75,7 @@ def get_cuda_major_version() -> str | None:
     try:
         import pynvml  # type: ignore[import-untyped]
 
-        from llenergymeasure.core.gpu_info import nvml_context
+        from llenergymeasure.device.gpu_info import nvml_context
 
         cuda_version_raw: int | None = None
         with nvml_context():

@@ -21,7 +21,7 @@ from llenergymeasure.cli._display import (
 )
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
-from llenergymeasure.exceptions import (
+from llenergymeasure.utils.exceptions import (
     BackendError,
     ConfigError,
     ExperimentError,

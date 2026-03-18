@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from llenergymeasure.core.gpu_info import nvml_context
+from llenergymeasure.device.gpu_info import nvml_context
 from llenergymeasure.domain.environment import (
     ContainerEnvironment,
     CPUEnvironment,

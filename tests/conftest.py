@@ -126,7 +126,7 @@ def clear_baseline_cache():
     Prevents baseline measurement state from leaking between tests, which is
     especially important when pytest-randomly changes execution order.
     """
-    from llenergymeasure.core.baseline import _baseline_cache
+    from llenergymeasure.harness.baseline import _baseline_cache
 
     _baseline_cache.clear()
     yield
@@ -140,11 +140,11 @@ def reset_flops_estimator():
     The flops module lazily creates a singleton estimator on first use.
     Resetting it prevents stale state from propagating across tests.
     """
-    import llenergymeasure.core.flops as _flops_mod
+    import llenergymeasure.harness.flops
 
-    _flops_mod._default_estimator = None
+    llenergymeasure.harness.flops._default_estimator = None
     yield
-    _flops_mod._default_estimator = None
+    llenergymeasure.harness.flops._default_estimator = None
 
 
 @pytest.fixture(autouse=True)

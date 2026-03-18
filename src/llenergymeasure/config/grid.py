@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config._dict_utils import _deep_merge, _unflatten
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig

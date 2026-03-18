@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.loader import deep_merge, load_experiment_config, load_study_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
-from llenergymeasure.exceptions import ConfigError
+from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
 # Helpers

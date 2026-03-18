@@ -11,9 +11,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.core.measurement_warnings import collect_measurement_warnings
-from llenergymeasure.core.power_thermal import PowerThermalSample
-from llenergymeasure.core.timeseries import write_timeseries_parquet
+from llenergymeasure.device.power_thermal import PowerThermalSample
+from llenergymeasure.harness.measurement_warnings import collect_measurement_warnings
+from llenergymeasure.harness.timeseries import write_timeseries_parquet
 
 # =============================================================================
 # Timeseries writer tests
@@ -283,7 +283,7 @@ def test_warnings_custom_threshold() -> None:
 
 def test_cuda_sync_called() -> None:
     """_cuda_sync() calls torch.cuda.synchronize() when CUDA is available."""
-    from llenergymeasure.core.harness import _cuda_sync
+    from llenergymeasure.harness import _cuda_sync
 
     mock_torch = MagicMock()
     mock_torch.cuda.is_available.return_value = True
@@ -299,7 +299,7 @@ def test_cuda_sync_called() -> None:
 
 def test_cuda_sync_skipped_when_cuda_unavailable() -> None:
     """_cuda_sync() skips synchronize() when torch.cuda.is_available() is False."""
-    from llenergymeasure.core.harness import _cuda_sync
+    from llenergymeasure.harness import _cuda_sync
 
     mock_torch = MagicMock()
     mock_torch.cuda.is_available.return_value = False
@@ -315,8 +315,8 @@ def test_cuda_sync_skipped_when_cuda_unavailable() -> None:
 
 def test_pytorch_backend_warmup_returns_warmup_result() -> None:
     """PyTorchBackend.warmup() returns a WarmupResult when warmup is disabled."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
     from llenergymeasure.domain.metrics import WarmupResult
 
     backend = PyTorchBackend()
@@ -334,8 +334,8 @@ def test_pytorch_backend_warmup_returns_warmup_result() -> None:
 
 def test_pytorch_backend_warmup_disabled_path() -> None:
     """PyTorchBackend.warmup() with enabled=False returns WarmupResult with 0 iterations."""
+    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
-    from llenergymeasure.core.backends.pytorch import PyTorchBackend
 
     backend = PyTorchBackend()
     config = ExperimentConfig(
@@ -353,11 +353,11 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     """MeasurementHarness._build_result() populates total_energy_j from EnergyMeasurement."""
     from datetime import datetime
 
+    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.protocol import InferenceOutput
-    from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
-    from llenergymeasure.core.harness import MeasurementHarness
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
     config = ExperimentConfig(model="test/model")
@@ -401,11 +401,11 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     """H1: Baseline energy adjustment uses energy_measurement.duration_sec, not datetime delta."""
     from datetime import datetime, timedelta
 
+    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.protocol import InferenceOutput
-    from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
-    from llenergymeasure.core.harness import MeasurementHarness
     from llenergymeasure.domain.metrics import ThermalThrottleInfo
+    from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
     config = ExperimentConfig(model="test/model")
@@ -449,10 +449,10 @@ def test_harness_build_result_zero_energy_when_no_backend() -> None:
     """MeasurementHarness._build_result() returns total_energy_j=0.0 when energy_measurement is None."""
     from datetime import datetime
 
+    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.protocol import InferenceOutput
-    from llenergymeasure.core.harness import MeasurementHarness
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
     config = ExperimentConfig(model="test/model")
@@ -490,7 +490,7 @@ def test_harness_build_result_zero_energy_when_no_backend() -> None:
 
 def test_inference_output_tracks_input_output_tokens() -> None:
     """InferenceOutput separates input_tokens and output_tokens."""
-    from llenergymeasure.core.backends.protocol import InferenceOutput
+    from llenergymeasure.backends.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -513,10 +513,10 @@ def _make_build_result_args():
     """Shared helper: return kwargs for MeasurementHarness._build_result() with minimal data."""
     from datetime import datetime
 
+    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.core.backends.protocol import InferenceOutput
-    from llenergymeasure.core.energy_backends.nvml import EnergyMeasurement
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.energy.nvml import EnergyMeasurement
 
     config = ExperimentConfig(model="gpt2")
     output = InferenceOutput(
@@ -551,7 +551,7 @@ def _make_build_result_args():
 
 def test_harness_build_result_populates_timeseries_field() -> None:
     """_build_result() with timeseries_path='timeseries.parquet' sets result.timeseries (CM-16)."""
-    from llenergymeasure.core.harness import MeasurementHarness
+    from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
     kwargs = _make_build_result_args()
@@ -566,7 +566,7 @@ def test_harness_build_result_populates_timeseries_field() -> None:
 
 def test_harness_build_result_populates_effective_config() -> None:
     """_build_result() populates result.effective_config with the model name (RES-16)."""
-    from llenergymeasure.core.harness import MeasurementHarness
+    from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
     kwargs = _make_build_result_args()
@@ -581,8 +581,8 @@ def test_harness_build_result_populates_effective_config() -> None:
 
 def test_harness_build_result_propagates_baseline_fields() -> None:
     """_build_result() with a baseline populates baseline_power_w and energy_adjusted_j (RES-06)."""
-    from llenergymeasure.core.baseline import BaselineCache
-    from llenergymeasure.core.harness import MeasurementHarness
+    from llenergymeasure.harness import MeasurementHarness
+    from llenergymeasure.harness.baseline import BaselineCache
 
     harness = MeasurementHarness()
     kwargs = _make_build_result_args()
