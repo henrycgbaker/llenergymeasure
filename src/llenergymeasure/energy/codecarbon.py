@@ -37,13 +37,13 @@ class CodeCarbonData:
     emissions_kg: float | None
 
 
-class CodeCarbonBackend:
-    """Energy tracking backend using CodeCarbon.
+class CodeCarbonSampler:
+    """Energy tracking sampler using CodeCarbon.
 
     CodeCarbon tracks energy consumption at the process level,
     measuring CPU, GPU, and RAM power usage.
 
-    Implements the EnergyBackend protocol.
+    Implements the EnergySampler protocol.
     """
 
     def __init__(

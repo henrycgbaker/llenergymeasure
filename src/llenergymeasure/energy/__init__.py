@@ -1,125 +1,49 @@
-"""Energy measurement backends for llenergymeasure.
+"""Energy measurement samplers for llenergymeasure.
 
-Provides a plugin registry (legacy) and the v2.0 ``select_energy_backend()``
-auto-selection function.
+Provides the ``select_energy_sampler()`` auto-selection function.
 
-Backend priority for auto-selection: Zeus > NVML > CodeCarbon > None.
+Sampler priority for auto-selection: Zeus > NVML > CodeCarbon > None.
 
-Usage (v2.0 API)::
+Usage::
 
-    from llenergymeasure.energy import select_energy_backend
+    from llenergymeasure.energy import select_energy_sampler
 
-    # Auto-select best available backend
-    backend = select_energy_backend("auto")
+    # Auto-select best available sampler
+    sampler = select_energy_sampler("auto")
 
-    # Explicit backend (raises ConfigError if unavailable)
-    backend = select_energy_backend("zeus")
+    # Explicit sampler (raises ConfigError if unavailable)
+    sampler = select_energy_sampler("zeus")
 
     # Intentional disable — returns None, no warnings
-    backend = select_energy_backend(None)
+    sampler = select_energy_sampler(None)
 
-    if backend is not None:
-        tracker = backend.start_tracking()
+    if sampler is not None:
+        tracker = sampler.start_tracking()
         # ... run inference ...
-        measurement = backend.stop_tracking(tracker)
-
-Legacy registry usage::
-
-    backend = get_backend("codecarbon")
+        measurement = sampler.stop_tracking(tracker)
 
 """
 
 from __future__ import annotations
 
 import importlib.util
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from llenergymeasure.energy.base import EnergyBackend  # canonical definition
-from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLBackend
-from llenergymeasure.energy.zeus import ZeusBackend
-from llenergymeasure.utils.exceptions import ConfigError, ConfigurationError
+from llenergymeasure.energy.base import EnergySampler  # canonical definition
+from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLSampler
+from llenergymeasure.energy.zeus import ZeusSampler
+from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
-    from llenergymeasure.energy.codecarbon import (
-        CodeCarbonBackend as CodeCarbonBackend,
-    )
     from llenergymeasure.energy.codecarbon import (
         CodeCarbonData as CodeCarbonData,
     )
     from llenergymeasure.energy.codecarbon import (
+        CodeCarbonSampler as CodeCarbonSampler,
+    )
+    from llenergymeasure.energy.codecarbon import (
         warm_up as warm_up,
     )
-
-# ---------------------------------------------------------------------------
-# Legacy plugin registry
-# ---------------------------------------------------------------------------
-
-_BACKENDS: dict[str, type[EnergyBackend]] = {}
-
-
-def register_backend(name: str, backend_cls: type[EnergyBackend]) -> None:
-    """Register an energy backend.
-
-    Args:
-        name: Unique name for the backend.
-        backend_cls: Backend class implementing EnergyBackend protocol.
-
-    Raises:
-        ValueError: If name is already registered.
-    """
-    if name in _BACKENDS:
-        raise ValueError(f"Backend '{name}' is already registered")
-    _BACKENDS[name] = backend_cls
-
-
-def get_backend(name: str, **kwargs: Any) -> EnergyBackend:
-    """Get an instance of a registered backend.
-
-    Args:
-        name: Name of the registered backend.
-        **kwargs: Arguments to pass to the backend constructor.
-
-    Returns:
-        Instance of the requested backend.
-
-    Raises:
-        ConfigurationError: If backend name is not registered.
-    """
-    if name not in _BACKENDS:
-        available = ", ".join(_BACKENDS.keys()) or "(none)"
-        raise ConfigurationError(f"Unknown backend: '{name}'. Available: {available}")
-    return _BACKENDS[name](**kwargs)  # type: ignore[return-value]
-
-
-def list_backends() -> list[str]:
-    """List all registered backend names.
-
-    Returns:
-        List of registered backend names.
-    """
-    return list(_BACKENDS.keys())
-
-
-def clear_backends() -> None:
-    """Clear all registered backends.
-
-    Primarily for testing purposes.
-    """
-    _BACKENDS.clear()
-
-
-def _register_default_backends() -> None:
-    """Register built-in backends in the legacy registry."""
-    register_backend("nvml", NVMLBackend)
-    # CodeCarbon requires torch — register lazily only if available
-    if importlib.util.find_spec("codecarbon") is not None:
-        from llenergymeasure.energy.codecarbon import CodeCarbonBackend
-
-        register_backend("codecarbon", CodeCarbonBackend)
-
-
-# Auto-register on import
-_register_default_backends()
 
 
 # ---------------------------------------------------------------------------
@@ -133,31 +57,31 @@ _INSTALL_GUIDANCE: dict[str, str] = {
 }
 
 
-def select_energy_backend(
+def select_energy_sampler(
     explicit: str | None,
     gpu_indices: list[int] | None = None,
-) -> EnergyBackend | None:
-    """Select and return an energy measurement backend.
+) -> EnergySampler | None:
+    """Select and return an energy measurement sampler.
 
-    This is the primary v2.0 API for backend selection.
+    This is the primary API for sampler selection.
 
     Selection rules:
     - ``None``: intentional disable — returns ``None`` immediately, no warnings.
     - Specific name (``"nvml"``, ``"zeus"``, ``"codecarbon"``): instantiate that
-      backend; raise ``ConfigError`` with install guidance if unavailable.
+      sampler; raise ``ConfigError`` with install guidance if unavailable.
     - ``"auto"``: probe in priority order (Zeus > NVML > CodeCarbon); return the
-      first available backend, or ``None`` if nothing is available (CPU-only machine).
+      first available sampler, or ``None`` if nothing is available (CPU-only machine).
 
     Args:
-        explicit: Backend name, ``"auto"``, or ``None`` to disable energy measurement.
+        explicit: Sampler name, ``"auto"``, or ``None`` to disable energy measurement.
         gpu_indices: GPU device indices to monitor. Defaults to [0] when None.
-            Forwarded to NVMLBackend and ZeusBackend constructors.
+            Forwarded to NVMLSampler and ZeusSampler constructors.
 
     Returns:
-        An EnergyBackend instance, or ``None`` if measurement is unavailable/disabled.
+        An EnergySampler instance, or ``None`` if measurement is unavailable/disabled.
 
     Raises:
-        ConfigError: When an explicitly requested backend is not available.
+        ConfigError: When an explicitly requested sampler is not available.
     """
     # Intentional disable — null in YAML maps to Python None
     if explicit is None:
@@ -166,81 +90,77 @@ def select_energy_backend(
     if explicit == "auto":
         return _auto_select(gpu_indices=gpu_indices)
 
-    # Explicit backend requested
-    backend = _instantiate(explicit, gpu_indices=gpu_indices)
-    if not backend.is_available():
+    # Explicit sampler requested
+    sampler = _instantiate(explicit, gpu_indices=gpu_indices)
+    if not sampler.is_available():
         guidance = _INSTALL_GUIDANCE.get(explicit, f"pip install llenergymeasure[{explicit}]")
         raise ConfigError(
-            f"Energy backend '{explicit}' is not available on this system.\n"
+            f"Energy sampler '{explicit}' is not available on this system.\n"
             f"Install with: {guidance}"
         )
-    return backend
+    return sampler
 
 
-def _auto_select(gpu_indices: list[int] | None = None) -> EnergyBackend | None:
-    """Auto-select best available backend: Zeus > NVML > CodeCarbon > None."""
+def _auto_select(gpu_indices: list[int] | None = None) -> EnergySampler | None:
+    """Auto-select best available sampler: Zeus > NVML > CodeCarbon > None."""
     # Zeus — preferred: hardware energy register accuracy
     if importlib.util.find_spec("zeus") is not None:
-        backend = ZeusBackend(gpu_indices=gpu_indices)
-        if backend.is_available():
-            return backend
+        sampler = ZeusSampler(gpu_indices=gpu_indices)
+        if sampler.is_available():
+            return sampler
 
     # NVML — always available on GPU machines (nvidia-ml-py is a base dep)
-    nvml_backend = NVMLBackend(gpu_indices=gpu_indices)
-    if nvml_backend.is_available():
-        return nvml_backend
+    nvml_sampler = NVMLSampler(gpu_indices=gpu_indices)
+    if nvml_sampler.is_available():
+        return nvml_sampler
 
     # CodeCarbon — software fallback (no gpu_indices: CodeCarbon handles its own GPU detection)
     if importlib.util.find_spec("codecarbon") is not None:
-        from llenergymeasure.energy.codecarbon import CodeCarbonBackend
+        from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 
-        cc_backend = CodeCarbonBackend()
-        if cc_backend.is_available():
-            return cc_backend
+        cc_sampler = CodeCarbonSampler()
+        if cc_sampler.is_available():
+            return cc_sampler
 
     # CPU-only or no energy measurement available
     return None
 
 
-def _instantiate(name: str, gpu_indices: list[int] | None = None) -> EnergyBackend:
-    """Instantiate a named backend.
+def _instantiate(name: str, gpu_indices: list[int] | None = None) -> EnergySampler:
+    """Instantiate a named sampler.
 
     Args:
         name: One of ``"nvml"``, ``"zeus"``, ``"codecarbon"``.
         gpu_indices: GPU device indices to monitor. Forwarded to NVML/Zeus constructors.
 
     Returns:
-        Backend instance (not yet checked for availability).
+        Sampler instance (not yet checked for availability).
 
     Raises:
-        ConfigError: If the name is not a known backend.
+        ConfigError: If the name is not a known sampler.
     """
     if name == "nvml":
-        return NVMLBackend(gpu_indices=gpu_indices)
+        return NVMLSampler(gpu_indices=gpu_indices)
     if name == "zeus":
-        return ZeusBackend(gpu_indices=gpu_indices)
+        return ZeusSampler(gpu_indices=gpu_indices)
     if name == "codecarbon":
-        from llenergymeasure.energy.codecarbon import CodeCarbonBackend
+        from llenergymeasure.energy.codecarbon import CodeCarbonSampler
 
-        return CodeCarbonBackend()
+        return CodeCarbonSampler()
 
     known = ", ".join(["nvml", "zeus", "codecarbon", "auto"])
     raise ConfigError(
-        f"Unknown energy backend: '{name}'. Valid options are: {known}, or null to disable."
+        f"Unknown energy sampler: '{name}'. Valid options are: {known}, or null to disable."
     )
 
 
 __all__ = [
-    "CodeCarbonBackend",
     "CodeCarbonData",
-    "EnergyBackend",
+    "CodeCarbonSampler",
     "EnergyMeasurement",
-    "NVMLBackend",
-    "ZeusBackend",
-    "clear_backends",
-    "get_backend",
-    "list_backends",
-    "register_backend",
-    "select_energy_backend",
+    "EnergySampler",
+    "NVMLSampler",
+    "ZeusSampler",
+    "select_energy_sampler",
     "warm_up",
 ]

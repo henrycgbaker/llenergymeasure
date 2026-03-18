@@ -1,7 +1,7 @@
 """Unit tests for v2.0 energy backends and auto-selection.
 
 All tests are fully mocked — no GPU or installed energy packages required.
-Tests cover NVMLBackend, ZeusBackend, EnergyMeasurement, and select_energy_backend().
+Tests cover NVMLSampler, ZeusSampler, EnergyMeasurement, and select_energy_sampler().
 """
 
 from __future__ import annotations
@@ -10,79 +10,80 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.energy import select_energy_backend
-from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLBackend
-from llenergymeasure.energy.zeus import ZeusBackend
+from llenergymeasure.energy import select_energy_sampler
+from llenergymeasure.energy.codecarbon import CodeCarbonSampler
+from llenergymeasure.energy.nvml import EnergyMeasurement, NVMLSampler
+from llenergymeasure.energy.zeus import ZeusSampler
 from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
-# NVMLBackend name
+# NVMLSampler name
 # ---------------------------------------------------------------------------
 
 
 def test_nvml_backend_name() -> None:
-    """NVMLBackend.name must return 'nvml'."""
-    assert NVMLBackend().name == "nvml"
+    """NVMLSampler.name must return 'nvml'."""
+    assert NVMLSampler().name == "nvml"
 
 
 # ---------------------------------------------------------------------------
-# NVMLBackend gpu_indices constructor
+# NVMLSampler gpu_indices constructor
 # ---------------------------------------------------------------------------
 
 
 def test_nvml_backend_accepts_gpu_indices() -> None:
-    """NVMLBackend(gpu_indices=[0, 1]) stores _gpu_indices correctly."""
-    b = NVMLBackend(gpu_indices=[0, 1])
+    """NVMLSampler(gpu_indices=[0, 1]) stores _gpu_indices correctly."""
+    b = NVMLSampler(gpu_indices=[0, 1])
     assert b._gpu_indices == [0, 1]
 
 
 def test_nvml_backend_defaults_to_gpu_zero() -> None:
-    """NVMLBackend() with no args defaults to [0] (backward compatible)."""
-    b = NVMLBackend()
+    """NVMLSampler() with no args defaults to [0] (backward compatible)."""
+    b = NVMLSampler()
     assert b._gpu_indices == [0]
 
 
 def test_nvml_backend_single_gpu_explicit() -> None:
-    """NVMLBackend(gpu_indices=[2]) stores [2]."""
-    b = NVMLBackend(gpu_indices=[2])
+    """NVMLSampler(gpu_indices=[2]) stores [2]."""
+    b = NVMLSampler(gpu_indices=[2])
     assert b._gpu_indices == [2]
 
 
 # ---------------------------------------------------------------------------
-# ZeusBackend name
+# ZeusSampler name
 # ---------------------------------------------------------------------------
 
 
 def test_zeus_backend_name() -> None:
-    """ZeusBackend.name must return 'zeus'."""
-    assert ZeusBackend().name == "zeus"
+    """ZeusSampler.name must return 'zeus'."""
+    assert ZeusSampler().name == "zeus"
 
 
 # ---------------------------------------------------------------------------
-# NVMLBackend availability
+# NVMLSampler availability
 # ---------------------------------------------------------------------------
 
 
 def test_nvml_is_available_no_gpu() -> None:
     """is_available() returns False when pynvml raises on init."""
     with patch(
-        "llenergymeasure.energy.nvml.NVMLBackend.is_available",
+        "llenergymeasure.energy.nvml.NVMLSampler.is_available",
         return_value=False,
     ):
-        backend = NVMLBackend()
+        backend = NVMLSampler()
         assert backend.is_available() is False
 
 
 def test_nvml_is_available_import_error() -> None:
     """is_available() returns False when pynvml is not installed."""
     with patch("importlib.util.find_spec", return_value=None):
-        backend = NVMLBackend()
+        backend = NVMLSampler()
         result = backend.is_available()
     assert result is False
 
 
 # ---------------------------------------------------------------------------
-# ZeusBackend availability
+# ZeusSampler availability
 # ---------------------------------------------------------------------------
 
 
@@ -99,7 +100,7 @@ def test_zeus_is_available_no_package() -> None:
     # Inject a sentinel that raises ImportError on attribute access (simulates absent package)
     sys.modules["zeus.monitor"] = None  # type: ignore[assignment]
     try:
-        backend = ZeusBackend()
+        backend = ZeusSampler()
         result = backend.is_available()
     finally:
         sys.modules.pop("zeus.monitor", None)
@@ -131,29 +132,29 @@ def test_energy_measurement_dataclass() -> None:
 
 
 # ---------------------------------------------------------------------------
-# select_energy_backend — null returns None
+# select_energy_sampler — null returns None
 # ---------------------------------------------------------------------------
 
 
 def test_select_backend_null_returns_none() -> None:
-    """select_energy_backend(None) must return None without any warnings."""
-    result = select_energy_backend(None)
+    """select_energy_sampler(None) must return None without any warnings."""
+    result = select_energy_sampler(None)
     assert result is None
 
 
 # ---------------------------------------------------------------------------
-# select_energy_backend — explicit unavailable raises ConfigError
+# select_energy_sampler — explicit unavailable raises ConfigError
 # ---------------------------------------------------------------------------
 
 
 def test_select_backend_explicit_unavailable_raises() -> None:
     """Requesting an explicit backend that is not available raises ConfigError."""
     with patch(
-        "llenergymeasure.energy.NVMLBackend.is_available",
+        "llenergymeasure.energy.NVMLSampler.is_available",
         return_value=False,
     ):
         with pytest.raises(ConfigError) as exc_info:
-            select_energy_backend("nvml")
+            select_energy_sampler("nvml")
         # Error must include install guidance
         assert "pip install" in str(exc_info.value).lower() or "install" in str(exc_info.value)
 
@@ -161,22 +162,22 @@ def test_select_backend_explicit_unavailable_raises() -> None:
 def test_select_backend_explicit_zeus_unavailable_raises() -> None:
     """Requesting zeus when not installed raises ConfigError with guidance."""
     with patch(
-        "llenergymeasure.energy.ZeusBackend.is_available",
+        "llenergymeasure.energy.ZeusSampler.is_available",
         return_value=False,
     ):
         with pytest.raises(ConfigError) as exc_info:
-            select_energy_backend("zeus")
+            select_energy_sampler("zeus")
         assert "zeus" in str(exc_info.value).lower()
 
 
 def test_select_backend_unknown_name_raises() -> None:
     """Requesting an unknown backend name raises ConfigError."""
     with pytest.raises(ConfigError):
-        select_energy_backend("unknown_backend_xyz")
+        select_energy_sampler("unknown_backend_xyz")
 
 
 # ---------------------------------------------------------------------------
-# select_energy_backend — auto priority
+# select_energy_sampler — auto priority
 # ---------------------------------------------------------------------------
 
 
@@ -185,12 +186,12 @@ def test_select_backend_auto_priority_zeus_first() -> None:
     with (
         patch("importlib.util.find_spec", return_value=MagicMock()) as _mock_find,
         patch(
-            "llenergymeasure.energy.ZeusBackend.is_available",
+            "llenergymeasure.energy.ZeusSampler.is_available",
             return_value=True,
         ),
     ):
-        result = select_energy_backend("auto")
-    assert isinstance(result, ZeusBackend)
+        result = select_energy_sampler("auto")
+    assert isinstance(result, ZeusSampler)
 
 
 def test_select_backend_auto_priority_nvml_when_no_zeus() -> None:
@@ -204,17 +205,16 @@ def test_select_backend_auto_priority_nvml_when_no_zeus() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
         patch(
-            "llenergymeasure.energy.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLSampler.is_available",
             return_value=True,
         ),
     ):
-        result = select_energy_backend("auto")
-    assert isinstance(result, NVMLBackend)
+        result = select_energy_sampler("auto")
+    assert isinstance(result, NVMLSampler)
 
 
 def test_select_backend_auto_priority_codecarbon_fallback() -> None:
     """Auto-selection returns CodeCarbon when neither zeus nor NVML is available."""
-    from llenergymeasure.energy.codecarbon import CodeCarbonBackend
 
     def fake_find_spec(name: str) -> object:
         if name == "zeus":
@@ -226,16 +226,16 @@ def test_select_backend_auto_priority_codecarbon_fallback() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
         patch(
-            "llenergymeasure.energy.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLSampler.is_available",
             return_value=False,
         ),
         patch(
-            "llenergymeasure.energy.codecarbon.CodeCarbonBackend.is_available",
+            "llenergymeasure.energy.codecarbon.CodeCarbonSampler.is_available",
             return_value=True,
         ),
     ):
-        result = select_energy_backend("auto")
-    assert isinstance(result, CodeCarbonBackend)
+        result = select_energy_sampler("auto")
+    assert isinstance(result, CodeCarbonSampler)
 
 
 def test_select_backend_auto_returns_none_when_nothing_available() -> None:
@@ -243,40 +243,40 @@ def test_select_backend_auto_returns_none_when_nothing_available() -> None:
     with (
         patch("importlib.util.find_spec", return_value=None),
         patch(
-            "llenergymeasure.energy.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLSampler.is_available",
             return_value=False,
         ),
     ):
-        result = select_energy_backend("auto")
+        result = select_energy_sampler("auto")
     assert result is None
 
 
 # ---------------------------------------------------------------------------
-# select_energy_backend — gpu_indices forwarding
+# select_energy_sampler — gpu_indices forwarding
 # ---------------------------------------------------------------------------
 
 
 def test_select_backend_forwards_gpu_indices_nvml() -> None:
-    """select_energy_backend('nvml', gpu_indices=[0, 1]) returns NVMLBackend with those indices."""
+    """select_energy_sampler('nvml', gpu_indices=[0, 1]) returns NVMLSampler with those indices."""
     with patch(
-        "llenergymeasure.energy.NVMLBackend.is_available",
+        "llenergymeasure.energy.NVMLSampler.is_available",
         return_value=True,
     ):
-        result = select_energy_backend("nvml", gpu_indices=[0, 1])
+        result = select_energy_sampler("nvml", gpu_indices=[0, 1])
 
-    assert isinstance(result, NVMLBackend)
+    assert isinstance(result, NVMLSampler)
     assert result._gpu_indices == [0, 1]
 
 
 def test_select_backend_forwards_gpu_indices_zeus() -> None:
-    """select_energy_backend('zeus', gpu_indices=[0, 1]) returns ZeusBackend with those indices."""
+    """select_energy_sampler('zeus', gpu_indices=[0, 1]) returns ZeusSampler with those indices."""
     with patch(
-        "llenergymeasure.energy.ZeusBackend.is_available",
+        "llenergymeasure.energy.ZeusSampler.is_available",
         return_value=True,
     ):
-        result = select_energy_backend("zeus", gpu_indices=[0, 1])
+        result = select_energy_sampler("zeus", gpu_indices=[0, 1])
 
-    assert isinstance(result, ZeusBackend)
+    assert isinstance(result, ZeusSampler)
     assert result._gpu_indices == [0, 1]
 
 
@@ -291,18 +291,18 @@ def test_select_backend_auto_forwards_gpu_indices() -> None:
     with (
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
         patch(
-            "llenergymeasure.energy.NVMLBackend.is_available",
+            "llenergymeasure.energy.NVMLSampler.is_available",
             return_value=True,
         ),
     ):
-        result = select_energy_backend("auto", gpu_indices=[2, 3])
+        result = select_energy_sampler("auto", gpu_indices=[2, 3])
 
-    assert isinstance(result, NVMLBackend)
+    assert isinstance(result, NVMLSampler)
     assert result._gpu_indices == [2, 3]
 
 
 # ---------------------------------------------------------------------------
-# NVMLBackend trapezoidal integration — single GPU
+# NVMLSampler trapezoidal integration — single GPU
 # ---------------------------------------------------------------------------
 
 
@@ -325,7 +325,7 @@ def test_nvml_trapezoidal_integration() -> None:
     mock_sampler = MagicMock()
     mock_sampler.get_samples.return_value = sample_data
 
-    backend = NVMLBackend(gpu_indices=[0])
+    backend = NVMLSampler(gpu_indices=[0])
     result = backend.stop_tracking(mock_sampler)
 
     assert isinstance(result, EnergyMeasurement)
@@ -348,7 +348,7 @@ def test_nvml_trapezoidal_skips_none_power() -> None:
     mock_sampler = MagicMock()
     mock_sampler.get_samples.return_value = sample_data
 
-    backend = NVMLBackend()
+    backend = NVMLSampler()
     result = backend.stop_tracking(mock_sampler)
 
     # Both pairs involve a None sample → should integrate to 0.0
@@ -364,14 +364,14 @@ def test_nvml_trapezoidal_single_sample() -> None:
         PowerThermalSample(timestamp=0.0, power_w=200.0, gpu_index=0),
     ]
 
-    backend = NVMLBackend()
+    backend = NVMLSampler()
     result = backend.stop_tracking(mock_sampler)
     assert result.total_j == 0.0
     assert result.duration_sec == 0.0
 
 
 # ---------------------------------------------------------------------------
-# NVMLBackend trapezoidal integration — multi-GPU
+# NVMLSampler trapezoidal integration — multi-GPU
 # ---------------------------------------------------------------------------
 
 
@@ -399,7 +399,7 @@ def test_nvml_multi_gpu_trapezoidal_integration() -> None:
     mock_sampler = MagicMock()
     mock_sampler.get_samples.return_value = sample_data
 
-    backend = NVMLBackend(gpu_indices=[0, 1])
+    backend = NVMLSampler(gpu_indices=[0, 1])
     result = backend.stop_tracking(mock_sampler)
 
     assert isinstance(result, EnergyMeasurement)
@@ -425,7 +425,7 @@ def test_nvml_multi_gpu_energy_per_gpu_dict_populated() -> None:
     mock_sampler = MagicMock()
     mock_sampler.get_samples.return_value = sample_data
 
-    backend = NVMLBackend(gpu_indices=[0, 1, 2])
+    backend = NVMLSampler(gpu_indices=[0, 1, 2])
     result = backend.stop_tracking(mock_sampler)
 
     assert result.per_gpu_j is not None

@@ -730,7 +730,7 @@ def test_progress_events_forwarded():
     q.put({"event": "completed", "config_hash": "abc123"})
     q.put(None)  # sentinel
 
-    with patch("llenergymeasure.cli._display.print_study_progress") as mock_progress:
+    with patch("llenergymeasure.study._progress.print_study_progress") as mock_progress:
         _consume_progress_events(q, index=3, total=12, config=config)
 
     assert mock_progress.call_count == 2
@@ -836,7 +836,7 @@ def test_docker_runner_spec_dispatches_to_docker(
                 "llenergymeasure.infra.docker_runner.DockerRunner.run", side_effect=fake_docker_run
             ),
             patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
-            patch("llenergymeasure.cli._display.print_study_progress"),
+            patch("llenergymeasure.study._progress.print_study_progress"),
             patch(
                 "llenergymeasure.results.persistence.save_result",
                 return_value=Path("/tmp/test-docker/r.json"),
@@ -922,7 +922,7 @@ def test_docker_error_caught_and_converted_to_failure_dict(
             "llenergymeasure.infra.docker_runner.DockerRunner.run", side_effect=raise_docker_error
         ),
         patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
-        patch("llenergymeasure.cli._display.print_study_progress"),
+        patch("llenergymeasure.study._progress.print_study_progress"),
     ):
         runner = StudyRunner(
             study_config, manifest, Path("/tmp/test-docker-err"), runner_specs=runner_specs

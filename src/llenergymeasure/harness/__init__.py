@@ -21,6 +21,7 @@ from llenergymeasure.domain.experiment import (
     ExperimentResult,
     compute_measurement_config_hash,
 )
+from llenergymeasure.energy import select_energy_sampler
 from llenergymeasure.harness.warmup import thermal_floor_wait
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
     from llenergymeasure.device.power_thermal import PowerThermalSample
     from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.metrics import FlopsResult
-    from llenergymeasure.energy import EnergyBackend
+    from llenergymeasure.energy import EnergySampler
     from llenergymeasure.harness.baseline import BaselineCache
 
 logger = logging.getLogger(__name__)
@@ -118,10 +119,9 @@ def measure_baseline_power(
 def select_energy_backend(
     explicit: str | None,
     gpu_indices: list[int] | None = None,
-) -> EnergyBackend | None:  # pragma: no cover
-    from llenergymeasure.energy import select_energy_backend as _seb
+) -> EnergySampler | None:  # pragma: no cover
 
-    return _seb(explicit, gpu_indices=gpu_indices)
+    return select_energy_sampler(explicit, gpu_indices=gpu_indices)
 
 
 def estimate_flops_palm(

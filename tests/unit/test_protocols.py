@@ -1,6 +1,6 @@
-"""Protocol conformance tests for EnergyBackend.
+"""Protocol conformance tests for EnergySampler.
 
-Tests that FakeEnergyBackend satisfies the runtime_checkable EnergyBackend
+Tests that FakeEnergyBackend satisfies the runtime_checkable EnergySampler
 Protocol interface defined in llenergymeasure.energy.base.
 
 INF-10 compliance: no unittest.mock.patch on internal modules. Fakes are
@@ -9,7 +9,7 @@ injected via constructor args and satisfy isinstance() checks at runtime.
 
 from __future__ import annotations
 
-from llenergymeasure.energy.base import EnergyBackend
+from llenergymeasure.energy.base import EnergySampler
 from tests.fakes import FakeEnergyBackend
 
 # ---------------------------------------------------------------------------
@@ -18,9 +18,9 @@ from tests.fakes import FakeEnergyBackend
 
 
 def test_fake_energy_backend_satisfies_protocol():
-    """FakeEnergyBackend satisfies isinstance(EnergyBackend) at runtime."""
+    """FakeEnergyBackend satisfies isinstance(EnergySampler) at runtime."""
     fake = FakeEnergyBackend()
-    assert isinstance(fake, EnergyBackend)
+    assert isinstance(fake, EnergySampler)
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
-"""Base protocol for energy measurement backends.
+"""Base protocol for energy measurement samplers.
 
-Defines the EnergyBackend protocol - the interface contract that all energy
-measurement backends (NVML, Zeus, CodeCarbon) must satisfy.
+Defines the EnergySampler protocol - the interface contract that all energy
+measurement samplers (NVML, Zeus, CodeCarbon) must satisfy.
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
-class EnergyBackend(Protocol):
-    """Protocol for energy measurement backends.
+class EnergySampler(Protocol):
+    """Protocol for energy measurement samplers.
 
     Implementations include Zeus, NVML, CodeCarbon, etc.
     """
