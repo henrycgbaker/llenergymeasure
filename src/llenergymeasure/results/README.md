@@ -117,7 +117,7 @@ Schema version allows backward-compatible loading of older results.
 
 - Experiment IDs are sanitized before filesystem operations
 - Path traversal prevented via `is_safe_path()` checks
-- See `../security.py` for implementation
+- See `../utils/security.py` for implementation
 
 ## CLI Commands
 
@@ -144,4 +144,4 @@ lem results show exp_id --json
 ## Related
 
 - See `../domain/README.md` for result models
-- See `../cli.py` for CLI commands
+- See `../cli/` for CLI commands
