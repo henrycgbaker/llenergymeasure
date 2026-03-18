@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Formula tests — MeasurementHarness._build_result inference_memory_mb
 # ---------------------------------------------------------------------------
@@ -81,7 +83,7 @@ def test_peak_memory_reset_precedes_measurement():
     must show 'reset' before 'max_alloc' to confirm the measurement window is
     inference-only (not including model weights).
     """
-
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
 

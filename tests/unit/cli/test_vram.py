@@ -73,6 +73,7 @@ def _patch_hfapi(model_info_return=None, side_effect=None):
     HfApi is imported lazily inside estimate_vram, so we patch at the source
     module (huggingface_hub) rather than at the call site.
     """
+    pytest.importorskip("huggingface_hub")
     mock_api_instance = MagicMock()
     if side_effect is not None:
         mock_api_instance.model_info.side_effect = side_effect

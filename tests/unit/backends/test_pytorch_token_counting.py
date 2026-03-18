@@ -1,6 +1,8 @@
 """Tests for PyTorch backend token counting with padded batches (C1 fix)."""
 
-import torch
+import pytest
+
+torch = pytest.importorskip("torch")
 
 
 def _count_tokens(inputs: dict, outputs: torch.Tensor) -> tuple[int, int]:

@@ -84,6 +84,7 @@ def test_get_backend_unknown_message_contains_backend_name():
 
 def test_detect_default_backend_returns_pytorch():
     """detect_default_backend returns 'pytorch' when transformers is installed."""
+    pytest.importorskip("transformers")
     from llenergymeasure.backends import detect_default_backend
 
     # transformers must be installed in the test environment
@@ -146,6 +147,7 @@ def test_detect_default_backend_error_message_has_install_hint():
 
 def test_model_load_kwargs_contains_base_keys():
     """_model_load_kwargs always includes torch_dtype, device_map, trust_remote_code."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -160,6 +162,7 @@ def test_model_load_kwargs_contains_base_keys():
 
 def test_model_load_kwargs_passthrough_kwargs_merged():
     """passthrough_kwargs are merged into model load kwargs (core P0 fix)."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -173,6 +176,7 @@ def test_model_load_kwargs_passthrough_kwargs_merged():
 
 def test_model_load_kwargs_passthrough_can_override_defaults():
     """passthrough_kwargs can override backend defaults (intentional escape hatch)."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -186,6 +190,7 @@ def test_model_load_kwargs_passthrough_can_override_defaults():
 
 def test_model_load_kwargs_no_passthrough_when_none():
     """No extra keys added when passthrough_kwargs is None."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -199,6 +204,7 @@ def test_model_load_kwargs_no_passthrough_when_none():
 
 def test_model_load_kwargs_pytorch_config_attn_implementation():
     """PyTorchConfig.attn_implementation is included in kwargs."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.backend_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
@@ -215,6 +221,7 @@ def test_model_load_kwargs_pytorch_config_attn_implementation():
 
 def test_model_load_kwargs_pytorch_config_load_in_4bit():
     """PyTorchConfig.load_in_4bit=True produces a BitsAndBytesConfig quantization_config."""
+    pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
@@ -236,6 +243,7 @@ def test_model_load_kwargs_pytorch_config_load_in_4bit():
 
 def test_model_load_kwargs_pytorch_config_load_in_8bit():
     """PyTorchConfig.load_in_8bit=True produces a BitsAndBytesConfig quantization_config."""
+    pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
@@ -257,6 +265,7 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
 
 def test_model_load_kwargs_pytorch_config_none_values_not_included():
     """None values from PyTorchConfig are NOT included in kwargs."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.backend_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
@@ -276,6 +285,7 @@ def test_model_load_kwargs_pytorch_config_none_values_not_included():
 
 def test_model_load_kwargs_no_pytorch_section():
     """When config.pytorch is None, only base keys are present."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -295,7 +305,7 @@ def test_model_load_kwargs_no_pytorch_section():
 
 def test_precision_to_dtype_fp32():
     """fp32 maps to torch.float32."""
-    import torch
+    torch = pytest.importorskip("torch")
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
@@ -304,7 +314,7 @@ def test_precision_to_dtype_fp32():
 
 def test_precision_to_dtype_fp16():
     """fp16 maps to torch.float16."""
-    import torch
+    torch = pytest.importorskip("torch")
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
@@ -313,7 +323,7 @@ def test_precision_to_dtype_fp16():
 
 def test_precision_to_dtype_bf16():
     """bf16 maps to torch.bfloat16."""
-    import torch
+    torch = pytest.importorskip("torch")
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
@@ -322,6 +332,7 @@ def test_precision_to_dtype_bf16():
 
 def test_precision_to_dtype_unknown_raises():
     """Unknown precision string raises KeyError."""
+    pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
     with pytest.raises(KeyError):
