@@ -48,12 +48,32 @@ class BackendPlugin(Protocol):
         """Load model into memory. Returns opaque model object passed to warmup/run_inference/cleanup."""
         ...
 
-    def warmup(self, config: ExperimentConfig, model: Any) -> WarmupResult:
-        """Run warmup iterations. Returns WarmupResult (thermal_floor_wait_s set by harness)."""
+    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
+        """Run warmup iterations.
+
+        Args:
+            config: Experiment configuration.
+            model: Opaque model object from load_model().
+            prompts: Pre-loaded prompts (loaded by harness before measurement window).
+
+        Returns:
+            WarmupResult (thermal_floor_wait_s set by harness).
+        """
         ...
 
-    def run_inference(self, config: ExperimentConfig, model: Any) -> InferenceOutput:
-        """Run inference over all prompts. Returns InferenceOutput."""
+    def run_inference(
+        self, config: ExperimentConfig, model: Any, prompts: list[str]
+    ) -> InferenceOutput:
+        """Run inference over all prompts.
+
+        Args:
+            config: Experiment configuration.
+            model: Opaque model object from load_model().
+            prompts: Pre-loaded prompts (loaded by harness before measurement window).
+
+        Returns:
+            InferenceOutput with token counts, timing, and memory stats.
+        """
         ...
 
     def cleanup(self, model: Any) -> None:

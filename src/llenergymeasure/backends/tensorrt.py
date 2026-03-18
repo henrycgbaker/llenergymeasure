@@ -178,7 +178,7 @@ class TensorRTBackend:
     # BackendPlugin: warmup
     # -------------------------------------------------------------------------
 
-    def warmup(self, config: ExperimentConfig, model: Any) -> WarmupResult:
+    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
         """Run minimal TRT-LLM warmup: 1 prompt, 1 token.
 
         thermal_floor_wait_s is NOT set here — MeasurementHarness sets it after
@@ -187,6 +187,7 @@ class TensorRTBackend:
         Args:
             config: Experiment configuration.
             model: Tuple of (llm, sampling_params) from load_model().
+            prompts: Pre-loaded prompts (loaded by harness before measurement window).
 
         Returns:
             WarmupResult. thermal_floor_wait_s is left at default 0.0 (set by harness).
@@ -199,7 +200,6 @@ class TensorRTBackend:
 
             from llenergymeasure.backends._helpers import warmup_single_token
 
-            prompts = self._prepare_prompts(config)
             warmup_single_token(llm, prompts, _SP, max_new_tokens=1)
             logger.debug("TRT-LLM warmup complete")
 
@@ -215,7 +215,9 @@ class TensorRTBackend:
     # BackendPlugin: run_inference
     # -------------------------------------------------------------------------
 
-    def run_inference(self, config: ExperimentConfig, model: Any) -> InferenceOutput:
+    def run_inference(
+        self, config: ExperimentConfig, model: Any, prompts: list[str]
+    ) -> InferenceOutput:
         """Run offline batch inference over all prompts.
 
         Single llm.generate() call with ALL prompts — no streaming.
@@ -223,6 +225,7 @@ class TensorRTBackend:
         Args:
             config: Experiment configuration.
             model: Tuple of (llm, sampling_params) from load_model().
+            prompts: Pre-loaded prompts (loaded by harness before measurement window).
 
         Returns:
             InferenceOutput with token counts, timing, memory stats, and build_metadata.
@@ -233,7 +236,6 @@ class TensorRTBackend:
         import time
 
         llm, sampling_params = model
-        prompts = self._prepare_prompts(config)
 
         # Reset peak stats before the measurement loop
         from llenergymeasure.backends._helpers import reset_cuda_peak_memory
@@ -553,11 +555,3 @@ class TensorRTBackend:
                 kwargs["return_perf_metrics"] = sampling.return_perf_metrics
 
         return SamplingParams(**kwargs)
-
-    def _prepare_prompts(self, config: ExperimentConfig) -> list[str]:
-        """Prepare prompts using the dataset loader."""
-        from llenergymeasure.datasets.loader import load_prompts
-
-        prompts = load_prompts(config)
-        logger.debug("Prepared %d prompts via dataset loader", len(prompts))
-        return prompts

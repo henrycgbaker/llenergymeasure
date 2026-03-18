@@ -88,7 +88,7 @@ class VLLMBackend:
     # BackendPlugin: warmup
     # -------------------------------------------------------------------------
 
-    def warmup(self, config: ExperimentConfig, model: Any) -> WarmupResult:
+    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
         """Run minimal vLLM warmup: 1 prompt, 1 token.
 
         thermal_floor_wait_s is NOT set here — MeasurementHarness sets it after
@@ -97,6 +97,7 @@ class VLLMBackend:
         Args:
             config: Experiment configuration.
             model: Tuple of (llm, sampling_params) from load_model().
+            prompts: Pre-loaded prompts (loaded by harness before measurement window).
 
         Returns:
             WarmupResult. thermal_floor_wait_s is left at default 0.0 (set by harness).
@@ -109,7 +110,6 @@ class VLLMBackend:
 
             from llenergymeasure.backends._helpers import warmup_single_token
 
-            prompts = self._prepare_prompts(config)
             warmup_single_token(llm, prompts, _SP, max_tokens=1)
             logger.debug("vLLM warmup complete")
 
@@ -125,7 +125,9 @@ class VLLMBackend:
     # BackendPlugin: run_inference
     # -------------------------------------------------------------------------
 
-    def run_inference(self, config: ExperimentConfig, model: Any) -> InferenceOutput:
+    def run_inference(
+        self, config: ExperimentConfig, model: Any, prompts: list[str]
+    ) -> InferenceOutput:
         """Run offline batch inference over all prompts.
 
         Single llm.generate() call with ALL prompts — no streaming, no
@@ -134,6 +136,7 @@ class VLLMBackend:
         Args:
             config: Experiment configuration.
             model: Tuple of (llm, sampling_params) from load_model().
+            prompts: Pre-loaded prompts (loaded by harness before measurement window).
 
         Returns:
             InferenceOutput with token counts, timing, and memory stats.
@@ -146,7 +149,6 @@ class VLLMBackend:
         from llenergymeasure.backends._helpers import reset_cuda_peak_memory
 
         llm, sampling_params = model
-        prompts = self._prepare_prompts(config)
 
         # Reset peak stats before the measurement loop so max_memory_allocated() below
         # captures inference-window peak (KV cache occupancy + activations), not pre-allocation.
@@ -423,14 +425,6 @@ class VLLMBackend:
     # -------------------------------------------------------------------------
     # Private: inference helpers
     # -------------------------------------------------------------------------
-
-    def _prepare_prompts(self, config: ExperimentConfig) -> list[str]:
-        """Prepare prompts using the dataset loader."""
-        from llenergymeasure.datasets.loader import load_prompts
-
-        prompts = load_prompts(config)
-        logger.debug("Prepared %d prompts via dataset loader", len(prompts))
-        return prompts
 
     @staticmethod
     def _nvml_peak_memory_mb() -> float | None:
