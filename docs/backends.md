@@ -314,7 +314,7 @@ Changing any **[recompile]** field invalidates the cached engine and triggers a 
 | `dtype` | `float16` \| `bfloat16` | auto | Model compute dtype. TRT-LLM is optimised for fp16/bf16; fp32 is not supported. **[recompile]** |
 | `fast_build` | bool | false | Enable fast engine build mode (reduced optimisation, faster compilation). **[recompile]** |
 | `backend` | `trt` | `trt` | TRT-LLM internal backend selector. This is the `LLM(backend=...)` parameter, not the `llem` backend field. Leave unset unless you have a specific reason to override. |
-| `engine_path` | str | null | Path to a pre-compiled engine directory. When set, skips compilation and loads the engine directly. |
+| `engine_path` | str | null | Path to a pre-compiled engine directory. When set, skips compilation and loads the engine directly. All compile-time parameters and `build_cache` are ignored. See [Pre-Compiled Engine Loading](#pre-compiled-engine-loading) below. |
 
 ### tensorrt.quant: Quantization
 
@@ -382,6 +382,60 @@ Compiled engines are stored in `~/.cache/tensorrt_llm` and reused across runs.
 | `cache_root` | str | `~/.cache/tensorrt_llm` | Root directory for engine cache storage |
 | `max_records` | int | 10 | Maximum number of cached engine records |
 | `max_cache_storage_gb` | float | 256 | Maximum total cache size in GB |
+
+### Pre-Compiled Engine Loading
+
+When `tensorrt.engine_path` is set, llem loads a pre-compiled TensorRT-LLM engine
+directly, skipping engine compilation entirely. This is useful when:
+
+- You have pre-built engines from a previous `llm.save()` call or a build pipeline
+- You want deterministic, fast experiment startup (no compilation overhead)
+- You are running sweeps where only runtime parameters vary (not engine shape)
+
+**Engine directory structure:**
+
+```
+/path/to/engine/
+  config.json          # Must contain 'pretrained_config' and 'build_config' keys
+  rank0.engine         # Compiled engine binary for GPU 0
+  rank1.engine         # Required if tp_size=2 (one file per rank)
+  tokenizer.json       # Saved by llm.save() - enables self-contained engines
+  tokenizer_config.json
+```
+
+**Validation checks (run before loading):**
+
+1. Directory exists
+2. `config.json` exists and is valid JSON
+3. `tp_size` in `config.json` matches `tensorrt.tp_size` (if detectable)
+4. `rank{N}.engine` files exist for each rank (0 to tp_size-1)
+
+**What happens when `engine_path` is set:**
+
+- `model` field is still required but used only as a fallback tokeniser source
+  (if the engine directory lacks tokeniser files)
+- All compile-time parameters (`max_batch_size`, `tp_size`, `max_input_len`,
+  `max_seq_len`, `dtype`, `fast_build`) are **ignored** - they are baked into
+  the engine
+- `build_cache` is **ignored** - no compilation occurs, so caching is irrelevant
+- Runtime parameters (`kv_cache`, `scheduler`, `sampling`) still apply
+- `build_metadata.engine_path` in the result indicates which engine was loaded
+
+**Example:**
+
+```yaml
+tensorrt:
+  engine_path: /engines/llama-7b-fp16-tp1
+  tp_size: 1  # Must match the engine's tp_size
+```
+
+> **Note:** Engines are not portable across GPU architectures. An engine compiled
+> on A100 (SM 8.0) will not load on H100 (SM 9.0) or vice versa. TRT-LLM will
+> raise a clear error at load time if there is an architecture mismatch.
+
+> **Tokeniser note:** Engines built via `llm.save()` include tokeniser files and
+> are self-contained. Engines built via the `trtllm-build` CLI may lack tokeniser
+> files - in that case, the `model` field is used as a fallback tokeniser source.
 
 ### tensorrt.sampling: TRT-LLM-Specific Sampling
 

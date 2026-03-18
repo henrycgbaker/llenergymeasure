@@ -22,14 +22,61 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.metrics import WarmupResult
-from llenergymeasure.utils.exceptions import BackendError
+from llenergymeasure.utils.exceptions import BackendError, ConfigError
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_engine_directory(engine_path: Path, tp_size: int) -> list[str]:
+    """Pre-flight validation for TRT-LLM engine directory.
+
+    Checks directory exists, config.json exists, tp_size matches, and
+    rank{N}.engine files exist. Returns list of error strings (empty = valid).
+    Does NOT re-implement TRT-LLM's format detection.
+
+    Args:
+        engine_path: Path to the engine directory.
+        tp_size: Expected tensor-parallel size (number of rank files to check).
+
+    Returns:
+        List of error strings. Empty list means the directory is valid.
+    """
+    errors: list[str] = []
+
+    if not engine_path.is_dir():
+        errors.append(f"engine_path does not exist or is not a directory: {engine_path}")
+        return errors
+
+    config_path = engine_path / "config.json"
+    if not config_path.exists():
+        errors.append(f"config.json not found in engine directory: {engine_path}")
+    else:
+        try:
+            with config_path.open() as f:
+                config_data = json.load(f)
+            engine_tp_size = (
+                config_data.get("pretrained_config", {}).get("mapping", {}).get("tp_size")
+            )
+            if engine_tp_size is not None and engine_tp_size != tp_size:
+                errors.append(
+                    f"tp_size mismatch: engine was built with tp_size={engine_tp_size} "
+                    f"but config requests tp_size={tp_size}"
+                )
+        except (json.JSONDecodeError, OSError) as exc:
+            errors.append(f"Failed to parse config.json in engine directory: {exc}")
+
+    for rank in range(tp_size):
+        rank_file = engine_path / f"rank{rank}.engine"
+        if not rank_file.exists():
+            errors.append(f"rank{rank}.engine not found in engine directory: {engine_path}")
+
+    return errors
 
 
 class TensorRTBackend:
@@ -77,15 +124,6 @@ class TensorRTBackend:
         _trt_mod = require_import("tensorrt_llm", "tensorrt")
         LLM = _trt_mod.LLM
 
-        # Warn about engine_path (forward-compatible, not yet implemented)
-        trt = config.tensorrt
-        if trt is not None and getattr(trt, "engine_path", None) is not None:
-            logger.warning(
-                "engine_path not yet supported; compiling from model weights. "
-                "engine_path=%r will be ignored.",
-                trt.engine_path,
-            )
-
         kwargs = self._build_llm_kwargs(config)
         logger.info("Loading TRT-LLM model %r (kwargs: %s)", config.model, list(kwargs.keys()))
 
@@ -128,6 +166,10 @@ class TensorRTBackend:
             "config_hash": config_hash,
             "built_at": datetime.now(timezone.utc).isoformat(),
         }
+
+        trt = config.tensorrt
+        if trt is not None and trt.engine_path is not None:
+            self._build_metadata["engine_path"] = trt.engine_path
 
         sampling_params = self._build_sampling_params(config)
         return llm, sampling_params
@@ -333,6 +375,9 @@ class TensorRTBackend:
 
         Starts with {"model": config.model, "backend": "trt"} and applies
         all non-None fields from TensorRTConfig.
+
+        When engine_path is set, returns early with only {"model": engine_path, "backend": "trt"}.
+        Compile-time kwargs are baked into the engine and must not be re-specified.
         """
         kwargs: dict[str, Any] = {
             "model": config.model,
@@ -340,6 +385,19 @@ class TensorRTBackend:
         }
 
         trt = config.tensorrt
+
+        # engine_path early-return: pass engine dir as model, skip all compile-time kwargs
+        if trt is not None and trt.engine_path is not None:
+            engine_path = Path(trt.engine_path)
+            tp_size = trt.tp_size if trt.tp_size is not None else 1
+            errors = _validate_engine_directory(engine_path, tp_size=tp_size)
+            if errors:
+                raise ConfigError(f"engine_path validation failed: {'; '.join(errors)}")
+            # Pass engine dir as model - TRT-LLM auto-detects TLLM_ENGINE format.
+            # Compile-time kwargs are baked into the engine; don't pass them.
+            # enable_build_cache is not set - engine format bypasses it.
+            return {"model": str(trt.engine_path), "backend": "trt"}
+
         if trt is None:
             # No tensorrt section — use defaults + enable build cache
             kwargs["enable_build_cache"] = True
@@ -381,8 +439,6 @@ class TensorRTBackend:
         # Build cache config
         if trt.build_cache is not None:
             try:
-                from pathlib import Path
-
                 from tensorrt_llm.llmapi import BuildCacheConfig
 
                 bc = trt.build_cache

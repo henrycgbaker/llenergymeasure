@@ -16,10 +16,11 @@ Coverage:
 
 from __future__ import annotations
 
+import json
 import sys
 import types
 
-from llenergymeasure.backends.tensorrt import TensorRTBackend
+from llenergymeasure.backends.tensorrt import TensorRTBackend, _validate_engine_directory
 from llenergymeasure.config.backend_configs import (
     TensorRTBuildCacheConfig,
     TensorRTConfig,
@@ -620,3 +621,129 @@ class TestBuildMetadata:
 
         assert "build_metadata" in extras
         assert extras["build_metadata"]["trt_llm_version"] == "0.21.0"
+
+
+# =============================================================================
+# Test Group 7: _validate_engine_directory
+# =============================================================================
+
+
+class TestValidateEngineDirectory:
+    def test_valid_engine_dir(self, tmp_path):
+        """Valid engine dir with config.json and rank0.engine passes."""
+        config = {"pretrained_config": {"mapping": {"tp_size": 1}}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+        errors = _validate_engine_directory(tmp_path, tp_size=1)
+        assert errors == []
+
+    def test_missing_dir(self, tmp_path):
+        """Non-existent dir returns error."""
+        errors = _validate_engine_directory(tmp_path / "nonexistent", tp_size=1)
+        assert len(errors) == 1
+        assert "does not exist" in errors[0]
+
+    def test_missing_config_json(self, tmp_path):
+        """Dir exists but no config.json returns error."""
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+        errors = _validate_engine_directory(tmp_path, tp_size=1)
+        assert len(errors) == 1
+        assert "config.json" in errors[0]
+
+    def test_tp_size_mismatch(self, tmp_path):
+        """Engine tp_size=2 but requested tp_size=1 returns error."""
+        config = {"pretrained_config": {"mapping": {"tp_size": 2}}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+        errors = _validate_engine_directory(tmp_path, tp_size=1)
+        assert any("tp_size" in e for e in errors)
+
+    def test_missing_rank_engine(self, tmp_path):
+        """tp_size=2 but only rank0.engine exists returns error for rank1."""
+        config = {"pretrained_config": {"mapping": {"tp_size": 2}}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+        errors = _validate_engine_directory(tmp_path, tp_size=2)
+        assert any("rank1.engine" in e for e in errors)
+
+    def test_corrupt_config_json(self, tmp_path):
+        """Corrupt config.json returns parse error."""
+        (tmp_path / "config.json").write_text("not json{{{")
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+        errors = _validate_engine_directory(tmp_path, tp_size=1)
+        assert any("config.json" in e for e in errors)
+
+    def test_missing_tp_size_key_skips_check(self, tmp_path):
+        """config.json without mapping.tp_size skips tp_size check (non-blocking)."""
+        config = {"pretrained_config": {}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+        errors = _validate_engine_directory(tmp_path, tp_size=1)
+        assert errors == []
+
+
+# =============================================================================
+# Test Group 8: _build_llm_kwargs engine_path branches
+# =============================================================================
+
+
+class TestBuildLlmKwargsEnginePath:
+    def test_build_llm_kwargs_engine_path(self, tmp_path):
+        """engine_path set -> kwargs has model=engine_path as string and backend=trt."""
+        config_data = {"pretrained_config": {"mapping": {"tp_size": 1}}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config_data))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))
+        backend = TensorRTBackend()
+        kwargs = backend._build_llm_kwargs(config)
+
+        assert kwargs["model"] == str(tmp_path)
+        assert kwargs["backend"] == "trt"
+
+    def test_build_llm_kwargs_engine_path_skips_compile_kwargs(self, tmp_path):
+        """engine_path set -> no compile-time kwargs (tp_size, max_batch_size, etc.)."""
+        config_data = {"pretrained_config": {"mapping": {"tp_size": 2}}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config_data))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+        (tmp_path / "rank1.engine").write_bytes(b"fake")
+
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(engine_path=str(tmp_path), tp_size=2, max_batch_size=16),
+        )
+        backend = TensorRTBackend()
+        kwargs = backend._build_llm_kwargs(config)
+
+        assert "tensor_parallel_size" not in kwargs
+        assert "max_batch_size" not in kwargs
+        assert "max_input_len" not in kwargs
+        assert "max_seq_len" not in kwargs
+        assert "fast_build" not in kwargs
+        assert "dtype" not in kwargs
+
+    def test_build_llm_kwargs_engine_path_no_build_cache(self, tmp_path):
+        """engine_path set -> enable_build_cache not in kwargs."""
+        config_data = {"pretrained_config": {"mapping": {"tp_size": 1}}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config_data))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))
+        backend = TensorRTBackend()
+        kwargs = backend._build_llm_kwargs(config)
+
+        assert "enable_build_cache" not in kwargs
+
+    def test_build_llm_kwargs_engine_path_invalid_dir_raises(self, tmp_path):
+        """engine_path pointing to non-existent dir raises ConfigError."""
+        import pytest
+
+        from llenergymeasure.utils.exceptions import ConfigError
+
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(engine_path=str(tmp_path / "nonexistent")),
+        )
+        backend = TensorRTBackend()
+        with pytest.raises(ConfigError, match="engine_path validation failed"):
+            backend._build_llm_kwargs(config)
