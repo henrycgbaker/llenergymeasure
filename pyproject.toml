@@ -26,6 +26,7 @@ dependencies = [
 pytorch = [
     "torch>=2.5",
     "transformers>=4.49",
+    "accelerate>=1.4",
     "bitsandbytes>=0.45",
     "calflops>=0.2",
 ]
