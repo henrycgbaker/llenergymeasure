@@ -1027,7 +1027,7 @@ class TestResolveGpuIndices:
 # MEAS-02: Energy scope is self-documenting through data
 # ---------------------------------------------------------------------------
 # The per_gpu_j data flow is already wired:
-#   NVMLBackend.stop_tracking() -> EnergyMeasurement.per_gpu_j
+#   NVMLSampler.stop_tracking() -> EnergyMeasurement.per_gpu_j
 #   MeasurementHarness._build_result() -> ExperimentResult.energy_per_device_j + multi_gpu
 # With _resolve_gpu_indices returning correct indices for TRT-LLM,
 # multi-GPU energy is automatically summed across all TP ranks.

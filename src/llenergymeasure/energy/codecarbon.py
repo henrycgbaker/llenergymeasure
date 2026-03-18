@@ -7,8 +7,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any
 
-import torch
-
 from llenergymeasure.domain.metrics import EnergyMetrics
 
 logger = logging.getLogger(__name__)
@@ -208,39 +206,3 @@ class CodeCarbonSampler:
         if tracker is None:
             return None
         return self._extract_data(tracker)
-
-
-def warm_up(
-    model: Any,
-    tokenizer: Any,
-    max_input_tokens: int,
-    num_warmup_runs: int = 3,
-    warmup_prompt: str = "This is a warm-up run.",
-) -> None:
-    """Run warm-up iterations to initialize GPU and caches.
-
-    Args:
-        model: The loaded model.
-        tokenizer: The corresponding tokenizer.
-        max_input_tokens: Maximum input token length.
-        num_warmup_runs: Number of warm-up iterations.
-        warmup_prompt: Prompt text to use for warm-up.
-    """
-    logger.debug("Running %d warm-up iterations", num_warmup_runs)
-
-    for i in range(num_warmup_runs):
-        dummy_input = tokenizer(
-            warmup_prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=max_input_tokens,
-        )
-        # Move to model's device
-        dummy_input = {k: v.to(model.device) for k, v in dummy_input.items()}
-
-        with torch.no_grad():
-            _ = model(**dummy_input)
-
-        logger.debug("Warm-up iteration %d/%d completed", i + 1, num_warmup_runs)
-
-    logger.debug("Warm-up complete")
