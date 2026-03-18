@@ -59,12 +59,11 @@ class VLLMBackend:
         Raises:
             BackendError: If vLLM is not installed or model loading fails.
         """
-        try:
-            from vllm import LLM, SamplingParams
-        except ImportError as e:
-            raise BackendError(
-                "vLLM is not installed. Install it with: pip install llenergymeasure[vllm]"
-            ) from e
+        from llenergymeasure.backends._helpers import require_import
+
+        _vllm = require_import("vllm", "vllm")
+        LLM = _vllm.LLM
+        SamplingParams = _vllm.SamplingParams
 
         kwargs = self._build_llm_kwargs(config)
         logger.info(
@@ -144,15 +143,14 @@ class VLLMBackend:
         """
         import time
 
-        import torch
+        from llenergymeasure.backends._helpers import reset_cuda_peak_memory
 
         llm, sampling_params = model
         prompts = self._prepare_prompts(config)
 
         # Reset peak stats before the measurement loop so max_memory_allocated() below
         # captures inference-window peak (KV cache occupancy + activations), not pre-allocation.
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
+        reset_cuda_peak_memory()
 
         logger.info(
             "Starting vLLM offline batch inference: %d prompts, max_tokens=%d",
@@ -172,22 +170,25 @@ class VLLMBackend:
             elapsed = time.perf_counter() - t0
 
         except Exception as e:
-            if "out of memory" in str(e).lower():
-                raise BackendError(
-                    f"vLLM CUDA out of memory. Try: reduce n, "
-                    f"use gpu_memory_utilization=0.8, or use a smaller model. "
-                    f"Original error: {e}"
-                ) from e
-            raise BackendError(f"vLLM inference failed: {e}") from e
+            from llenergymeasure.backends._helpers import raise_backend_error
+
+            raise_backend_error(
+                e,
+                "vLLM",
+                hint="reduce n, use gpu_memory_utilization=0.8, or use a smaller model.",
+            )
 
         # Capture peak memory — torch first, NVML fallback for pre-allocation detection.
-        peak_mb = 0.0
-        if torch.cuda.is_available():
-            peak_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
+        from llenergymeasure.backends._helpers import get_cuda_peak_memory_mb
 
-            # Heuristic: if peak matches gpu_memory_utilization * total_vram within 5%,
-            # it's likely pre-allocation, not actual usage. Fall back to NVML.
+        peak_mb = get_cuda_peak_memory_mb()
+
+        # Heuristic: if peak matches gpu_memory_utilization * total_vram within 5%,
+        # it's likely pre-allocation, not actual usage. Fall back to NVML.
+        if peak_mb > 0:
             try:
+                import torch
+
                 total_vram = torch.cuda.get_device_properties(
                     torch.cuda.current_device()
                 ).total_memory / (1024 * 1024)
@@ -200,7 +201,7 @@ class VLLMBackend:
                 ):
                     gpu_util = vllm_cfg.engine.gpu_memory_utilization
                 expected_prealloc = total_vram * gpu_util
-                if peak_mb > 0 and abs(peak_mb - expected_prealloc) / expected_prealloc < 0.05:
+                if abs(peak_mb - expected_prealloc) / expected_prealloc < 0.05:
                     logger.debug(
                         "torch peak (%.1fMB) matches pre-allocation (%.1fMB), trying NVML",
                         peak_mb,

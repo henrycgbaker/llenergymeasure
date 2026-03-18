@@ -16,8 +16,110 @@ import numpy as np
 
 from llenergymeasure.config.models import WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
+from llenergymeasure.utils.exceptions import BackendError
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# CUDA memory helpers (extracted from pytorch.py, vllm.py, tensorrt.py)
+# ---------------------------------------------------------------------------
+
+
+def reset_cuda_peak_memory() -> None:
+    """Reset CUDA peak memory stats before a measurement window.
+
+    Best-effort — silently ignores failures (e.g. no CUDA, no torch).
+    """
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+    except Exception:
+        pass
+
+
+def get_cuda_peak_memory_mb() -> float:
+    """Return peak GPU memory allocated in MB since last reset.
+
+    Returns 0.0 if torch/CUDA is unavailable.
+    """
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return torch.cuda.max_memory_allocated() / (1024 * 1024)
+    except Exception:
+        pass
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
+# OOM / import error helpers (extracted from all 3 backends)
+# ---------------------------------------------------------------------------
+
+
+def is_oom_error(exc: Exception) -> bool:
+    """Check whether an exception is a CUDA out-of-memory error."""
+    if type(exc).__name__ == "OutOfMemoryError":
+        return True
+    return "out of memory" in str(exc).lower()
+
+
+def raise_backend_error(exc: Exception, backend_name: str, *, hint: str = "") -> None:
+    """Raise a BackendError wrapping *exc* with a user-friendly message.
+
+    If the error is OOM, includes remediation hints. Otherwise wraps
+    generically as "<backend> inference failed".
+
+    Args:
+        exc: The original exception.
+        backend_name: Human-readable backend name (e.g. "vLLM", "TRT-LLM").
+        hint: Extra remediation text appended to OOM messages.
+    """
+    if is_oom_error(exc):
+        msg = f"{backend_name} CUDA out of memory."
+        if hint:
+            msg = f"{msg} Try: {hint}"
+        raise BackendError(f"{msg} Original error: {exc}") from exc
+    raise BackendError(f"{backend_name} inference failed: {exc}") from exc
+
+
+def require_import(module: str, extra_name: str) -> Any:
+    """Import *module* or raise BackendError with install instructions.
+
+    Args:
+        module: Fully-qualified module name (e.g. "vllm").
+        extra_name: pip extra name (e.g. "vllm", "tensorrt").
+
+    Returns:
+        The imported module object.
+    """
+    try:
+        import importlib
+
+        return importlib.import_module(module)
+    except ImportError as e:
+        raise BackendError(
+            f"{module} is not installed. Install it with: pip install llenergymeasure[{extra_name}]"
+        ) from e
+
+
+# ---------------------------------------------------------------------------
+# CV calculation helper
+# ---------------------------------------------------------------------------
+
+
+def compute_cv(values: list[float]) -> float:
+    """Compute the coefficient of variation (std / mean) for *values*.
+
+    Returns 0.0 when the mean is zero or negative (avoids division by zero).
+    """
+    mean = float(np.mean(values))
+    if mean <= 0:
+        return 0.0
+    return float(np.std(values)) / mean
 
 
 def cleanup_model(model_obj: Any, *, use_gc: bool = True) -> None:
@@ -106,9 +208,7 @@ def warmup_until_converged(
             # Check convergence (skip in fixed mode)
             if not fixed_mode and len(latencies) >= max(config.min_prompts, config.window_size):
                 recent = latencies[-config.window_size :]
-                mean = float(np.mean(recent))
-                std = float(np.std(recent))
-                cv = std / mean if mean > 0 else 0.0
+                cv = compute_cv(recent)
                 final_cv = cv
 
                 if cv < config.cv_threshold:
@@ -131,10 +231,7 @@ def warmup_until_converged(
     if fixed_mode:
         converged = True
         if latencies and len(latencies) >= config.window_size:
-            recent = latencies[-config.window_size :]
-            mean = float(np.mean(recent))
-            std = float(np.std(recent))
-            final_cv = std / mean if mean > 0 else 0.0
+            final_cv = compute_cv(latencies[-config.window_size :])
 
     # Log result
     if converged and not fixed_mode:

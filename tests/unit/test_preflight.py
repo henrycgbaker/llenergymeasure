@@ -18,16 +18,11 @@ import llenergymeasure.api.preflight
 from llenergymeasure.api.preflight import run_preflight, run_study_preflight
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.utils.exceptions import PreFlightError
+from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_config(
-    model: str = "meta-llama/Llama-2-7b-hf", backend: str = "pytorch"
-) -> ExperimentConfig:
-    return ExperimentConfig(model=model, backend=backend)  # type: ignore[call-arg]
 
 
 def _patch_all_checks_pass(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,7 +46,7 @@ def test_preflight_passes_when_all_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         llenergymeasure.api.preflight, "_warn_if_persistence_mode_off", lambda: None
     )
-    config = _make_config()
+    config = make_config()
     # Should not raise
     run_preflight(config)
 
@@ -72,7 +67,7 @@ def test_preflight_collects_all_failures(monkeypatch: pytest.MonkeyPatch) -> Non
         lambda model_id: f"{model_id} not found on HuggingFace Hub",
     )
 
-    config = _make_config()
+    config = make_config()
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -98,7 +93,7 @@ def test_preflight_cuda_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
         llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
     )
 
-    config = _make_config()
+    config = make_config()
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -119,7 +114,7 @@ def test_preflight_backend_not_installed(monkeypatch: pytest.MonkeyPatch) -> Non
         llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
     )
 
-    config = _make_config(backend="pytorch")
+    config = make_config(backend="pytorch")
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -142,7 +137,7 @@ def test_preflight_gated_model(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda model_id: f"{model_id} gated model — no HF_TOKEN → export HF_TOKEN=<your_token>",
     )
 
-    config = _make_config(model="meta-llama/Llama-2-7b-hf")
+    config = make_config(model="meta-llama/Llama-2-7b-hf")
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -167,7 +162,7 @@ def test_preflight_model_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda model_id: f"{model_id} not found on HuggingFace Hub",
     )
 
-    config = _make_config(model="nonexistent/fake-model-xyz")
+    config = make_config(model="nonexistent/fake-model-xyz")
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -186,7 +181,7 @@ def test_preflight_local_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     )
 
     # Provide a real path — shouldn't raise
-    config = _make_config(model=str(tmp_path))
+    config = make_config(model=str(tmp_path))
     run_preflight(config)  # Should not raise
 
 
@@ -203,7 +198,7 @@ def test_preflight_local_model_missing(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Do NOT monkeypatch _check_model_accessible — use real implementation
     non_existent = "/definitely/does/not/exist/model"
-    config = _make_config(model=non_existent)
+    config = make_config(model=non_existent)
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -238,7 +233,7 @@ def test_preflight_persistence_mode_warning_not_blocking(
 
     monkeypatch.setattr(llenergymeasure.api.preflight, "_warn_if_persistence_mode_off", fake_warn)
 
-    config = _make_config()
+    config = make_config()
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.api.preflight"):
         # Should NOT raise a PreFlightError
         run_preflight(config)
@@ -262,7 +257,7 @@ def test_preflight_error_format(monkeypatch: pytest.MonkeyPatch) -> None:
         llenergymeasure.api.preflight, "_check_model_accessible", lambda model_id: None
     )
 
-    config = _make_config()
+    config = make_config()
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
