@@ -119,7 +119,7 @@ def measure_baseline_power(
                         power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
                         per_gpu_samples[gpu_idx].append(power_mw / 1000.0)
                     except pynvml.NVMLError:
-                        pass
+                        logger.debug("Power read failed for GPU %d", gpu_idx, exc_info=True)
                 time.sleep(interval)
         except Exception as e:
             logger.warning("Baseline: sampling failed: %s", e)

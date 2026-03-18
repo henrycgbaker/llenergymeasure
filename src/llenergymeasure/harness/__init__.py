@@ -351,6 +351,8 @@ class MeasurementHarness:
 
                 if torch.cuda.is_available():
                     indices = gpu_indices if gpu_indices is not None else [0]
+                    if not indices:
+                        return 0.0
                     peak = max(torch.cuda.max_memory_allocated(device=idx) for idx in indices)
                     return float(peak / (1024 * 1024))
             except Exception:

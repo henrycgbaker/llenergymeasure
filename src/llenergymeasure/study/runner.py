@@ -256,13 +256,13 @@ def _collect_result(
         # Use pre-drained payload if available; otherwise poll/recv
         if pipe_payload is not _UNSET:
             payload = pipe_payload
-            if isinstance(payload, dict) and "type" in payload:
+            if isinstance(payload, dict) and "type" in payload and "message" in payload:
                 payload["config_hash"] = config_hash
                 return payload
         elif parent_conn.poll():
             try:
                 payload = parent_conn.recv()
-                if isinstance(payload, dict) and "type" in payload:
+                if isinstance(payload, dict) and "type" in payload and "message" in payload:
                     payload["config_hash"] = config_hash
                     return payload
             except Exception:
@@ -279,7 +279,7 @@ def _collect_result(
         try:
             payload = pipe_payload
             # If payload is an error dict (exception in worker), treat as failure
-            if isinstance(payload, dict) and "type" in payload and "traceback" in payload:
+            if isinstance(payload, dict) and "type" in payload and "message" in payload:
                 payload["config_hash"] = config_hash
                 return payload
             return payload
@@ -295,7 +295,7 @@ def _collect_result(
         try:
             payload = parent_conn.recv()
             # If payload is an error dict (exception in worker), treat as failure
-            if isinstance(payload, dict) and "type" in payload and "traceback" in payload:
+            if isinstance(payload, dict) and "type" in payload and "message" in payload:
                 payload["config_hash"] = config_hash
                 return payload
             return payload
