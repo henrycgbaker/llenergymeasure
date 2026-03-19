@@ -84,6 +84,15 @@ def run_experiment(
     """
     study = _to_study_config(config, model=model, backend=backend, n=n, dataset=dataset, **kwargs)
     study_result = _run(study, skip_preflight=skip_preflight)
+    if not study_result.experiments:
+        from llenergymeasure.utils.exceptions import ExperimentError
+
+        error_msg = (
+            study_result.summary.warnings[0]
+            if study_result.summary and study_result.summary.warnings
+            else "Experiment produced no results"
+        )
+        raise ExperimentError(error_msg)
     return study_result.experiments[0]
 
 

@@ -362,6 +362,9 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -400,6 +403,9 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -432,6 +438,9 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -465,6 +474,9 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pf_module, "run_preflight", failing_preflight)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     mock_result = _make_experiment_result()
     monkeypatch.setattr(backends_module, "get_backend", lambda name: _MockBackend(mock_result))
     _patch_harness(monkeypatch, mock_result)
@@ -494,6 +506,9 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    monkeypatch.setattr(
         backends_module, "get_backend", lambda name: _MockBackend(_make_experiment_result())
     )
     monkeypatch.setattr(harness_module.MeasurementHarness, "run", _failing_harness_run)
@@ -521,6 +536,9 @@ def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, expected_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -555,6 +573,9 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     # Avoid real disk writes by patching create_study_dir and save_result
     monkeypatch.setattr(
@@ -1083,3 +1104,105 @@ class TestResolveGpuIndicesTensorrt:
 
         config = make_config(backend="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
+
+
+# =============================================================================
+# Quick Task 9: run_experiment raises ExperimentError when experiments list is empty
+# =============================================================================
+
+
+def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
+    """run_experiment raises ExperimentError (not IndexError) when _run returns empty experiments."""
+    import llenergymeasure.api._impl as api_module
+    from llenergymeasure.domain.experiment import StudySummary
+    from llenergymeasure.utils.exceptions import ExperimentError
+
+    empty_study_result = StudyResult(
+        experiments=[],
+        summary=StudySummary(
+            total_experiments=1,
+            completed=0,
+            failed=1,
+            total_wall_time_s=0.1,
+            total_energy_j=0.0,
+            unique_configurations=1,
+            warnings=["Docker container failed: image not found"],
+        ),
+    )
+
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
+
+    config = ExperimentConfig(model="gpt2")
+    with pytest.raises(ExperimentError) as exc_info:
+        run_experiment(config)
+
+    assert "Docker container failed: image not found" in str(exc_info.value)
+
+
+def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
+    """run_experiment raises ExperimentError with fallback message when warnings list is empty."""
+    import llenergymeasure.api._impl as api_module
+    from llenergymeasure.domain.experiment import StudySummary
+    from llenergymeasure.utils.exceptions import ExperimentError
+
+    empty_study_result = StudyResult(
+        experiments=[],
+        summary=StudySummary(
+            total_experiments=1,
+            completed=0,
+            failed=1,
+            total_wall_time_s=0.1,
+            total_energy_j=0.0,
+            unique_configurations=1,
+            warnings=[],
+        ),
+    )
+
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
+
+    config = ExperimentConfig(model="gpt2")
+    with pytest.raises(ExperimentError, match="Experiment produced no results"):
+        run_experiment(config)
+
+
+def test_run_study_partial_failure_returns_partial_results(monkeypatch):
+    """run_study returns StudyResult with partial results when some experiments fail.
+
+    Simulates a study where one Docker experiment succeeds and another fails.
+    The study should NOT raise - it returns a StudyResult with the successful
+    experiments and a summary showing the failure count.
+    """
+    import llenergymeasure.api._impl as api_module
+    from llenergymeasure.domain.experiment import StudySummary
+
+    successful_result = _make_experiment_result(experiment_id="partial-ok")
+
+    partial_study_result = StudyResult(
+        experiments=[successful_result],  # 1 succeeded, 1 was filtered (None)
+        summary=StudySummary(
+            total_experiments=2,
+            completed=1,
+            failed=1,
+            total_wall_time_s=5.0,
+            total_energy_j=100.0,
+            unique_configurations=2,
+            warnings=["Docker container failed for experiment 2"],
+        ),
+    )
+
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: partial_study_result)
+
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(model="gpt2"),
+            ExperimentConfig(model="gpt2-medium"),
+        ]
+    )
+    result = run_study(study)
+
+    # Study should return partial results, NOT raise
+    assert isinstance(result, StudyResult)
+    assert len(result.experiments) == 1
+    assert result.experiments[0].experiment_id == "partial-ok"
+    assert result.summary.completed == 1
+    assert result.summary.failed == 1

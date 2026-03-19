@@ -7,9 +7,10 @@ Auto-detection: if Docker + NVIDIA Container Toolkit are available on the host,
 default to Docker for best measurement isolation. Otherwise fall back to local
 with a nudge message.
 
-User config: any value stored in UserRunnersConfig is treated as explicit —
-including "local". If user config is present, auto-detection is skipped for
-that backend. Pass ``user_config=None`` to enable auto-detection.
+User config: non-"auto" values in UserRunnersConfig are treated as explicit.
+"auto" (the default) falls through to auto-detection, allowing Docker to be
+picked up automatically when available. Pass ``user_config=None`` to skip
+the user config step entirely.
 
 This module is intentionally free of Docker dispatch mechanics — it only decides
 *what* should run *where*. Dispatch is handled by DockerRunner (Plan 03).
@@ -104,8 +105,8 @@ def resolve_runner(
         1. Env var   ``LLEM_RUNNER_{BACKEND}``  — source="env"
         2. Study YAML ``runners:`` section       — source="yaml"
         3. User config ``runners.{backend}``     — source="user_config"
-           Any value in user_config is treated as explicit (including "local").
-           Pass ``user_config=None`` to allow auto-detection.
+           Only non-"auto" values are treated as explicit. "auto" falls through
+           to step 4. Pass ``user_config=None`` to allow auto-detection.
         4. Auto-detection: Docker + NVIDIA CT    — source="auto_detected"
         5. Built-in default: local              — source="default"
 
@@ -118,7 +119,8 @@ def resolve_runner(
                       Keys are backend names, values are runner strings.
         user_config:  UserRunnersConfig from loaded user preferences.
                       None = no user config present (enables auto-detection).
-                      When provided, all field values are treated as explicit.
+                      When provided, "auto" values fall through to auto-detection;
+                      explicit values ("local", "docker", "docker:<img>") are honoured.
 
     Returns:
         RunnerSpec with mode, image, and source fields populated.
@@ -136,12 +138,14 @@ def resolve_runner(
             mode, image = parse_runner_value(yaml_val)
             return RunnerSpec(mode=mode, image=image, source="yaml")  # type: ignore[arg-type]
 
-    # 3. User config — any value is treated as explicit (user opted in or opted out)
+    # 3. User config — "auto" means no explicit preference, fall through to auto-detection.
     #    Passing user_config=None means "no user config file present" → auto-detect.
     if user_config is not None:
-        user_val: str = getattr(user_config, backend, "local")
-        mode, image = parse_runner_value(user_val)
-        return RunnerSpec(mode=mode, image=image, source="user_config")  # type: ignore[arg-type]
+        user_val: str = getattr(user_config, backend, "auto")
+        if user_val != "auto":
+            mode, image = parse_runner_value(user_val)
+            return RunnerSpec(mode=mode, image=image, source="user_config")  # type: ignore[arg-type]
+        # "auto" -> fall through to auto-detection
 
     # 4. Auto-detection: Docker + NVIDIA Container Toolkit available?
     if is_docker_available():

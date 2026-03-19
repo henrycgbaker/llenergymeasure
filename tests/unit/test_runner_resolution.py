@@ -258,9 +258,9 @@ class TestResolveRunner:
         assert spec.mode == "docker"
         assert spec.image is None
 
-    def test_auto_detected_docker_does_not_apply_when_user_config_provided(self):
-        """user_config=UserRunnersConfig() (all defaults) still blocks auto-detection."""
-        user_config = UserRunnersConfig()  # all fields default to "local"
+    def test_auto_user_config_default_falls_through_to_auto_detection(self):
+        """user_config=UserRunnersConfig() (all defaults to 'auto') falls through to auto-detection."""
+        user_config = UserRunnersConfig()  # all fields default to "auto"
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
@@ -268,8 +268,34 @@ class TestResolveRunner:
         ):
             spec = resolve_runner("pytorch", user_config=user_config)
 
-        # user_config layer applies — docker auto-detection is skipped
-        assert spec.source == "user_config"
+        # "auto" falls through — Docker auto-detection applies
+        assert spec.source == "auto_detected"
+        assert spec.mode == "docker"
+
+    def test_explicit_auto_in_user_config_falls_through_to_auto_detection(self):
+        """Explicit 'auto' in user_config falls through to auto-detection."""
+        user_config = UserRunnersConfig(pytorch="auto")
+
+        with patch(
+            "llenergymeasure.infra.runner_resolution.is_docker_available",
+            return_value=True,
+        ):
+            spec = resolve_runner("pytorch", user_config=user_config)
+
+        assert spec.source == "auto_detected"
+        assert spec.mode == "docker"
+
+    def test_auto_user_config_no_docker_falls_to_default(self):
+        """user_config defaults to 'auto', Docker unavailable → falls to default."""
+        user_config = UserRunnersConfig()  # all fields default to "auto"
+
+        with patch(
+            "llenergymeasure.infra.runner_resolution.is_docker_available",
+            return_value=False,
+        ):
+            spec = resolve_runner("pytorch", user_config=user_config)
+
+        assert spec.source == "default"
         assert spec.mode == "local"
 
     # --- Default (local fallback) ---
@@ -341,6 +367,30 @@ class TestResolveStudyRunners:
             result = resolve_study_runners(["tensorrt"])
 
         assert "tensorrt" in result
+        assert result["tensorrt"].source == "auto_detected"
+
+    def test_mixed_auto_and_explicit_per_backend(self):
+        """Study with one backend explicitly set and another using auto-detection.
+
+        Simulates a researcher who forces pytorch=local but lets vllm auto-detect
+        to Docker. Each backend resolves independently through the precedence chain.
+        """
+        user_config = UserRunnersConfig(pytorch="local", vllm="auto", tensorrt="auto")
+
+        with patch(
+            "llenergymeasure.infra.runner_resolution.is_docker_available",
+            return_value=True,
+        ):
+            result = resolve_study_runners(["pytorch", "vllm", "tensorrt"], user_config=user_config)
+
+        # pytorch: explicit "local" -> user_config source
+        assert result["pytorch"].mode == "local"
+        assert result["pytorch"].source == "user_config"
+        # vllm: "auto" falls through -> Docker auto-detected
+        assert result["vllm"].mode == "docker"
+        assert result["vllm"].source == "auto_detected"
+        # tensorrt: "auto" falls through -> Docker auto-detected
+        assert result["tensorrt"].mode == "docker"
         assert result["tensorrt"].source == "auto_detected"
 
 

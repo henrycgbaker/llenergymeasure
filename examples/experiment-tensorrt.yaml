@@ -107,6 +107,3 @@ tensorrt:
   #   ignore_eos: false           # Force max_tokens generation every time
   #   return_perf_metrics: false  # Return TRT-LLM performance metrics in output
 
-# --- Runners ---
-runners:
-  tensorrt: docker

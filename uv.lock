@@ -2508,6 +2508,21 @@ dependencies = [
 codecarbon = [
     { name = "codecarbon" },
 ]
+dev = [
+    { name = "accelerate" },
+    { name = "bitsandbytes" },
+    { name = "calflops" },
+    { name = "import-linter" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-randomly" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "torch" },
+    { name = "transformers" },
+    { name = "types-pyyaml" },
+]
 pytorch = [
     { name = "accelerate" },
     { name = "bitsandbytes" },
@@ -2544,21 +2559,30 @@ requires-dist = [
     { name = "bitsandbytes", marker = "extra == 'pytorch'", specifier = ">=0.45" },
     { name = "calflops", marker = "extra == 'pytorch'", specifier = ">=0.2" },
     { name = "codecarbon", marker = "extra == 'codecarbon'", specifier = ">=2.8" },
+    { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.9" },
+    { name = "llenergymeasure", extras = ["pytorch"], marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "nvidia-ml-py", specifier = ">=12.0" },
     { name = "platformdirs", specifier = ">=3.0" },
     { name = "pyarrow", specifier = ">=14.0" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "pytest-randomly", marker = "extra == 'dev'", specifier = ">=3.15" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
     { name = "tensorrt-llm", marker = "extra == 'tensorrt'", specifier = ">=0.12" },
     { name = "torch", marker = "extra == 'pytorch'", specifier = ">=2.5" },
     { name = "tqdm", specifier = ">=4.66" },
     { name = "transformers", marker = "extra == 'pytorch'", specifier = ">=4.49" },
     { name = "typer", specifier = ">=0.9" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.6" },
     { name = "zeus", marker = "extra == 'zeus'", specifier = ">=0.13.1" },
 ]
-provides-extras = ["pytorch", "vllm", "tensorrt", "zeus", "codecarbon"]
+provides-extras = ["pytorch", "vllm", "tensorrt", "zeus", "codecarbon", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
