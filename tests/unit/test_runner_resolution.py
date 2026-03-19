@@ -369,6 +369,30 @@ class TestResolveStudyRunners:
         assert "tensorrt" in result
         assert result["tensorrt"].source == "auto_detected"
 
+    def test_mixed_auto_and_explicit_per_backend(self):
+        """Study with one backend explicitly set and another using auto-detection.
+
+        Simulates a researcher who forces pytorch=local but lets vllm auto-detect
+        to Docker. Each backend resolves independently through the precedence chain.
+        """
+        user_config = UserRunnersConfig(pytorch="local", vllm="auto", tensorrt="auto")
+
+        with patch(
+            "llenergymeasure.infra.runner_resolution.is_docker_available",
+            return_value=True,
+        ):
+            result = resolve_study_runners(["pytorch", "vllm", "tensorrt"], user_config=user_config)
+
+        # pytorch: explicit "local" -> user_config source
+        assert result["pytorch"].mode == "local"
+        assert result["pytorch"].source == "user_config"
+        # vllm: "auto" falls through -> Docker auto-detected
+        assert result["vllm"].mode == "docker"
+        assert result["vllm"].source == "auto_detected"
+        # tensorrt: "auto" falls through -> Docker auto-detected
+        assert result["tensorrt"].mode == "docker"
+        assert result["tensorrt"].source == "auto_detected"
+
 
 # ---------------------------------------------------------------------------
 # RunnerSpec.extra_mounts

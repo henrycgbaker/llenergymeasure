@@ -1163,3 +1163,46 @@ def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
     config = ExperimentConfig(model="gpt2")
     with pytest.raises(ExperimentError, match="Experiment produced no results"):
         run_experiment(config)
+
+
+def test_run_study_partial_failure_returns_partial_results(monkeypatch):
+    """run_study returns StudyResult with partial results when some experiments fail.
+
+    Simulates a study where one Docker experiment succeeds and another fails.
+    The study should NOT raise - it returns a StudyResult with the successful
+    experiments and a summary showing the failure count.
+    """
+    import llenergymeasure.api._impl as api_module
+    from llenergymeasure.domain.experiment import StudySummary
+
+    successful_result = _make_experiment_result(experiment_id="partial-ok")
+
+    partial_study_result = StudyResult(
+        experiments=[successful_result],  # 1 succeeded, 1 was filtered (None)
+        summary=StudySummary(
+            total_experiments=2,
+            completed=1,
+            failed=1,
+            total_wall_time_s=5.0,
+            total_energy_j=100.0,
+            unique_configurations=2,
+            warnings=["Docker container failed for experiment 2"],
+        ),
+    )
+
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: partial_study_result)
+
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(model="gpt2"),
+            ExperimentConfig(model="gpt2-medium"),
+        ]
+    )
+    result = run_study(study)
+
+    # Study should return partial results, NOT raise
+    assert isinstance(result, StudyResult)
+    assert len(result.experiments) == 1
+    assert result.experiments[0].experiment_id == "partial-ok"
+    assert result.summary.completed == 1
+    assert result.summary.failed == 1
