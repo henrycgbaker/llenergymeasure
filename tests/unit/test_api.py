@@ -1083,3 +1083,62 @@ class TestResolveGpuIndicesTensorrt:
 
         config = make_config(backend="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
+
+
+# =============================================================================
+# Quick Task 9: run_experiment raises ExperimentError when experiments list is empty
+# =============================================================================
+
+
+def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
+    """run_experiment raises ExperimentError (not IndexError) when _run returns empty experiments."""
+    import llenergymeasure.api._impl as api_module
+    from llenergymeasure.domain.experiment import StudySummary
+    from llenergymeasure.utils.exceptions import ExperimentError
+
+    empty_study_result = StudyResult(
+        experiments=[],
+        summary=StudySummary(
+            total_experiments=1,
+            completed=0,
+            failed=1,
+            total_wall_time_s=0.1,
+            total_energy_j=0.0,
+            unique_configurations=1,
+            warnings=["Docker container failed: image not found"],
+        ),
+    )
+
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
+
+    config = ExperimentConfig(model="gpt2")
+    with pytest.raises(ExperimentError) as exc_info:
+        run_experiment(config)
+
+    assert "Docker container failed: image not found" in str(exc_info.value)
+
+
+def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
+    """run_experiment raises ExperimentError with fallback message when warnings list is empty."""
+    import llenergymeasure.api._impl as api_module
+    from llenergymeasure.domain.experiment import StudySummary
+    from llenergymeasure.utils.exceptions import ExperimentError
+
+    empty_study_result = StudyResult(
+        experiments=[],
+        summary=StudySummary(
+            total_experiments=1,
+            completed=0,
+            failed=1,
+            total_wall_time_s=0.1,
+            total_energy_j=0.0,
+            unique_configurations=1,
+            warnings=[],
+        ),
+    )
+
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
+
+    config = ExperimentConfig(model="gpt2")
+    with pytest.raises(ExperimentError, match="Experiment produced no results"):
+        run_experiment(config)

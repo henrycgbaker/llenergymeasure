@@ -162,3 +162,34 @@ def test_silent_ignore_invalid_float_datacenter_pue(tmp_path, monkeypatch):
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     # Falls back to default when invalid
     assert config.measurement.datacenter_pue == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# UserRunnersConfig "auto" default behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_user_runners_config_defaults_to_auto():
+    """UserRunnersConfig() with no args has all three runner fields default to 'auto'."""
+    from llenergymeasure.config.user_config import UserRunnersConfig
+
+    config = UserRunnersConfig()
+    assert config.pytorch == "auto"
+    assert config.vllm == "auto"
+    assert config.tensorrt == "auto"
+
+
+def test_user_runners_config_accepts_auto_in_file(tmp_path):
+    """Config file with runners.pytorch: auto loads without error."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("runners:\n  pytorch: auto\n")
+    config = load_user_config(config_path=config_file)
+    assert config.runners.pytorch == "auto"
+
+
+def test_user_runners_config_validator_accepts_auto():
+    """UserRunnersConfig(pytorch='auto') does not raise ValidationError."""
+    from llenergymeasure.config.user_config import UserRunnersConfig
+
+    config = UserRunnersConfig(pytorch="auto")
+    assert config.pytorch == "auto"
