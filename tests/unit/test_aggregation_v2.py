@@ -823,24 +823,24 @@ class TestExtendedMetricsAggregationPath:
         assert result.extended_metrics.token_efficiency_index is not None
         assert result.extended_metrics.token_efficiency_index > 0
 
-    def test_exception_in_aggregation_graceful(self, make_raw_result, monkeypatch):
-        """If extended metrics aggregation raises, result still has empty metrics."""
-
-        def _boom(*args, **kwargs):
-            raise RuntimeError("boom")
+    def test_exception_in_extended_metrics_compute_graceful(self, make_raw_result, monkeypatch):
+        """If aggregate_extended_metrics raises inside _aggregate_extended_metrics_from_results,
+        the try/except catches it and returns empty ExtendedEfficiencyMetrics."""
+        from llenergymeasure.results import extended_metrics as ext_mod
 
         monkeypatch.setattr(
-            "llenergymeasure.results.aggregation._aggregate_extended_metrics_from_results",
-            _boom,
+            ext_mod,
+            "aggregate_extended_metrics",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         raw0 = make_raw_result(process_index=0, gpu_id=0)
-        # Should not raise — aggregation catches the exception
-        # But since we monkeypatched the internal function, the call may or may not
-        # be swallowed. Let's verify the outer aggregate_results still succeeds.
-        # The actual _aggregate_extended_metrics_from_results has a try/except,
-        # but we're replacing it with one that raises before that try/except.
-        # So this will actually raise. Let's test the actual internal path instead.
-        pass
+        result = aggregate_results(
+            raw_results=[raw0],
+            experiment_id="ext-boom",
+            measurement_config_hash="abc123def456abcd",
+        )
+        # The exception is caught; extended_metrics falls back to empty
+        assert result.extended_metrics is not None
 
 
 # ---------------------------------------------------------------------------

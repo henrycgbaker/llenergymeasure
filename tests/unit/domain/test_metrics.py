@@ -369,7 +369,7 @@ class TestCollectItlMeasurements:
     def test_four_token_request(self):
         """Four tokens = 3 intervals -> exactly trimmable."""
         timestamps = [[0.0, 10.0, 20.0, 30.0]]
-        full, trimmed, excluded = collect_itl_measurements(timestamps)
+        full, trimmed, _excluded = collect_itl_measurements(timestamps)
         assert len(full) == 3
         assert len(trimmed) == 1  # middle interval only
         assert trimmed[0] == pytest.approx(10.0)
