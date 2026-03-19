@@ -34,6 +34,17 @@ vllm = ["vllm>=0.6"]
 tensorrt = ["tensorrt-llm>=0.12"]
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
+dev = [
+    "llenergymeasure[pytorch]",
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "pytest-xdist>=3.8.0",
+    "pytest-randomly>=3.15",
+    "ruff>=0.8",
+    "mypy>=1.0",
+    "types-pyyaml>=6.0.12",
+    "import-linter>=2.9",
+]
 
 [dependency-groups]
 dev = [

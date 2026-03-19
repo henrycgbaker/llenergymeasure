@@ -26,7 +26,9 @@ def detect_default_backend() -> str:
         return "vllm"
     raise BackendError(
         "No inference backend installed. Install one with: "
-        "pip install llenergymeasure[pytorch] or pip install llenergymeasure[vllm]"
+        "pip install llenergymeasure[pytorch], "
+        "pip install llenergymeasure[vllm], or "
+        "pip install llenergymeasure[tensorrt]"
     )
 
 
