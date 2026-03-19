@@ -362,6 +362,9 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -400,6 +403,9 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -432,6 +438,9 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -465,6 +474,9 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pf_module, "run_preflight", failing_preflight)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     mock_result = _make_experiment_result()
     monkeypatch.setattr(backends_module, "get_backend", lambda name: _MockBackend(mock_result))
     _patch_harness(monkeypatch, mock_result)
@@ -494,6 +506,9 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
+    monkeypatch.setattr(
         backends_module, "get_backend", lambda name: _MockBackend(_make_experiment_result())
     )
     monkeypatch.setattr(harness_module.MeasurementHarness, "run", _failing_harness_run)
@@ -521,6 +536,9 @@ def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, expected_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -555,6 +573,9 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     _patch_harness(monkeypatch, mock_result)
     # Avoid real disk writes by patching create_study_dir and save_result
     monkeypatch.setattr(
