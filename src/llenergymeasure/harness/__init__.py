@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.backends.protocol import BackendPlugin, InferenceOutput
+from llenergymeasure.datasets import load_prompts
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
@@ -248,9 +249,13 @@ class MeasurementHarness:
         # Must happen BEFORE warmup, which allocates KV cache.
         model_memory_mb = self._capture_model_memory_mb(gpu_indices=gpu_indices)
 
+        # 4b. Load prompts — BEFORE measurement window (methodology fix)
+        prompts = load_prompts(config)
+        logger.debug("Loaded %d prompts via dataset loader", len(prompts))
+
         try:
             # 5. Warmup (CM-21, CM-24) — returns WarmupResult
-            warmup_result = backend.warmup(config, model)
+            warmup_result = backend.warmup(config, model, prompts)
 
             # 6. Thermal floor (CM-22) — harness sets thermal_floor_wait_s on warmup_result
             wait_s = thermal_floor_wait(config)
@@ -273,7 +278,7 @@ class MeasurementHarness:
 
             # Start thermal sampler around inference for timeseries + throttle detection
             with PowerThermalSampler(gpu_indices=gpu_indices) as sampler:
-                output = backend.run_inference(config, model)
+                output = backend.run_inference(config, model, prompts)
 
             t_inference_end = time.perf_counter()  # Canonical timer end (H1)
 

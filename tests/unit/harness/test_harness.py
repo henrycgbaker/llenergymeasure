@@ -41,7 +41,7 @@ class FakeBackend:
         self.call_log.append("load_model")
         return {"model": "fake_model_object"}
 
-    def warmup(self, config: Any, model: Any) -> WarmupResult:
+    def warmup(self, config: Any, model: Any, prompts: list[str]) -> WarmupResult:
         self.call_log.append("warmup")
         return WarmupResult(
             converged=True,
@@ -51,7 +51,7 @@ class FakeBackend:
             max_prompts=10,
         )
 
-    def run_inference(self, config: Any, model: Any) -> InferenceOutput:
+    def run_inference(self, config: Any, model: Any, prompts: list[str]) -> InferenceOutput:
         self.call_log.append("run_inference")
         if self.fail_on_run_inference:
             raise RuntimeError("Fake inference failure")
@@ -107,6 +107,10 @@ def _apply_patches():
         patch(
             "llenergymeasure.harness.measure_baseline_power",
             return_value=None,
+        ),
+        patch(
+            "llenergymeasure.harness.load_prompts",
+            return_value=["test prompt"],
         ),
         patch(
             "llenergymeasure.harness.select_energy_backend",
@@ -199,8 +203,8 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
     captured_warmup: list[WarmupResult] = []
 
     class TrackingBackend(FakeBackend):
-        def warmup(self, config: Any, model: Any) -> WarmupResult:
-            result = super().warmup(config, model)
+        def warmup(self, config: Any, model: Any, prompts: list[str]) -> WarmupResult:
+            result = super().warmup(config, model, prompts)
             # thermal_floor_wait_s starts at 0 from warmup_until_converged
             assert result.thermal_floor_wait_s == 0.0
             captured_warmup.append(result)
@@ -255,6 +259,7 @@ def test_harness_passes_gpu_indices_to_energy_backend(minimal_config):
             return_value=None,
         ),
         patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch("llenergymeasure.harness.select_energy_backend", return_value=None) as mock_seb,
         patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
         patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
@@ -286,6 +291,7 @@ def test_harness_passes_gpu_indices_to_thermal_sampler(minimal_config):
             return_value=None,
         ),
         patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch("llenergymeasure.harness.select_energy_backend", return_value=None),
         patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
         patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
@@ -326,6 +332,7 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
             return_value=None,
         ),
         patch("llenergymeasure.harness.measure_baseline_power", return_value=None) as mock_mbp,
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch("llenergymeasure.harness.select_energy_backend", return_value=None),
         patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
         patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
@@ -357,6 +364,7 @@ def test_harness_defaults_to_no_gpu_indices(minimal_config):
             return_value=None,
         ),
         patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch("llenergymeasure.harness.select_energy_backend", return_value=None) as mock_seb,
         patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
         patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
@@ -413,6 +421,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
             return_value=None,
         ),
         patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch(
             "llenergymeasure.harness.select_energy_backend",
             side_effect=fake_select_energy_backend,
@@ -614,7 +623,7 @@ def test_harness_warmup_result_wired_to_experiment_result(minimal_config):
     """warmup_result from backend.warmup() must reach ExperimentResult.warmup_result."""
 
     class WarmupTrackingBackend(FakeBackend):
-        def warmup(self, config: Any, model: Any) -> WarmupResult:
+        def warmup(self, config: Any, model: Any, prompts: list[str]) -> WarmupResult:
             return WarmupResult(
                 converged=True,
                 final_cv=0.05,
@@ -661,6 +670,7 @@ def test_harness_per_gpu_j_wired_to_energy_per_device_j(minimal_config):
     with (
         patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
         patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch(
             "llenergymeasure.harness.select_energy_backend",
             return_value=mock_energy_backend,
@@ -704,6 +714,7 @@ def test_harness_single_gpu_no_multi_gpu_metrics(minimal_config):
     with (
         patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
         patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch(
             "llenergymeasure.harness.select_energy_backend",
             return_value=mock_energy_backend,

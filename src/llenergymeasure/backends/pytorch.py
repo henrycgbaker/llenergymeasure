@@ -84,7 +84,7 @@ class PyTorchBackend:
     # BackendPlugin: warmup
     # -------------------------------------------------------------------------
 
-    def warmup(self, config: ExperimentConfig, model: Any) -> WarmupResult:
+    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
         """Run warmup using warmup_until_converged() and return WarmupResult.
 
         thermal_floor_wait_s is NOT set here — MeasurementHarness sets it after
@@ -93,6 +93,7 @@ class PyTorchBackend:
         Args:
             config: Experiment configuration.
             model: Tuple of (model, tokenizer) from load_model().
+            prompts: Pre-loaded prompts (unused — PyTorch warmup uses synthetic prompt).
 
         Returns:
             WarmupResult with convergence status and iteration count.
@@ -136,12 +137,15 @@ class PyTorchBackend:
     # BackendPlugin: run_inference
     # -------------------------------------------------------------------------
 
-    def run_inference(self, config: ExperimentConfig, model: Any) -> InferenceOutput:
+    def run_inference(
+        self, config: ExperimentConfig, model: Any, prompts: list[str]
+    ) -> InferenceOutput:
         """Run the batched measurement loop over all prompts.
 
         Args:
             config: Experiment configuration.
             model: Tuple of (model, tokenizer) from load_model().
+            prompts: Pre-loaded prompts (loaded by harness before measurement window).
 
         Returns:
             InferenceOutput with token counts, timing, and memory stats.
@@ -150,9 +154,6 @@ class PyTorchBackend:
             BackendError: On CUDA OOM or other inference failures.
         """
         hf_model, tokenizer = model
-
-        # Prepare prompts (M1 placeholder — generates synthetic prompts)
-        prompts = self._prepare_prompts(config)
 
         batch_size = 1
         if config.pytorch is not None and config.pytorch.batch_size is not None:
@@ -344,14 +345,6 @@ class PyTorchBackend:
     # -------------------------------------------------------------------------
     # Private: inference helpers
     # -------------------------------------------------------------------------
-
-    def _prepare_prompts(self, config: ExperimentConfig) -> list[str]:
-        """Prepare prompts using the dataset loader."""
-        from llenergymeasure.datasets.loader import load_prompts
-
-        prompts = load_prompts(config)
-        logger.debug("Prepared %d prompts via dataset loader", len(prompts))
-        return prompts
 
     def _run_batch(
         self,
