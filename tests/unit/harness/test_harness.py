@@ -733,3 +733,125 @@ def test_harness_single_gpu_no_multi_gpu_metrics(minimal_config):
 
     assert result.energy_per_device_j == [100.0]
     assert result.multi_gpu is None
+
+
+# ---------------------------------------------------------------------------
+# Error recovery: energy sampler returns None
+# ---------------------------------------------------------------------------
+
+
+def test_harness_energy_sampler_none_placeholder(minimal_config):
+    """When select_energy_backend returns None, result still has zero energy (placeholder)."""
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(backend, minimal_config)
+
+    # select_energy_backend returns None in _apply_patches, so total_energy_j should be 0.0
+    assert result.total_energy_j == pytest.approx(0.0)
+    assert result.avg_energy_per_token_j == pytest.approx(0.0)
+
+
+def test_harness_stop_tracking_raises_cleanup_still_called(minimal_config):
+    """If energy_backend.stop_tracking raises, cleanup is still called and model released."""
+    mock_energy = MagicMock()
+    mock_energy.start_tracking.return_value = MagicMock()
+    mock_energy.stop_tracking.side_effect = RuntimeError("NVML error")
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
+        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.select_energy_backend", return_value=mock_energy),
+        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
+        patch("llenergymeasure.harness.estimate_flops_palm", return_value=MagicMock(value=0)),
+        patch("llenergymeasure.harness._cuda_sync"),
+        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+        pytest.raises(RuntimeError, match="NVML error"),
+    ):
+        harness.run(backend, minimal_config)
+
+    # cleanup was called despite the exception (try/finally in harness)
+    assert "cleanup" in backend.call_log
+
+
+def test_harness_flops_estimation_raises_returns_zero_flops(minimal_config):
+    """If FLOPs estimation raises, total_flops should be 0, not crash."""
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
+        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.select_energy_backend", return_value=None),
+        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.estimate_flops_palm_from_config",
+            side_effect=RuntimeError("model not found"),
+        ),
+        patch("llenergymeasure.harness._cuda_sync"),
+        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        result = harness.run(backend, minimal_config)
+
+    assert result.total_flops == pytest.approx(0.0)
+
+
+def test_harness_energy_none_still_produces_valid_result(minimal_config):
+    """Full lifecycle with None energy produces a valid ExperimentResult."""
+    from llenergymeasure.domain.experiment import ExperimentResult
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(backend, minimal_config)
+
+    assert isinstance(result, ExperimentResult)
+    assert result.total_tokens > 0
+    assert result.energy_breakdown is None or result.energy_breakdown.raw_j == 0.0
+
+
+def test_harness_flops_none_result_has_none_derived(minimal_config):
+    """When FLOPs estimation returns None, derived fields are None."""
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with (
+        patch("llenergymeasure.harness.collect_environment_snapshot", return_value=None),
+        patch("llenergymeasure.harness.measure_baseline_power", return_value=None),
+        patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
+        patch("llenergymeasure.harness.select_energy_backend", return_value=None),
+        patch("llenergymeasure.harness.thermal_floor_wait", return_value=0.0),
+        patch(
+            "llenergymeasure.harness.estimate_flops_palm_from_config",
+            return_value=None,
+        ),
+        patch("llenergymeasure.harness._cuda_sync"),
+        patch("llenergymeasure.harness.PowerThermalSampler", new=_make_mock_pts()),
+        patch(
+            "llenergymeasure.harness.write_timeseries_parquet",
+            return_value=MagicMock(name="f"),
+        ),
+        patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
+    ):
+        result = harness.run(backend, minimal_config)
+
+    assert result.total_flops == pytest.approx(0.0)
+    assert result.flops_per_output_token is None
+    assert result.flops_per_second is None

@@ -13,10 +13,19 @@ from llenergymeasure.domain.experiment import (
 )
 from llenergymeasure.domain.metrics import (
     ComputeMetrics,
+    EnergyBreakdown,
     EnergyMetrics,
     InferenceMetrics,
+    LatencyMeasurements,
+    ThermalThrottleInfo,
+    WarmupResult,
 )
-from llenergymeasure.results.aggregation import aggregate_results, validate_process_completeness
+from llenergymeasure.results.aggregation import (
+    _check_temporal_overlap,
+    aggregate_latency_measurements,
+    aggregate_results,
+    validate_process_completeness,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -461,3 +470,449 @@ def test_aggregate_populates_flops_derived_fields(make_raw_result):
     assert result.flops_per_output_token == pytest.approx(3e12 / 1200)
     assert result.flops_per_input_token == pytest.approx(3e12 / 300)
     assert result.flops_per_second == pytest.approx(3e12 / 10)
+
+
+# ---------------------------------------------------------------------------
+# Energy breakdown aggregation
+# ---------------------------------------------------------------------------
+
+
+class TestEnergyBreakdownAggregation:
+    """EnergyBreakdown summing across processes in aggregate_results()."""
+
+    def test_sum_raw_j(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            energy_breakdown=EnergyBreakdown(raw_j=10.0, adjusted_j=8.0, baseline_power_w=5.0),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            energy_breakdown=EnergyBreakdown(raw_j=15.0, adjusted_j=12.0, baseline_power_w=5.0),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="eb-test",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.energy_breakdown is not None
+        assert result.energy_breakdown.raw_j == pytest.approx(25.0)
+
+    def test_sum_adjusted_j(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            energy_breakdown=EnergyBreakdown(raw_j=10.0, adjusted_j=8.0),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            energy_breakdown=EnergyBreakdown(raw_j=15.0, adjusted_j=12.0),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="eb-adj",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.energy_breakdown.adjusted_j == pytest.approx(20.0)
+
+    def test_none_adjusted_handled(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            energy_breakdown=EnergyBreakdown(raw_j=10.0, adjusted_j=None),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            energy_breakdown=EnergyBreakdown(raw_j=15.0, adjusted_j=None),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="eb-none-adj",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.energy_breakdown.adjusted_j is None
+
+    def test_baseline_power_from_first(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            energy_breakdown=EnergyBreakdown(raw_j=10.0, baseline_power_w=42.0),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            energy_breakdown=EnergyBreakdown(raw_j=15.0, baseline_power_w=99.0),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="eb-baseline",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.energy_breakdown.baseline_power_w == pytest.approx(42.0)
+
+    def test_no_breakdowns_no_aggregated_breakdown(self, make_raw_result):
+        raw0 = make_raw_result(process_index=0, gpu_id=0)
+        result = aggregate_results(
+            raw_results=[raw0],
+            experiment_id="eb-none",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.energy_breakdown is None
+
+
+# ---------------------------------------------------------------------------
+# Thermal throttle aggregation
+# ---------------------------------------------------------------------------
+
+
+class TestThermalThrottleAggregation:
+    """ThermalThrottleInfo merging across processes."""
+
+    def test_any_detected_true(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            thermal_throttle=ThermalThrottleInfo(detected=False, max_temperature_c=70.0),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            thermal_throttle=ThermalThrottleInfo(detected=True, max_temperature_c=85.0),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="tt-any",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.thermal_throttle.detected is True
+
+    def test_max_temperature(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            thermal_throttle=ThermalThrottleInfo(max_temperature_c=70.0, throttle_duration_sec=0.5),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            thermal_throttle=ThermalThrottleInfo(max_temperature_c=85.0, throttle_duration_sec=1.5),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="tt-max",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.thermal_throttle.max_temperature_c == pytest.approx(85.0)
+        assert result.thermal_throttle.throttle_duration_sec == pytest.approx(1.5)
+
+    def test_all_false_stays_false(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            thermal_throttle=ThermalThrottleInfo(detected=False),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            thermal_throttle=ThermalThrottleInfo(detected=False),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="tt-false",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.thermal_throttle.detected is False
+
+    def test_none_temperatures_handled(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            thermal_throttle=ThermalThrottleInfo(max_temperature_c=None),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            thermal_throttle=ThermalThrottleInfo(max_temperature_c=None),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="tt-none-temp",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.thermal_throttle.max_temperature_c is None
+
+    def test_no_throttle_info(self, make_raw_result):
+        raw0 = make_raw_result(process_index=0, gpu_id=0)
+        result = aggregate_results(
+            raw_results=[raw0],
+            experiment_id="tt-no-info",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.thermal_throttle is None
+
+
+# ---------------------------------------------------------------------------
+# Warmup result carry-forward
+# ---------------------------------------------------------------------------
+
+
+class TestWarmupResultCarryForward:
+    """Warmup result taken from first non-None process."""
+
+    def test_takes_first_non_none(self, make_raw_result):
+        warmup = WarmupResult(
+            converged=True, final_cv=0.05, iterations_completed=3, target_cv=0.01, max_prompts=10
+        )
+        raw0 = make_raw_result(process_index=0, gpu_id=0, warmup_result=None)
+        raw1 = make_raw_result(process_index=1, gpu_id=1, warmup_result=warmup)
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="wu-first",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.warmup_result is not None
+        assert result.warmup_result.converged is True
+
+    def test_all_none_returns_none(self, make_raw_result):
+        raw0 = make_raw_result(process_index=0, gpu_id=0)
+        raw1 = make_raw_result(process_index=1, gpu_id=1)
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="wu-none",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.warmup_result is None
+
+    def test_first_process_has_warmup(self, make_raw_result):
+        warmup = WarmupResult(
+            converged=False, final_cv=0.15, iterations_completed=10, target_cv=0.01, max_prompts=10
+        )
+        raw0 = make_raw_result(process_index=0, gpu_id=0, warmup_result=warmup)
+        result = aggregate_results(
+            raw_results=[raw0],
+            experiment_id="wu-single",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.warmup_result is not None
+        assert result.warmup_result.converged is False
+
+
+# ---------------------------------------------------------------------------
+# aggregate_latency_measurements
+# ---------------------------------------------------------------------------
+
+
+class TestAggregateLatencyMeasurements:
+    """aggregate_latency_measurements() from LatencyMeasurements lists."""
+
+    def _make_lm(self, ttft=None, itl_full=None, itl_trimmed=None) -> LatencyMeasurements:
+        return LatencyMeasurements(
+            ttft_ms=ttft or [],
+            itl_full_ms=itl_full or [],
+            itl_trimmed_ms=itl_trimmed or [],
+            request_count=1,
+            total_output_tokens=10,
+            excluded_tokens=0,
+            streaming_mode=True,
+            warmup_requests_excluded=0,
+        )
+
+    def test_empty_returns_none(self):
+        assert aggregate_latency_measurements([]) is None
+
+    def test_no_ttft_samples_returns_none(self):
+        lm = self._make_lm(ttft=[], itl_full=[5.0])
+        assert aggregate_latency_measurements([lm]) is None
+
+    def test_single_process_passthrough(self):
+        lm = self._make_lm(ttft=[10.0, 20.0], itl_full=[5.0, 6.0], itl_trimmed=[5.5])
+        stats = aggregate_latency_measurements([lm])
+        assert stats is not None
+        assert stats.ttft_samples == 2
+        assert stats.ttft_mean_ms == pytest.approx(15.0)
+
+    def test_multi_process_concatenation(self):
+        lm1 = self._make_lm(ttft=[10.0], itl_trimmed=[5.0])
+        lm2 = self._make_lm(ttft=[20.0], itl_trimmed=[8.0])
+        stats = aggregate_latency_measurements([lm1, lm2])
+        assert stats.ttft_samples == 2
+        assert stats.ttft_mean_ms == pytest.approx(15.0)
+        assert stats.itl_mean_ms == pytest.approx(6.5)
+        assert stats.itl_samples == 2
+
+    def test_correct_percentiles(self):
+        lm = self._make_lm(
+            ttft=[10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0],
+            itl_trimmed=[1.0, 2.0, 3.0, 4.0, 5.0],
+        )
+        stats = aggregate_latency_measurements([lm])
+        assert stats.ttft_p95_ms <= stats.ttft_p99_ms
+        assert stats.ttft_min_ms == pytest.approx(10.0)
+        assert stats.ttft_max_ms == pytest.approx(100.0)
+
+    def test_itl_full_stats(self):
+        lm = self._make_lm(ttft=[10.0], itl_full=[1.0, 2.0, 3.0])
+        stats = aggregate_latency_measurements([lm])
+        assert stats.itl_full_mean_ms == pytest.approx(2.0)
+
+
+# ---------------------------------------------------------------------------
+# Extended metrics aggregation path in aggregate_results
+# ---------------------------------------------------------------------------
+
+
+class TestExtendedMetricsAggregationPath:
+    """Extended metrics collection from process results."""
+
+    def test_collects_per_request_latencies(self, make_raw_result):
+        raw0 = make_raw_result(process_index=0, gpu_id=0, per_request_latencies_ms=[100.0, 110.0])
+        raw1 = make_raw_result(process_index=1, gpu_id=1, per_request_latencies_ms=[200.0, 210.0])
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="ext-lat",
+            measurement_config_hash="abc123def456abcd",
+        )
+        # Should have request latency stats from 4 concatenated samples
+        assert result.extended_metrics is not None
+        assert result.extended_metrics.request_latency.e2e_latency_samples == 4
+
+    def test_collects_gpu_utilisation_samples(self, make_raw_result):
+        raw0 = make_raw_result(process_index=0, gpu_id=0, gpu_utilisation_samples=[50.0, 60.0])
+        raw1 = make_raw_result(process_index=1, gpu_id=1, gpu_utilisation_samples=[70.0, 80.0])
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="ext-gpu",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.extended_metrics is not None
+        assert result.extended_metrics.gpu_utilisation.sm_utilisation_samples == 4
+        assert result.extended_metrics.gpu_utilisation.sm_utilisation_mean == pytest.approx(65.0)
+
+    def test_empty_samples_graceful(self, make_raw_result):
+        raw0 = make_raw_result(process_index=0, gpu_id=0)
+        result = aggregate_results(
+            raw_results=[raw0],
+            experiment_id="ext-empty",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.extended_metrics is not None
+
+    def test_extended_metrics_has_tei(self, make_raw_result):
+        """TEI should be recomputed from aggregated totals."""
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            inference_metrics=InferenceMetrics(
+                total_tokens=500,
+                input_tokens=100,
+                output_tokens=400,
+                inference_time_sec=10.0,
+                tokens_per_second=50.0,
+                latency_per_token_ms=2.0,
+            ),
+            energy_metrics=EnergyMetrics(total_energy_j=25.0, duration_sec=10.0),
+        )
+        result = aggregate_results(
+            raw_results=[raw0],
+            experiment_id="ext-tei",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert result.extended_metrics.token_efficiency_index is not None
+        assert result.extended_metrics.token_efficiency_index > 0
+
+    def test_exception_in_extended_metrics_compute_graceful(self, make_raw_result, monkeypatch):
+        """If aggregate_extended_metrics raises inside _aggregate_extended_metrics_from_results,
+        the try/except catches it and returns empty ExtendedEfficiencyMetrics."""
+        from llenergymeasure.results import extended_metrics as ext_mod
+
+        monkeypatch.setattr(
+            ext_mod,
+            "aggregate_extended_metrics",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        raw0 = make_raw_result(process_index=0, gpu_id=0)
+        result = aggregate_results(
+            raw_results=[raw0],
+            experiment_id="ext-boom",
+            measurement_config_hash="abc123def456abcd",
+        )
+        # The exception is caught; extended_metrics falls back to empty
+        assert result.extended_metrics is not None
+
+
+# ---------------------------------------------------------------------------
+# Temporal overlap check
+# ---------------------------------------------------------------------------
+
+
+class TestTemporalOverlapCheck:
+    """_check_temporal_overlap() validation."""
+
+    def test_single_process_always_true(self, make_raw_result):
+        raw0 = make_raw_result(process_index=0, gpu_id=0)
+        assert _check_temporal_overlap([raw0]) is True
+
+    def test_overlapping_true(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            timestamps=Timestamps.from_times(
+                datetime(2026, 2, 26, 14, 0, 0),
+                datetime(2026, 2, 26, 14, 0, 10),
+            ),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            timestamps=Timestamps.from_times(
+                datetime(2026, 2, 26, 14, 0, 1),
+                datetime(2026, 2, 26, 14, 0, 10),
+            ),
+        )
+        assert _check_temporal_overlap([raw0, raw1]) is True
+
+    def test_non_overlapping_false(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            timestamps=Timestamps.from_times(
+                datetime(2026, 2, 26, 14, 0, 0),
+                datetime(2026, 2, 26, 14, 0, 5),
+            ),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            timestamps=Timestamps.from_times(
+                datetime(2026, 2, 26, 14, 0, 10),
+                datetime(2026, 2, 26, 14, 0, 20),
+            ),
+        )
+        assert _check_temporal_overlap([raw0, raw1]) is False
+
+    def test_non_overlapping_warning_in_result(self, make_raw_result):
+        raw0 = make_raw_result(
+            process_index=0,
+            gpu_id=0,
+            timestamps=Timestamps.from_times(
+                datetime(2026, 2, 26, 14, 0, 0),
+                datetime(2026, 2, 26, 14, 0, 5),
+            ),
+        )
+        raw1 = make_raw_result(
+            process_index=1,
+            gpu_id=1,
+            timestamps=Timestamps.from_times(
+                datetime(2026, 2, 26, 14, 0, 10),
+                datetime(2026, 2, 26, 14, 0, 20),
+            ),
+        )
+        result = aggregate_results(
+            raw_results=[raw0, raw1],
+            experiment_id="overlap-warn",
+            measurement_config_hash="abc123def456abcd",
+        )
+        assert any("concurrently" in w for w in result.measurement_warnings)

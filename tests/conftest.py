@@ -11,8 +11,15 @@ from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
+    RawProcessResult,
     StudyResult,
     StudySummary,
+    Timestamps,
+)
+from llenergymeasure.domain.metrics import (
+    ComputeMetrics,
+    EnergyMetrics,
+    InferenceMetrics,
 )
 
 _REPLAY_DIR = Path(__file__).parent / "fixtures" / "replay"
@@ -79,6 +86,63 @@ def make_study_result(**overrides) -> StudyResult:
     }
     defaults.update(overrides)
     return StudyResult(**defaults)
+
+
+def make_energy_metrics(**overrides) -> EnergyMetrics:
+    """Return a valid EnergyMetrics with sensible defaults."""
+    defaults: dict = {
+        "total_energy_j": 10.0,
+        "duration_sec": 5.0,
+    }
+    defaults.update(overrides)
+    return EnergyMetrics(**defaults)
+
+
+def make_inference_metrics(**overrides) -> InferenceMetrics:
+    """Return a valid InferenceMetrics with sensible defaults."""
+    defaults: dict = {
+        "total_tokens": 500,
+        "input_tokens": 100,
+        "output_tokens": 400,
+        "inference_time_sec": 10.0,
+        "tokens_per_second": 50.0,
+        "latency_per_token_ms": 2.0,
+    }
+    defaults.update(overrides)
+    return InferenceMetrics(**defaults)
+
+
+def make_compute_metrics(**overrides) -> ComputeMetrics:
+    """Return a valid ComputeMetrics with sensible defaults."""
+    defaults: dict = {
+        "flops_total": 5e11,
+    }
+    defaults.update(overrides)
+    return ComputeMetrics(**defaults)
+
+
+def make_raw_process_result(**overrides) -> RawProcessResult:
+    """Return a valid RawProcessResult with sensible defaults.
+
+    Builds on make_energy_metrics, make_inference_metrics, and
+    make_compute_metrics factories for nested fields.
+    """
+    defaults: dict = {
+        "experiment_id": "test-001",
+        "process_index": 0,
+        "gpu_id": 0,
+        "config_name": "test",
+        "model_name": "gpt2",
+        "timestamps": Timestamps.from_times(
+            datetime(2026, 2, 26, 14, 0, 0, tzinfo=timezone.utc),
+            datetime(2026, 2, 26, 14, 0, 10, tzinfo=timezone.utc),
+        ),
+        "inference_metrics": make_inference_metrics(),
+        "energy_metrics": make_energy_metrics(),
+        "compute_metrics": make_compute_metrics(),
+    }
+    defaults.update(overrides)
+    return RawProcessResult(**defaults)
 
 
 @pytest.fixture
