@@ -64,6 +64,24 @@ def _step_line(
     return f"   {counter:>7s}  {label:<16s} {detail:<34s} {status:>4s}  {elapsed_str}"
 
 
+def _step_line_prefix(
+    idx: int,
+    total: int | None,
+    label: str,
+    detail: str,
+) -> str:
+    """Format the counter/label/detail portion of a step line (without status/elapsed).
+
+    Used by _render() to build styled output where status and elapsed are
+    appended separately with colour styles. Non-TTY mode continues to use
+    _step_line() which includes status and elapsed in the same string.
+    """
+    counter = f"[{idx}/{total}]" if total is not None else f"[{idx}]"
+    if len(detail) > 34:
+        detail = detail[:31] + "..."
+    return f"   {counter:>7s}  {label:<16s} {detail:<34s}"
+
+
 def _phase_for_step(step: str) -> str:
     """Look up the phase for a step name, defaulting to Measurement."""
     return STEP_PHASES.get(step, PHASE_MEASUREMENT)
@@ -107,6 +125,9 @@ class StepDisplay:
         self._step_data: dict[str, tuple[str, str, float]] = {}  # step -> (label, detail, elapsed)
         self._completed_steps: set[str] = set()
         self._skipped_steps: set[str] = set()
+
+        # Substeps per step: list of (text, elapsed_sec) tuples
+        self._substeps: dict[str, list[tuple[str, float]]] = {}
 
         # Active step
         self._active_step: str | None = None
@@ -262,8 +283,18 @@ class StepDisplay:
         self._refresh()
 
     def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
-        """Stub - full implementation in Plan 02."""
-        pass
+        """Record a completed sub-operation within the active step.
+
+        In TTY mode: stored and rendered as indented · lines below the parent step.
+        In non-TTY mode: also printed immediately as they arrive.
+        """
+        with self._lock:
+            if step not in self._substeps:
+                self._substeps[step] = []
+            self._substeps[step].append((text, elapsed_sec))
+        if not self._is_tty:
+            self._print_substep_line(step, text, elapsed_sec)
+        self._refresh()
 
     # -- Heartbeat (non-TTY only) --
 
@@ -315,6 +346,13 @@ class StepDisplay:
         or been skipped. Pending steps are NOT shown — they appear progressively
         as the harness reaches them. This gives a growing output that shows
         exactly where execution is.
+
+        Colour coding:
+        - Phase headers: bold white
+        - Completed steps: green ✓ checkmark
+        - Active steps: yellow braille spinner
+        - Skipped steps: all dim grey
+        - Substep lines: dim grey, indented with · prefix
         """
         lines = Text()
         with self._lock:
@@ -336,34 +374,45 @@ class StepDisplay:
                 if not has_visible:
                     continue
 
-                lines.append(f"\n  {phase}\n")
+                lines.append(f"\n  {phase}\n", style="bold white")
 
                 for step in steps:
                     idx = self._step_index_in_phase(step, phase)
 
                     if step in self._completed_steps:
                         label, detail, elapsed = self._step_data[step]
-                        line = _step_line(
-                            idx, phase_total, label, detail, "DONE", _format_elapsed(elapsed)
-                        )
-                        lines.append(line + "\n")
+                        prefix = _step_line_prefix(idx, phase_total, label, detail)
+                        lines.append(prefix)
+                        lines.append("  ✓", style="bold green")
+                        lines.append(f"  {_format_elapsed(elapsed)}\n")
+                        # Substep lines below completed step
+                        for sub_text, sub_elapsed in self._substeps.get(step, []):
+                            lines.append(f"              · {sub_text}", style="dim")
+                            if sub_elapsed > 0:
+                                lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
+                            lines.append("\n")
                     elif step in self._skipped_steps:
                         label, reason, _ = self._step_data[step]
-                        line = _step_line(idx, phase_total, label, reason, "SKIP", "")
-                        lines.append(line + "\n")
+                        prefix = _step_line_prefix(idx, phase_total, label, reason)
+                        lines.append(prefix, style="dim")
+                        lines.append("  SKIP", style="dim")
+                        lines.append("\n")
                     elif step == self._active_step:
                         elapsed = time.monotonic() - self._active_start
                         frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
                         spinner = _SPINNER_FRAMES[frame_idx]
-                        line = _step_line(
-                            idx,
-                            phase_total,
-                            self._active_label,
-                            self._active_detail,
-                            spinner,
-                            _format_elapsed(elapsed),
+                        prefix = _step_line_prefix(
+                            idx, phase_total, self._active_label, self._active_detail
                         )
-                        lines.append(line + "\n")
+                        lines.append(prefix)
+                        lines.append(f"  {spinner}", style="yellow")
+                        lines.append(f"  {_format_elapsed(elapsed)}\n")
+                        # Substep lines so far for the active step
+                        for sub_text, sub_elapsed in self._substeps.get(step, []):
+                            lines.append(f"              · {sub_text}", style="dim")
+                            if sub_elapsed > 0:
+                                lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
+                            lines.append("\n")
                     # Pending steps: NOT shown (Docker BuildKit-style progressive output)
 
         return lines
@@ -408,6 +457,11 @@ class StepDisplay:
             idx = self._step_index_in_phase(step, phase)
         line = _step_line(idx, phase_total, label, reason or "-", "SKIP", "")
         self._console.print(line, highlight=False)
+
+    def _print_substep_line(self, step: str, text: str, elapsed_sec: float) -> None:
+        """Print a substep line in non-TTY mode (indented with · prefix)."""
+        elapsed_str = f"  {_format_elapsed(elapsed_sec)}" if elapsed_sec > 0 else ""
+        self._console.print(f"              · {text}{elapsed_str}", highlight=False)
 
 
 class StudyStepDisplay:

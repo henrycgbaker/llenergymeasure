@@ -259,3 +259,68 @@ def test_study_display_satisfies_protocol():
     console, _ = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
     assert isinstance(display, ProgressCallback)
+
+
+# ---------------------------------------------------------------------------
+# Substep display (Plan 02)
+# ---------------------------------------------------------------------------
+
+
+def test_substep_lines_appear_in_output():
+    """Non-TTY: substep lines appear in output with · prefix after step completes."""
+    console, buf = _make_console()
+    display = StepDisplay(console=console)
+    display.register_steps(["model"])
+    display.start()
+
+    display.on_step_start("model", "Loading", "gpt2")
+    display.on_substep("model", "loading tokenizer", 1.2)
+    display.on_step_done("model", 5.0)
+    display.finish(total_elapsed=5.0)
+
+    output = buf.getvalue()
+    assert "· loading tokenizer" in output
+    assert "1.2s" in output
+
+
+def test_colour_checkmark_in_tty_render():
+    """TTY render: completed steps contain ✓ with bold green style."""
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=True, no_color=True, width=200)
+    display = StepDisplay(console=console)
+    display.register_steps(["model"])
+    display.start()
+
+    display.on_step_start("model", "Loading", "gpt2")
+    display.on_step_done("model", 3.0)
+
+    rendered = display._render()
+    # The rendered Text should contain ✓
+    plain_text = rendered.plain
+    assert "✓" in plain_text
+    # Check that at least one span has "bold green" style
+    spans = [(s.style, rendered.plain[s.start : s.end]) for s in rendered._spans]
+    green_spans = [(style, text) for style, text in spans if "green" in str(style)]
+    assert any("✓" in text for _, text in green_spans), f"No bold green ✓ found. Spans: {spans}"
+
+    display.stop()
+
+
+def test_substep_non_tty_prints_immediately():
+    """Non-TTY: substep lines are printed as they arrive (not deferred to done)."""
+    console, buf = _make_console()
+    display = StepDisplay(console=console)
+    display.register_steps(["measure"])
+    display.start()
+
+    display.on_step_start("measure", "Measuring", "100 prompts")
+    display.on_substep("measure", "CUDA sync (pre)")
+    display.on_substep("measure", "energy tracker started")
+
+    # Check output BEFORE step is done — substeps should already be printed
+    mid_output = buf.getvalue()
+    assert "· CUDA sync (pre)" in mid_output
+    assert "· energy tracker started" in mid_output
+
+    display.on_step_done("measure", 10.0)
+    display.finish(total_elapsed=10.0)
