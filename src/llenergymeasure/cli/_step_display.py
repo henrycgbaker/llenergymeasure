@@ -16,8 +16,9 @@ import contextlib
 import threading
 import time
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
+from rich.table import Table
 from rich.text import Text
 
 from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_LABELS, STEP_PHASES
@@ -465,35 +466,51 @@ class StepDisplay:
 
 
 class StudyStepDisplay:
-    """Step display for study mode with outer experiment counter and nested inner steps.
+    """Step display for study mode using a Rich Table for completed experiments.
 
-    Shows [x/y] outer counter per experiment. The active experiment shows
-    nested inner step progress. Completed experiments collapse to a summary line.
+    Completed experiments appear as table rows with Config, Time, Energy, tok/s columns.
+    The active experiment shows nested step progress below the table (deferred for
+    multi-process study runs — see module docstring).
+
+    Thread-safe: event methods may be called from worker threads.
     """
 
     def __init__(
-        self, total_experiments: int, console: Console | None = None, force_plain: bool = False
+        self,
+        total_experiments: int,
+        study_name: str = "",
+        n_cycles: int = 1,
+        console: Console | None = None,
+        force_plain: bool = False,
     ) -> None:
         self._console = console or Console(stderr=True)
         self._total = total_experiments
+        self._study_name = study_name
+        self._n_cycles = n_cycles
         self._is_tty = self._console.is_terminal and not force_plain
         self._lock = threading.Lock()
 
-        # Completed experiment summaries
-        self._completed_lines: list[str] = []
+        # Completed experiment rows: (index, status, config, elapsed, energy_j, throughput)
+        self._completed_rows: list[tuple[int, str, str, float, float | None, float | None]] = []
 
-        # Active inner display
+        # Active experiment state
         self._active_index: int = 0
         self._active_header: str = ""
         self._inner_completed: list[tuple[str, str, str, float]] = []
         self._inner_active: tuple[str, str, str, float] | None = None  # step, label, detail, start
         self._inner_steps: list[str] = []
+        self._inner_substeps: dict[str, list[tuple[str, float]]] = {}
 
         self._live: Live | None = None
         self._total_start: float = 0.0
 
     def start(self) -> None:
+        """Begin the display. Prints study header and starts Rich Live if TTY."""
         self._total_start = time.monotonic()
+        # Print study header per CONTEXT.md format
+        header = f"Study: {self._study_name}" if self._study_name else "Study"
+        header += f" | {self._total} experiments | {self._n_cycles} cycles"
+        self._console.print(header, highlight=False)
         if self._is_tty:
             self._live = Live(
                 Text(""),
@@ -504,6 +521,7 @@ class StudyStepDisplay:
             self._live.start()
 
     def stop(self) -> None:
+        """Stop Rich Live."""
         if self._live is not None:
             self._live.stop()
             self._live = None
@@ -518,44 +536,68 @@ class StudyStepDisplay:
             self._inner_completed = []
             self._inner_active = None
             self._inner_steps = steps
+            self._inner_substeps = {}
         self._refresh()
 
-    def end_experiment_ok(self, index: int, elapsed: float, energy_j: float | None = None) -> None:
+    def end_experiment_ok(
+        self,
+        index: int,
+        elapsed: float,
+        energy_j: float | None = None,
+        throughput_tok_s: float | None = None,
+    ) -> None:
         """Mark experiment as successfully completed."""
         with self._lock:
             self._inner_active = None
-            energy_str = f"  {energy_j:.0f} J" if energy_j is not None else ""
-            line = (
-                f" [{index:>2d}/{self._total}]  OK    {self._active_header:<42s}"
-                f" {_format_elapsed(elapsed):>8s}{energy_str}"
+            self._completed_rows.append(
+                (index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s)
             )
-            self._completed_lines.append(line)
         if not self._is_tty:
-            self._console.print(line, highlight=False)
+            self._print_completed_row(
+                index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s
+            )
         self._refresh()
 
     def end_experiment_fail(self, index: int, elapsed: float, error: str = "") -> None:
         """Mark experiment as failed."""
         with self._lock:
             self._inner_active = None
-            line = f" [{index:>2d}/{self._total}]  FAIL  {self._active_header:<42s} {_format_elapsed(elapsed):>8s}"
-            self._completed_lines.append(line)
-            if error:
-                self._completed_lines.append(f"         {error}")
+            self._completed_rows.append((index, "FAIL", self._active_header, elapsed, None, None))
         if not self._is_tty:
-            self._console.print(
-                f" [{index:>2d}/{self._total}]  FAIL  {self._active_header}  {_format_elapsed(elapsed)}",
-                highlight=False,
-            )
+            self._print_completed_row(index, "FAIL", self._active_header, elapsed, None, None)
             if error:
                 self._console.print(f"         {error}", highlight=False)
         self._refresh()
 
-    def finish(self) -> None:
-        """Print study completion footer."""
+    def finish(
+        self,
+        save_path: str | None = None,
+        total_elapsed: float | None = None,
+    ) -> None:
+        """Print study completion footer with final results table.
+
+        Args:
+            save_path: Optional path to saved results directory.
+            total_elapsed: Total elapsed time in seconds. If None, falls back to
+                monotonic clock delta from start() (which may be wrong if start()
+                was never called — callers constructing post-hoc should always pass this).
+        """
         self.stop()
-        total = time.monotonic() - self._total_start
+        if total_elapsed is not None:
+            total = total_elapsed
+        elif self._total_start > 0:
+            total = time.monotonic() - self._total_start
+        else:
+            total = 0.0
         self._console.print(f"\nStudy completed in {_format_elapsed(total)}", highlight=False)
+
+        # Print final summary table with all experiments
+        if self._completed_rows:
+            table = self._build_table()
+            self._console.print(table)
+
+        if save_path:
+            self._console.print(f"\nSaved: {save_path}", highlight=False)
 
     # -- ProgressCallback for inner steps --
 
@@ -578,67 +620,125 @@ class StudyStepDisplay:
                 detail = self._inner_active[2]
                 self._inner_completed.append((step, label, detail, elapsed_sec))
                 self._inner_active = None
-        if not self._is_tty:
-            self._print_inner_line(step, elapsed_sec)
         self._refresh()
 
     def on_step_skip(self, step: str, reason: str = "") -> None:
         """No-op for study display (inner steps don't show SKIP)."""
 
     def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
-        """Stub - full implementation in Plan 02/03."""
-        pass
+        """Record a completed sub-operation within the active step.
+
+        Implemented for protocol compliance and single-process study paths.
+        In multi-process study runs, the progress_queue only carries
+        started/completed/failed events, so this will not receive events.
+        """
+        with self._lock:
+            if step not in self._inner_substeps:
+                self._inner_substeps[step] = []
+            self._inner_substeps[step].append((text, elapsed_sec))
+        self._refresh()
 
     # -- Rendering --
 
-    def _render(self) -> Text:
+    def _build_table(self) -> Table:
+        """Build the Rich Table of completed experiments."""
+        table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
+        table.add_column("#", width=3, justify="right")
+        table.add_column("Status", width=6)
+        table.add_column("Config")
+        table.add_column("Time", justify="right")
+        table.add_column("Energy", justify="right")
+        table.add_column("tok/s", justify="right")
+        for idx, status, config, elapsed, energy, throughput in self._completed_rows:
+            status_text = (
+                Text("\u2713", style="bold green")
+                if status == "OK"
+                else Text("\u2717", style="bold red")
+            )
+            energy_str = f"{energy:.1f} J" if energy is not None else "-"
+            throughput_str = f"{throughput:.1f}" if throughput is not None else "-"
+            table.add_row(
+                str(idx),
+                status_text,
+                config,
+                _format_elapsed(elapsed),
+                energy_str,
+                throughput_str,
+            )
+        return table
+
+    def _render_active_steps(self) -> Text:
+        """Render the active experiment's step progress."""
         lines = Text()
-        with self._lock:
-            for cline in self._completed_lines:
-                lines.append(cline + "\n")
+        if not self._active_header:
+            return lines
 
-            if self._active_header:
-                lines.append(f" [{self._active_index:>2d}/{self._total}]  {self._active_header}\n")
+        lines.append(f"\n  [{self._active_index}/{self._total}] {self._active_header}\n")
 
-                inner_total = len(self._inner_steps) or (
-                    len(self._inner_completed) + (1 if self._inner_active else 0)
-                )
+        inner_total = len(self._inner_steps) or (
+            len(self._inner_completed) + (1 if self._inner_active else 0)
+        )
 
-                for i, (_step, label, detail, elapsed) in enumerate(self._inner_completed):
-                    idx = i + 1
-                    inner_line = _step_line(
-                        idx, inner_total, label, detail, "DONE", _format_elapsed(elapsed)
-                    )
-                    lines.append(f"         {inner_line}\n")
+        for i, (_step, label, detail, elapsed) in enumerate(self._inner_completed):
+            idx = i + 1
+            counter = f"[{idx}/{inner_total}]"
+            trunc_detail = detail[:31] + "..." if len(detail) > 34 else detail
+            lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
+            lines.append("  \u2713", style="bold green")
+            lines.append(f"  {_format_elapsed(elapsed)}\n")
+            for sub_text, sub_elapsed in self._inner_substeps.get(_step, []):
+                lines.append(f"                    \u00b7 {sub_text}", style="dim")
+                if sub_elapsed > 0:
+                    lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
+                lines.append("\n")
 
-                if self._inner_active:
-                    _step, label, detail, start = self._inner_active
-                    idx = len(self._inner_completed) + 1
-                    elapsed = time.monotonic() - start
-                    frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
-                    spinner = _SPINNER_FRAMES[frame_idx]
-                    inner_line = _step_line(
-                        idx, inner_total, label, detail, spinner, _format_elapsed(elapsed)
-                    )
-                    lines.append(f"         {inner_line}")
+        if self._inner_active:
+            _step, label, detail, start = self._inner_active
+            idx = len(self._inner_completed) + 1
+            elapsed = time.monotonic() - start
+            frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
+            spinner = _SPINNER_FRAMES[frame_idx]
+            counter = f"[{idx}/{inner_total}]"
+            trunc_detail = detail[:31] + "..." if len(detail) > 34 else detail
+            lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
+            lines.append(f"  {spinner}", style="yellow")
+            lines.append(f"  {_format_elapsed(elapsed)}\n")
+            for sub_text, sub_elapsed in self._inner_substeps.get(_step, []):
+                lines.append(f"                    \u00b7 {sub_text}", style="dim")
+                if sub_elapsed > 0:
+                    lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
+                lines.append("\n")
 
         return lines
 
+    def _render(self) -> object:
+        """Render completed experiments table + active experiment step display."""
+        with self._lock:
+            table = self._build_table()
+            step_text = self._render_active_steps()
+        return Group(table, step_text)
+
     def _refresh(self) -> None:
+        """Push updated renderable to Live display."""
         if self._live is not None:
             with contextlib.suppress(Exception):
                 self._live.update(self._render())
 
-    def _print_inner_line(self, step: str, elapsed_sec: float) -> None:
-        """Print inner step line in non-TTY mode."""
-        with self._lock:
-            inner_total = len(self._inner_steps) or len(self._inner_completed)
-            idx = len(self._inner_completed)
-            label = STEP_LABELS.get(step, step)
-            detail = ""
-            for s, _l, d, _e in self._inner_completed:
-                if s == step:
-                    detail = d
-                    break
-        line = _step_line(idx, inner_total, label, detail, "DONE", _format_elapsed(elapsed_sec))
-        self._console.print(f"         {line}", highlight=False)
+    def _print_completed_row(
+        self,
+        index: int,
+        status: str,
+        config: str,
+        elapsed: float,
+        energy: float | None,
+        throughput: float | None,
+    ) -> None:
+        """Print a completed experiment row in non-TTY mode."""
+        status_str = "OK" if status == "OK" else "FAIL"
+        energy_str = f"  {energy:.1f} J" if energy is not None else ""
+        throughput_str = f"  {throughput:.1f} tok/s" if throughput is not None else ""
+        line = (
+            f" [{index:>2d}/{self._total}]  {status_str:<4s}  {config:<42s}"
+            f" {_format_elapsed(elapsed):>8s}{energy_str}{throughput_str}"
+        )
+        self._console.print(line, highlight=False)

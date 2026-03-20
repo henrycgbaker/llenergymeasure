@@ -211,8 +211,17 @@ def test_step_display_quiet_mode():
 def test_study_display_experiment_lifecycle():
     """StudyStepDisplay tracks experiment completion with summary lines."""
     console, buf = _make_console()
-    display = StudyStepDisplay(total_experiments=3, console=console)
+    display = StudyStepDisplay(
+        total_experiments=3,
+        study_name="my-sweep",
+        n_cycles=2,
+        console=console,
+    )
     display.start()
+
+    # Study header should appear
+    output_after_start = buf.getvalue()
+    assert "Study: my-sweep | 3 experiments | 2 cycles" in output_after_start
 
     # Experiment 1: success
     display.begin_experiment(1, "gpt2", "pytorch", "bf16", ["preflight", "model", "measure"])
@@ -236,6 +245,104 @@ def test_study_display_experiment_lifecycle():
     assert "OK" in output
     assert "FAIL" in output
     assert "Study completed" in output
+
+
+def test_study_display_table_output():
+    """Rich Table renders with all columns and values in TTY mode."""
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=True, no_color=True, width=120)
+    display = StudyStepDisplay(
+        total_experiments=2,
+        study_name="table-test",
+        n_cycles=1,
+        console=console,
+    )
+    display.end_experiment_ok(1, elapsed=154.2, energy_j=12.4, throughput_tok_s=38.7)
+    display.end_experiment_ok(2, elapsed=98.5, energy_j=8.1, throughput_tok_s=42.3)
+    display.finish(total_elapsed=270.0)
+
+    output = buf.getvalue()
+    # Table column headers
+    assert "#" in output
+    assert "Status" in output
+    assert "Config" in output
+    assert "Time" in output
+    assert "Energy" in output
+    assert "tok/s" in output
+    # Row values
+    assert "12.4 J" in output
+    assert "38.7" in output
+    assert "8.1 J" in output
+    assert "42.3" in output
+    # Completion line
+    assert "Study completed in" in output
+
+
+def test_study_display_substep_in_active_experiment():
+    """on_substep() records substeps attached to the active inner step."""
+    console, buf = _make_console()
+    display = StudyStepDisplay(total_experiments=1, console=console)
+    display.begin_experiment(1, "gpt2", "pytorch", "bf16", ["measure"])
+    display.on_step_start("measure", "Measuring", "100 prompts")
+    display.on_substep("measure", "CUDA sync (pre)", 0.0)
+    display.on_substep("measure", "energy tracker started", 0.0)
+
+    # Verify substeps are stored (for TTY rendering)
+    with display._lock:
+        substeps = display._inner_substeps.get("measure", [])
+    assert len(substeps) == 2
+    assert substeps[0][0] == "CUDA sync (pre)"
+    assert substeps[1][0] == "energy tracker started"
+
+
+def test_study_display_finish_prints_summary_table():
+    """finish() prints the final Rich Table with all experiment results."""
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=True, no_color=True, width=120)
+    display = StudyStepDisplay(
+        total_experiments=2,
+        study_name="finish-test",
+        n_cycles=3,
+        console=console,
+    )
+    display.end_experiment_ok(1, elapsed=60.0, energy_j=10.0, throughput_tok_s=50.0)
+    display.end_experiment_fail(2, elapsed=5.0, error="Timeout")
+    display.finish(save_path="./results/finish-test/", total_elapsed=75.0)
+
+    output = buf.getvalue()
+    assert "Study completed in 1m 15s" in output
+    assert "10.0 J" in output
+    assert "Saved: ./results/finish-test/" in output
+
+
+def test_study_display_finish_total_elapsed_parameter():
+    """finish(total_elapsed=...) uses the provided value, not the internal clock."""
+    console, buf = _make_console()
+    display = StudyStepDisplay(total_experiments=1, console=console)
+    # Never call start() — simulate post-hoc construction
+    display.end_experiment_ok(1, elapsed=10.0)
+    display.finish(total_elapsed=15.5)
+
+    output = buf.getvalue()
+    assert "Study completed in 15.5s" in output
+
+
+def test_study_display_non_tty_plain_rows():
+    """Non-TTY mode prints plain text rows for each completed experiment."""
+    console, buf = _make_console()
+    display = StudyStepDisplay(total_experiments=2, console=console)
+    display.begin_experiment(1, "gpt2", "pytorch", "bf16", [])
+    display.end_experiment_ok(1, elapsed=30.0, energy_j=5.5, throughput_tok_s=25.0)
+    display.begin_experiment(2, "llama", "vllm", "bf16", [])
+    display.end_experiment_fail(2, elapsed=2.0, error="OOM")
+
+    output = buf.getvalue()
+    # Non-TTY rows contain the config and status
+    assert "OK" in output
+    assert "gpt2 / pytorch / bf16" in output
+    assert "FAIL" in output
+    assert "llama / vllm / bf16" in output
+    assert "OOM" in output
 
 
 # ---------------------------------------------------------------------------
