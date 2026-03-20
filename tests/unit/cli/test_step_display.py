@@ -159,6 +159,41 @@ def test_step_display_header_printed():
     assert "Experiment: gpt2 | pytorch | bf16" in output
 
 
+def test_step_display_finish_with_metrics():
+    """finish() prints energy and throughput on the completion line."""
+    console, buf = _make_console()
+    display = StepDisplay(console=console)
+    display.start()
+    display.finish(total_elapsed=42.0, energy_j=512.3, throughput_tok_s=123.4)
+
+    output = buf.getvalue()
+    assert "Completed in 42.0s" in output
+    assert "Energy: 512.3 J" in output
+    assert "Throughput: 123.4 tok/s" in output
+
+
+def test_step_display_finish_no_metrics():
+    """finish() without metrics only prints the elapsed line."""
+    console, buf = _make_console()
+    display = StepDisplay(console=console)
+    display.start()
+    display.finish(total_elapsed=10.0)
+
+    output = buf.getvalue()
+    assert "Completed in 10.0s" in output
+    assert "Energy:" not in output
+    assert "Throughput:" not in output
+
+
+def test_step_display_force_plain():
+    """force_plain=True disables Rich Live even if console is a TTY."""
+    buf = StringIO()
+    # force_terminal=True simulates TTY but force_plain should override Live
+    console = Console(file=buf, force_terminal=True, no_color=True)
+    display = StepDisplay(console=console, force_plain=True)
+    assert not display._is_tty  # force_plain overrides TTY detection
+
+
 def test_step_display_quiet_mode():
     """When progress=None (quiet mode), no display is created."""
     # Just verify the pattern works - pass None through the API

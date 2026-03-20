@@ -70,6 +70,57 @@ def _make_mock_config() -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
+# _build_header unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_header_strips_hf_org_prefix():
+    """_build_header strips the HuggingFace org prefix from model name."""
+    from llenergymeasure.cli.run import _build_header
+
+    config = _make_mock_config()
+    config.model = "meta-llama/Llama-3.2-1B-Instruct"
+    config.backend = "vllm"
+    config.precision = "bf16"
+    config.n = 100
+
+    header = _build_header(config, runner_tag="docker")
+    assert "Llama-3.2-1B-Instruct" in header
+    assert "meta-llama" not in header
+    assert "[docker]" in header
+
+
+def test_build_header_default_precision_omitted():
+    """_build_header omits precision when it is the default 'bf16'."""
+    from llenergymeasure.cli.run import _build_header
+
+    config = _make_mock_config()
+    config.model = "gpt2"
+    config.backend = "pytorch"
+    config.precision = "bf16"  # default — should not appear
+    config.n = 100
+
+    header = _build_header(config, runner_tag="local")
+    assert "bf16" not in header
+    assert header == "gpt2 | pytorch [local]"
+
+
+def test_build_header_nondefault_fields_shown():
+    """_build_header includes precision and n when non-default."""
+    from llenergymeasure.cli.run import _build_header
+
+    config = _make_mock_config()
+    config.model = "gpt2"
+    config.backend = "pytorch"
+    config.precision = "fp16"
+    config.n = 50
+
+    header = _build_header(config, runner_tag="local")
+    assert "fp16" in header
+    assert "n=50" in header
+
+
+# ---------------------------------------------------------------------------
 # Basic flag tests
 # ---------------------------------------------------------------------------
 
