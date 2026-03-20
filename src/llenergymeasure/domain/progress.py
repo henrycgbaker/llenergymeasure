@@ -6,6 +6,9 @@ violating the architectural layering rules.
 Steps are grouped into phases for hierarchical display (Docker BuildKit
 style). The display renders phase headers with indented sub-steps.
 Steps that don't apply are shown as SKIP with a fixed total count.
+
+The protocol also supports on_substep() for fine-grained sub-operation
+reporting within an active step (e.g. CUDA check, model access check).
 """
 
 from __future__ import annotations
@@ -25,6 +28,9 @@ class ProgressCallback(Protocol):
 
     Steps that don't apply in a given run are reported via on_step_skip()
     and rendered as SKIP in the display. This keeps a fixed [x/y] counter.
+
+    Sub-step granularity: on_substep() reports completed sub-operations
+    within an active step (e.g. "CUDA available", "model accessible").
 
     Implementors:
         - StepDisplay (cli/_step_display.py) -- Rich-based TTY rendering
@@ -69,6 +75,16 @@ class ProgressCallback(Protocol):
         Args:
             step: Step identifier from the fixed vocabulary.
             reason: Optional human-readable reason (e.g. "disabled", "cached").
+        """
+        ...
+
+    def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
+        """Signal a completed sub-operation within the active step.
+
+        Args:
+            step: Parent step identifier (must match most recent on_step_start).
+            text: Human-readable substep description (e.g. "CUDA available").
+            elapsed_sec: Wall-clock time for this substep (0.0 = instantaneous).
         """
         ...
 

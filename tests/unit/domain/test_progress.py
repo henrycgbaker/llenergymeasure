@@ -35,6 +35,9 @@ def test_protocol_is_runtime_checkable():
         def on_step_skip(self, step: str, reason: str = "") -> None:
             pass
 
+        def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
+            pass
+
     assert isinstance(Impl(), ProgressCallback)
 
 

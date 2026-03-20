@@ -246,6 +246,10 @@ class StepDisplay:
             self._print_skipped_step(step, label, reason)
         self._refresh()
 
+    def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
+        """Stub - full implementation in Plan 02."""
+        pass
+
     # -- Heartbeat (non-TTY only) --
 
     def _heartbeat_loop(self) -> None:
@@ -509,6 +513,10 @@ class StudyStepDisplay:
 
     def on_step_skip(self, step: str, reason: str = "") -> None:
         """No-op for study display (inner steps don't show SKIP)."""
+
+    def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
+        """Stub - full implementation in Plan 02/03."""
+        pass
 
     # -- Rendering --
 
