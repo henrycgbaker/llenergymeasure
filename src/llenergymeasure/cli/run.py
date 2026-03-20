@@ -409,22 +409,48 @@ def _run_study_impl(
         user_config = load_user_config()
         effective_mode = user_config.ui.progress_mode
 
-    # Pre-flight summary display
+    # Study header + pre-flight summary
     if effective_mode != "quiet":
+        n_exp = len(study_config.experiments)
+        n_cycles = study_config.execution.n_cycles
+        name = study_config.name or "unnamed"
+        print(f"Study: {name} | {n_exp} experiments | {n_cycles} cycles", file=sys.stderr)
+
         summary = format_preflight_summary(study_config)
         print(summary, file=sys.stderr)
         print(file=sys.stderr)
+
+    # Track elapsed time around the study run
+    import time as _time
+
+    _study_start = _time.monotonic()
 
     # Run the study — pass skip_preflight so CLI flag overrides YAML config
     from llenergymeasure import run_study
 
     result = run_study(study_config, skip_preflight=skip_preflight)
 
-    # Display summary
-    if effective_mode != "quiet":
-        print_study_summary(result)
+    _study_elapsed = _time.monotonic() - _study_start
 
-    # Show output path
-    if result.result_files:
-        first = result.result_files[0]
-        print(f"Study results: {first}", file=sys.stderr)
+    # Study completion summary table
+    if effective_mode != "quiet" and result.experiments:
+        from llenergymeasure.cli._step_display import StudyStepDisplay
+
+        study_display = StudyStepDisplay(
+            total_experiments=len(result.experiments),
+            study_name=study_config.name or "",
+            n_cycles=study_config.execution.n_cycles,
+        )
+        for i, exp in enumerate(result.experiments, 1):
+            study_display.end_experiment_ok(
+                i,
+                elapsed=exp.total_inference_time_sec,
+                energy_j=exp.total_energy_j if exp.total_energy_j > 0 else None,
+                throughput_tok_s=exp.avg_tokens_per_second
+                if exp.avg_tokens_per_second > 0
+                else None,
+            )
+        save_path = str(result.result_files[0]) if result.result_files else None
+        study_display.finish(save_path=save_path, total_elapsed=_study_elapsed)
+    elif effective_mode != "quiet":
+        print_study_summary(result)

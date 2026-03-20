@@ -280,7 +280,7 @@ def test_study_display_table_output():
 
 def test_study_display_substep_in_active_experiment():
     """on_substep() records substeps attached to the active inner step."""
-    console, buf = _make_console()
+    console, _buf = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
     display.begin_experiment(1, "gpt2", "pytorch", "bf16", ["measure"])
     display.on_step_start("measure", "Measuring", "100 prompts")
