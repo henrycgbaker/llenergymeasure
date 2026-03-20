@@ -39,14 +39,17 @@ def _format_elapsed(seconds: float) -> str:
 
 def _step_line(
     idx: int,
-    total: int,
+    total: int | None,
     label: str,
     detail: str,
     status: str,
     elapsed_str: str,
 ) -> str:
-    """Format a single step line."""
-    counter = f"[{idx}/{total}]"
+    """Format a single step line.
+
+    When total is None, the counter shows just ``[x]`` (no denominator).
+    """
+    counter = f"[{idx}/{total}]" if total is not None else f"[{idx}]"
     return f" {counter:>7s}  {label:<18s} {detail:<38s} {status:>4s}  {elapsed_str}"
 
 
@@ -72,6 +75,7 @@ class StepDisplay:
 
         # Step registration
         self._steps: list[str] = []
+        self._explicitly_registered: bool = False
 
         # State
         self._completed: list[tuple[str, str, str, float]] = []  # (step, label, detail, elapsed)
@@ -93,6 +97,7 @@ class StepDisplay:
         """Set the ordered list of step names for [x/y] counting."""
         with self._lock:
             self._steps = list(steps)
+            self._explicitly_registered = True
 
     def start(self) -> None:
         """Begin the display. Prints header and starts Rich Live if TTY."""
@@ -160,11 +165,23 @@ class StepDisplay:
         except ValueError:
             return len(self._completed) + (1 if self._active_step == step else 0)
 
+    def _get_total(self) -> int | None:
+        """Return the total step count, or None if steps are auto-registered.
+
+        TTY mode always returns a count (Live re-renders so lines stay consistent).
+        Non-TTY with auto-registered steps returns None (avoids [1/1] → [2/2] jitter).
+        """
+        if self._explicitly_registered:
+            return self.total_steps
+        if self._is_tty:
+            return self.total_steps or (len(self._completed) + (1 if self._active_step else 0))
+        return None
+
     def _render(self) -> Text:
         """Build current display state as a Rich Text renderable."""
         lines = Text()
         with self._lock:
-            total = self.total_steps or (len(self._completed) + (1 if self._active_step else 0))
+            total = self._get_total()
             for step, label, detail, elapsed in self._completed:
                 idx = self._step_index(step)
                 line = _step_line(idx, total, label, detail, "DONE", _format_elapsed(elapsed))
@@ -195,12 +212,14 @@ class StepDisplay:
     def _print_completed_line(self, step: str, elapsed_sec: float) -> None:
         """Print a single completed step line (non-TTY mode)."""
         with self._lock:
-            total = self.total_steps or len(self._completed)
+            total = self._get_total()
             idx = self._step_index(step)
-            label = STEP_LABELS.get(step, step)
+            # Use the actual label/detail from the completed step data (not STEP_LABELS)
+            label = step
             detail_text = ""
-            for s, _lbl, det, _el in self._completed:
+            for s, lbl, det, _el in self._completed:
                 if s == step:
+                    label = lbl
                     detail_text = det
                     break
         line = _step_line(idx, total, label, detail_text, "DONE", _format_elapsed(elapsed_sec))

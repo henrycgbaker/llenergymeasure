@@ -162,7 +162,7 @@ class DockerRunner:
 
             # --- Build and execute docker command ---
             if _p:
-                _p.on_step_start("container", "Starting", "container")
+                _p.on_step_start("container", "Running", f"experiment in {self.image}")
                 t0 = time.perf_counter()
 
             # Secrets are passed via a temp env-file (mode 0600) that is deleted after
@@ -173,8 +173,11 @@ class DockerRunner:
                 )
                 logger.debug("Running docker command: %s", _mask_secrets(str(cmd), secrets))
 
+                # Use Popen streaming when progress callback is provided, so that
+                # future container images with StreamProgressCallback can emit
+                # per-step events. For now, existing images produce no JSON lines
+                # and users see a single "Running" step with a spinner.
                 if _p:
-                    # Streaming mode: Popen + line-by-line stdout parsing
                     returncode, stderr_text = self._run_container_streaming(
                         cmd,
                         _p,
@@ -327,7 +330,9 @@ class DockerRunner:
         stderr_thread = threading.Thread(target=_read_stderr, args=(proc.stderr,), daemon=True)
         stderr_thread.start()
 
-        # Stream stdout line by line — parse progress events
+        # Stream stdout line by line — parse progress events from container.
+        # Container events update the wrapping "container" step's detail text
+        # rather than creating new top-level steps (avoids double-counting).
         assert proc.stdout is not None
         for line in proc.stdout:
             stripped = line.strip()
@@ -335,22 +340,14 @@ class DockerRunner:
                 try:
                     event = json.loads(stripped)
                     event_type = event.get("event")
+                    # Surface container's current activity as detail on the "container" step
                     if event_type == "step_start":
-                        progress.on_step_start(
-                            event.get("step", ""),
-                            event.get("description", ""),
-                            event.get("detail", ""),
-                        )
+                        desc = event.get("description", "")
+                        detail = event.get("detail", "")
+                        label = f"{desc}  {detail}".strip() if detail else desc
+                        progress.on_step_update("container", label)
                     elif event_type == "step_update":
-                        progress.on_step_update(
-                            event.get("step", ""),
-                            event.get("detail", ""),
-                        )
-                    elif event_type == "step_done":
-                        progress.on_step_done(
-                            event.get("step", ""),
-                            event.get("elapsed_sec", 0.0),
-                        )
+                        progress.on_step_update("container", event.get("detail", ""))
                 except (json.JSONDecodeError, KeyError):
                     logger.debug("Unparseable progress line: %s", stripped)
             else:

@@ -241,18 +241,15 @@ def _run_impl(
     # Build experiment header string
     header = _build_header(experiment_config)
 
-    # Determine expected steps for [x/y] counter
-    steps = ["preflight", "model", "warmup", "measure", "save"]
-    if hasattr(experiment_config, "baseline") and experiment_config.baseline.enabled:
-        steps.insert(1, "baseline")
-
-    # Create progress display (None in quiet mode)
+    # Create progress display (None in quiet mode).
+    # Steps are auto-registered as they fire — the display adapts to both
+    # local runs (preflight, model, warmup, measure, save) and Docker runs
+    # (pull, container) without the CLI needing to know the execution mode.
     progress = None
     if not quiet:
         from llenergymeasure.cli._step_display import StepDisplay
 
         display = StepDisplay(header=f"Experiment: {header}")
-        display.register_steps(steps)
         display.start()
         progress = display
 
