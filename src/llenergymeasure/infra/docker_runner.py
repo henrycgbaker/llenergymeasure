@@ -161,11 +161,12 @@ class DockerRunner:
             config_path.write_text(config.model_dump_json(), encoding="utf-8")
 
             # --- Build and execute docker command ---
+            t0_container: float | None = None
             if _p:
                 # Show short image tag (e.g. "pytorch:v0.9.0") not the full registry path
                 short_image = self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
-                _p.on_step_start("container", "Running", short_image)
-                t0 = time.perf_counter()
+                _p.on_step_start("container_start", "Starting", short_image)
+                t0_container = time.perf_counter()
 
             # Secrets are passed via a temp env-file (mode 0600) that is deleted after
             # the container exits — they never appear in the command argument list.
@@ -175,15 +176,15 @@ class DockerRunner:
                 )
                 logger.debug("Running docker command: %s", _mask_secrets(str(cmd), secrets))
 
-                # Use Popen streaming when progress callback is provided, so that
-                # future container images with StreamProgressCallback can emit
-                # per-step events. For now, existing images produce no JSON lines
-                # and users see a single "Running" step with a spinner.
+                # Use Popen streaming when progress callback is provided.
+                # Container inner events (baseline, model, warmup, measure, save)
+                # are forwarded as top-level steps for granular progress display.
                 if _p:
                     returncode, stderr_text = self._run_container_streaming(
                         cmd,
                         _p,
                         _mask_secrets_fn=lambda t: _mask_secrets(t, secrets),
+                        container_start_time=t0_container,
                     )
                 else:
                     # Classic mode: blocking subprocess.run (backward compatible)
@@ -214,15 +215,10 @@ class DockerRunner:
                     returncode,
                     exchange_dir,
                 )
-                if _p:
-                    _p.on_step_done("container", time.perf_counter() - t0)
                 error = translate_docker_error(returncode, stderr_text, self.image)
                 # Do NOT clean up — preserve for debugging
                 exchange_dir = None  # type: ignore[assignment]
                 raise error
-
-            if _p:
-                _p.on_step_done("container", time.perf_counter() - t0)
 
             # --- Read result ---
             result = self._read_result(exchange_dir, config_hash)
@@ -251,20 +247,34 @@ class DockerRunner:
     def _ensure_image(self, progress: Any = None) -> None:
         """Check if the Docker image exists locally; pull with visible output if not.
 
-        This prevents the silent hang that occurs when ``docker run`` implicitly
-        pulls a multi-GB image with all output captured.
+        Always emits an ``image_check`` step so the user sees the cache lookup.
+        If the image is not cached, emits a separate ``pull`` step.
         """
+        short_image = self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
+
+        if progress:
+            progress.on_step_start("image_check", "Inspecting", short_image)
+        t0 = time.perf_counter()
+
         check = subprocess.run(
             ["docker", "image", "inspect", self.image],
             capture_output=True,
             timeout=10,
         )
         if check.returncode == 0:
+            if progress:
+                progress.on_step_update("image_check", f"{short_image} (cached)")
+                progress.on_step_done("image_check", time.perf_counter() - t0)
+                progress.on_step_skip("pull", "cached")
             return
 
         if progress:
+            progress.on_step_done("image_check", time.perf_counter() - t0)
+
+        # Image not cached — pull it
+        if progress:
             progress.on_step_start("pull", "Pulling", self.image)
-        t0 = time.perf_counter()
+        t0_pull = time.perf_counter()
 
         print(f"Pulling image: {self.image}", file=sys.stderr)
         pull = subprocess.run(
@@ -275,7 +285,7 @@ class DockerRunner:
         )
         if pull.returncode != 0:
             if progress:
-                progress.on_step_done("pull", time.perf_counter() - t0)
+                progress.on_step_done("pull", time.perf_counter() - t0_pull)
             from llenergymeasure.infra.docker_errors import DockerImagePullError
 
             raise DockerImagePullError(
@@ -284,36 +294,76 @@ class DockerRunner:
             )
 
         if progress:
-            progress.on_step_done("pull", time.perf_counter() - t0)
+            progress.on_step_done("pull", time.perf_counter() - t0_pull)
 
     def _run_container_streaming(
         self,
         cmd: list[str],
         progress: Any = None,
         _mask_secrets_fn: Any = None,
+        container_start_time: float | None = None,
     ) -> tuple[int, str]:
         """Run container with Popen, streaming stdout for progress events.
 
-        When a progress callback is provided, lines starting with ``{"event":``
-        are parsed as JSON progress events and forwarded to the callback.
-        Other lines are logged as container output.
+        Container inner events (step_start, step_update, step_done) are
+        forwarded as top-level progress steps so the CLI can display each
+        measurement phase individually (Docker BuildKit-style granularity).
+
+        The ``container_start`` step (started by the caller) is ended when
+        the first inner event arrives, capturing the container boot time.
 
         Args:
             cmd: Docker command list.
             progress: Optional ProgressCallback.
             _mask_secrets_fn: Optional callable to mask secrets in log output.
+            container_start_time: perf_counter timestamp of container_start step.
 
         Returns:
             Tuple of (returncode, stderr_text).
         """
         stderr_lines: list[str] = []
+        # Keywords in container stderr that indicate meaningful activity.
+        # When no JSON progress events arrive (old images), surface these
+        # as on_step_update to show the container is alive and working.
+        _ACTIVITY_KEYWORDS = (
+            "loading",
+            "downloading",
+            "measuring",
+            "warmup",
+            "warming",
+            "inference",
+            "saving",
+            "running",
+            "model",
+            "tokenizer",
+        )
 
         def _read_stderr(pipe: Any) -> None:
-            """Read stderr in a background thread to prevent blocking."""
+            """Read stderr in a background thread to prevent blocking.
+
+            For old images that don't emit JSON progress events, surfaces
+            interesting log lines as step updates on container_start.
+            """
             for line in pipe:
                 stderr_lines.append(line)
-                logger.debug("container stderr: %s", line.rstrip())
+                stripped = line.strip()
+                logger.debug("container stderr: %s", stripped)
+                # Surface activity from old images as step updates
+                if (
+                    progress is not None
+                    and not container_start_done_flag[0]
+                    and stripped
+                    and any(kw in stripped.lower() for kw in _ACTIVITY_KEYWORDS)
+                ):
+                    # Truncate long log lines and strip log prefix (e.g. "INFO:root:")
+                    display_text = stripped
+                    if ":" in display_text and display_text.split(":")[0].isupper():
+                        display_text = display_text.split(":", 2)[-1].strip()
+                    progress.on_step_update("container_start", display_text[:50])
             pipe.close()
+
+        # Mutable flag shared with stderr thread to track if JSON events arrived
+        container_start_done_flag = [False]
 
         try:
             proc = subprocess.Popen(
@@ -332,9 +382,10 @@ class DockerRunner:
         stderr_thread = threading.Thread(target=_read_stderr, args=(proc.stderr,), daemon=True)
         stderr_thread.start()
 
-        # Stream stdout line by line — parse progress events from container.
-        # Container events update the wrapping "container" step's detail text
-        # rather than creating new top-level steps (avoids double-counting).
+        # Stream stdout line by line — forward inner events as top-level steps.
+        # The container's "preflight" step is translated to "container_preflight"
+        # to avoid collision with the host-level preflight.
+        container_start_done = False
         assert proc.stdout is not None
         for line in proc.stdout:
             stripped = line.strip()
@@ -342,14 +393,33 @@ class DockerRunner:
                 try:
                     event = json.loads(stripped)
                     event_type = event.get("event")
-                    # Surface container's current activity as detail on the "container" step
+                    step = event.get("step", "")
+
+                    # End "container_start" step on first inner event (boot time)
+                    if not container_start_done and container_start_time is not None:
+                        container_start_done = True
+                        container_start_done_flag[0] = True
+                        progress.on_step_done(
+                            "container_start", time.perf_counter() - container_start_time
+                        )
+
+                    # Translate container's "preflight" to avoid host collision
+                    if step == "preflight":
+                        step = "container_preflight"
+
+                    # Forward inner events as top-level steps
                     if event_type == "step_start":
-                        desc = event.get("description", "")
-                        detail = event.get("detail", "")
-                        label = f"{desc} {detail}".strip() if detail else desc
-                        progress.on_step_update("container", label)
+                        progress.on_step_start(
+                            step,
+                            event.get("description", ""),
+                            event.get("detail", ""),
+                        )
                     elif event_type == "step_update":
-                        progress.on_step_update("container", event.get("detail", ""))
+                        progress.on_step_update(step, event.get("detail", ""))
+                    elif event_type == "step_done":
+                        progress.on_step_done(step, event.get("elapsed_sec", 0.0))
+                    elif event_type == "step_skip":
+                        progress.on_step_skip(step, event.get("reason", ""))
                 except (json.JSONDecodeError, KeyError):
                     logger.debug("Unparseable progress line: %s", stripped)
             else:
@@ -359,6 +429,10 @@ class DockerRunner:
                     logger.debug("container stdout: %s", masked)
 
         proc.stdout.close()
+
+        # If no inner events arrived, end container_start now (old images)
+        if not container_start_done and container_start_time is not None and progress is not None:
+            progress.on_step_done("container_start", time.perf_counter() - container_start_time)
 
         # Wait for process to finish
         try:

@@ -366,11 +366,11 @@ def _run_in_process(
         from llenergymeasure.harness.preflight import run_preflight
 
         if progress:
-            progress.on_step_start("preflight", "Checking", "preflight, CUDA, model access")
+            progress.on_step_start("container_preflight", "Checking", "CUDA, model access")
         t0 = time.perf_counter()
         run_preflight(config)
         if progress:
-            progress.on_step_done("preflight", time.perf_counter() - t0)
+            progress.on_step_done("container_preflight", time.perf_counter() - t0)
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()

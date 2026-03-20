@@ -74,7 +74,7 @@ def _make_console() -> tuple[Console, StringIO]:
 
 
 def test_step_display_non_tty_prints_completed_lines():
-    """Non-TTY mode prints one line per completed step."""
+    """Non-TTY mode prints one line per completed step with phase headers."""
     console, buf = _make_console()
     display = StepDisplay(console=console)
     display.register_steps(["preflight", "model", "measure"])
@@ -92,9 +92,13 @@ def test_step_display_non_tty_prints_completed_lines():
     display.finish(total_elapsed=36.2)
 
     output = buf.getvalue()
-    assert "[1/3]" in output
-    assert "[2/3]" in output
-    assert "[3/3]" in output
+    # Phase headers
+    assert "Setup" in output
+    assert "Measurement" in output
+    # Per-phase step counters (preflight is in Setup [1/1], model+measure in Measurement [1/2] [2/2])
+    assert "[1/1]" in output  # preflight in Setup
+    assert "[1/2]" in output  # model in Measurement
+    assert "[2/2]" in output  # measure in Measurement
     assert "DONE" in output
     assert "Completed in 36.2s" in output
 

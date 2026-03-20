@@ -239,23 +239,20 @@ class MeasurementHarness:
         # 2. Baseline power measurement (BEFORE model load — CM-17, CM-20)
         baseline = None
         if config.baseline.enabled:
-            logger.debug("Measuring baseline power (%.0fs)...", config.baseline.duration_seconds)
+            dur = config.baseline.duration_seconds
+            logger.debug("Measuring baseline power (%.0fs)...", dur)
             if _p:
-                _p.on_step_start(
-                    "baseline",
-                    "Measuring baseline",
-                    f"{config.baseline.duration_seconds:.0f}s idle power",
-                )
+                _p.on_step_start("baseline", "Measuring", f"baseline idle power ({dur:.0f}s)")
                 t0 = time.perf_counter()
-            baseline = measure_baseline_power(
-                config.baseline.duration_seconds, gpu_indices=gpu_indices
-            )
+            baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
             if _p:
                 _p.on_step_done("baseline", time.perf_counter() - t0)
+        elif _p:
+            _p.on_step_skip("baseline", "disabled")
 
         # 3. Load model via backend plugin
         if _p:
-            _p.on_step_start("model", "Loading model", config.model)
+            _p.on_step_start("model", "Loading", f"model {config.model}")
             t0 = time.perf_counter()
         model = backend.load_model(config)
         if _p:
@@ -270,8 +267,13 @@ class MeasurementHarness:
         model_memory_mb = self._capture_model_memory_mb(gpu_indices=gpu_indices)
 
         # 4b. Load prompts — BEFORE measurement window (methodology fix)
+        if _p:
+            _p.on_step_start("prompts", "Loading", f"prompts ({config.n} {config.dataset})")
+            t0_prompts = time.perf_counter()
         prompts = load_prompts(config)
         logger.debug("Loaded %d prompts via dataset loader", len(prompts))
+        if _p:
+            _p.on_step_done("prompts", time.perf_counter() - t0_prompts)
 
         try:
             # 5. Warmup (CM-21, CM-24) — returns WarmupResult
@@ -294,9 +296,22 @@ class MeasurementHarness:
             # 6. Thermal floor (CM-22) — harness sets thermal_floor_wait_s on warmup_result
             wait_s = thermal_floor_wait(config)
             warmup_result.thermal_floor_wait_s = wait_s
+            if _p:
+                if wait_s > 0:
+                    _p.on_step_start("thermal_floor", "Waiting", f"thermal floor ({wait_s:.0f}s)")
+                    _p.on_step_done("thermal_floor", wait_s)
+                else:
+                    _p.on_step_skip("thermal_floor", "wait=0s")
 
             # 7. Select energy backend (CM-14)
+            if _p:
+                _p.on_step_start("energy_select", "Selecting", "energy backend")
+                t0_energy = time.perf_counter()
             energy_backend = select_energy_backend(config.energy.backend, gpu_indices=gpu_indices)
+            if _p:
+                backend_name = type(energy_backend).__name__ if energy_backend else "none"
+                _p.on_step_update("energy_select", f"energy backend ({backend_name})")
+                _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
 
             # 8. Start energy tracking (after warmup + thermal floor)
             energy_tracker = None
@@ -307,7 +322,7 @@ class MeasurementHarness:
             _cuda_sync()
 
             if _p:
-                _p.on_step_start("measure", "Measuring", f"{config.n} prompts")
+                _p.on_step_start("measure", "Measuring", f"inference ({config.n} prompts)")
             t_inference_start = time.perf_counter()  # Canonical timer start (H1)
             # 10. Record start time and run inference
             start_time = datetime.now()
@@ -336,7 +351,14 @@ class MeasurementHarness:
             end_time = datetime.now()
 
             # 13. FLOPs estimation (CM-26, CM-28 — warmup tokens excluded)
+            if _p:
+                _p.on_step_start("flops", "Estimating", "FLOPs (PaLM formula)")
+                t0_flops = time.perf_counter()
             flops_result = self._estimate_flops(backend, config, output)
+            if _p:
+                if flops_result is not None:
+                    _p.on_step_update("flops", f"FLOPs: {flops_result.value:.2e}")
+                _p.on_step_done("flops", time.perf_counter() - t0_flops)
 
         finally:
             # Always release model from memory even on exception
@@ -347,7 +369,7 @@ class MeasurementHarness:
             _p.on_step_start(
                 "save",
                 "Saving",
-                str(config.output_dir) if config.output_dir else "results",
+                f"results to {config.output_dir}" if config.output_dir else "results",
             )
             t0_save = time.perf_counter()
 

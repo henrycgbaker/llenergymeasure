@@ -1,11 +1,13 @@
 """Rich-based step display for CLI progress output.
 
 Implements the ProgressCallback protocol from domain/progress.py.
-Renders Docker-build-style numbered step output with per-step timing
-and a spinner heartbeat for long operations.
+Renders Docker-BuildKit-style hierarchical output with phase headers
+and numbered sub-steps. Uses fixed step counts with SKIP for
+inapplicable steps.
 
-TTY mode:    Rich Live for flicker-free in-place updates.
-Non-TTY:     One line per completed step, no spinner or animation.
+TTY mode:    Rich Live for flicker-free in-place updates + spinner.
+Non-TTY:     Phase headers + one line per completed/skipped step +
+             heartbeat every 10s for long-running steps.
 """
 
 from __future__ import annotations
@@ -18,10 +20,16 @@ from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 
-from llenergymeasure.domain.progress import STEP_LABELS
+from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_LABELS, STEP_PHASES
 
 # Braille spinner frames (same as Docker BuildKit / ora)
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+# Heartbeat interval for non-TTY mode (seconds)
+_HEARTBEAT_INTERVAL = 10.0
+
+# Minimum step duration before heartbeat kicks in (seconds)
+_HEARTBEAT_THRESHOLD = 5.0
 
 
 def _format_elapsed(seconds: float) -> str:
@@ -48,16 +56,28 @@ def _step_line(
     """Format a single step line.
 
     When total is None, the counter shows just ``[x]`` (no denominator).
-    Detail is truncated to 38 chars to prevent line wrapping on 80-col terminals.
+    Detail is truncated to 34 chars to prevent line wrapping on 80-col terminals.
     """
     counter = f"[{idx}/{total}]" if total is not None else f"[{idx}]"
-    if len(detail) > 38:
-        detail = detail[:35] + "..."
-    return f" {counter:>7s}  {label:<18s} {detail:<38s} {status:>4s}  {elapsed_str}"
+    if len(detail) > 34:
+        detail = detail[:31] + "..."
+    return f"   {counter:>7s}  {label:<16s} {detail:<34s} {status:>4s}  {elapsed_str}"
+
+
+def _phase_for_step(step: str) -> str:
+    """Look up the phase for a step name, defaulting to Measurement."""
+    return STEP_PHASES.get(step, PHASE_MEASUREMENT)
 
 
 class StepDisplay:
-    """Rich-based step display for single experiment progress.
+    """Rich-based step display with hierarchical phase grouping.
+
+    Steps are automatically grouped into phases (Setup, Measurement)
+    based on the STEP_PHASES mapping. Phase headers are rendered before
+    their first sub-step.
+
+    When steps are pre-registered via register_steps(), a fixed [x/y]
+    counter is shown. Steps that don't apply are shown as SKIP.
 
     Thread-safe: harness calls on_step_start/update/done from a worker
     thread while Rich Live refreshes from its own thread.
@@ -65,7 +85,7 @@ class StepDisplay:
     Usage::
 
         display = StepDisplay(header="Experiment: gpt2 | pytorch | bf16")
-        display.register_steps(["preflight", "model", "warmup", "measure", "save"])
+        display.register_steps(STEPS_DOCKER)
         display.start()
         # ... pass display as ProgressCallback to harness ...
         display.finish()
@@ -76,12 +96,17 @@ class StepDisplay:
         self._header = header
         self._lock = threading.Lock()
 
-        # Step registration
-        self._steps: list[str] = []
+        # Phase tracking: ordered list of phases seen, steps per phase
+        self._phases: list[str] = []
+        self._phase_steps: dict[str, list[str]] = {}
         self._explicitly_registered: bool = False
 
-        # State
-        self._completed: list[tuple[str, str, str, float]] = []  # (step, label, detail, elapsed)
+        # Step state: done, skipped, or active
+        self._step_data: dict[str, tuple[str, str, float]] = {}  # step -> (label, detail, elapsed)
+        self._completed_steps: set[str] = set()
+        self._skipped_steps: set[str] = set()
+
+        # Active step
         self._active_step: str | None = None
         self._active_label: str = ""
         self._active_detail: str = ""
@@ -92,22 +117,39 @@ class StepDisplay:
         self._is_tty = self._console.is_terminal
         self._total_start: float = 0.0
 
+        # Non-TTY: track which phases have been printed
+        self._printed_phases: set[str] = set()
+
+        # Heartbeat thread (non-TTY only)
+        self._heartbeat_thread: threading.Thread | None = None
+        self._heartbeat_stop = threading.Event()
+
     @property
     def total_steps(self) -> int:
-        return len(self._steps)
+        return sum(len(steps) for steps in self._phase_steps.values())
 
     def register_steps(self, steps: list[str]) -> None:
-        """Set the ordered list of step names for [x/y] counting."""
+        """Pre-register steps for fixed [x/y] counting.
+
+        When registered, the counter denominator is fixed from the start.
+        Steps not started by the end are shown as SKIP.
+        """
         with self._lock:
-            self._steps = list(steps)
             self._explicitly_registered = True
+            for step in steps:
+                phase = _phase_for_step(step)
+                if phase not in self._phases:
+                    self._phases.append(phase)
+                if phase not in self._phase_steps:
+                    self._phase_steps[phase] = []
+                if step not in self._phase_steps[phase]:
+                    self._phase_steps[phase].append(step)
 
     def start(self) -> None:
         """Begin the display. Prints header and starts Rich Live if TTY."""
         self._total_start = time.monotonic()
         if self._header:
             self._console.print(self._header, highlight=False)
-            self._console.print()
         if self._is_tty:
             self._live = Live(
                 self._render(),
@@ -116,9 +158,18 @@ class StepDisplay:
                 transient=False,
             )
             self._live.start()
+        else:
+            # Start heartbeat thread for non-TTY mode
+            self._heartbeat_stop.clear()
+            self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+            self._heartbeat_thread.start()
 
     def stop(self) -> None:
-        """Stop Rich Live if running."""
+        """Stop Rich Live and heartbeat thread."""
+        self._heartbeat_stop.set()
+        if self._heartbeat_thread is not None:
+            self._heartbeat_thread.join(timeout=2)
+            self._heartbeat_thread = None
         if self._live is not None:
             self._live.stop()
             self._live = None
@@ -134,76 +185,168 @@ class StepDisplay:
 
     def on_step_start(self, step: str, description: str, detail: str = "") -> None:
         with self._lock:
-            # Auto-register unknown steps so the counter stays accurate
-            if step not in self._steps:
-                self._steps.append(step)
+            phase = _phase_for_step(step)
+            if phase not in self._phases:
+                self._phases.append(phase)
+            if phase not in self._phase_steps:
+                self._phase_steps[phase] = []
+            if step not in self._phase_steps[phase]:
+                self._phase_steps[phase].append(step)
+
             self._active_step = step
             self._active_label = description or STEP_LABELS.get(step, step)
             self._active_detail = detail
             self._active_start = time.monotonic()
+
+        if not self._is_tty:
+            self._print_phase_header_if_new(phase)
         self._refresh()
 
     def on_step_update(self, step: str, detail: str) -> None:
+        elapsed = 0.0
         with self._lock:
             if self._active_step == step:
                 self._active_detail = detail
+                elapsed = time.monotonic() - self._active_start
+        if not self._is_tty and elapsed >= 1.0:
+            # Only print updates in non-TTY for steps running > 1s
+            # (avoids noisy duplicate lines for fast sub-second steps)
+            self._print_update_line(step, detail)
         self._refresh()
 
     def on_step_done(self, step: str, elapsed_sec: float) -> None:
         with self._lock:
-            self._completed.append((step, self._active_label, self._active_detail, elapsed_sec))
+            label = self._active_label if self._active_step == step else STEP_LABELS.get(step, step)
+            detail = self._active_detail if self._active_step == step else ""
+            self._step_data[step] = (label, detail, elapsed_sec)
+            self._completed_steps.add(step)
             if self._active_step == step:
                 self._active_step = None
         if not self._is_tty:
-            # Non-TTY: print completed line immediately
-            self._print_completed_line(step, elapsed_sec)
+            self._print_completed_step(step, label, detail, elapsed_sec)
         self._refresh()
+
+    def on_step_skip(self, step: str, reason: str = "") -> None:
+        with self._lock:
+            phase = _phase_for_step(step)
+            if phase not in self._phases:
+                self._phases.append(phase)
+            if phase not in self._phase_steps:
+                self._phase_steps[phase] = []
+            if step not in self._phase_steps[phase]:
+                self._phase_steps[phase].append(step)
+
+            label = STEP_LABELS.get(step, step)
+            # Store reason as detail, keep label as the verb
+            self._step_data[step] = (label, reason or "-", 0.0)
+            self._skipped_steps.add(step)
+
+        if not self._is_tty:
+            self._print_phase_header_if_new(phase)
+            self._print_skipped_step(step, label, reason)
+        self._refresh()
+
+    # -- Heartbeat (non-TTY only) --
+
+    def _heartbeat_loop(self) -> None:
+        """Print periodic status for long-running steps (non-TTY mode)."""
+        while not self._heartbeat_stop.wait(timeout=_HEARTBEAT_INTERVAL):
+            with self._lock:
+                if self._active_step is not None:
+                    elapsed = time.monotonic() - self._active_start
+                    if elapsed >= _HEARTBEAT_THRESHOLD:
+                        phase = _phase_for_step(self._active_step)
+                        idx = self._step_index_in_phase(self._active_step, phase)
+                        total = self._phase_total(phase)
+                        line = _step_line(
+                            idx,
+                            total,
+                            self._active_label,
+                            self._active_detail,
+                            " ...",
+                            _format_elapsed(elapsed),
+                        )
+                        self._console.print(line, highlight=False)
 
     # -- Rendering --
 
-    def _step_index(self, step: str) -> int:
-        """1-based index of step in registered list, or append position."""
+    def _step_index_in_phase(self, step: str, phase: str) -> int:
+        """1-based index of step within its phase."""
+        steps = self._phase_steps.get(phase, [])
         try:
-            return self._steps.index(step) + 1
+            return steps.index(step) + 1
         except ValueError:
-            return len(self._completed) + (1 if self._active_step == step else 0)
+            return len(steps)
 
-    def _get_total(self) -> int | None:
-        """Return the total step count, or None if steps are auto-registered.
+    def _phase_total(self, phase: str) -> int | None:
+        """Total step count for a phase.
 
-        TTY mode always returns a count (Live re-renders so lines stay consistent).
-        Non-TTY with auto-registered steps returns None (avoids [1/1] → [2/2] jitter).
+        Returns None in non-TTY mode when steps are auto-registered,
+        to avoid misleading [1/1] -> [2/2] jitter as new steps arrive.
+        TTY mode always returns a count (Live re-renders all lines).
         """
-        if self._explicitly_registered:
-            return self.total_steps
-        if self._is_tty:
-            return self.total_steps or (len(self._completed) + (1 if self._active_step else 0))
+        if self._explicitly_registered or self._is_tty:
+            return len(self._phase_steps.get(phase, []))
         return None
 
     def _render(self) -> Text:
-        """Build current display state as a Rich Text renderable."""
+        """Build current display state as a Rich Text renderable.
+
+        Docker BuildKit-style: only show steps that have started, completed,
+        or been skipped. Pending steps are NOT shown — they appear progressively
+        as the harness reaches them. This gives a growing output that shows
+        exactly where execution is.
+        """
         lines = Text()
         with self._lock:
-            total = self._get_total()
-            for step, label, detail, elapsed in self._completed:
-                idx = self._step_index(step)
-                line = _step_line(idx, total, label, detail, "DONE", _format_elapsed(elapsed))
-                lines.append(line + "\n")
+            for phase in self._phases:
+                steps = self._phase_steps.get(phase, [])
+                if not steps:
+                    continue
 
-            if self._active_step is not None:
-                idx = self._step_index(self._active_step)
-                elapsed = time.monotonic() - self._active_start
-                frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
-                spinner = _SPINNER_FRAMES[frame_idx]
-                line = _step_line(
-                    idx,
-                    total,
-                    self._active_label,
-                    self._active_detail,
-                    spinner,
-                    _format_elapsed(elapsed),
+                phase_total = len(steps)
+
+                # Only show phase header if at least one step in this phase
+                # has been started, completed, or skipped
+                has_visible = any(
+                    step in self._completed_steps
+                    or step in self._skipped_steps
+                    or step == self._active_step
+                    for step in steps
                 )
-                lines.append(line)
+                if not has_visible:
+                    continue
+
+                lines.append(f"\n  {phase}\n")
+
+                for step in steps:
+                    idx = self._step_index_in_phase(step, phase)
+
+                    if step in self._completed_steps:
+                        label, detail, elapsed = self._step_data[step]
+                        line = _step_line(
+                            idx, phase_total, label, detail, "DONE", _format_elapsed(elapsed)
+                        )
+                        lines.append(line + "\n")
+                    elif step in self._skipped_steps:
+                        label, reason, _ = self._step_data[step]
+                        line = _step_line(idx, phase_total, label, reason, "SKIP", "")
+                        lines.append(line + "\n")
+                    elif step == self._active_step:
+                        elapsed = time.monotonic() - self._active_start
+                        frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
+                        spinner = _SPINNER_FRAMES[frame_idx]
+                        line = _step_line(
+                            idx,
+                            phase_total,
+                            self._active_label,
+                            self._active_detail,
+                            spinner,
+                            _format_elapsed(elapsed),
+                        )
+                        lines.append(line + "\n")
+                    # Pending steps: NOT shown (Docker BuildKit-style progressive output)
+
         return lines
 
     def _refresh(self) -> None:
@@ -212,20 +355,39 @@ class StepDisplay:
             with contextlib.suppress(Exception):
                 self._live.update(self._render())
 
-    def _print_completed_line(self, step: str, elapsed_sec: float) -> None:
-        """Print a single completed step line (non-TTY mode)."""
+    def _print_phase_header_if_new(self, phase: str) -> None:
+        """Print phase header in non-TTY mode (once per phase)."""
+        if phase not in self._printed_phases:
+            self._printed_phases.add(phase)
+            self._console.print(f"\n  {phase}", highlight=False)
+
+    def _print_update_line(self, step: str, detail: str) -> None:
+        """Print a step_update line in non-TTY mode (sub-step detail)."""
+        phase = _phase_for_step(step)
         with self._lock:
-            total = self._get_total()
-            idx = self._step_index(step)
-            # Use the actual label/detail from the completed step data (not STEP_LABELS)
-            label = step
-            detail_text = ""
-            for s, lbl, det, _el in self._completed:
-                if s == step:
-                    label = lbl
-                    detail_text = det
-                    break
-        line = _step_line(idx, total, label, detail_text, "DONE", _format_elapsed(elapsed_sec))
+            idx = self._step_index_in_phase(step, phase)
+            total = self._phase_total(phase)
+            label = self._active_label if self._active_step == step else STEP_LABELS.get(step, step)
+            elapsed = time.monotonic() - self._active_start if self._active_step == step else 0.0
+        line = _step_line(idx, total, label, detail, " ...", _format_elapsed(elapsed))
+        self._console.print(line, highlight=False)
+
+    def _print_completed_step(self, step: str, label: str, detail: str, elapsed_sec: float) -> None:
+        """Print a single completed step line (non-TTY mode)."""
+        phase = _phase_for_step(step)
+        with self._lock:
+            phase_total = self._phase_total(phase)
+            idx = self._step_index_in_phase(step, phase)
+        line = _step_line(idx, phase_total, label, detail, "DONE", _format_elapsed(elapsed_sec))
+        self._console.print(line, highlight=False)
+
+    def _print_skipped_step(self, step: str, label: str, reason: str) -> None:
+        """Print a skipped step line (non-TTY mode)."""
+        phase = _phase_for_step(step)
+        with self._lock:
+            phase_total = self._phase_total(phase)
+            idx = self._step_index_in_phase(step, phase)
+        line = _step_line(idx, phase_total, label, reason or "-", "SKIP", "")
         self._console.print(line, highlight=False)
 
 
@@ -345,16 +507,17 @@ class StudyStepDisplay:
             self._print_inner_line(step, elapsed_sec)
         self._refresh()
 
+    def on_step_skip(self, step: str, reason: str = "") -> None:
+        """No-op for study display (inner steps don't show SKIP)."""
+
     # -- Rendering --
 
     def _render(self) -> Text:
         lines = Text()
         with self._lock:
-            # Completed experiments
             for cline in self._completed_lines:
                 lines.append(cline + "\n")
 
-            # Active experiment header
             if self._active_header:
                 lines.append(f" [{self._active_index:>2d}/{self._total}]  {self._active_header}\n")
 
@@ -362,7 +525,6 @@ class StudyStepDisplay:
                     len(self._inner_completed) + (1 if self._inner_active else 0)
                 )
 
-                # Inner completed steps
                 for i, (_step, label, detail, elapsed) in enumerate(self._inner_completed):
                     idx = i + 1
                     inner_line = _step_line(
@@ -370,7 +532,6 @@ class StudyStepDisplay:
                     )
                     lines.append(f"         {inner_line}\n")
 
-                # Inner active step
                 if self._inner_active:
                     _step, label, detail, start = self._inner_active
                     idx = len(self._inner_completed) + 1

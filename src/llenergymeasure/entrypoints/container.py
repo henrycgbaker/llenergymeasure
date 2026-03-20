@@ -78,6 +78,15 @@ class StreamProgressCallback:
             }
         )
 
+    def on_step_skip(self, step: str, reason: str = "") -> None:
+        _write_progress_line(
+            {
+                "event": "step_skip",
+                "step": step,
+                "reason": reason,
+            }
+        )
+
 
 def _write_progress_line(event: dict) -> None:
     """Write a JSON progress line to stdout and flush immediately."""
