@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, overload
 
 if TYPE_CHECKING:
-    pass
+    from llenergymeasure.domain.progress import ProgressCallback
 
 # ---------------------------------------------------------------------------
 # GPU index resolution
@@ -55,6 +55,7 @@ def run_experiment(
     n: int = 100,
     dataset: str = "aienergyscore",
     skip_preflight: bool = False,
+    progress: ProgressCallback | None = None,
     **kwargs: Any,
 ) -> ExperimentResult:
     """Run a single LLM inference efficiency experiment.
@@ -73,6 +74,7 @@ def run_experiment(
         n: Number of prompts (kwargs form only, default 100).
         dataset: Dataset name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
+        progress: Optional callback for step-by-step progress reporting.
         **kwargs: Additional ExperimentConfig fields (kwargs form only).
 
     Returns:
@@ -83,7 +85,7 @@ def run_experiment(
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     study = _to_study_config(config, model=model, backend=backend, n=n, dataset=dataset, **kwargs)
-    study_result = _run(study, skip_preflight=skip_preflight)
+    study_result = _run(study, skip_preflight=skip_preflight, progress=progress)
     if not study_result.experiments:
         from llenergymeasure.utils.exceptions import ExperimentError
 
@@ -170,7 +172,11 @@ def _to_study_config(
     return StudyConfig(experiments=[experiment])
 
 
-def _run(study: StudyConfig, skip_preflight: bool = False) -> StudyResult:
+def _run(
+    study: StudyConfig,
+    skip_preflight: bool = False,
+    progress: ProgressCallback | None = None,
+) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
     Always:
@@ -232,7 +238,7 @@ def _run(study: StudyConfig, skip_preflight: bool = False) -> StudyResult:
 
     if is_single:
         result_files, experiment_results, warnings = _run_in_process(
-            study, manifest, study_dir, runner_specs=runner_specs
+            study, manifest, study_dir, runner_specs=runner_specs, progress=progress
         )
     else:
         result_files, experiment_results, warnings = _run_via_runner(
@@ -286,6 +292,7 @@ def _run_in_process(
     manifest: Any,
     study_dir: Path,
     runner_specs: Any = None,
+    progress: ProgressCallback | None = None,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Run a single experiment in-process or via DockerRunner directly.
 
@@ -330,7 +337,7 @@ def _run_in_process(
             extra_mounts=spec.extra_mounts,
         )
         try:
-            result = docker_runner.run(config)
+            result = docker_runner.run(config, progress=progress)
         except DockerError as exc:
             # Convert to failure dict — manifest marks failed, study continues
             error_payload: dict[str, Any] = {
@@ -344,15 +351,23 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
+        import time as _time
+
         from llenergymeasure.backends import get_backend
         from llenergymeasure.harness import MeasurementHarness
         from llenergymeasure.harness.preflight import run_preflight
 
+        if progress:
+            progress.on_step_start("preflight", "Checking", "preflight, CUDA, model access")
+        t0 = _time.perf_counter()
         run_preflight(config)
+        if progress:
+            progress.on_step_done("preflight", _time.perf_counter() - t0)
+
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
         gpu_indices = _resolve_gpu_indices(config)
-        result = harness.run(backend, config, gpu_indices=gpu_indices)
+        result = harness.run(backend, config, gpu_indices=gpu_indices, progress=progress)
 
     # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
     if isinstance(result, dict) and "type" in result:

@@ -38,6 +38,17 @@ def _make_proc(returncode: int = 0, stdout: str = "", stderr: str = "") -> Magic
     return proc
 
 
+def _subprocess_run_with_image_cached(*run_results: MagicMock):
+    """Create a subprocess.run side_effect that handles _ensure_image's inspect call.
+
+    The first subprocess.run call is always ``docker image inspect`` from
+    ``_ensure_image`` — returns exit 0 (image cached). Subsequent calls
+    return the provided results in order.
+    """
+    results = iter([_make_proc(0), *run_results])  # image inspect → 0, then user results
+    return lambda *a, **k: next(results)
+
+
 # ---------------------------------------------------------------------------
 # Test 1: Success path
 # ---------------------------------------------------------------------------
@@ -57,7 +68,10 @@ class TestSuccessPath:
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", return_value=_make_proc(0)),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
         ):
             # Write a valid result JSON before runner reads it
@@ -87,7 +101,10 @@ class TestSuccessPath:
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", return_value=_make_proc(0)),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
             from llenergymeasure.domain.experiment import compute_measurement_config_hash
@@ -167,6 +184,15 @@ class TestOOMError:
         exchange_dir = tmp_path / "llem-oom"
         exchange_dir.mkdir()
 
+        # First subprocess.run call is _ensure_image (docker image inspect) → return 0 (cached).
+        # Second call is the actual docker run → return 137 (OOM).
+        calls = iter(
+            [
+                _make_proc(0),  # docker image inspect — image cached
+                _make_proc(137, stderr="OOM killer invoked: killed by container OOM"),
+            ]
+        )
+
         with (
             patch(
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
@@ -174,7 +200,7 @@ class TestOOMError:
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",
-                return_value=_make_proc(137, stderr="OOM killer invoked: killed by container OOM"),
+                side_effect=lambda *a, **k: next(calls),
             ),
         ):
             runner = DockerRunner(image=IMAGE)
@@ -194,6 +220,20 @@ class TestTimeout:
         exchange_dir = tmp_path / "llem-timeout"
         exchange_dir.mkdir()
 
+        # First call is image inspect (return 0), second is docker run (timeout)
+        results = iter(
+            [
+                _make_proc(0),  # docker image inspect
+                None,  # sentinel: raise TimeoutExpired
+            ]
+        )
+
+        def fake_run(*a, **k):
+            r = next(results)
+            if r is None:
+                raise subprocess.TimeoutExpired(cmd=["docker", "run"], timeout=30)
+            return r
+
         with (
             patch(
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
@@ -201,7 +241,7 @@ class TestTimeout:
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",
-                side_effect=subprocess.TimeoutExpired(cmd=["docker", "run"], timeout=30),
+                side_effect=fake_run,
             ),
         ):
             runner = DockerRunner(image=IMAGE, timeout=30)
@@ -228,9 +268,11 @@ class TestPermissionError:
             ),
             patch(
                 "llenergymeasure.infra.docker_runner.subprocess.run",
-                return_value=_make_proc(
-                    1,
-                    stderr="Got permission denied while trying to connect to the Docker daemon socket",
+                side_effect=_subprocess_run_with_image_cached(
+                    _make_proc(
+                        1,
+                        stderr="Got permission denied while trying to connect to the Docker daemon socket",
+                    )
                 ),
             ),
         ):
@@ -325,6 +367,9 @@ class TestDockerCommandStructure:
         captured_cmds: list[list[str]] = []
 
         def fake_run(cmd, **kwargs):
+            # Skip the _ensure_image "docker image inspect" call
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return _make_proc(0)
             captured_cmds.append(cmd)
             return _make_proc(1, stderr="No such image")  # fail fast
 
@@ -380,6 +425,9 @@ class TestHFTokenPropagation:
         captured_cmds: list[list[str]] = []
 
         def fake_run(cmd, **kwargs):
+            # Skip the _ensure_image "docker image inspect" call
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return _make_proc(0)
             captured_cmds.append(cmd)
             return _make_proc(1, stderr="No such image")
 
@@ -411,6 +459,9 @@ class TestHFTokenPropagation:
         captured_cmds: list[list[str]] = []
 
         def fake_run(cmd, **kwargs):
+            # Skip the _ensure_image "docker image inspect" call
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return _make_proc(0)
             captured_cmds.append(cmd)
             return _make_proc(1, stderr="No such image")
 
@@ -448,7 +499,10 @@ class TestRunnerMetadata:
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", return_value=_make_proc(0)),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
             from llenergymeasure.domain.experiment import compute_measurement_config_hash
@@ -477,7 +531,10 @@ class TestRunnerMetadata:
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", return_value=_make_proc(0)),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
             from llenergymeasure.domain.experiment import compute_measurement_config_hash
@@ -515,7 +572,10 @@ class TestCleanupWarning:
                 "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
                 return_value=str(exchange_dir),
             ),
-            patch("llenergymeasure.infra.docker_runner.subprocess.run", return_value=_make_proc(0)),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
             patch(
                 "llenergymeasure.infra.docker_runner.shutil.rmtree",
                 side_effect=PermissionError("permission denied"),
@@ -554,6 +614,9 @@ class TestHFTokenSecure:
         captured_cmds: list[list[str]] = []
 
         def fake_run(cmd, **kwargs):
+            # Skip the _ensure_image "docker image inspect" call
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return _make_proc(0)
             captured_cmds.append(cmd)
             return _make_proc(1, stderr="No such image")
 
@@ -601,6 +664,9 @@ class TestHFTokenSecure:
         captured_cmds: list[list[str]] = []
 
         def fake_run(cmd, **kwargs):
+            # Skip the _ensure_image "docker image inspect" call
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return _make_proc(0)
             captured_cmds.append(cmd)
             return _make_proc(1, stderr="No such image")
 
@@ -669,6 +735,9 @@ class TestMpirunInjection:
         captured_cmds: list[list[str]] = []
 
         def fake_run(cmd, **kwargs):
+            # Skip the _ensure_image "docker image inspect" call
+            if cmd[:3] == ["docker", "image", "inspect"]:
+                return _make_proc(0)
             captured_cmds.append(cmd)
             return _make_proc(1, stderr="No such image")
 

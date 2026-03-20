@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from llenergymeasure.device.power_thermal import PowerThermalSample
     from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.metrics import FlopsResult
+    from llenergymeasure.domain.progress import ProgressCallback
     from llenergymeasure.energy import EnergySampler
     from llenergymeasure.harness.baseline import BaselineCache
 
@@ -206,6 +207,7 @@ class MeasurementHarness:
         config: ExperimentConfig,
         snapshot: EnvironmentSnapshot | None = None,
         gpu_indices: list[int] | None = None,
+        progress: ProgressCallback | None = None,
     ) -> ExperimentResult:
         """Run a complete measurement using the given backend plugin.
 
@@ -216,6 +218,8 @@ class MeasurementHarness:
                       When None, collected in a background thread during model load.
             gpu_indices: GPU device indices to monitor for energy/thermal measurement.
                          Defaults to [0] (single GPU, backward compatible) when None.
+            progress: Optional callback for step-by-step progress reporting.
+                      When None, no progress events are emitted (backward compatible).
 
         Returns:
             ExperimentResult with all measurement fields populated.
@@ -224,6 +228,8 @@ class MeasurementHarness:
             BackendError: If model loading or inference fails.
             PreFlightError: If pre-flight checks fail before GPU allocation.
         """
+        _p = progress  # short alias
+
         # 1. Environment snapshot — start background thread (BEFORE model loading — CM-32)
         snapshot_future: Future[EnvironmentSnapshot] | None = None
         if snapshot is None:
@@ -234,12 +240,26 @@ class MeasurementHarness:
         baseline = None
         if config.baseline.enabled:
             logger.debug("Measuring baseline power (%.0fs)...", config.baseline.duration_seconds)
+            if _p:
+                _p.on_step_start(
+                    "baseline",
+                    "Measuring baseline",
+                    f"{config.baseline.duration_seconds:.0f}s idle power",
+                )
+                t0 = time.perf_counter()
             baseline = measure_baseline_power(
                 config.baseline.duration_seconds, gpu_indices=gpu_indices
             )
+            if _p:
+                _p.on_step_done("baseline", time.perf_counter() - t0)
 
         # 3. Load model via backend plugin
+        if _p:
+            _p.on_step_start("model", "Loading model", config.model)
+            t0 = time.perf_counter()
         model = backend.load_model(config)
+        if _p:
+            _p.on_step_done("model", time.perf_counter() - t0)
 
         # 3b. Join snapshot future — collection hidden behind model loading
         if snapshot_future is not None:
@@ -255,7 +275,21 @@ class MeasurementHarness:
 
         try:
             # 5. Warmup (CM-21, CM-24) — returns WarmupResult
+            if _p:
+                _p.on_step_start(
+                    "warmup", "Warming up", f"up to {config.warmup.max_prompts} prompts"
+                )
+                t0_warmup = time.perf_counter()
             warmup_result = backend.warmup(config, model, prompts)
+            if _p:
+                cv_info = ""
+                if warmup_result.final_cv > 0:
+                    cv_info = f"  CV={warmup_result.final_cv:.1%}"
+                _p.on_step_update(
+                    "warmup",
+                    f"{warmup_result.iterations_completed}/{config.warmup.max_prompts} prompts{cv_info}",
+                )
+                _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
 
             # 6. Thermal floor (CM-22) — harness sets thermal_floor_wait_s on warmup_result
             wait_s = thermal_floor_wait(config)
@@ -272,6 +306,8 @@ class MeasurementHarness:
             # 9. CUDA sync BEFORE inference (CM-15 — Zeus best practice)
             _cuda_sync()
 
+            if _p:
+                _p.on_step_start("measure", "Measuring", f"{config.n} prompts")
             t_inference_start = time.perf_counter()  # Canonical timer start (H1)
             # 10. Record start time and run inference
             start_time = datetime.now()
@@ -281,6 +317,8 @@ class MeasurementHarness:
                 output = backend.run_inference(config, model, prompts)
 
             t_inference_end = time.perf_counter()  # Canonical timer end (H1)
+            if _p:
+                _p.on_step_done("measure", t_inference_end - t_inference_start)
 
             thermal_info = sampler.get_thermal_throttle_info()
             timeseries_samples = sampler.get_samples()
@@ -305,6 +343,14 @@ class MeasurementHarness:
             backend.cleanup(model)
 
         # 14. Write timeseries Parquet sidecar (if output_dir set — CM-16)
+        if _p:
+            _p.on_step_start(
+                "save",
+                "Saving",
+                str(config.output_dir) if config.output_dir else "results",
+            )
+            t0_save = time.perf_counter()
+
         timeseries_path: str | None = None
         if config.output_dir is not None and timeseries_samples:
             ts_file = write_timeseries_parquet(
@@ -318,7 +364,7 @@ class MeasurementHarness:
         measurement_warnings = self._collect_warnings(duration_sec, timeseries_samples, gpu_indices)
 
         # 16. Assemble ExperimentResult
-        return self._build_result(
+        result = self._build_result(
             backend_name=backend.name,
             config=config,
             output=output,
@@ -335,6 +381,11 @@ class MeasurementHarness:
             measurement_warnings=measurement_warnings,
             warmup_result=warmup_result,
         )
+
+        if _p:
+            _p.on_step_done("save", time.perf_counter() - t0_save)
+
+        return result
 
     # -------------------------------------------------------------------------
     # Private helpers

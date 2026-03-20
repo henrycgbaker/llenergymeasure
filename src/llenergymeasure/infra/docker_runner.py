@@ -20,7 +20,10 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -111,11 +114,17 @@ class DockerRunner:
     # Public API
     # ------------------------------------------------------------------
 
-    def run(self, config: Any) -> Any:
+    def run(self, config: Any, progress: Any = None) -> Any:
         """Run an experiment inside an ephemeral Docker container.
+
+        When a progress callback is provided, streams container stdout line by
+        line and forwards JSON progress events to the callback. Lines starting
+        with ``{"event":`` are parsed as progress events; other lines are
+        forwarded as container log output (visible at -v).
 
         Args:
             config: ExperimentConfig to dispatch.
+            progress: Optional ProgressCallback for step-by-step progress reporting.
 
         Returns:
             ExperimentResult on success, or a dict error payload if the container
@@ -141,48 +150,74 @@ class DockerRunner:
         if hf_token:
             secrets["HF_TOKEN"] = hf_token
 
+        _p = progress  # short alias
+
         try:
+            # --- Ensure image is available (pull with visible output if needed) ---
+            self._ensure_image(progress=_p)
+
             # --- Write config JSON ---
             config_path = exchange_dir / f"{config_hash}_config.json"
             config_path.write_text(config.model_dump_json(), encoding="utf-8")
 
             # --- Build and execute docker command ---
+            if _p:
+                _p.on_step_start("container", "Starting", "container")
+                t0 = time.perf_counter()
+
             # Secrets are passed via a temp env-file (mode 0600) that is deleted after
-            # subprocess.run completes — they never appear in the command argument list.
+            # the container exits — they never appear in the command argument list.
             with _env_file(secrets) as env_path:
                 cmd = self._build_docker_cmd(
                     config, config_hash, str(exchange_dir), env_path=env_path
                 )
                 logger.debug("Running docker command: %s", _mask_secrets(str(cmd), secrets))
-                try:
-                    proc = subprocess.run(
+
+                if _p:
+                    # Streaming mode: Popen + line-by-line stdout parsing
+                    returncode, stderr_text = self._run_container_streaming(
                         cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=self.timeout,
+                        _p,
+                        _mask_secrets_fn=lambda t: _mask_secrets(t, secrets),
                     )
-                except subprocess.TimeoutExpired as exc:
-                    logger.debug(
-                        "Docker container timed out after %ss. Debug artifacts at %s",
-                        self.timeout,
-                        exchange_dir,
-                    )
-                    raise DockerTimeoutError(
-                        message=f"Container timed out after {self.timeout}s.",
-                        fix_suggestion="Increase timeout or reduce experiment size.",
-                    ) from exc
+                else:
+                    # Classic mode: blocking subprocess.run (backward compatible)
+                    try:
+                        proc = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=self.timeout,
+                        )
+                    except subprocess.TimeoutExpired as exc:
+                        logger.debug(
+                            "Docker container timed out after %ss. Debug artifacts at %s",
+                            self.timeout,
+                            exchange_dir,
+                        )
+                        raise DockerTimeoutError(
+                            message=f"Container timed out after {self.timeout}s.",
+                            fix_suggestion="Increase timeout or reduce experiment size.",
+                        ) from exc
+                    returncode = proc.returncode
+                    stderr_text = proc.stderr
 
             # --- Handle non-zero exit ---
-            if proc.returncode != 0:
+            if returncode != 0:
                 logger.debug(
                     "Container failed (exit %d). Debug artifacts at %s",
-                    proc.returncode,
+                    returncode,
                     exchange_dir,
                 )
-                error = translate_docker_error(proc.returncode, proc.stderr, self.image)
+                if _p:
+                    _p.on_step_done("container", time.perf_counter() - t0)
+                error = translate_docker_error(returncode, stderr_text, self.image)
                 # Do NOT clean up — preserve for debugging
                 exchange_dir = None  # type: ignore[assignment]
                 raise error
+
+            if _p:
+                _p.on_step_done("container", time.perf_counter() - t0)
 
             # --- Read result ---
             result = self._read_result(exchange_dir, config_hash)
@@ -207,6 +242,140 @@ class DockerRunner:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _ensure_image(self, progress: Any = None) -> None:
+        """Check if the Docker image exists locally; pull with visible output if not.
+
+        This prevents the silent hang that occurs when ``docker run`` implicitly
+        pulls a multi-GB image with all output captured.
+        """
+        check = subprocess.run(
+            ["docker", "image", "inspect", self.image],
+            capture_output=True,
+            timeout=10,
+        )
+        if check.returncode == 0:
+            return
+
+        if progress:
+            progress.on_step_start("pull", "Pulling", self.image)
+        t0 = time.perf_counter()
+
+        print(f"Pulling image: {self.image}", file=sys.stderr)
+        pull = subprocess.run(
+            ["docker", "pull", self.image],
+            stdout=sys.stderr,
+            stderr=sys.stderr,
+            timeout=self.timeout,
+        )
+        if pull.returncode != 0:
+            if progress:
+                progress.on_step_done("pull", time.perf_counter() - t0)
+            from llenergymeasure.infra.docker_errors import DockerImagePullError
+
+            raise DockerImagePullError(
+                message=f"Image not found or could not be pulled: {self.image}",
+                fix_suggestion=f"docker pull {self.image}",
+            )
+
+        if progress:
+            progress.on_step_done("pull", time.perf_counter() - t0)
+
+    def _run_container_streaming(
+        self,
+        cmd: list[str],
+        progress: Any = None,
+        _mask_secrets_fn: Any = None,
+    ) -> tuple[int, str]:
+        """Run container with Popen, streaming stdout for progress events.
+
+        When a progress callback is provided, lines starting with ``{"event":``
+        are parsed as JSON progress events and forwarded to the callback.
+        Other lines are logged as container output.
+
+        Args:
+            cmd: Docker command list.
+            progress: Optional ProgressCallback.
+            _mask_secrets_fn: Optional callable to mask secrets in log output.
+
+        Returns:
+            Tuple of (returncode, stderr_text).
+        """
+        stderr_lines: list[str] = []
+
+        def _read_stderr(pipe: Any) -> None:
+            """Read stderr in a background thread to prevent blocking."""
+            for line in pipe:
+                stderr_lines.append(line)
+                logger.debug("container stderr: %s", line.rstrip())
+            pipe.close()
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except OSError as exc:
+            raise DockerContainerError(
+                message=f"Failed to start docker process: {exc}",
+                fix_suggestion="Is Docker installed and running?",
+            ) from exc
+
+        # Read stderr in background thread to avoid deadlock
+        stderr_thread = threading.Thread(target=_read_stderr, args=(proc.stderr,), daemon=True)
+        stderr_thread.start()
+
+        # Stream stdout line by line — parse progress events
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            stripped = line.strip()
+            if stripped.startswith('{"event":') and progress is not None:
+                try:
+                    event = json.loads(stripped)
+                    event_type = event.get("event")
+                    if event_type == "step_start":
+                        progress.on_step_start(
+                            event.get("step", ""),
+                            event.get("description", ""),
+                            event.get("detail", ""),
+                        )
+                    elif event_type == "step_update":
+                        progress.on_step_update(
+                            event.get("step", ""),
+                            event.get("detail", ""),
+                        )
+                    elif event_type == "step_done":
+                        progress.on_step_done(
+                            event.get("step", ""),
+                            event.get("elapsed_sec", 0.0),
+                        )
+                except (json.JSONDecodeError, KeyError):
+                    logger.debug("Unparseable progress line: %s", stripped)
+            else:
+                # Non-progress line — log as container output
+                if stripped:
+                    masked = _mask_secrets_fn(stripped) if _mask_secrets_fn else stripped
+                    logger.debug("container stdout: %s", masked)
+
+        proc.stdout.close()
+
+        # Wait for process to finish
+        try:
+            proc.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired as exc:
+            proc.kill()
+            proc.wait()
+            raise DockerTimeoutError(
+                message=f"Container timed out after {self.timeout}s.",
+                fix_suggestion="Increase timeout or reduce experiment size.",
+            ) from exc
+
+        stderr_thread.join(timeout=5)
+        stderr_text = "".join(stderr_lines)
+
+        return proc.returncode, stderr_text
 
     def _build_docker_cmd(
         self,

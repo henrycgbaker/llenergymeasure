@@ -9,14 +9,12 @@ from typing import Annotated, Any
 
 import typer
 from pydantic import ValidationError
-from tqdm.auto import tqdm
 
 from llenergymeasure.api import run_experiment
 from llenergymeasure.cli._display import (
     format_error,
     format_validation_error,
     print_dry_run,
-    print_experiment_header,
     print_result_summary,
 )
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
@@ -240,16 +238,29 @@ def _run_impl(
         return
 
     # --- Run branch ---
-    print_experiment_header(experiment_config)
+    # Build experiment header string
+    header = _build_header(experiment_config)
 
-    with tqdm(
-        total=None,
-        desc="Measuring",
-        file=sys.stderr,
-        disable=quiet or not sys.stderr.isatty(),
-    ) as pbar:
-        result = run_experiment(experiment_config, skip_preflight=skip_preflight)
-        pbar.set_description("Done")
+    # Determine expected steps for [x/y] counter
+    steps = ["preflight", "model", "warmup", "measure", "save"]
+    if hasattr(experiment_config, "baseline") and experiment_config.baseline.enabled:
+        steps.insert(1, "baseline")
+
+    # Create progress display (None in quiet mode)
+    progress = None
+    if not quiet:
+        from llenergymeasure.cli._step_display import StepDisplay
+
+        display = StepDisplay(header=f"Experiment: {header}")
+        display.register_steps(steps)
+        display.start()
+        progress = display
+
+    try:
+        result = run_experiment(experiment_config, skip_preflight=skip_preflight, progress=progress)
+    finally:
+        if progress is not None:
+            display.finish()
 
     print_result_summary(result)
 
@@ -264,6 +275,14 @@ def _run_impl(
         if ts_source is not None:
             ts_source.unlink(missing_ok=True)
         print(f"Saved: {experiment_config.output_dir}", file=sys.stderr)
+
+
+def _build_header(config: Any) -> str:
+    """Build a compact experiment header string from config."""
+    parts = [config.model, config.backend, config.precision]
+    if config.n != 100:
+        parts.append(f"n={config.n}")
+    return " | ".join(parts)
 
 
 # ---------------------------------------------------------------------------
