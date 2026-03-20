@@ -91,7 +91,9 @@ class StepDisplay:
         display.finish()
     """
 
-    def __init__(self, header: str = "", console: Console | None = None) -> None:
+    def __init__(
+        self, header: str = "", console: Console | None = None, force_plain: bool = False
+    ) -> None:
         self._console = console or Console(stderr=True)
         self._header = header
         self._lock = threading.Lock()
@@ -112,9 +114,9 @@ class StepDisplay:
         self._active_detail: str = ""
         self._active_start: float = 0.0
 
-        # Rich Live (TTY only)
+        # Rich Live (TTY only); force_plain disables Live mode even in a TTY
         self._live: Live | None = None
-        self._is_tty = self._console.is_terminal
+        self._is_tty = self._console.is_terminal and not force_plain
         self._total_start: float = 0.0
 
         # Non-TTY: track which phases have been printed
@@ -174,12 +176,25 @@ class StepDisplay:
             self._live.stop()
             self._live = None
 
-    def finish(self, total_elapsed: float | None = None) -> None:
-        """Print completion footer and stop the live display."""
+    def finish(
+        self,
+        total_elapsed: float | None = None,
+        energy_j: float | None = None,
+        throughput_tok_s: float | None = None,
+    ) -> None:
+        """Print completion footer with optional key metrics."""
         self.stop()
         if total_elapsed is None:
             total_elapsed = time.monotonic() - self._total_start
         self._console.print(f"\nCompleted in {_format_elapsed(total_elapsed)}", highlight=False)
+        # Key metrics line (Energy + Throughput)
+        metrics_parts = []
+        if energy_j is not None and energy_j > 0:
+            metrics_parts.append(f"Energy: {energy_j:.1f} J")
+        if throughput_tok_s is not None and throughput_tok_s > 0:
+            metrics_parts.append(f"Throughput: {throughput_tok_s:.1f} tok/s")
+        if metrics_parts:
+            self._console.print("  ".join(metrics_parts), highlight=False)
 
     # -- ProgressCallback implementation --
 
@@ -402,10 +417,12 @@ class StudyStepDisplay:
     nested inner step progress. Completed experiments collapse to a summary line.
     """
 
-    def __init__(self, total_experiments: int, console: Console | None = None) -> None:
+    def __init__(
+        self, total_experiments: int, console: Console | None = None, force_plain: bool = False
+    ) -> None:
         self._console = console or Console(stderr=True)
         self._total = total_experiments
-        self._is_tty = self._console.is_terminal
+        self._is_tty = self._console.is_terminal and not force_plain
         self._lock = threading.Lock()
 
         # Completed experiment summaries

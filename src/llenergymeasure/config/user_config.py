@@ -91,6 +91,10 @@ class UserUIConfig(BaseModel):
 
     log_level: Literal["WARNING", "INFO", "DEBUG"] = Field(default="WARNING")
     prompt: bool = Field(default=True, description="Enable interactive prompts (False for CI/HPC)")
+    progress_mode: Literal["auto", "plain", "quiet"] = Field(
+        default="auto",
+        description="Progress output mode: auto=Rich Live TTY, plain=sequential print, quiet=silent",
+    )
 
 
 class UserAdvancedConfig(BaseModel):

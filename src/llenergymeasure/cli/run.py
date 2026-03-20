@@ -239,28 +239,50 @@ def _run_impl(
 
     # --- Run branch ---
     # Build experiment header string
-    header = _build_header(experiment_config)
+    runner_tag = _resolve_runner_tag(experiment_config)
+    header = _build_header(experiment_config, runner_tag=runner_tag)
+
+    # Resolve progress mode: CLI flags > user config > default
+    # -q forces quiet, -v forces plain, otherwise use user config
+    if quiet:
+        effective_mode = "quiet"
+    elif verbose:
+        effective_mode = "plain"
+    else:
+        from llenergymeasure.config.user_config import load_user_config
+
+        user_config = load_user_config()
+        effective_mode = user_config.ui.progress_mode
 
     # Create progress display (None in quiet mode).
     # Steps are pre-registered with a fixed count so [x/y] counters are
     # stable. Steps that don't apply are shown as SKIP.
     progress = None
-    if not quiet:
+    display = None
+    if effective_mode != "quiet":
         from llenergymeasure.cli._step_display import StepDisplay
         from llenergymeasure.domain.progress import STEPS_DOCKER
 
-        display = StepDisplay(header=f"Experiment: {header}")
+        display = StepDisplay(
+            header=f"Experiment: {header}",
+            force_plain=effective_mode == "plain",
+        )
         # Pre-register: Docker path is the common case (auto-elevation).
         # Local path is rare (only when runner explicitly set to local).
         display.register_steps(STEPS_DOCKER)
         display.start()
         progress = display
 
+    result = None
     try:
         result = run_experiment(experiment_config, skip_preflight=skip_preflight, progress=progress)
     finally:
-        if progress is not None:
-            display.finish()
+        if display is not None:
+            energy = getattr(result, "total_energy_j", None) if result is not None else None
+            throughput = (
+                getattr(result, "avg_tokens_per_second", None) if result is not None else None
+            )
+            display.finish(energy_j=energy, throughput_tok_s=throughput)
 
     print_result_summary(result)
 
@@ -277,12 +299,39 @@ def _run_impl(
         print(f"Saved: {experiment_config.output_dir}", file=sys.stderr)
 
 
-def _build_header(config: Any) -> str:
-    """Build a compact experiment header string from config."""
-    parts = [config.model, config.backend, config.precision]
+def _resolve_runner_tag(config: Any) -> str:
+    """Determine the runner tag string for display from config.runner.
+
+    Returns "local" or "docker" based on the runner field.
+    """
+    runner = getattr(config, "runner", "auto")
+    if runner == "local":
+        return "local"
+    if runner == "docker" or (isinstance(runner, str) and runner.startswith("docker:")):
+        return "docker"
+    # auto: pytorch defaults to local, vllm/tensorrt default to docker
+    backend = getattr(config, "backend", "pytorch")
+    return "local" if backend == "pytorch" else "docker"
+
+
+def _build_header(config: Any, runner_tag: str = "local") -> str:
+    """Build compact experiment header: model | backend [runner] + deviation fields.
+
+    Args:
+        config: ExperimentConfig with model, backend, precision, n, dataset fields.
+        runner_tag: Runner tag string ("local" or "docker").
+    """
+    # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
+    model = config.model.split("/")[-1] if "/" in config.model else config.model
+    parts = [f"{model} | {config.backend}"]
+    # Deviation fields (only when non-default)
+    if config.precision != "bf16":
+        parts.append(config.precision)
     if config.n != 100:
         parts.append(f"n={config.n}")
-    return " | ".join(parts)
+    if getattr(config, "dataset", "aienergyscore") != "aienergyscore":
+        parts.append(config.dataset)
+    return f"{' | '.join(parts)} [{runner_tag}]"
 
 
 # ---------------------------------------------------------------------------
@@ -349,8 +398,19 @@ def _run_study_impl(
         print_study_dry_run(study_config, verbose=verbose)
         return
 
+    # Resolve progress mode: CLI flags > user config > default
+    if quiet:
+        effective_mode = "quiet"
+    elif verbose:
+        effective_mode = "plain"
+    else:
+        from llenergymeasure.config.user_config import load_user_config
+
+        user_config = load_user_config()
+        effective_mode = user_config.ui.progress_mode
+
     # Pre-flight summary display
-    if not quiet:
+    if effective_mode != "quiet":
         summary = format_preflight_summary(study_config)
         print(summary, file=sys.stderr)
         print(file=sys.stderr)
@@ -361,7 +421,7 @@ def _run_study_impl(
     result = run_study(study_config, skip_preflight=skip_preflight)
 
     # Display summary
-    if not quiet:
+    if effective_mode != "quiet":
         print_study_summary(result)
 
     # Show output path
