@@ -48,8 +48,11 @@ def _step_line(
     """Format a single step line.
 
     When total is None, the counter shows just ``[x]`` (no denominator).
+    Detail is truncated to 38 chars to prevent line wrapping on 80-col terminals.
     """
     counter = f"[{idx}/{total}]" if total is not None else f"[{idx}]"
+    if len(detail) > 38:
+        detail = detail[:35] + "..."
     return f" {counter:>7s}  {label:<18s} {detail:<38s} {status:>4s}  {elapsed_str}"
 
 

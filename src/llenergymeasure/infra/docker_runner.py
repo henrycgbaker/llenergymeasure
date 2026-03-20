@@ -162,7 +162,9 @@ class DockerRunner:
 
             # --- Build and execute docker command ---
             if _p:
-                _p.on_step_start("container", "Running", f"experiment in {self.image}")
+                # Show short image tag (e.g. "pytorch:v0.9.0") not the full registry path
+                short_image = self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
+                _p.on_step_start("container", "Running", short_image)
                 t0 = time.perf_counter()
 
             # Secrets are passed via a temp env-file (mode 0600) that is deleted after
@@ -344,7 +346,7 @@ class DockerRunner:
                     if event_type == "step_start":
                         desc = event.get("description", "")
                         detail = event.get("detail", "")
-                        label = f"{desc}  {detail}".strip() if detail else desc
+                        label = f"{desc} {detail}".strip() if detail else desc
                         progress.on_step_update("container", label)
                     elif event_type == "step_update":
                         progress.on_step_update("container", event.get("detail", ""))

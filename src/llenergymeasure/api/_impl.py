@@ -207,12 +207,22 @@ def _run(
     # Multi-backend guard — raises PreFlightError for multi-backend studies (CM-10)
     # or auto-elevates to Docker when available (DOCK-05). Also runs Docker pre-flight
     # checks when any backend resolves to a Docker runner.
-    run_study_preflight(
-        study,
-        skip_preflight=skip_preflight,
-        yaml_runners=study.runners,
-        user_config=user_config.runners,
-    )
+    if progress:
+        progress.on_step_start("preflight", "Checking", "environment and Docker")
+        t0_pf = time.perf_counter()
+    try:
+        run_study_preflight(
+            study,
+            skip_preflight=skip_preflight,
+            yaml_runners=study.runners,
+            user_config=user_config.runners,
+        )
+    except Exception:
+        if progress:
+            progress.on_step_done("preflight", time.perf_counter() - t0_pf)
+        raise
+    if progress:
+        progress.on_step_done("preflight", time.perf_counter() - t0_pf)
 
     # Resolve runner specs for all backends in the study
     runner_specs = resolve_study_runners(
@@ -351,18 +361,16 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
-        import time as _time
-
         from llenergymeasure.backends import get_backend
         from llenergymeasure.harness import MeasurementHarness
         from llenergymeasure.harness.preflight import run_preflight
 
         if progress:
             progress.on_step_start("preflight", "Checking", "preflight, CUDA, model access")
-        t0 = _time.perf_counter()
+        t0 = time.perf_counter()
         run_preflight(config)
         if progress:
-            progress.on_step_done("preflight", _time.perf_counter() - t0)
+            progress.on_step_done("preflight", time.perf_counter() - t0)
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
