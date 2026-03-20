@@ -230,6 +230,11 @@ class MeasurementHarness:
         """
         _p = progress  # short alias
 
+        def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
+            """Emit a substep event if callback supports it (backward-compatible)."""
+            if _p and hasattr(_p, "on_substep"):
+                _p.on_substep(step, text, elapsed)
+
         # 1. Environment snapshot — start background thread (BEFORE model loading — CM-32)
         snapshot_future: Future[EnvironmentSnapshot] | None = None
         if snapshot is None:
@@ -247,6 +252,11 @@ class MeasurementHarness:
             baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
             if _p:
                 _p.on_step_done("baseline", time.perf_counter() - t0)
+            if baseline is not None:
+                _substep(
+                    "baseline",
+                    f"baseline: {baseline.mean_power_w:.1f}W (σ={baseline.std_power_w:.2f})",
+                )
         elif _p:
             _p.on_step_skip("baseline", "disabled")
 
@@ -265,6 +275,8 @@ class MeasurementHarness:
         # 4. Capture model memory baseline immediately after model load.
         # Must happen BEFORE warmup, which allocates KV cache.
         model_memory_mb = self._capture_model_memory_mb(gpu_indices=gpu_indices)
+        if model_memory_mb > 0:
+            _substep("model", f"model memory: {model_memory_mb:.0f}MB")
 
         # 4b. Load prompts — BEFORE measurement window (methodology fix)
         if _p:
@@ -274,6 +286,7 @@ class MeasurementHarness:
         logger.debug("Loaded %d prompts via dataset loader", len(prompts))
         if _p:
             _p.on_step_done("prompts", time.perf_counter() - t0_prompts)
+        _substep("prompts", f"tokenised {len(prompts)} prompts")
 
         try:
             # 5. Warmup (CM-21, CM-24) — returns WarmupResult
@@ -312,6 +325,8 @@ class MeasurementHarness:
                 backend_name = type(energy_backend).__name__ if energy_backend else "none"
                 _p.on_step_update("energy_select", f"energy backend ({backend_name})")
                 _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
+            energy_backend_name = type(energy_backend).__name__ if energy_backend else "none"
+            _substep("energy_select", f"selected: {energy_backend_name}")
 
             # 8. Start energy tracking (after warmup + thermal floor)
             energy_tracker = None
@@ -320,9 +335,12 @@ class MeasurementHarness:
 
             # 9. CUDA sync BEFORE inference (CM-15 — Zeus best practice)
             _cuda_sync()
+            _substep("measure", "CUDA sync (pre)")
 
             if _p:
                 _p.on_step_start("measure", "Measuring", f"inference ({config.n} prompts)")
+            _substep("measure", "energy tracker started")
+
             t_inference_start = time.perf_counter()  # Canonical timer start (H1)
             # 10. Record start time and run inference
             start_time = datetime.now()
@@ -332,14 +350,16 @@ class MeasurementHarness:
                 output = backend.run_inference(config, model, prompts)
 
             t_inference_end = time.perf_counter()  # Canonical timer end (H1)
+
+            # 11. CUDA sync AFTER inference, before stopping energy (CM-15)
+            _cuda_sync()
+            _substep("measure", "CUDA sync (post)")
+
             if _p:
                 _p.on_step_done("measure", t_inference_end - t_inference_start)
 
             thermal_info = sampler.get_thermal_throttle_info()
             timeseries_samples = sampler.get_samples()
-
-            # 11. CUDA sync AFTER inference, before stopping energy (CM-15)
-            _cuda_sync()
 
             # Harness sets canonical inference timer (H1) — overrides backend's elapsed_time_sec
             output.inference_time_sec = t_inference_end - t_inference_start
@@ -359,6 +379,8 @@ class MeasurementHarness:
                 if flops_result is not None:
                     _p.on_step_update("flops", f"FLOPs: {flops_result.value:.2e}")
                 _p.on_step_done("flops", time.perf_counter() - t0_flops)
+            if flops_result is not None:
+                _substep("flops", f"FLOPs: {flops_result.value:.2e}")
 
         finally:
             # Always release model from memory even on exception
@@ -380,6 +402,7 @@ class MeasurementHarness:
                 Path(config.output_dir) / "timeseries.parquet",
             )
             timeseries_path = ts_file.name  # relative name in result JSON
+            _substep("save", "timeseries parquet written")
 
         # 15. Collect measurement quality warnings (CM-25 implied)
         duration_sec = (end_time - start_time).total_seconds()
@@ -403,6 +426,7 @@ class MeasurementHarness:
             measurement_warnings=measurement_warnings,
             warmup_result=warmup_result,
         )
+        _substep("save", "result assembled")
 
         if _p:
             _p.on_step_done("save", time.perf_counter() - t0_save)
