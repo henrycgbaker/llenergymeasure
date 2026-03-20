@@ -61,7 +61,7 @@ jobs:
           enable-cache: true
           cache-suffix: test-${{ matrix.python-version }}
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus --extra webhooks
+      - run: uv sync --dev --extra pytorch --extra codecarbon --extra zeus
       - name: Unit + integration tests
         run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
       - name: Upload coverage to Codecov
