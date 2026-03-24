@@ -11,6 +11,7 @@ warmup_until_converged(), model.generate() inference loop, and cleanup.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from llenergymeasure.backends.protocol import InferenceOutput
@@ -39,16 +40,26 @@ class PyTorchBackend:
     # BackendPlugin: load_model
     # -------------------------------------------------------------------------
 
-    def load_model(self, config: ExperimentConfig) -> tuple[Any, Any]:
+    def load_model(
+        self,
+        config: ExperimentConfig,
+        on_substep: Callable[[str, float], None] | None = None,
+    ) -> tuple[Any, Any]:
         """Load model and tokenizer directly — no intermediate loader class.
 
         The P0 fix: kwargs are built by _model_load_kwargs() and passed
         directly to from_pretrained(). The v1.x bug was that _build_model_kwargs()
         built the dict but loader.load(config) ignored it.
 
+        Args:
+            config: Experiment configuration.
+            on_substep: Optional callback ``(text, elapsed_sec)`` for substep visibility.
+
         Returns:
             Tuple of (model, tokenizer).
         """
+        import time as _time
+
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         kwargs = self._model_load_kwargs(config)
@@ -58,12 +69,19 @@ class PyTorchBackend:
         trust = True
         if config.pytorch is not None and config.pytorch.trust_remote_code is not None:
             trust = config.pytorch.trust_remote_code
+
+        t0 = _time.perf_counter()
         tokenizer = AutoTokenizer.from_pretrained(config.model, trust_remote_code=trust)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
+        if on_substep is not None:
+            on_substep("tokenizer loaded", _time.perf_counter() - t0)
 
+        t0 = _time.perf_counter()
         model = AutoModelForCausalLM.from_pretrained(config.model, **kwargs)
         model.eval()
+        if on_substep is not None:
+            on_substep("model weights loaded", _time.perf_counter() - t0)
 
         # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
         if config.pytorch is not None and config.pytorch.torch_compile:
@@ -72,8 +90,11 @@ class PyTorchBackend:
             mode = config.pytorch.torch_compile_mode or "default"
             backend = config.pytorch.torch_compile_backend or "inductor"
             try:
+                t0 = _time.perf_counter()
                 model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
                 logger.debug("torch.compile applied (mode=%s, backend=%s)", mode, backend)
+                if on_substep is not None:
+                    on_substep(f"torch.compile ({mode})", _time.perf_counter() - t0)
             except Exception as e:
                 logger.warning("torch.compile failed (non-fatal, continuing without): %s", e)
 

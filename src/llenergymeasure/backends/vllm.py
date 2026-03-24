@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time as _time
+from collections.abc import Callable
 from typing import Any
 
 from llenergymeasure.backends.protocol import InferenceOutput
@@ -45,13 +47,18 @@ class VLLMBackend:
     # BackendPlugin: load_model
     # -------------------------------------------------------------------------
 
-    def load_model(self, config: ExperimentConfig) -> tuple[Any, Any]:
+    def load_model(
+        self,
+        config: ExperimentConfig,
+        on_substep: Callable[[str, float], None] | None = None,
+    ) -> tuple[Any, Any]:
         """Load model via vllm.LLM() and build SamplingParams.
 
         All vLLM imports are lazy so this module can be imported without vLLM.
 
         Args:
             config: Experiment configuration.
+            on_substep: Optional callback ``(text, elapsed_sec)`` for substep visibility.
 
         Returns:
             Tuple of (llm, sampling_params).
@@ -71,7 +78,10 @@ class VLLMBackend:
         )
 
         try:
+            t0 = _time.perf_counter()
             llm = LLM(**kwargs)
+            if on_substep is not None:
+                on_substep("vLLM engine loaded", _time.perf_counter() - t0)
         except Exception as e:
             raise BackendError(f"vLLM model loading failed: {e}") from e
 
@@ -82,6 +92,8 @@ class VLLMBackend:
             sampling_params = self._build_beam_search_params(config, config.vllm.beam_search)
         else:
             sampling_params = self._build_sampling_params(config, SamplingParams)
+        if on_substep is not None:
+            on_substep("sampling params built", 0.0)
         return llm, sampling_params
 
     # -------------------------------------------------------------------------

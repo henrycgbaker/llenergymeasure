@@ -37,7 +37,7 @@ class FakeBackend:
     def name(self) -> str:
         return self.backend_name
 
-    def load_model(self, config: Any) -> dict:
+    def load_model(self, config: Any, **kwargs: Any) -> dict:
         self.call_log.append("load_model")
         return {"model": "fake_model_object"}
 

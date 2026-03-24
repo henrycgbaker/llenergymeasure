@@ -9,14 +9,12 @@ from typing import Annotated, Any
 
 import typer
 from pydantic import ValidationError
-from tqdm.auto import tqdm
 
 from llenergymeasure.api import run_experiment
 from llenergymeasure.cli._display import (
     format_error,
     format_validation_error,
     print_dry_run,
-    print_experiment_header,
     print_result_summary,
 )
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
@@ -240,16 +238,41 @@ def _run_impl(
         return
 
     # --- Run branch ---
-    print_experiment_header(experiment_config)
+    # Build experiment header string
+    runner_tag = _resolve_runner_tag(experiment_config)
+    header = _build_header(experiment_config, runner_tag=runner_tag)
 
-    with tqdm(
-        total=None,
-        desc="Measuring",
-        file=sys.stderr,
-        disable=quiet or not sys.stderr.isatty(),
-    ) as pbar:
-        result = run_experiment(experiment_config, skip_preflight=skip_preflight)
-        pbar.set_description("Done")
+    effective_mode = _resolve_progress_mode(quiet, verbose)
+
+    # Create progress display (None in quiet mode).
+    # Steps are pre-registered with a fixed count so [x/y] counters are
+    # stable. Steps that don't apply are shown as SKIP.
+    progress = None
+    display = None
+    if effective_mode != "quiet":
+        from llenergymeasure.cli._step_display import StepDisplay
+        from llenergymeasure.domain.progress import STEPS_DOCKER
+
+        display = StepDisplay(
+            header=f"Experiment: {header}",
+            force_plain=effective_mode == "plain",
+        )
+        # Pre-register: Docker path is the common case (auto-elevation).
+        # Local path is rare (only when runner explicitly set to local).
+        display.register_steps(STEPS_DOCKER)
+        display.start()
+        progress = display
+
+    result = None
+    try:
+        result = run_experiment(experiment_config, skip_preflight=skip_preflight, progress=progress)
+    finally:
+        if display is not None:
+            energy = getattr(result, "total_energy_j", None) if result is not None else None
+            throughput = (
+                getattr(result, "avg_tokens_per_second", None) if result is not None else None
+            )
+            display.finish(energy_j=energy, throughput_tok_s=throughput)
 
     print_result_summary(result)
 
@@ -264,6 +287,52 @@ def _run_impl(
         if ts_source is not None:
             ts_source.unlink(missing_ok=True)
         print(f"Saved: {experiment_config.output_dir}", file=sys.stderr)
+
+
+def _resolve_progress_mode(quiet: bool, verbose: bool) -> str:
+    """Resolve effective progress mode: CLI flags > user config > default."""
+    if quiet:
+        return "quiet"
+    if verbose:
+        return "plain"
+    from llenergymeasure.config.user_config import load_user_config
+
+    return load_user_config().ui.progress_mode
+
+
+def _resolve_runner_tag(config: Any) -> str:
+    """Determine the runner tag string for display from config.runner.
+
+    Returns "local" or "docker" based on the runner field.
+    """
+    runner = getattr(config, "runner", "auto")
+    if runner == "local":
+        return "local"
+    if runner == "docker" or (isinstance(runner, str) and runner.startswith("docker:")):
+        return "docker"
+    # auto: pytorch defaults to local, vllm/tensorrt default to docker
+    backend = getattr(config, "backend", "pytorch")
+    return "local" if backend == "pytorch" else "docker"
+
+
+def _build_header(config: Any, runner_tag: str = "local") -> str:
+    """Build compact experiment header: model | backend [runner] + deviation fields.
+
+    Args:
+        config: ExperimentConfig with model, backend, precision, n, dataset fields.
+        runner_tag: Runner tag string ("local" or "docker").
+    """
+    # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
+    model = config.model.split("/")[-1] if "/" in config.model else config.model
+    parts = [f"{model} | {config.backend}"]
+    # Deviation fields (only when non-default)
+    if config.precision != "bf16":
+        parts.append(config.precision)
+    if config.n != 100:
+        parts.append(f"n={config.n}")
+    if getattr(config, "dataset", "aienergyscore") != "aienergyscore":
+        parts.append(config.dataset)
+    return f"{' | '.join(parts)} [{runner_tag}]"
 
 
 # ---------------------------------------------------------------------------
@@ -330,22 +399,50 @@ def _run_study_impl(
         print_study_dry_run(study_config, verbose=verbose)
         return
 
-    # Pre-flight summary display
-    if not quiet:
+    effective_mode = _resolve_progress_mode(quiet, verbose)
+
+    # Study header + pre-flight summary
+    if effective_mode != "quiet":
+        n_exp = len(study_config.experiments)
+        n_cycles = study_config.execution.n_cycles
+        name = study_config.name or "unnamed"
+        print(f"Study: {name} | {n_exp} experiments | {n_cycles} cycles", file=sys.stderr)
+
         summary = format_preflight_summary(study_config)
         print(summary, file=sys.stderr)
         print(file=sys.stderr)
+
+    # Track elapsed time around the study run
+    import time as _time
+
+    _study_start = _time.monotonic()
 
     # Run the study — pass skip_preflight so CLI flag overrides YAML config
     from llenergymeasure import run_study
 
     result = run_study(study_config, skip_preflight=skip_preflight)
 
-    # Display summary
-    if not quiet:
-        print_study_summary(result)
+    _study_elapsed = _time.monotonic() - _study_start
 
-    # Show output path
-    if result.result_files:
-        first = result.result_files[0]
-        print(f"Study results: {first}", file=sys.stderr)
+    # Study completion summary table
+    if effective_mode != "quiet" and result.experiments:
+        from llenergymeasure.cli._step_display import StudyStepDisplay
+
+        study_display = StudyStepDisplay(
+            total_experiments=len(result.experiments),
+            study_name=study_config.name or "",
+            n_cycles=study_config.execution.n_cycles,
+        )
+        for i, exp in enumerate(result.experiments, 1):
+            study_display.end_experiment_ok(
+                i,
+                elapsed=exp.total_inference_time_sec,
+                energy_j=exp.total_energy_j if exp.total_energy_j > 0 else None,
+                throughput_tok_s=exp.avg_tokens_per_second
+                if exp.avg_tokens_per_second > 0
+                else None,
+            )
+        save_path = str(result.result_files[0]) if result.result_files else None
+        study_display.finish(save_path=save_path, total_elapsed=_study_elapsed)
+    elif effective_mode != "quiet":
+        print_study_summary(result)

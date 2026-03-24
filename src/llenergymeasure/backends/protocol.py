@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -44,8 +45,18 @@ class BackendPlugin(Protocol):
         """Backend identifier (e.g. 'pytorch', 'vllm', 'tensorrt')."""
         ...
 
-    def load_model(self, config: ExperimentConfig) -> Any:
-        """Load model into memory. Returns opaque model object passed to warmup/run_inference/cleanup."""
+    def load_model(
+        self,
+        config: ExperimentConfig,
+        on_substep: Callable[[str, float], None] | None = None,
+    ) -> Any:
+        """Load model into memory. Returns opaque model object passed to warmup/run_inference/cleanup.
+
+        Args:
+            config: Experiment configuration.
+            on_substep: Optional callback ``(text, elapsed_sec)`` for reporting
+                sub-operation progress (e.g. tokenizer loaded, engine compiled).
+        """
         ...
 
     def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:

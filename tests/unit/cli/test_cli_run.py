@@ -64,7 +64,60 @@ def _make_mock_config() -> MagicMock:
     config.max_input_tokens = 512
     config.max_output_tokens = 128
     config.pytorch = None
+    config.baseline = MagicMock()
+    config.baseline.enabled = False
     return config
+
+
+# ---------------------------------------------------------------------------
+# _build_header unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_header_strips_hf_org_prefix():
+    """_build_header strips the HuggingFace org prefix from model name."""
+    from llenergymeasure.cli.run import _build_header
+
+    config = _make_mock_config()
+    config.model = "meta-llama/Llama-3.2-1B-Instruct"
+    config.backend = "vllm"
+    config.precision = "bf16"
+    config.n = 100
+
+    header = _build_header(config, runner_tag="docker")
+    assert "Llama-3.2-1B-Instruct" in header
+    assert "meta-llama" not in header
+    assert "[docker]" in header
+
+
+def test_build_header_default_precision_omitted():
+    """_build_header omits precision when it is the default 'bf16'."""
+    from llenergymeasure.cli.run import _build_header
+
+    config = _make_mock_config()
+    config.model = "gpt2"
+    config.backend = "pytorch"
+    config.precision = "bf16"  # default — should not appear
+    config.n = 100
+
+    header = _build_header(config, runner_tag="local")
+    assert "bf16" not in header
+    assert header == "gpt2 | pytorch [local]"
+
+
+def test_build_header_nondefault_fields_shown():
+    """_build_header includes precision and n when non-default."""
+    from llenergymeasure.cli.run import _build_header
+
+    config = _make_mock_config()
+    config.model = "gpt2"
+    config.backend = "pytorch"
+    config.precision = "fp16"
+    config.n = 50
+
+    header = _build_header(config, runner_tag="local")
+    assert "fp16" in header
+    assert "n=50" in header
 
 
 # ---------------------------------------------------------------------------
@@ -216,32 +269,24 @@ def test_run_dry_run_calls_estimate_vram():
 
 
 def test_run_quiet_flag_accepted():
-    """--quiet suppresses the tqdm progress spinner (disable=True)."""
+    """--quiet suppresses step progress display (progress=None passed to run_experiment)."""
     mock_config = _make_mock_config()
     mock_result = _make_mock_result()
 
     with (
         patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result),
-        patch("llenergymeasure.cli.run.print_experiment_header"),
+        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result) as mock_run,
         patch("llenergymeasure.cli.run.print_result_summary"),
-        patch("llenergymeasure.cli.run.tqdm") as mock_tqdm,
     ):
-        # Make tqdm context manager work
-        mock_tqdm.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_tqdm.return_value.__exit__ = MagicMock(return_value=False)
-
         result = runner.invoke(app, ["run", "--model", "gpt2", "--quiet"])
 
     assert result.exit_code == 0, (
         f"Expected exit 0, got {result.exit_code}. Output: {result.output}"
     )
-    # Verify tqdm was called with disable=True when --quiet is set
-    call_kwargs = mock_tqdm.call_args
-    assert call_kwargs is not None, "tqdm was not called"
-    # quiet=True so disable must be True (quiet or not isatty -> True or x -> True)
-    disable_val = call_kwargs.kwargs.get("disable")
-    assert disable_val is True, f"Expected disable=True in tqdm call, got disable={disable_val!r}"
+    # In quiet mode, progress callback must be None
+    call_kwargs = mock_run.call_args
+    assert call_kwargs is not None, "run_experiment was not called"
+    assert call_kwargs.kwargs.get("progress") is None, "Expected progress=None in quiet mode"
 
 
 # ---------------------------------------------------------------------------
@@ -257,13 +302,8 @@ def test_run_success_prints_summary():
     with (
         patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
         patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result),
-        patch("llenergymeasure.cli.run.print_experiment_header"),
         patch("llenergymeasure.cli.run.print_result_summary") as mock_summary,
-        patch("llenergymeasure.cli.run.tqdm") as mock_tqdm,
     ):
-        mock_tqdm.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_tqdm.return_value.__exit__ = MagicMock(return_value=False)
-
         result = runner.invoke(app, ["run", "--model", "gpt2"])
 
     assert result.exit_code == 0, (
@@ -441,13 +481,9 @@ def test_run_saves_to_output_dir(tmp_path):
     with (
         patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
         patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result),
-        patch("llenergymeasure.cli.run.print_experiment_header"),
         patch("llenergymeasure.cli.run.print_result_summary"),
-        patch("llenergymeasure.cli.run.tqdm") as mock_tqdm,
         patch("llenergymeasure.api.save_result") as mock_save_result,
     ):
-        mock_tqdm.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_tqdm.return_value.__exit__ = MagicMock(return_value=False)
         result = runner.invoke(app, ["run", "--model", "gpt2", "--output", str(tmp_path / "out")])
 
     assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"

@@ -25,12 +25,83 @@ or directly for testing::
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import sys
+import time
 import traceback
 from pathlib import Path
 
-__all__ = ["main", "run_container_experiment"]
+__all__ = ["StreamProgressCallback", "main", "run_container_experiment"]
+
+
+class StreamProgressCallback:
+    """Writes progress events as JSON lines to stdout for host-side parsing.
+
+    The host DockerRunner reads these lines from the container's stdout
+    and forwards them to the CLI progress display. Lines are flushed
+    immediately so the host receives them in real-time.
+
+    JSON line format::
+
+        {"event":"step_start","step":"model","description":"Loading model","detail":"gpt2"}
+        {"event":"step_update","step":"warmup","detail":"12/50 prompts"}
+        {"event":"step_done","step":"model","elapsed_sec":42.3}
+    """
+
+    def on_step_start(self, step: str, description: str, detail: str = "") -> None:
+        _write_progress_line(
+            {
+                "event": "step_start",
+                "step": step,
+                "description": description,
+                "detail": detail,
+            }
+        )
+
+    def on_step_update(self, step: str, detail: str) -> None:
+        _write_progress_line(
+            {
+                "event": "step_update",
+                "step": step,
+                "detail": detail,
+            }
+        )
+
+    def on_step_done(self, step: str, elapsed_sec: float) -> None:
+        _write_progress_line(
+            {
+                "event": "step_done",
+                "step": step,
+                "elapsed_sec": elapsed_sec,
+            }
+        )
+
+    def on_step_skip(self, step: str, reason: str = "") -> None:
+        _write_progress_line(
+            {
+                "event": "step_skip",
+                "step": step,
+                "reason": reason,
+            }
+        )
+
+    def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
+        _write_progress_line(
+            {
+                "event": "substep",
+                "step": step,
+                "text": text,
+                "elapsed_sec": elapsed_sec,
+            }
+        )
+
+
+def _write_progress_line(event: dict[str, object]) -> None:
+    """Write a JSON progress line to stdout and flush immediately."""
+    with contextlib.suppress(Exception):
+        print(json.dumps(event), file=sys.stdout, flush=True)
 
 
 def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
@@ -40,6 +111,9 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     (``core.backends.get_backend`` + ``orchestration.preflight.run_preflight``)
     so measurement behaviour is identical whether the experiment runs locally
     or inside a container.
+
+    Creates a StreamProgressCallback to emit progress events to stdout for
+    the host DockerRunner to parse and forward to the CLI display.
 
     Args:
         config_path: Path to the config JSON file (inside the container).
@@ -67,12 +141,19 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     # --- Stable file name derived from config content ---
     config_hash = compute_measurement_config_hash(config)
 
+    # --- Create progress callback for streaming to host ---
+    progress = StreamProgressCallback()
+
     # --- Run experiment via library API (not CLI) ---
+    progress.on_step_start("preflight", "Checking", "preflight, CUDA, model access")
+    t0 = time.perf_counter()
     run_preflight(config)
+    progress.on_step_done("preflight", time.perf_counter() - t0)
+
     backend = get_backend(config.backend)
     harness = MeasurementHarness()
     gpu_indices = _resolve_gpu_indices(config)
-    result = harness.run(backend, config, gpu_indices=gpu_indices)
+    result = harness.run(backend, config, gpu_indices=gpu_indices, progress=progress)
 
     # --- Write result ---
     result_dir.mkdir(parents=True, exist_ok=True)

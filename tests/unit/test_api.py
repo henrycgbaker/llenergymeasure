@@ -305,7 +305,7 @@ class _MockBackend:
     def name(self) -> str:
         return "pytorch"
 
-    def load_model(self, config: ExperimentConfig):
+    def load_model(self, config: ExperimentConfig, **kwargs):
         return object()  # Opaque model object
 
     def warmup(self, config: ExperimentConfig, model, prompts: list[str] | None = None):
