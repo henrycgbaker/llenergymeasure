@@ -474,7 +474,7 @@ def test_sigint_during_gap_exits_immediately() -> None:
     proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
     ctx = _make_mock_context(proc, pipe_data=fake_result)
 
-    def fake_run_gap(seconds: float, label: str, interrupt_event: object) -> None:
+    def fake_run_gap(seconds: float, label: str, interrupt_event: object, **kwargs: object) -> None:
         """Simulate SIGINT occurring during gap by setting the event."""
 
         if isinstance(interrupt_event, threading.Event):

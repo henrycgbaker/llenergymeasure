@@ -465,7 +465,12 @@ class StudyRunner:
                 if i > 0:
                     gap_secs = float(self.study.execution.experiment_gap_seconds or 0)
                     if gap_secs > 0:
-                        run_gap(gap_secs, "Experiment gap", self._interrupt_event)
+                        run_gap(
+                            gap_secs,
+                            "Experiment gap",
+                            self._interrupt_event,
+                            quiet=self._progress is not None,
+                        )
                         if self._interrupt_event.is_set():
                             break
 
@@ -473,7 +478,12 @@ class StudyRunner:
                 if n_unique > 0 and i > 0 and i % n_unique == 0:
                     cycle_gap_secs = float(self.study.execution.cycle_gap_seconds or 0)
                     if cycle_gap_secs > 0:
-                        run_gap(cycle_gap_secs, "Cycle gap", self._interrupt_event)
+                        run_gap(
+                            cycle_gap_secs,
+                            "Cycle gap",
+                            self._interrupt_event,
+                            quiet=self._progress is not None,
+                        )
                         if self._interrupt_event.is_set():
                             break
 
