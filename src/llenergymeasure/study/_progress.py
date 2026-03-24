@@ -10,6 +10,7 @@ import math
 import sys
 
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.utils.formatting import format_elapsed as _format_duration
 
 
 def _sig3(value: float) -> str:
@@ -40,9 +41,6 @@ def _sig3(value: float) -> str:
     if "." in formatted:
         formatted = formatted.rstrip("0").rstrip(".")
     return formatted
-
-
-from llenergymeasure.utils.formatting import format_elapsed as _format_duration
 
 
 def print_study_progress(

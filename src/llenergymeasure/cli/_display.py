@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.utils.exceptions import LLEMError
+from llenergymeasure.utils.formatting import format_elapsed as _format_duration
 
 
 def _sig3(value: float) -> str:
@@ -47,9 +48,6 @@ def _sig3(value: float) -> str:
     if "." in formatted:
         formatted = formatted.rstrip("0").rstrip(".")
     return formatted
-
-
-from llenergymeasure.utils.formatting import format_elapsed as _format_duration
 
 
 def print_result_summary(result: ExperimentResult) -> None:
