@@ -1,0 +1,95 @@
+# Advanced single-experiment - showcasing LoRA, synthetic data, and convergence warmup
+# Run: llem run configs/examples/experiment-advanced.yaml
+#
+# Demonstrates advanced features not commonly used in basic experiments:
+#   - Synthetic dataset for reproducible fixed-length prompts
+#   - LoRA adapter loading from HuggingFace Hub
+#   - CV-based warmup convergence detection
+#   - Beam search decoding
+#   - BitsAndBytes 4-bit quantization
+#   - Custom output directory
+#
+# Adjust the model, adapter, and parameters to match your setup.
+
+model: meta-llama/Llama-3.2-1B
+backend: pytorch
+
+# --- Synthetic dataset ---
+# Generates fixed-length prompts for perfectly reproducible benchmarks.
+# Useful when you need exact control over input/output token lengths.
+n: 50
+dataset:
+  n: 50                      # Number of synthetic prompts to generate
+  input_len: 256             # Each prompt is exactly 256 tokens
+  output_len: 64             # Request exactly 64 output tokens
+  seed: 42                   # Deterministic prompt generation
+
+precision: bf16
+random_seed: 42
+max_input_tokens: 256
+max_output_tokens: 64
+
+# --- Energy measurement ---
+energy:
+  backend: auto
+
+baseline:
+  enabled: true
+  duration_seconds: 30.0
+
+# --- CV-based warmup convergence ---
+# Instead of a fixed number of warmup prompts, runs until the coefficient
+# of variation (CV) of inference times drops below the threshold.
+# More robust than fixed warmup for models with variable load times.
+warmup:
+  enabled: true
+  convergence_detection: true
+  cv_threshold: 0.05         # Stop when CV < 5%
+  min_prompts: 5             # Run at least 5 warmup prompts
+  max_prompts: 25            # Give up after 25 if not converged
+  window_size: 5             # Rolling window for CV calculation
+  thermal_floor_seconds: 60.0
+
+# --- Beam search decoding ---
+# Beam search explores multiple candidate sequences in parallel.
+# Useful for translation, summarisation, or any task where greedy
+# decoding may miss better sequences.
+decoder:
+  temperature: 0.0           # Greedy within each beam
+  do_sample: false
+  top_k: 0
+  top_p: 1.0
+  repetition_penalty: 1.0
+
+# --- LoRA adapter ---
+# Load a fine-tuned LoRA adapter on top of the base model.
+# Uncomment and replace with your adapter ID or local path.
+# lora:
+#   adapter_id: my-org/my-lora-adapter
+#   merge_weights: false      # true = merge into base (faster inference, more memory)
+
+# --- PyTorch backend with advanced options ---
+pytorch:
+  batch_size: 4
+
+  # Beam search
+  num_beams: 4               # 4-beam search
+  early_stopping: true       # Stop when beam_width complete sequences found
+  length_penalty: 1.2        # Favour slightly longer sequences
+
+  # BitsAndBytes 4-bit quantization
+  # Reduces memory footprint significantly at minor accuracy cost.
+  # load_in_4bit: true
+  # bnb_4bit_compute_dtype: bfloat16
+  # bnb_4bit_quant_type: nf4
+  # bnb_4bit_use_double_quant: true
+
+  # N-gram repetition prevention
+  no_repeat_ngram_size: 3    # Prevent repeating any 3-gram
+
+  attn_implementation: sdpa
+  device_map: auto
+  trust_remote_code: true
+
+# --- Custom output directory ---
+output_dir: ./results/advanced-experiment
