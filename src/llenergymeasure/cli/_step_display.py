@@ -85,6 +85,22 @@ def _step_line_prefix(
     return f"   {counter:>7s}  {label:<16s} {detail:<34s}"
 
 
+def _render_substep_lines(
+    lines: Text,
+    substeps: list[tuple[str, float]],
+    indent: str = "              ",
+) -> None:
+    """Append substep lines (dim · prefix) to a Rich Text renderable.
+
+    Shared between StepDisplay and StudyStepDisplay to avoid duplication.
+    """
+    for sub_text, sub_elapsed in substeps:
+        lines.append(f"{indent}· {sub_text}", style="dim")
+        if sub_elapsed > 0:
+            lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
+        lines.append("\n")
+
+
 def _phase_for_step(step: str) -> str:
     """Look up the phase for a step name, defaulting to Measurement."""
     return STEP_PHASES.get(step, PHASE_MEASUREMENT)
@@ -383,12 +399,7 @@ class StepDisplay:
                         lines.append(prefix)
                         lines.append("  ✓", style="bold green")
                         lines.append(f"  {_format_elapsed(elapsed)}\n")
-                        # Substep lines below completed step
-                        for sub_text, sub_elapsed in self._substeps.get(step, []):
-                            lines.append(f"              · {sub_text}", style="dim")
-                            if sub_elapsed > 0:
-                                lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
-                            lines.append("\n")
+                        _render_substep_lines(lines, self._substeps.get(step, []))
                     elif step in self._skipped_steps:
                         label, reason, _ = self._step_data[step]
                         prefix = _step_line_prefix(idx, phase_total, label, reason)
@@ -405,12 +416,7 @@ class StepDisplay:
                         lines.append(prefix)
                         lines.append(f"  {spinner}", style="yellow")
                         lines.append(f"  {_format_elapsed(elapsed)}\n")
-                        # Substep lines so far for the active step
-                        for sub_text, sub_elapsed in self._substeps.get(step, []):
-                            lines.append(f"              · {sub_text}", style="dim")
-                            if sub_elapsed > 0:
-                                lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
-                            lines.append("\n")
+                        _render_substep_lines(lines, self._substeps.get(step, []))
                     # Pending steps: NOT shown (Docker BuildKit-style progressive output)
 
         return lines
@@ -692,11 +698,9 @@ class StudyStepDisplay:
             lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
             lines.append("  \u2713", style="bold green")
             lines.append(f"  {_format_elapsed(elapsed)}\n")
-            for sub_text, sub_elapsed in self._inner_substeps.get(_step, []):
-                lines.append(f"                    \u00b7 {sub_text}", style="dim")
-                if sub_elapsed > 0:
-                    lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
-                lines.append("\n")
+            _render_substep_lines(
+                lines, self._inner_substeps.get(_step, []), indent="                    "
+            )
 
         if self._inner_active:
             _step, label, detail, start = self._inner_active
@@ -709,11 +713,9 @@ class StudyStepDisplay:
             lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
             lines.append(f"  {spinner}", style="yellow")
             lines.append(f"  {_format_elapsed(elapsed)}\n")
-            for sub_text, sub_elapsed in self._inner_substeps.get(_step, []):
-                lines.append(f"                    \u00b7 {sub_text}", style="dim")
-                if sub_elapsed > 0:
-                    lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
-                lines.append("\n")
+            _render_substep_lines(
+                lines, self._inner_substeps.get(_step, []), indent="                    "
+            )
 
         return lines
 

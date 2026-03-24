@@ -24,10 +24,13 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from llenergymeasure.domain.progress import ProgressCallback
 
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
@@ -119,7 +122,7 @@ class DockerRunner:
     # Public API
     # ------------------------------------------------------------------
 
-    def run(self, config: Any, progress: Any = None) -> Any:
+    def run(self, config: Any, progress: ProgressCallback | None = None) -> Any:
         """Run an experiment inside an ephemeral Docker container.
 
         When a progress callback is provided, streams container stdout line by
@@ -249,7 +252,7 @@ class DockerRunner:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _ensure_image(self, progress: Any = None) -> None:
+    def _ensure_image(self, progress: ProgressCallback | None = None) -> None:
         """Check if the Docker image exists locally; pull with visible output if not.
 
         Always emits an ``image_check`` step so the user sees the cache lookup.
@@ -318,8 +321,8 @@ class DockerRunner:
     def _run_container_streaming(
         self,
         cmd: list[str],
-        progress: Any = None,
-        _mask_secrets_fn: Any = None,
+        progress: ProgressCallback | None = None,
+        _mask_secrets_fn: Callable[[str], str] | None = None,
         container_start_time: float | None = None,
     ) -> tuple[int, str]:
         """Run container with Popen, streaming stdout for progress events.
@@ -370,7 +373,7 @@ class DockerRunner:
                 # Surface activity from old images as step updates
                 if (
                     progress is not None
-                    and not container_start_done_flag[0]
+                    and not container_start_done_event.is_set()
                     and stripped
                     and any(kw in stripped.lower() for kw in _ACTIVITY_KEYWORDS)
                 ):
@@ -381,8 +384,8 @@ class DockerRunner:
                     progress.on_step_update("container_start", display_text[:50])
             pipe.close()
 
-        # Mutable flag shared with stderr thread to track if JSON events arrived
-        container_start_done_flag = [False]
+        # Thread-safe flag shared with stderr thread to track if JSON events arrived
+        container_start_done_event = threading.Event()
 
         try:
             proc = subprocess.Popen(
@@ -417,7 +420,7 @@ class DockerRunner:
                     # End "container_start" step on first inner event (boot time)
                     if not container_start_done and container_start_time is not None:
                         container_start_done = True
-                        container_start_done_flag[0] = True
+                        container_start_done_event.set()
                         progress.on_step_done(
                             "container_start", time.perf_counter() - container_start_time
                         )

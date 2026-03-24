@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 
 def format_elapsed(seconds: float) -> str:
     """Format seconds as human-readable elapsed time.
@@ -31,3 +33,33 @@ def truncate_detail(detail: str) -> str:
     if len(detail) > _DETAIL_MAX_LEN:
         return detail[: _DETAIL_MAX_LEN - 3] + "..."
     return detail
+
+
+def sig3(value: float) -> str:
+    """Format a float to 3 significant figures.
+
+    Examples:
+        312.4  -> "312"
+        3.12   -> "3.12"
+        0.00312 -> "0.00312"
+        847.0  -> "847"
+        0      -> "0"
+        1234   -> "1230"
+    """
+    if value == 0:
+        return "0"
+    magnitude = math.floor(math.log10(abs(value)))
+    # Number of decimal places needed for 3 sig figs
+    decimal_places = max(0, 2 - magnitude)
+    rounded = round(value, decimal_places - int(magnitude >= 3) * 0)
+    # Recompute for clarity: round to 3 sig figs
+    factor = 10 ** (magnitude - 2)
+    rounded = round(value / factor) * factor
+    # Format without trailing zeros
+    if decimal_places <= 0:
+        return str(int(rounded))
+    formatted = f"{rounded:.{decimal_places}f}"
+    # Strip trailing zeros after decimal point
+    if "." in formatted:
+        formatted = formatted.rstrip("0").rstrip(".")
+    return formatted
