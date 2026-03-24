@@ -301,8 +301,9 @@ experiments:
 # Runner configuration
 # =====================================================================
 runners:
-  pytorch: local
+  pytorch: docker
   vllm: docker
+  # pytorch: local             # Use local runner if PyTorch is installed on host
   # vllm: "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"  # Explicit image
   # tensorrt: docker           # Uncomment when adding TensorRT-LLM
 
