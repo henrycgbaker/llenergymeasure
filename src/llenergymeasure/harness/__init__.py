@@ -255,7 +255,7 @@ class MeasurementHarness:
             if baseline is not None:
                 _substep(
                     "baseline",
-                    f"baseline: {baseline.mean_power_w:.1f}W (σ={baseline.std_power_w:.2f})",
+                    f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples)",
                 )
         elif _p:
             _p.on_step_skip("baseline", "disabled")
@@ -264,7 +264,13 @@ class MeasurementHarness:
         if _p:
             _p.on_step_start("model", "Loading", f"model {config.model}")
             t0 = time.perf_counter()
-        model = backend.load_model(config)
+
+        # Build model substep callback
+        def _on_model_substep(text: str, elapsed: float) -> None:
+            _substep("model", text, elapsed)
+
+        model = backend.load_model(config, on_substep=_on_model_substep)
+
         if _p:
             _p.on_step_done("model", time.perf_counter() - t0)
 
@@ -295,26 +301,36 @@ class MeasurementHarness:
                     "warmup", "Warming up", f"up to {config.warmup.max_prompts} prompts"
                 )
                 t0_warmup = time.perf_counter()
-            warmup_result = backend.warmup(config, model, prompts)
-            if _p:
-                cv_info = ""
-                if warmup_result.final_cv > 0:
-                    cv_info = f"  CV={warmup_result.final_cv:.1%}"
-                _p.on_step_update(
-                    "warmup",
-                    f"{warmup_result.iterations_completed}/{config.warmup.max_prompts} prompts{cv_info}",
-                )
-                _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
 
-            # 6. Thermal floor (CM-22) — harness sets thermal_floor_wait_s on warmup_result
-            wait_s = thermal_floor_wait(config)
-            warmup_result.thermal_floor_wait_s = wait_s
+            warmup_result = backend.warmup(config, model, prompts)
+
             if _p:
-                if wait_s > 0:
-                    _p.on_step_start("thermal_floor", "Waiting", f"thermal floor ({wait_s:.0f}s)")
-                    _p.on_step_done("thermal_floor", wait_s)
+                iters = warmup_result.iterations_completed
+                cv_info = f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""
+                converged = "converged" if warmup_result.converged else "not converged"
+                _p.on_step_update("warmup", f"{iters} iterations ({converged}{cv_info})")
+                _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
+            _substep(
+                "warmup",
+                f"{warmup_result.iterations_completed} iterations"
+                + (f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""),
+            )
+
+            # 6. Thermal floor (CM-22) — show step BEFORE sleeping
+            floor_secs = config.warmup.thermal_floor_seconds if config.warmup.enabled else 0
+            if _p:
+                if floor_secs > 0:
+                    _p.on_step_start(
+                        "thermal_floor", "Waiting", f"thermal floor ({floor_secs:.0f}s)"
+                    )
                 else:
                     _p.on_step_skip("thermal_floor", "wait=0s")
+
+            wait_s = thermal_floor_wait(config)
+            warmup_result.thermal_floor_wait_s = wait_s
+
+            if _p and wait_s > 0:
+                _p.on_step_done("thermal_floor", wait_s)
 
             # 7. Select energy backend (CM-14)
             if _p:

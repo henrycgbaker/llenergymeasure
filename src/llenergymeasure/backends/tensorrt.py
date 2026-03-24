@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -102,7 +103,11 @@ class TensorRTBackend:
     # BackendPlugin: load_model
     # -------------------------------------------------------------------------
 
-    def load_model(self, config: ExperimentConfig) -> tuple[Any, Any]:
+    def load_model(
+        self,
+        config: ExperimentConfig,
+        on_substep: Callable[[str, float], None] | None = None,
+    ) -> tuple[Any, Any]:
         """Compile/load engine via tensorrt_llm.LLM() and build SamplingParams.
 
         Engine compilation happens here — BEFORE the NVML measurement window.
@@ -112,6 +117,7 @@ class TensorRTBackend:
 
         Args:
             config: Experiment configuration.
+            on_substep: Optional callback ``(text, elapsed_sec)`` for substep visibility.
 
         Returns:
             Tuple of (llm, sampling_params).
@@ -152,6 +158,8 @@ class TensorRTBackend:
             raise BackendError(f"TensorRT-LLM model loading failed: {e}") from e
 
         build_time_sec = time.perf_counter() - build_start
+        if on_substep is not None:
+            on_substep(f"engine compiled ({gpu_arch}, TRT-LLM {trt_version})", build_time_sec)
         logger.debug(
             "TRT-LLM engine built in %.1fs (arch=%s, version=%s)",
             build_time_sec,
@@ -172,6 +180,8 @@ class TensorRTBackend:
             self._build_metadata["engine_path"] = trt.engine_path
 
         sampling_params = self._build_sampling_params(config)
+        if on_substep is not None:
+            on_substep("sampling params built", 0.0)
         return llm, sampling_params
 
     # -------------------------------------------------------------------------

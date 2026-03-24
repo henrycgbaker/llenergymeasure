@@ -27,10 +27,24 @@ from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_LABELS, STEP
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 # Heartbeat interval for non-TTY mode (seconds)
-_HEARTBEAT_INTERVAL = 10.0
+_HEARTBEAT_INTERVAL = 5.0
 
 # Minimum step duration before heartbeat kicks in (seconds)
-_HEARTBEAT_THRESHOLD = 5.0
+_HEARTBEAT_THRESHOLD = 3.0
+
+
+class _DynamicRenderable:
+    """Proxy that calls a render function on every Rich auto-refresh.
+
+    Without this, ``Live`` holds a static ``Text`` snapshot and the
+    spinner / elapsed counters freeze between callback events.
+    """
+
+    def __init__(self, render_fn: object) -> None:
+        self._render_fn = render_fn
+
+    def __rich_console__(self, console: Console, options: object) -> object:
+        yield self._render_fn()
 
 
 def _format_elapsed(seconds: float) -> str:
@@ -176,9 +190,9 @@ class StepDisplay:
             self._console.print(self._header, highlight=False)
         if self._is_tty:
             self._live = Live(
-                self._render(),
+                _DynamicRenderable(self._render),
                 console=self._console,
-                refresh_per_second=4,
+                refresh_per_second=8,
                 transient=False,
             )
             self._live.start()
@@ -237,6 +251,7 @@ class StepDisplay:
 
         if not self._is_tty:
             self._print_phase_header_if_new(phase)
+            self._print_started_step(step, description or STEP_LABELS.get(step, step), detail)
         self._refresh()
 
     def on_step_update(self, step: str, detail: str) -> None:
@@ -419,10 +434,10 @@ class StepDisplay:
         return lines
 
     def _refresh(self) -> None:
-        """Push updated renderable to Live display."""
+        """Trigger immediate Live repaint (auto-refresh handles animation)."""
         if self._live is not None:
             with contextlib.suppress(Exception):
-                self._live.update(self._render())
+                self._live.refresh()
 
     def _print_phase_header_if_new(self, phase: str) -> None:
         """Print phase header in non-TTY mode (once per phase)."""
@@ -439,6 +454,15 @@ class StepDisplay:
             label = self._active_label if self._active_step == step else STEP_LABELS.get(step, step)
             elapsed = time.monotonic() - self._active_start if self._active_step == step else 0.0
         line = _step_line(idx, total, label, detail, " ...", _format_elapsed(elapsed))
+        self._console.print(line, highlight=False)
+
+    def _print_started_step(self, step: str, label: str, detail: str) -> None:
+        """Print a step start line (non-TTY mode) for immediate feedback."""
+        phase = _phase_for_step(step)
+        with self._lock:
+            phase_total = self._phase_total(phase)
+            idx = self._step_index_in_phase(step, phase)
+        line = _step_line(idx, phase_total, label, detail, " ...", "")
         self._console.print(line, highlight=False)
 
     def _print_completed_step(self, step: str, label: str, detail: str, elapsed_sec: float) -> None:
@@ -513,9 +537,9 @@ class StudyStepDisplay:
         self._console.print(header, highlight=False)
         if self._is_tty:
             self._live = Live(
-                Text(""),
+                _DynamicRenderable(self._render),
                 console=self._console,
-                refresh_per_second=4,
+                refresh_per_second=8,
                 transient=False,
             )
             self._live.start()
@@ -719,10 +743,10 @@ class StudyStepDisplay:
         return Group(table, step_text)
 
     def _refresh(self) -> None:
-        """Push updated renderable to Live display."""
+        """Trigger immediate Live repaint (auto-refresh handles animation)."""
         if self._live is not None:
             with contextlib.suppress(Exception):
-                self._live.update(self._render())
+                self._live.refresh()
 
     def _print_completed_row(
         self,

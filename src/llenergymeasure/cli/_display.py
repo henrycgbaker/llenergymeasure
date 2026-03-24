@@ -120,7 +120,7 @@ def print_result_summary(result: ExperimentResult) -> None:
 
     # --- Timing ---
     print("Timing")
-    print(f"  Duration       {_format_duration(result.duration_sec)}")
+    print(f"  Meas. window   {_format_duration(result.duration_sec)}")
     if result.warmup_excluded_samples is not None:
         print(f"  Warmup         {result.warmup_excluded_samples} prompts excluded")
     print()
