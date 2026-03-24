@@ -47,6 +47,9 @@ def run_gap(seconds: float, label: str, interrupt_event: threading.Event) -> Non
         label: Display label — "Config gap" or "Cycle gap".
         interrupt_event: threading.Event set by SIGINT handler; if set on
                          entry or during the gap, abort immediately.
+
+    When Rich Live is active, StudyRunner._run_gap() renders the countdown
+    inside the live display instead of calling this function.
     """
     if seconds <= 0:
         return

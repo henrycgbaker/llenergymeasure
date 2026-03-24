@@ -35,7 +35,7 @@ class ProgressCallback(Protocol):
     Implementors:
         - StepDisplay (cli/_step_display.py) -- Rich-based TTY rendering
         - StreamProgressCallback (entrypoints/container.py) -- JSON lines to stdout
-        - _QueueProgressAdapter (study/runner.py) -- multiprocessing.Queue bridge
+        - _QueueProgressCallback (study/runner.py) -- multiprocessing.Queue bridge
     """
 
     def on_step_start(self, step: str, description: str, detail: str = "") -> None:
@@ -86,6 +86,68 @@ class ProgressCallback(Protocol):
             text: Human-readable substep description (e.g. "CUDA available").
             elapsed_sec: Wall-clock time for this substep (0.0 = instantaneous).
         """
+        ...
+
+
+@runtime_checkable
+class StudyProgressCallback(ProgressCallback, Protocol):
+    """Extended callback for study-level experiment tracking + per-step progress.
+
+    Adds begin/end experiment methods on top of ProgressCallback's step events.
+    Used by StudyStepDisplay (cli/_step_display.py) and consumed by
+    StudyRunner (study/runner.py).
+
+    Implementors:
+        - StudyStepDisplay (cli/_step_display.py)
+    """
+
+    def begin_experiment(
+        self, index: int, model: str, backend: str, precision: str, steps: list[str]
+    ) -> None:
+        """Signal that a new experiment is starting within the study.
+
+        Args:
+            index: 1-based experiment position in the study.
+            model: Model name (e.g. "gpt2").
+            backend: Backend name (e.g. "pytorch").
+            precision: Precision string (e.g. "bf16").
+            steps: Ordered step names for this experiment's [x/y] counter.
+        """
+        ...
+
+    def end_experiment_ok(
+        self,
+        index: int,
+        elapsed: float,
+        energy_j: float | None = None,
+        throughput_tok_s: float | None = None,
+    ) -> None:
+        """Signal that an experiment completed successfully.
+
+        Args:
+            index: 1-based experiment position.
+            elapsed: Total wall-clock time in seconds.
+            energy_j: Total energy in joules (None if unavailable).
+            throughput_tok_s: Throughput in tokens/second (None if unavailable).
+        """
+        ...
+
+    def end_experiment_fail(self, index: int, elapsed: float, error: str = "") -> None:
+        """Signal that an experiment failed.
+
+        Args:
+            index: 1-based experiment position.
+            elapsed: Wall-clock time until failure in seconds.
+            error: Human-readable error message.
+        """
+        ...
+
+    def show_gap(self, text: str) -> None:
+        """Show a gap countdown line in the display (e.g. 'Experiment gap: 7s')."""
+        ...
+
+    def clear_gap(self) -> None:
+        """Clear the gap countdown line."""
         ...
 
 

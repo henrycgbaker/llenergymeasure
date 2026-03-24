@@ -515,14 +515,21 @@ class StudyStepDisplay:
 
         self._live: Live | None = None
         self._total_start: float = 0.0
+        self._gap_text: str = ""
 
-    def start(self) -> None:
-        """Begin the display. Prints study header and starts Rich Live if TTY."""
+    def start(self, *, print_header: bool = True) -> None:
+        """Begin the display. Optionally prints study header and starts Rich Live if TTY.
+
+        Args:
+            print_header: When False, suppresses the header line (caller prints it
+                separately, e.g. with a preflight summary in between).
+        """
         self._total_start = time.monotonic()
-        # Print study header per CONTEXT.md format
-        header = f"Study: {self._study_name}" if self._study_name else "Study"
-        header += f" | {self._total} experiments | {self._n_cycles} cycles"
-        self._console.print(header, highlight=False)
+        if print_header:
+            # Print study header per CONTEXT.md format
+            header = f"Study: {self._study_name}" if self._study_name else "Study"
+            header += f" | {self._total} experiments | {self._n_cycles} cycles"
+            self._console.print(header, highlight=False)
         if self._is_tty:
             self._live = Live(
                 _DynamicRenderable(self._render),
@@ -588,12 +595,17 @@ class StudyStepDisplay:
     ) -> None:
         """Print study completion footer with final results table.
 
+        When Live was active (TTY mode), the table is already on screen from the
+        live display, so only the completion line and save path are printed.
+        When used post-hoc (no Live), prints the full table.
+
         Args:
             save_path: Optional path to saved results directory.
             total_elapsed: Total elapsed time in seconds. If None, falls back to
                 monotonic clock delta from start() (which may be wrong if start()
                 was never called — callers constructing post-hoc should always pass this).
         """
+        was_live = self._live is not None
         self.stop()
         if total_elapsed is not None:
             total = total_elapsed
@@ -603,8 +615,8 @@ class StudyStepDisplay:
             total = 0.0
         self._console.print(f"\nStudy completed in {_format_elapsed(total)}", highlight=False)
 
-        # Print final summary table with all experiments
-        if self._completed_rows:
+        # Only print table in post-hoc mode — Live already shows it on screen
+        if not was_live and self._completed_rows:
             table = self._build_table()
             self._console.print(table)
 
@@ -648,6 +660,20 @@ class StudyStepDisplay:
             if step not in self._inner_substeps:
                 self._inner_substeps[step] = []
             self._inner_substeps[step].append((text, elapsed_sec))
+        self._refresh()
+
+    # -- Gap display --
+
+    def show_gap(self, text: str) -> None:
+        """Show a gap countdown line below the table (e.g. 'Experiment gap: 7s')."""
+        with self._lock:
+            self._gap_text = text
+        self._refresh()
+
+    def clear_gap(self) -> None:
+        """Clear the gap countdown line."""
+        with self._lock:
+            self._gap_text = ""
         self._refresh()
 
     # -- Rendering --
@@ -720,11 +746,12 @@ class StudyStepDisplay:
         return lines
 
     def _render(self) -> Group:
-        """Render completed experiments table + active experiment step display."""
+        """Render completed experiments table + active experiment step display + gap."""
         with self._lock:
             table = self._build_table()
             step_text = self._render_active_steps()
-        return Group(table, step_text)
+            gap = Text(f"\n  {self._gap_text}", style="dim") if self._gap_text else Text("")
+        return Group(table, step_text, gap)
 
     def _refresh(self) -> None:
         """Trigger immediate Live repaint (auto-refresh handles animation)."""
