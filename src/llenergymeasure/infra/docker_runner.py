@@ -110,6 +110,11 @@ class DockerRunner:
         self.source = source
         self.extra_mounts = extra_mounts or []
 
+    @property
+    def short_image(self) -> str:
+        """Short image tag for display (e.g. 'pytorch:v0.9.0')."""
+        return self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -164,7 +169,7 @@ class DockerRunner:
             t0_container: float | None = None
             if _p:
                 # Show short image tag (e.g. "pytorch:v0.9.0") not the full registry path
-                short_image = self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
+                short_image = self.short_image
                 _p.on_step_start("container_start", "Starting", short_image)
                 t0_container = time.perf_counter()
 
@@ -250,7 +255,7 @@ class DockerRunner:
         Always emits an ``image_check`` step so the user sees the cache lookup.
         If the image is not cached, emits a separate ``pull`` step.
         """
-        short_image = self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
+        short_image = self.short_image
 
         if progress:
             progress.on_step_start("image_check", "Inspecting", short_image)
@@ -434,7 +439,7 @@ class DockerRunner:
                         progress.on_step_done(step, event.get("elapsed_sec", 0.0))
                     elif event_type == "step_skip":
                         progress.on_step_skip(step, event.get("reason", ""))
-                    elif event_type == "substep" and hasattr(progress, "on_substep"):
+                    elif event_type == "substep":
                         progress.on_substep(
                             step,
                             event.get("text", ""),

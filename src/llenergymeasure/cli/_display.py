@@ -49,25 +49,7 @@ def _sig3(value: float) -> str:
     return formatted
 
 
-def _format_duration(seconds: float) -> str:
-    """Format seconds as human-readable duration.
-
-    Examples:
-        4.2  -> "4.2s"
-        272  -> "4m 32s"
-        3900 -> "1h 05m"
-    """
-    if seconds < 60:
-        # Show 1 decimal place for sub-minute durations
-        return f"{seconds:.1f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}m {secs:02d}s"
-    else:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {minutes:02d}m"
+from llenergymeasure.utils.formatting import format_elapsed as _format_duration
 
 
 def print_result_summary(result: ExperimentResult) -> None:

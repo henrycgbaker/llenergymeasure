@@ -22,6 +22,8 @@ from rich.table import Table
 from rich.text import Text
 
 from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_LABELS, STEP_PHASES
+from llenergymeasure.utils.formatting import format_elapsed as _format_elapsed
+from llenergymeasure.utils.formatting import truncate_detail as _truncate_detail
 
 # Braille spinner frames (same as Docker BuildKit / ora)
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -47,19 +49,6 @@ class _DynamicRenderable:
         yield self._render_fn()
 
 
-def _format_elapsed(seconds: float) -> str:
-    """Format seconds as human-readable elapsed time."""
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    if seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}m {secs:02d}s"
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    return f"{hours}h {minutes:02d}m"
-
-
 def _step_line(
     idx: int,
     total: int | None,
@@ -74,8 +63,7 @@ def _step_line(
     Detail is truncated to 34 chars to prevent line wrapping on 80-col terminals.
     """
     counter = f"[{idx}/{total}]" if total is not None else f"[{idx}]"
-    if len(detail) > 34:
-        detail = detail[:31] + "..."
+    detail = _truncate_detail(detail)
     return f"   {counter:>7s}  {label:<16s} {detail:<34s} {status:>4s}  {elapsed_str}"
 
 
@@ -92,8 +80,7 @@ def _step_line_prefix(
     _step_line() which includes status and elapsed in the same string.
     """
     counter = f"[{idx}/{total}]" if total is not None else f"[{idx}]"
-    if len(detail) > 34:
-        detail = detail[:31] + "..."
+    detail = _truncate_detail(detail)
     return f"   {counter:>7s}  {label:<16s} {detail:<34s}"
 
 
@@ -166,6 +153,20 @@ class StepDisplay:
     def total_steps(self) -> int:
         return sum(len(steps) for steps in self._phase_steps.values())
 
+    def _ensure_step_registered(self, step: str) -> str:
+        """Register a step into its phase if not already present. Returns phase name.
+
+        Must be called with self._lock held.
+        """
+        phase = _phase_for_step(step)
+        if phase not in self._phases:
+            self._phases.append(phase)
+        if phase not in self._phase_steps:
+            self._phase_steps[phase] = []
+        if step not in self._phase_steps[phase]:
+            self._phase_steps[phase].append(step)
+        return phase
+
     def register_steps(self, steps: list[str]) -> None:
         """Pre-register steps for fixed [x/y] counting.
 
@@ -175,13 +176,7 @@ class StepDisplay:
         with self._lock:
             self._explicitly_registered = True
             for step in steps:
-                phase = _phase_for_step(step)
-                if phase not in self._phases:
-                    self._phases.append(phase)
-                if phase not in self._phase_steps:
-                    self._phase_steps[phase] = []
-                if step not in self._phase_steps[phase]:
-                    self._phase_steps[phase].append(step)
+                self._ensure_step_registered(step)
 
     def start(self) -> None:
         """Begin the display. Prints header and starts Rich Live if TTY."""
@@ -236,14 +231,7 @@ class StepDisplay:
 
     def on_step_start(self, step: str, description: str, detail: str = "") -> None:
         with self._lock:
-            phase = _phase_for_step(step)
-            if phase not in self._phases:
-                self._phases.append(phase)
-            if phase not in self._phase_steps:
-                self._phase_steps[phase] = []
-            if step not in self._phase_steps[phase]:
-                self._phase_steps[phase].append(step)
-
+            phase = self._ensure_step_registered(step)
             self._active_step = step
             self._active_label = description or STEP_LABELS.get(step, step)
             self._active_detail = detail
@@ -280,14 +268,7 @@ class StepDisplay:
 
     def on_step_skip(self, step: str, reason: str = "") -> None:
         with self._lock:
-            phase = _phase_for_step(step)
-            if phase not in self._phases:
-                self._phases.append(phase)
-            if phase not in self._phase_steps:
-                self._phase_steps[phase] = []
-            if step not in self._phase_steps[phase]:
-                self._phase_steps[phase].append(step)
-
+            phase = self._ensure_step_registered(step)
             label = STEP_LABELS.get(step, step)
             # Store reason as detail, keep label as the verb
             self._step_data[step] = (label, reason or "-", 0.0)
@@ -706,7 +687,7 @@ class StudyStepDisplay:
         for i, (_step, label, detail, elapsed) in enumerate(self._inner_completed):
             idx = i + 1
             counter = f"[{idx}/{inner_total}]"
-            trunc_detail = detail[:31] + "..." if len(detail) > 34 else detail
+            trunc_detail = _truncate_detail(detail)
             lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
             lines.append("  \u2713", style="bold green")
             lines.append(f"  {_format_elapsed(elapsed)}\n")
@@ -723,7 +704,7 @@ class StudyStepDisplay:
             frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
             spinner = _SPINNER_FRAMES[frame_idx]
             counter = f"[{idx}/{inner_total}]"
-            trunc_detail = detail[:31] + "..." if len(detail) > 34 else detail
+            trunc_detail = _truncate_detail(detail)
             lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
             lines.append(f"  {spinner}", style="yellow")
             lines.append(f"  {_format_elapsed(elapsed)}\n")

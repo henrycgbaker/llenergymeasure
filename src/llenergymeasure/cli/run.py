@@ -242,17 +242,7 @@ def _run_impl(
     runner_tag = _resolve_runner_tag(experiment_config)
     header = _build_header(experiment_config, runner_tag=runner_tag)
 
-    # Resolve progress mode: CLI flags > user config > default
-    # -q forces quiet, -v forces plain, otherwise use user config
-    if quiet:
-        effective_mode = "quiet"
-    elif verbose:
-        effective_mode = "plain"
-    else:
-        from llenergymeasure.config.user_config import load_user_config
-
-        user_config = load_user_config()
-        effective_mode = user_config.ui.progress_mode
+    effective_mode = _resolve_progress_mode(quiet, verbose)
 
     # Create progress display (None in quiet mode).
     # Steps are pre-registered with a fixed count so [x/y] counters are
@@ -297,6 +287,17 @@ def _run_impl(
         if ts_source is not None:
             ts_source.unlink(missing_ok=True)
         print(f"Saved: {experiment_config.output_dir}", file=sys.stderr)
+
+
+def _resolve_progress_mode(quiet: bool, verbose: bool) -> str:
+    """Resolve effective progress mode: CLI flags > user config > default."""
+    if quiet:
+        return "quiet"
+    if verbose:
+        return "plain"
+    from llenergymeasure.config.user_config import load_user_config
+
+    return load_user_config().ui.progress_mode
 
 
 def _resolve_runner_tag(config: Any) -> str:
@@ -398,16 +399,7 @@ def _run_study_impl(
         print_study_dry_run(study_config, verbose=verbose)
         return
 
-    # Resolve progress mode: CLI flags > user config > default
-    if quiet:
-        effective_mode = "quiet"
-    elif verbose:
-        effective_mode = "plain"
-    else:
-        from llenergymeasure.config.user_config import load_user_config
-
-        user_config = load_user_config()
-        effective_mode = user_config.ui.progress_mode
+    effective_mode = _resolve_progress_mode(quiet, verbose)
 
     # Study header + pre-flight summary
     if effective_mode != "quiet":

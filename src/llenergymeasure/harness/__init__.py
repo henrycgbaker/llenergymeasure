@@ -231,8 +231,8 @@ class MeasurementHarness:
         _p = progress  # short alias
 
         def _substep(step: str, text: str, elapsed: float = 0.0) -> None:
-            """Emit a substep event if callback supports it (backward-compatible)."""
-            if _p and hasattr(_p, "on_substep"):
+            """Emit a substep event to the progress callback."""
+            if _p:
                 _p.on_substep(step, text, elapsed)
 
         # 1. Environment snapshot — start background thread (BEFORE model loading — CM-32)
@@ -250,13 +250,13 @@ class MeasurementHarness:
                 _p.on_step_start("baseline", "Measuring", f"baseline idle power ({dur:.0f}s)")
                 t0 = time.perf_counter()
             baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
-            if _p:
-                _p.on_step_done("baseline", time.perf_counter() - t0)
             if baseline is not None:
                 _substep(
                     "baseline",
                     f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples)",
                 )
+            if _p:
+                _p.on_step_done("baseline", time.perf_counter() - t0)
         elif _p:
             _p.on_step_skip("baseline", "disabled")
 
@@ -290,9 +290,9 @@ class MeasurementHarness:
             t0_prompts = time.perf_counter()
         prompts = load_prompts(config)
         logger.debug("Loaded %d prompts via dataset loader", len(prompts))
+        _substep("prompts", f"tokenised {len(prompts)} prompts")
         if _p:
             _p.on_step_done("prompts", time.perf_counter() - t0_prompts)
-        _substep("prompts", f"tokenised {len(prompts)} prompts")
 
         try:
             # 5. Warmup (CM-21, CM-24) — returns WarmupResult
@@ -337,12 +337,11 @@ class MeasurementHarness:
                 _p.on_step_start("energy_select", "Selecting", "energy backend")
                 t0_energy = time.perf_counter()
             energy_backend = select_energy_backend(config.energy.backend, gpu_indices=gpu_indices)
-            if _p:
-                backend_name = type(energy_backend).__name__ if energy_backend else "none"
-                _p.on_step_update("energy_select", f"energy backend ({backend_name})")
-                _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
             energy_backend_name = type(energy_backend).__name__ if energy_backend else "none"
             _substep("energy_select", f"selected: {energy_backend_name}")
+            if _p:
+                _p.on_step_update("energy_select", f"energy backend ({energy_backend_name})")
+                _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
 
             # 8. Start energy tracking (after warmup + thermal floor)
             energy_tracker = None
