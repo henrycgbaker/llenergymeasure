@@ -35,7 +35,7 @@ class ProgressCallback(Protocol):
     Implementors:
         - StepDisplay (cli/_step_display.py) -- Rich-based TTY rendering
         - StreamProgressCallback (entrypoints/container.py) -- JSON lines to stdout
-        - _QueueProgressAdapter (study/runner.py) -- multiprocessing.Queue bridge
+        - _QueueProgressCallback (study/runner.py) -- multiprocessing.Queue bridge
     """
 
     def on_step_start(self, step: str, description: str, detail: str = "") -> None:
@@ -140,6 +140,14 @@ class StudyProgressCallback(ProgressCallback, Protocol):
             elapsed: Wall-clock time until failure in seconds.
             error: Human-readable error message.
         """
+        ...
+
+    def show_gap(self, text: str) -> None:
+        """Show a gap countdown line in the display (e.g. 'Experiment gap: 7s')."""
+        ...
+
+    def clear_gap(self) -> None:
+        """Clear the gap countdown line."""
         ...
 
 

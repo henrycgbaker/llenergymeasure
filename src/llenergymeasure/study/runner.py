@@ -509,12 +509,13 @@ class StudyRunner:
 
     def _run_gap(self, seconds: float, label: str) -> None:
         """Run a thermal gap, rendering countdown in the live display or terminal."""
-        if self._progress and hasattr(self._progress, "show_gap"):
-            # Render countdown inside Rich Live display
+        if self._progress:
+            from llenergymeasure.study.gaps import format_gap_duration
+
             for remaining in range(int(seconds), 0, -1):
                 if self._interrupt_event.is_set():
                     break
-                self._progress.show_gap(f"{label}: {remaining}s")
+                self._progress.show_gap(f"{label}: {format_gap_duration(remaining)}")
                 self._interrupt_event.wait(timeout=1)
             self._progress.clear_gap()
         else:
@@ -543,7 +544,7 @@ class StudyRunner:
         spec = self._runner_specs.get(config.backend) if self._runner_specs else None
         if spec is not None and spec.mode == "docker":
             return self._run_one_docker(
-                config, spec, config_hash=config_hash, cycle=cycle, index=index, total=total
+                config, spec, config_hash=config_hash, cycle=cycle, index=index
             )
 
         timeout = _calculate_timeout(config)
@@ -617,16 +618,25 @@ class StudyRunner:
         parent_conn.close()
 
         exp_elapsed = time.monotonic() - exp_start
+        self._handle_result(result, config_hash, cycle, index, exp_elapsed)
+        return result
 
-        # Update manifest and signal study display based on outcome
+    def _handle_result(
+        self,
+        result: Any,
+        config_hash: str,
+        cycle: int,
+        index: int,
+        elapsed: float,
+    ) -> None:
+        """Update manifest and signal study display based on experiment outcome."""
         if isinstance(result, dict) and "type" in result:
             error_type = result.get("type", "UnknownError")
             error_message = result.get("message", "")
             self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
             if self._progress:
-                self._progress.end_experiment_fail(index, exp_elapsed, error=error_message)
+                self._progress.end_experiment_fail(index, elapsed, error=error_message)
         else:
-            # Save result to study directory and track path (RES-15)
             _save_and_record(
                 result, self.study_dir, self.manifest, config_hash, cycle, self.result_files
             )
@@ -635,12 +645,10 @@ class StudyRunner:
                 throughput = getattr(result, "avg_tokens_per_second", None)
                 self._progress.end_experiment_ok(
                     index,
-                    exp_elapsed,
+                    elapsed,
                     energy_j=energy_j if energy_j and energy_j > 0 else None,
                     throughput_tok_s=throughput if throughput and throughput > 0 else None,
                 )
-
-        return result
 
     def _run_one_docker(
         self,
@@ -650,7 +658,6 @@ class StudyRunner:
         config_hash: str,
         cycle: int,
         index: int,
-        total: int,
     ) -> Any:
         """Dispatch one experiment to a Docker container via DockerRunner.
 
@@ -664,7 +671,6 @@ class StudyRunner:
             config_hash: Pre-computed config hash (avoids recomputing).
             cycle:       Current cycle number for manifest tracking.
             index:       1-based position in study for progress display.
-            total:       Total experiment count for progress display.
 
         Returns:
             ExperimentResult on success, or a failure dict on error.
@@ -709,27 +715,5 @@ class StudyRunner:
             }
 
         exp_elapsed = time.monotonic() - exp_start
-
-        # Update manifest and signal study display based on outcome
-        if isinstance(result, dict) and "type" in result:
-            error_type = result.get("type", "UnknownError")
-            error_message = result.get("message", "")
-            self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
-            if self._progress:
-                self._progress.end_experiment_fail(index, exp_elapsed, error=error_message)
-        else:
-            # Save result to study directory and track path (RES-15)
-            _save_and_record(
-                result, self.study_dir, self.manifest, config_hash, cycle, self.result_files
-            )
-            if self._progress:
-                energy_j = getattr(result, "total_energy_j", None)
-                throughput = getattr(result, "avg_tokens_per_second", None)
-                self._progress.end_experiment_ok(
-                    index,
-                    exp_elapsed,
-                    energy_j=energy_j if energy_j and energy_j > 0 else None,
-                    throughput_tok_s=throughput if throughput and throughput > 0 else None,
-                )
-
+        self._handle_result(result, config_hash, cycle, index, exp_elapsed)
         return result

@@ -30,12 +30,7 @@ def format_gap_duration(seconds: float) -> str:
     return f"{minutes}m {secs:02d}s remaining"
 
 
-def run_gap(
-    seconds: float,
-    label: str,
-    interrupt_event: threading.Event,
-    quiet: bool = False,
-) -> None:
+def run_gap(seconds: float, label: str, interrupt_event: threading.Event) -> None:
     """Run a thermal gap with inline countdown display and Enter-to-skip.
 
     Displays an in-place countdown that overwrites itself each tick:
@@ -52,19 +47,15 @@ def run_gap(
         label: Display label — "Config gap" or "Cycle gap".
         interrupt_event: threading.Event set by SIGINT handler; if set on
                          entry or during the gap, abort immediately.
-        quiet: When True, sleep for the gap duration without printing countdown.
-            Used when Rich Live is active to avoid text conflicts.
+
+    When Rich Live is active, StudyRunner._run_gap() renders the countdown
+    inside the live display instead of calling this function.
     """
     if seconds <= 0:
         return
 
     # Check interrupt before doing anything
     if interrupt_event.is_set():
-        return
-
-    # Quiet mode: sleep without countdown (Rich Live is active)
-    if quiet:
-        interrupt_event.wait(timeout=seconds)
         return
 
     skip_event = threading.Event()
