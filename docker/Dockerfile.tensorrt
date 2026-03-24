@@ -19,6 +19,11 @@ FROM nvcr.io/nvidia/tensorrt-llm/release:${TRTLLM_VERSION}
 # that conflicts with DockerRunner's command override pattern.
 ENTRYPOINT []
 
+# NGC sets TensorRT/CUDA library paths in shell profiles (.bashrc) rather
+# than Docker ENV.  Our CMD runs python3 directly (no shell), so we must
+# ensure LD_LIBRARY_PATH includes the TRT and CUDA directories explicitly.
+ENV LD_LIBRARY_PATH="/usr/local/tensorrt/lib:${LD_LIBRARY_PATH}"
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app

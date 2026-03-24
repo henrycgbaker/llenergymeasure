@@ -162,10 +162,15 @@ class VLLMBackend:
 
         try:
             t0 = time.perf_counter()
-            # BeamSearchParams uses llm.beam_search(), SamplingParams uses llm.generate()
-            from vllm import BeamSearchParams as _BSP
+            # BeamSearchParams uses llm.beam_search(), SamplingParams uses llm.generate().
+            # Guard import — BeamSearchParams was added in vLLM >=0.8; older versions
+            # (e.g. 0.7.3 in the v0.9.0 container image) don't export it.
+            try:
+                from vllm import BeamSearchParams as _BSP
+            except ImportError:
+                _BSP = None  # type: ignore[assignment,misc]
 
-            if isinstance(sampling_params, _BSP):
+            if _BSP is not None and isinstance(sampling_params, _BSP):
                 outputs = llm.beam_search(prompts, sampling_params)
             else:
                 outputs = llm.generate(prompts, sampling_params)
