@@ -515,6 +515,7 @@ class StudyStepDisplay:
 
         self._live: Live | None = None
         self._total_start: float = 0.0
+        self._gap_text: str = ""
 
     def start(self, *, print_header: bool = True) -> None:
         """Begin the display. Optionally prints study header and starts Rich Live if TTY.
@@ -661,6 +662,20 @@ class StudyStepDisplay:
             self._inner_substeps[step].append((text, elapsed_sec))
         self._refresh()
 
+    # -- Gap display --
+
+    def show_gap(self, text: str) -> None:
+        """Show a gap countdown line below the table (e.g. 'Experiment gap: 7s')."""
+        with self._lock:
+            self._gap_text = text
+        self._refresh()
+
+    def clear_gap(self) -> None:
+        """Clear the gap countdown line."""
+        with self._lock:
+            self._gap_text = ""
+        self._refresh()
+
     # -- Rendering --
 
     def _build_table(self) -> Table:
@@ -731,11 +746,12 @@ class StudyStepDisplay:
         return lines
 
     def _render(self) -> Group:
-        """Render completed experiments table + active experiment step display."""
+        """Render completed experiments table + active experiment step display + gap."""
         with self._lock:
             table = self._build_table()
             step_text = self._render_active_steps()
-        return Group(table, step_text)
+            gap = Text(f"\n  {self._gap_text}", style="dim") if self._gap_text else Text("")
+        return Group(table, step_text, gap)
 
     def _refresh(self) -> None:
         """Trigger immediate Live repaint (auto-refresh handles animation)."""

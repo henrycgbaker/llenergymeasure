@@ -465,12 +465,7 @@ class StudyRunner:
                 if i > 0:
                     gap_secs = float(self.study.execution.experiment_gap_seconds or 0)
                     if gap_secs > 0:
-                        run_gap(
-                            gap_secs,
-                            "Experiment gap",
-                            self._interrupt_event,
-                            quiet=self._progress is not None,
-                        )
+                        self._run_gap(gap_secs, "Experiment gap")
                         if self._interrupt_event.is_set():
                             break
 
@@ -478,12 +473,7 @@ class StudyRunner:
                 if n_unique > 0 and i > 0 and i % n_unique == 0:
                     cycle_gap_secs = float(self.study.execution.cycle_gap_seconds or 0)
                     if cycle_gap_secs > 0:
-                        run_gap(
-                            cycle_gap_secs,
-                            "Cycle gap",
-                            self._interrupt_event,
-                            quiet=self._progress is not None,
-                        )
+                        self._run_gap(cycle_gap_secs, "Cycle gap")
                         if self._interrupt_event.is_set():
                             break
 
@@ -516,6 +506,20 @@ class StudyRunner:
 
             self._env_snapshot_future = collect_environment_snapshot_async()
         return self._env_snapshot_future.result(timeout=10)
+
+    def _run_gap(self, seconds: float, label: str) -> None:
+        """Run a thermal gap, rendering countdown in the live display or terminal."""
+        if self._progress and hasattr(self._progress, "show_gap"):
+            # Render countdown inside Rich Live display
+            for remaining in range(int(seconds), 0, -1):
+                if self._interrupt_event.is_set():
+                    break
+                self._progress.show_gap(f"{label}: {remaining}s")
+                self._interrupt_event.wait(timeout=1)
+            self._progress.clear_gap()
+        else:
+            # Fall back to terminal countdown
+            run_gap(seconds, label, self._interrupt_event)
 
     def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int, total: int) -> Any:
         """Dispatch one experiment via Docker or subprocess, collect result or failure dict.
