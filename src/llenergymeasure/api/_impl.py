@@ -27,11 +27,21 @@ from llenergymeasure.utils.exceptions import ConfigError
 
 
 @overload
-def run_experiment(config: str | Path, *, skip_preflight: bool = ...) -> ExperimentResult: ...
+def run_experiment(
+    config: str | Path,
+    *,
+    skip_preflight: bool = ...,
+    progress: ProgressCallback | None = ...,
+) -> ExperimentResult: ...
 
 
 @overload
-def run_experiment(config: ExperimentConfig, *, skip_preflight: bool = ...) -> ExperimentResult: ...
+def run_experiment(
+    config: ExperimentConfig,
+    *,
+    skip_preflight: bool = ...,
+    progress: ProgressCallback | None = ...,
+) -> ExperimentResult: ...
 
 
 @overload
@@ -43,6 +53,7 @@ def run_experiment(
     n: int = 100,
     dataset: str = "aienergyscore",
     skip_preflight: bool = ...,
+    progress: ProgressCallback | None = ...,
     **kwargs: Any,
 ) -> ExperimentResult: ...
 

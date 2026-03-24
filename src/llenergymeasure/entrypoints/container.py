@@ -98,7 +98,7 @@ class StreamProgressCallback:
         )
 
 
-def _write_progress_line(event: dict) -> None:
+def _write_progress_line(event: dict[str, object]) -> None:
     """Write a JSON progress line to stdout and flush immediately."""
     with contextlib.suppress(Exception):
         print(json.dumps(event), file=sys.stdout, flush=True)

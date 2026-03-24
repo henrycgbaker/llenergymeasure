@@ -15,8 +15,9 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
+from collections.abc import Callable
 
-from rich.console import Console, Group
+from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
@@ -42,10 +43,10 @@ class _DynamicRenderable:
     spinner / elapsed counters freeze between callback events.
     """
 
-    def __init__(self, render_fn: object) -> None:
+    def __init__(self, render_fn: Callable[[], Text | Group | Table]) -> None:
         self._render_fn = render_fn
 
-    def __rich_console__(self, console: Console, options: object) -> object:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         yield self._render_fn()
 
 
@@ -716,7 +717,7 @@ class StudyStepDisplay:
 
         return lines
 
-    def _render(self) -> object:
+    def _render(self) -> Group:
         """Render completed experiments table + active experiment step display."""
         with self._lock:
             table = self._build_table()
