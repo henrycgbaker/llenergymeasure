@@ -21,16 +21,19 @@ import os
 import signal
 import sys
 import threading
+import time
 import traceback
 from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_LOCAL
 from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig, StudyConfig
     from llenergymeasure.domain.environment import EnvironmentSnapshot
+    from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
 
@@ -91,6 +94,43 @@ def _kill_process_group(pid: int, sig: int) -> None:
 
 
 # =============================================================================
+# Queue-based progress callback (runs inside child process)
+# =============================================================================
+
+
+class _QueueProgressCallback:
+    """ProgressCallback that serialises step events onto a multiprocessing.Queue.
+
+    Created inside the worker subprocess. Events are dicts consumed by the
+    parent's _consume_progress_events thread and forwarded to StudyStepDisplay.
+    """
+
+    def __init__(self, queue: Any) -> None:
+        self._queue = queue
+
+    def _put(self, event: dict[str, Any]) -> None:
+        with contextlib.suppress(Exception):
+            self._queue.put(event)
+
+    def on_step_start(self, step: str, description: str, detail: str = "") -> None:
+        self._put(
+            {"event": "step_start", "step": step, "description": description, "detail": detail}
+        )
+
+    def on_step_update(self, step: str, detail: str) -> None:
+        self._put({"event": "step_update", "step": step, "detail": detail})
+
+    def on_step_done(self, step: str, elapsed_sec: float) -> None:
+        self._put({"event": "step_done", "step": step, "elapsed_sec": elapsed_sec})
+
+    def on_step_skip(self, step: str, reason: str = "") -> None:
+        self._put({"event": "step_skip", "step": step, "reason": reason})
+
+    def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
+        self._put({"event": "substep", "step": step, "text": text, "elapsed_sec": elapsed_sec})
+
+
+# =============================================================================
 # Worker function (runs inside child process)
 # =============================================================================
 
@@ -126,6 +166,9 @@ def _run_experiment_worker(
         config_hash = compute_measurement_config_hash(config)
         progress_queue.put({"event": "started", "config_hash": config_hash})
 
+        # Create progress callback that serialises step events to queue
+        progress_cb = _QueueProgressCallback(progress_queue)
+
         # Run the actual experiment in-process (within the spawned subprocess)
         from llenergymeasure.backends import get_backend
         from llenergymeasure.harness import MeasurementHarness
@@ -133,14 +176,19 @@ def _run_experiment_worker(
 
         # Pre-flight inside subprocess: CUDA availability must be checked in the
         # process that will use the GPU.
+        progress_cb.on_step_start("container_preflight", "Checking", "CUDA, model access")
+        t0_pf = time.perf_counter()
         run_preflight(config)
+        progress_cb.on_step_done("container_preflight", time.perf_counter() - t0_pf)
 
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         gpu_indices = _resolve_gpu_indices(config)
-        result = harness.run(backend, config, snapshot=snapshot, gpu_indices=gpu_indices)
+        result = harness.run(
+            backend, config, snapshot=snapshot, gpu_indices=gpu_indices, progress=progress_cb
+        )
 
         # Send result back to parent via Pipe
         conn.send(result)
@@ -172,37 +220,42 @@ def _run_experiment_worker(
 
 def _consume_progress_events(
     q: Any,
-    index: int,
-    total: int,
-    config: Any,  # ExperimentConfig
+    study_progress: StudyProgressCallback | None = None,
 ) -> None:
-    """Consume progress events from the queue and forward to display.
+    """Consume progress events from the queue and forward to study display.
 
-    Runs as a daemon thread in the parent process. Receives events from the
-    child subprocess via multiprocessing.Queue and calls print_study_progress()
-    for each meaningful event.
+    Runs as a daemon thread in the parent process. Receives step events from
+    the child subprocess via multiprocessing.Queue and forwards them to the
+    StudyProgressCallback (typically StudyStepDisplay).
+
+    Coarse events (started/completed/failed) are ignored here - study-level
+    begin/end experiment tracking is handled directly by _run_one().
     """
     while True:
         event = q.get()
         if event is None:
             break
 
-        if not isinstance(event, dict):
+        if not isinstance(event, dict) or study_progress is None:
             continue
 
         event_type = event.get("event")
-        if event_type == "started":
-            from llenergymeasure.study._progress import print_study_progress
 
-            print_study_progress(index, total, config, status="running")
-        elif event_type == "completed":
-            from llenergymeasure.study._progress import print_study_progress
-
-            print_study_progress(index, total, config, status="completed")
-        elif event_type == "failed":
-            from llenergymeasure.study._progress import print_study_progress
-
-            print_study_progress(index, total, config, status="failed")
+        # Forward step-level events to study display
+        if event_type == "step_start":
+            study_progress.on_step_start(
+                event["step"], event.get("description", ""), event.get("detail", "")
+            )
+        elif event_type == "step_update":
+            study_progress.on_step_update(event["step"], event.get("detail", ""))
+        elif event_type == "step_done":
+            study_progress.on_step_done(event["step"], event.get("elapsed_sec", 0))
+        elif event_type == "step_skip":
+            study_progress.on_step_skip(event["step"], event.get("reason", ""))
+        elif event_type == "substep":
+            study_progress.on_substep(
+                event["step"], event.get("text", ""), event.get("elapsed_sec", 0)
+            )
 
 
 # =============================================================================
@@ -332,6 +385,7 @@ class StudyRunner:
         manifest_writer: ManifestWriter,
         study_dir: Path,
         runner_specs: dict[str, RunnerSpec] | None = None,
+        progress: StudyProgressCallback | None = None,
     ) -> None:
         self.study = study
         self.manifest = manifest_writer
@@ -339,6 +393,8 @@ class StudyRunner:
         self.result_files: list[str] = []
         # Pre-resolved runner specs per backend (None = all experiments use subprocess path)
         self._runner_specs = runner_specs
+        # Live study progress display (None = no live output)
+        self._progress = progress
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -478,6 +534,14 @@ class StudyRunner:
 
         timeout = _calculate_timeout(config)
 
+        # Signal study display: new experiment starting (subprocess = local steps)
+        if self._progress:
+            self._progress.begin_experiment(
+                index, config.model, config.backend, config.precision, list(STEPS_LOCAL)
+            )
+
+        exp_start = time.monotonic()
+
         # Resolve cached snapshot in parent — serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
 
@@ -492,7 +556,7 @@ class StudyRunner:
 
         consumer = threading.Thread(
             target=_consume_progress_events,
-            args=(progress_queue, index, total, config),
+            args=(progress_queue, self._progress),
             daemon=True,
         )
         consumer.start()
@@ -538,16 +602,29 @@ class StudyRunner:
         result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
 
-        # Update manifest based on outcome
+        exp_elapsed = time.monotonic() - exp_start
+
+        # Update manifest and signal study display based on outcome
         if isinstance(result, dict) and "type" in result:
             error_type = result.get("type", "UnknownError")
             error_message = result.get("message", "")
             self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
+            if self._progress:
+                self._progress.end_experiment_fail(index, exp_elapsed, error=error_message)
         else:
             # Save result to study directory and track path (RES-15)
             _save_and_record(
                 result, self.study_dir, self.manifest, config_hash, cycle, self.result_files
             )
+            if self._progress:
+                energy_j = getattr(result, "total_energy_j", None)
+                throughput = getattr(result, "avg_tokens_per_second", None)
+                self._progress.end_experiment_ok(
+                    index,
+                    exp_elapsed,
+                    energy_j=energy_j if energy_j and energy_j > 0 else None,
+                    throughput_tok_s=throughput if throughput and throughput > 0 else None,
+                )
 
         return result
 
@@ -580,7 +657,6 @@ class StudyRunner:
         """
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
-        from llenergymeasure.study._progress import print_study_progress
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
         from llenergymeasure.utils.exceptions import DockerError
 
@@ -598,11 +674,19 @@ class StudyRunner:
         check_gpu_memory_residual()
 
         self.manifest.mark_running(config_hash, cycle)
-        print_study_progress(index, total, config, status="running")
+
+        # Signal study display: new experiment starting (Docker steps)
+        if self._progress:
+            self._progress.begin_experiment(
+                index, config.model, config.backend, config.precision, list(STEPS_DOCKER)
+            )
+
+        exp_start = time.monotonic()
 
         result: Any
         try:
-            result = docker_runner.run(config)
+            # Pass study progress as step callback — DockerRunner calls on_step_*
+            result = docker_runner.run(config, progress=self._progress)
         except DockerError as exc:
             result = {
                 "type": type(exc).__name__,
@@ -610,17 +694,28 @@ class StudyRunner:
                 "config_hash": config_hash,
             }
 
-        # Update manifest based on outcome
+        exp_elapsed = time.monotonic() - exp_start
+
+        # Update manifest and signal study display based on outcome
         if isinstance(result, dict) and "type" in result:
             error_type = result.get("type", "UnknownError")
             error_message = result.get("message", "")
             self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
-            print_study_progress(index, total, config, status="failed")
+            if self._progress:
+                self._progress.end_experiment_fail(index, exp_elapsed, error=error_message)
         else:
             # Save result to study directory and track path (RES-15)
             _save_and_record(
                 result, self.study_dir, self.manifest, config_hash, cycle, self.result_files
             )
-            print_study_progress(index, total, config, status="completed")
+            if self._progress:
+                energy_j = getattr(result, "total_energy_j", None)
+                throughput = getattr(result, "avg_tokens_per_second", None)
+                self._progress.end_experiment_ok(
+                    index,
+                    exp_elapsed,
+                    energy_j=energy_j if energy_j and energy_j > 0 else None,
+                    throughput_tok_s=throughput if throughput and throughput > 0 else None,
+                )
 
         return result

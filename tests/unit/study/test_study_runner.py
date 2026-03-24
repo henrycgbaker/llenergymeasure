@@ -717,25 +717,25 @@ def test_cycle_counter_increments_per_config_hash() -> None:
 
 
 def test_progress_events_forwarded():
-    """_consume_progress_events forwards events to print_study_progress."""
+    """_consume_progress_events forwards step events to study_progress callback."""
     from queue import Queue
-    from unittest.mock import patch
+    from unittest.mock import MagicMock
 
-    from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.study.runner import _consume_progress_events
 
-    config = ExperimentConfig(model="test-model", backend="pytorch", n=10)
+    mock_progress = MagicMock()
     q = Queue()
-    q.put({"event": "started", "config_hash": "abc123"})
-    q.put({"event": "completed", "config_hash": "abc123"})
+    q.put({"event": "step_start", "step": "baseline", "description": "Measuring", "detail": "30s"})
+    q.put({"event": "step_done", "step": "baseline", "elapsed_sec": 30.1})
+    q.put({"event": "substep", "step": "model", "text": "loading weights", "elapsed_sec": 2.5})
+    q.put({"event": "started", "config_hash": "abc123"})  # coarse event — ignored
     q.put(None)  # sentinel
 
-    with patch("llenergymeasure.study._progress.print_study_progress") as mock_progress:
-        _consume_progress_events(q, index=3, total=12, config=config)
+    _consume_progress_events(q, study_progress=mock_progress)
 
-    assert mock_progress.call_count == 2
-    statuses = [c.kwargs["status"] for c in mock_progress.call_args_list]
-    assert statuses == ["running", "completed"]
+    mock_progress.on_step_start.assert_called_once_with("baseline", "Measuring", "30s")
+    mock_progress.on_step_done.assert_called_once_with("baseline", 30.1)
+    mock_progress.on_substep.assert_called_once_with("model", "loading weights", 2.5)
 
 
 # =============================================================================
@@ -818,7 +818,7 @@ def test_docker_runner_spec_dispatches_to_docker(
     docker_run_calls: list = []
     subprocess_process_calls: list = []
 
-    def fake_docker_run(config):
+    def fake_docker_run(config, **kwargs):
         docker_run_calls.append(config)
         return fake_result
 
@@ -904,7 +904,7 @@ def test_docker_error_caught_and_converted_to_failure_dict(
 
     from llenergymeasure.utils.exceptions import DockerError
 
-    def raise_docker_error(config):
+    def raise_docker_error(config, **kwargs):
         raise DockerError("Container failed to start")
 
     subprocess_process_calls: list = []

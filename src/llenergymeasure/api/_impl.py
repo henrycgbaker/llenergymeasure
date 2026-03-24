@@ -7,10 +7,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, overload
-
-if TYPE_CHECKING:
-    from llenergymeasure.domain.progress import ProgressCallback
+from typing import Any, overload
 
 # ---------------------------------------------------------------------------
 # GPU index resolution
@@ -19,6 +16,7 @@ from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
+from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
@@ -114,7 +112,12 @@ def run_experiment(
 # ---------------------------------------------------------------------------
 
 
-def run_study(config: str | Path | StudyConfig, *, skip_preflight: bool = False) -> StudyResult:
+def run_study(
+    config: str | Path | StudyConfig,
+    *,
+    skip_preflight: bool = False,
+    progress: ProgressCallback | None = None,
+) -> StudyResult:
     """Run a multi-experiment study.
 
     Always writes manifest.json to disk (LA-05 — documented side-effect).
@@ -124,6 +127,9 @@ def run_study(config: str | Path | StudyConfig, *, skip_preflight: bool = False)
         config: YAML file path or resolved StudyConfig.
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
             CLI --skip-preflight flag and YAML execution.skip_preflight: true also bypass.
+        progress: Optional StudyProgressCallback for live per-experiment display.
+            When provided, the study runner emits begin/end experiment events and
+            forwards per-step progress from worker subprocesses.
 
     Returns:
         StudyResult with experiments, result_files, measurement_protocol, summary.
@@ -141,7 +147,7 @@ def run_study(config: str | Path | StudyConfig, *, skip_preflight: bool = False)
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
-    return _run(study, skip_preflight=skip_preflight)
+    return _run(study, skip_preflight=skip_preflight, progress=progress)
 
 
 # ---------------------------------------------------------------------------
@@ -258,12 +264,36 @@ def _run(
     is_single = len(study.experiments) == 1 and study.execution.n_cycles == 1
 
     if is_single:
+        # For single-experiment studies with a StudyProgressCallback, emit
+        # begin/end experiment events so the study display shows the table row.
+        from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_LOCAL, StudyProgressCallback
+
+        study_cb: StudyProgressCallback | None = (
+            progress if isinstance(progress, StudyProgressCallback) else None
+        )
+        if study_cb is not None:
+            config = study.experiments[0]
+            spec = runner_specs.get(config.backend) if runner_specs else None
+            steps = list(STEPS_DOCKER if (spec and spec.mode == "docker") else STEPS_LOCAL)
+            study_cb.begin_experiment(1, config.model, config.backend, config.precision, steps)
+
+        exp_start = time.monotonic()
         result_files, experiment_results, warnings = _run_in_process(
             study, manifest, study_dir, runner_specs=runner_specs, progress=progress
         )
+        exp_elapsed = time.monotonic() - exp_start
+
+        if study_cb is not None:
+            r = experiment_results[0] if experiment_results else None
+            if r is not None:
+                energy = r.total_energy_j if r.total_energy_j > 0 else None
+                tp = r.avg_tokens_per_second if r.avg_tokens_per_second > 0 else None
+                study_cb.end_experiment_ok(1, exp_elapsed, energy_j=energy, throughput_tok_s=tp)
+            else:
+                study_cb.end_experiment_fail(1, exp_elapsed)
     else:
         result_files, experiment_results, warnings = _run_via_runner(
-            study, manifest, study_dir, runner_specs=runner_specs
+            study, manifest, study_dir, runner_specs=runner_specs, progress=progress
         )
 
     wall_time = time.monotonic() - wall_start
@@ -407,11 +437,16 @@ def _run_via_runner(
     manifest: Any,
     study_dir: Path,
     runner_specs: Any = None,
+    progress: ProgressCallback | None = None,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs."""
+    from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.study.runner import StudyRunner
 
-    runner = StudyRunner(study, manifest, study_dir, runner_specs=runner_specs)
+    study_progress = progress if isinstance(progress, StudyProgressCallback) else None
+    runner = StudyRunner(
+        study, manifest, study_dir, runner_specs=runner_specs, progress=study_progress
+    )
     raw_results = runner.run()
 
     warnings: list[str] = []

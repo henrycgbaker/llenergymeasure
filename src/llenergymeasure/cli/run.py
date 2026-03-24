@@ -354,7 +354,7 @@ def _run_study_impl(
     """Study execution path — separated for clean error handling."""
     import yaml
 
-    from llenergymeasure.cli._display import print_study_dry_run, print_study_summary
+    from llenergymeasure.cli._display import print_study_dry_run
     from llenergymeasure.config.grid import format_preflight_summary
     from llenergymeasure.config.loader import load_study_config
 
@@ -401,48 +401,53 @@ def _run_study_impl(
 
     effective_mode = _resolve_progress_mode(quiet, verbose)
 
-    # Study header + pre-flight summary
+    # Create live study display before the run so per-experiment progress is shown
+    study_display = None
     if effective_mode != "quiet":
+        from llenergymeasure.cli._step_display import StudyStepDisplay
+
         n_exp = len(study_config.experiments)
         n_cycles = study_config.execution.n_cycles
         name = study_config.name or "unnamed"
+
+        # Print header + preflight summary (static, before live display starts)
         print(f"Study: {name} | {n_exp} experiments | {n_cycles} cycles", file=sys.stderr)
 
         summary = format_preflight_summary(study_config)
         print(summary, file=sys.stderr)
         print(file=sys.stderr)
 
+        study_display = StudyStepDisplay(
+            total_experiments=n_exp,
+            study_name=name,
+            n_cycles=n_cycles,
+            force_plain=effective_mode == "plain",
+        )
+        # Header already printed above; start Live without repeating it
+        study_display.start(print_header=False)
+
     # Track elapsed time around the study run
     import time as _time
 
     _study_start = _time.monotonic()
 
-    # Run the study — pass skip_preflight so CLI flag overrides YAML config
+    # Run the study with live progress display
     from llenergymeasure import run_study
 
-    result = run_study(study_config, skip_preflight=skip_preflight)
+    try:
+        result = run_study(study_config, skip_preflight=skip_preflight, progress=study_display)
+    finally:
+        # Safety stop — ensures Rich Live is torn down even on exceptions
+        if study_display is not None:
+            study_display.stop()
 
     _study_elapsed = _time.monotonic() - _study_start
 
-    # Study completion summary table
-    if effective_mode != "quiet" and result.experiments:
-        from llenergymeasure.cli._step_display import StudyStepDisplay
-
-        study_display = StudyStepDisplay(
-            total_experiments=len(result.experiments),
-            study_name=study_config.name or "",
-            n_cycles=study_config.execution.n_cycles,
-        )
-        for i, exp in enumerate(result.experiments, 1):
-            study_display.end_experiment_ok(
-                i,
-                elapsed=exp.total_inference_time_sec,
-                energy_j=exp.total_energy_j if exp.total_energy_j > 0 else None,
-                throughput_tok_s=exp.avg_tokens_per_second
-                if exp.avg_tokens_per_second > 0
-                else None,
-            )
+    # Study completion footer
+    if study_display is not None:
         save_path = str(result.result_files[0]) if result.result_files else None
         study_display.finish(save_path=save_path, total_elapsed=_study_elapsed)
     elif effective_mode != "quiet":
+        from llenergymeasure.cli._display import print_study_summary
+
         print_study_summary(result)
