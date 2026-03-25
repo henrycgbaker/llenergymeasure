@@ -13,28 +13,79 @@
 name: pytorch-full-parameter-space
 
 # =====================================================================
-# Shared fields (applied to every experiment)
+# Shared fields (applied to every experiment in the study)
 # =====================================================================
 model: Qwen/Qwen2.5-0.5B
-dataset: aienergyscore
+backend: pytorch
+
+# --- Data ---
 n: 50
+dataset: aienergyscore           # Built-in dataset (see synthetic alternative below)
+dataset_order: interleaved       # interleaved | grouped | shuffled
+
+# Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
+# dataset:
+#   n: 50                        # Number of synthetic prompts to generate
+#   input_len: 512               # Fixed input token length per prompt
+#   output_len: 128              # Fixed output token length per prompt
+#   seed: 42                     # Reproducible prompt generation
+
+# --- Hardware ---
+precision: bf16                  # Overridden per-experiment; also a sweep axis
+random_seed: 42
+
+# --- Token limits ---
 max_input_tokens: 512
 max_output_tokens: 128
 
-decoder:
-  preset: deterministic          # Greedy decoding for reproducible comparison
+# --- Energy measurement ---
+energy:
+  backend: auto                  # auto | nvml | zeus | codecarbon | null (disables)
 
+# --- Baseline power measurement ---
+baseline:
+  enabled: true
+  duration_seconds: 30.0         # 5.0 - 120.0
+
+# --- Warmup ---
 warmup:
   enabled: true
   n_warmup: 3
-  thermal_floor_seconds: 30.0
+  thermal_floor_seconds: 30.0    # Minimum 30s
+  # CV-based convergence detection (opt-in, additive to n_warmup):
+  # convergence_detection: true
+  # cv_threshold: 0.05           # Target coefficient of variation
+  # max_prompts: 20              # Upper bound on warmup prompts
+  # window_size: 5               # Rolling window for CV calculation
+  # min_prompts: 5               # Minimum before checking convergence
 
-baseline:
-  enabled: true
-  duration_seconds: 30.0
+# --- Decoder / sampling (universal, shared across backends) ---
+decoder:
+  preset: deterministic          # Greedy decoding for reproducible comparison
+  # Presets override individual params below. Available: deterministic | standard | creative | factual
+  # temperature: 1.0             # 0.0 (greedy) to 2.0
+  # do_sample: true
+  # top_k: 50                   # 0 = disabled
+  # top_p: 1.0                  # 1.0 = disabled (nucleus sampling)
+  # repetition_penalty: 1.0     # 1.0 = no penalty
+  # min_p: null                 # Min probability filter (null = disabled)
+  # min_new_tokens: null         # Minimum output tokens (null = no minimum)
 
-energy:
-  backend: auto
+# --- LoRA adapter (optional, applies to all experiments) ---
+# Exactly one of adapter_id or adapter_path must be set.
+# lora:
+#   adapter_id: my-org/my-lora-adapter   # HuggingFace Hub adapter ID
+#   # adapter_path: /path/to/local/adapter  # OR local adapter weights
+#   merge_weights: false         # Merge adapter into base model at load time
+
+# --- Passthrough kwargs (advanced) ---
+# Extra keyword arguments forwarded directly to the backend at execution time.
+# Keys must not collide with ExperimentConfig top-level field names.
+# passthrough_kwargs:
+#   use_safetensors: true
+
+# --- Output ---
+# output_dir: null               # Per-experiment output directory override
 
 # =====================================================================
 # Sweep axes (Cartesian product)
@@ -60,6 +111,8 @@ sweep:
 # =====================================================================
 # Explicit experiments (mutually exclusive or feature-specific params)
 # =====================================================================
+# Some parameters are mutually exclusive or only valid in specific
+# combinations, so they're listed explicitly rather than swept.
 experiments:
 
   # -----------------------------------------------------------------
@@ -158,6 +211,7 @@ experiments:
       num_beams: 4
       early_stopping: true
       length_penalty: 1.0
+      no_repeat_ngram_size: 3   # Prevent repeating any 3-gram
       device_map: auto
       trust_remote_code: true
 
@@ -178,6 +232,7 @@ experiments:
   # -----------------------------------------------------------------
   # Static KV cache
   # -----------------------------------------------------------------
+  # cache_implementation requires use_cache: true (or null).
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
@@ -216,9 +271,50 @@ experiments:
   #     device_map: auto
   #     trust_remote_code: true
 
+  # -----------------------------------------------------------------
+  # Synthetic dataset experiment
+  # -----------------------------------------------------------------
+  # Uncomment to add a fixed-length synthetic prompt experiment.
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   precision: bf16
+  #   n: 50
+  #   dataset:
+  #     n: 50
+  #     input_len: 256
+  #     output_len: 64
+  #     seed: 42
+  #   pytorch:
+  #     batch_size: 4
+  #     device_map: auto
+  #     trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # CV-based warmup convergence experiment
+  # -----------------------------------------------------------------
+  # Uncomment to add an experiment with adaptive warmup convergence.
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   precision: bf16
+  #   n: 50
+  #   warmup:
+  #     enabled: true
+  #     convergence_detection: true
+  #     cv_threshold: 0.05
+  #     min_prompts: 5
+  #     max_prompts: 25
+  #     window_size: 5
+  #     thermal_floor_seconds: 60.0
+  #   pytorch:
+  #     batch_size: 4
+  #     device_map: auto
+  #     trust_remote_code: true
+
 # =====================================================================
 # Runner configuration
 # =====================================================================
+# Determines how the backend executes: locally or via Docker.
+# Values: 'local', 'docker', or 'docker:<custom-image-tag>'
 runners:
   pytorch: local                 # Use docker for fully containerised runs
 
@@ -227,6 +323,8 @@ runners:
 # =====================================================================
 execution:
   n_cycles: 3
-  cycle_order: interleaved       # A,B,C,...,A,B,C... to control for thermal drift
+  cycle_order: interleaved       # sequential | interleaved | shuffled
   experiment_gap_seconds: 60.0   # Gap for thermal stabilisation between experiments
   cycle_gap_seconds: 300.0       # 5-minute gap between full cycles
+  # shuffle_seed: null           # Explicit seed for shuffled order (null = derived from study hash)
+  # skip_preflight: false        # Skip Docker pre-flight checks (not recommended)

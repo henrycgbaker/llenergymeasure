@@ -9,34 +9,82 @@
 # Sweep experiments:
 #   2 precision x 3 gpu_memory_utilization x 2 enforce_eager
 #   x 3 max_num_seqs x 2 enable_chunked_prefill = 72 experiments
-# Explicit experiments: 8 active + 1 commented (speculative decoding)
+# Explicit experiments: 8 active + 2 commented (speculative, LoRA)
 # Total: 80 unique experiments x 3 cycles = 240 runs
 
 name: vllm-full-parameter-space
 
 # =====================================================================
-# Shared fields (applied to every experiment)
+# Shared fields (applied to every experiment in the study)
 # =====================================================================
 model: Qwen/Qwen2.5-0.5B
-dataset: aienergyscore
+backend: vllm
+
+# --- Data ---
 n: 50
+dataset: aienergyscore           # Built-in dataset (see synthetic alternative below)
+dataset_order: interleaved       # interleaved | grouped | shuffled
+
+# Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
+# dataset:
+#   n: 50                        # Number of synthetic prompts to generate
+#   input_len: 512               # Fixed input token length per prompt
+#   output_len: 128              # Fixed output token length per prompt
+#   seed: 42                     # Reproducible prompt generation
+
+# --- Hardware ---
+precision: bf16                  # Overridden per-experiment; also a sweep axis
+random_seed: 42
+
+# --- Token limits ---
 max_input_tokens: 512
 max_output_tokens: 128
 
-decoder:
-  preset: deterministic          # Greedy decoding for reproducible comparison
+# --- Energy measurement ---
+energy:
+  backend: auto                  # auto | nvml | zeus | codecarbon | null (disables)
 
+# --- Baseline power measurement ---
+baseline:
+  enabled: true
+  duration_seconds: 30.0         # 5.0 - 120.0
+
+# --- Warmup ---
 warmup:
   enabled: true
   n_warmup: 3
-  thermal_floor_seconds: 30.0
+  thermal_floor_seconds: 30.0    # Minimum 30s
+  # CV-based convergence detection (opt-in, additive to n_warmup):
+  # convergence_detection: true
+  # cv_threshold: 0.05           # Target coefficient of variation
+  # max_prompts: 20              # Upper bound on warmup prompts
+  # window_size: 5               # Rolling window for CV calculation
+  # min_prompts: 5               # Minimum before checking convergence
 
-baseline:
-  enabled: true
-  duration_seconds: 30.0
+# --- Decoder / sampling (universal, shared across backends) ---
+decoder:
+  preset: deterministic          # Greedy decoding for reproducible comparison
+  # Presets override individual params below. Available: deterministic | standard | creative | factual
+  # temperature: 1.0             # 0.0 (greedy) to 2.0
+  # do_sample: true
+  # top_k: 50                   # 0 = disabled
+  # top_p: 1.0                  # 1.0 = disabled (nucleus sampling)
+  # repetition_penalty: 1.0     # 1.0 = no penalty
+  # min_p: null                 # Min probability filter (null = disabled)
+  # min_new_tokens: null         # Minimum output tokens (null = no minimum)
 
-energy:
-  backend: auto
+# --- LoRA adapter (optional, applies to all experiments) ---
+# lora:
+#   adapter_id: my-org/my-lora-adapter   # HuggingFace Hub adapter ID
+#   # adapter_path: /path/to/local/adapter  # OR local adapter weights
+#   merge_weights: false         # Merge adapter into base model at load time
+
+# --- Passthrough kwargs (advanced) ---
+# passthrough_kwargs:
+#   trust_remote_code: true
+
+# --- Output ---
+# output_dir: null               # Per-experiment output directory override
 
 # =====================================================================
 # Sweep axes (Cartesian product)
@@ -73,6 +121,8 @@ sweep:
 # =====================================================================
 # Explicit experiments (mutually exclusive or feature-specific params)
 # =====================================================================
+# Some parameters are mutually exclusive or only valid in specific
+# combinations, so they're listed explicitly rather than swept.
 experiments:
 
   # -----------------------------------------------------------------
@@ -107,6 +157,10 @@ experiments:
       sampling:
         presence_penalty: 0.6
         frequency_penalty: 0.6
+        # max_tokens: null         # Override max_output_tokens for vLLM-specific sweeps
+        # min_tokens: 0            # Minimum output tokens before EOS allowed
+        # ignore_eos: false        # Force max_tokens generation
+        # n: 1                     # Output sequences per prompt
 
   # -----------------------------------------------------------------
   # Prefix caching
@@ -155,6 +209,7 @@ experiments:
   # -----------------------------------------------------------------
   # KV cache dtype fp8
   # -----------------------------------------------------------------
+  # fp8 KV cache halves VRAM on Ampere+.
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
@@ -176,6 +231,18 @@ experiments:
       engine:
         tensor_parallel_size: 2
         gpu_memory_utilization: 0.9
+        # pipeline_parallel_size: 1  # Pipeline parallel (requires PP-capable model)
+        # disable_custom_all_reduce: false  # Disable custom all-reduce for multi-GPU
+        # swap_space: 4.0           # CPU swap space in GiB for KV cache offloading
+        # cpu_offload_gb: 0.0       # CPU RAM in GiB to offload model weights
+        # max_num_batched_tokens: null  # Max tokens per scheduler iteration (null = auto)
+        # max_model_len: null       # Override model's max sequence length
+        # quantization: null        # awq | gptq | fp8 | marlin | bitsandbytes
+        # kv_cache_memory_bytes: null  # Absolute KV cache size (mutually exclusive with gpu_memory_utilization)
+        # compilation_config: null  # Full passthrough to vLLM CompilationConfig
+        # attention:
+        #   backend: null           # flash_attn | flashinfer | etc. (null = auto)
+        #   flash_attn_version: null
 
   # -----------------------------------------------------------------
   # Speculative decoding (commented out - requires a real draft model)
@@ -190,17 +257,33 @@ experiments:
   #       num_speculative_tokens: 5
   #       gpu_memory_utilization: 0.9
 
+  # -----------------------------------------------------------------
+  # LoRA adapter (commented out - requires a real adapter)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   precision: bf16
+  #   n: 50
+  #   lora:
+  #     adapter_id: my-org/my-lora-adapter
+  #     merge_weights: false
+
 # =====================================================================
 # Runner configuration
 # =====================================================================
+# Determines how the backend executes: locally or via Docker.
+# Values: 'local', 'docker', or 'docker:<custom-image-tag>'
 runners:
   vllm: docker
+  # vllm: "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"  # Explicit image
 
 # =====================================================================
 # Execution controls
 # =====================================================================
 execution:
   n_cycles: 3
-  cycle_order: interleaved       # A,B,C,...,A,B,C... to control for thermal drift
+  cycle_order: interleaved       # sequential | interleaved | shuffled
   experiment_gap_seconds: 60.0   # Gap for thermal stabilisation between experiments
   cycle_gap_seconds: 300.0       # 5-minute gap between full cycles
+  # shuffle_seed: null           # Explicit seed for shuffled order (null = derived from study hash)
+  # skip_preflight: false        # Skip Docker pre-flight checks (not recommended)
