@@ -2,24 +2,24 @@
 #
 # Quick Start:
 #   pip install -e .              # Install llenergymeasure
-#   lem doctor                    # Check environment
+#   llem config                   # Check environment
 #   docker compose build pytorch  # Build backend image
 #
 # Manual Usage:
 #   Build base first:  docker compose build base
-#   PyTorch (default): docker compose run --rm pytorch lem --help
-#   vLLM:              docker compose run --rm vllm lem --help
-#   TensorRT:          docker compose run --rm tensorrt lem --help
+#   PyTorch (default): docker compose run --rm pytorch llem --help
+#   vLLM:              docker compose run --rm vllm llem --help
+#   TensorRT:          docker compose run --rm tensorrt llem --help
 #
 # Examples:
 #   # PyTorch backend (default)
-#   docker compose run --rm pytorch lem experiment configs/examples/pytorch_example.yaml
+#   docker compose run --rm pytorch llem run configs/examples/experiment-pytorch.yaml
 #
 #   # vLLM backend
-#   docker compose run --rm vllm lem experiment configs/examples/vllm_example.yaml
+#   docker compose run --rm vllm llem run configs/examples/experiment-vllm.yaml
 #
 #   # TensorRT backend
-#   docker compose run --rm tensorrt lem experiment configs/examples/tensorrt_example.yaml
+#   docker compose run --rm tensorrt llem run configs/examples/experiment-tensorrt.yaml
 #
 #   # Development shells
 #   docker compose --profile dev run --rm pytorch-dev /bin/bash

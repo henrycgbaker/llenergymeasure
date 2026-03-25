@@ -1,7 +1,8 @@
-# Quick Docker test — PyTorch + vLLM both in Docker
-# Run: llem run examples/study-docker-test.yaml --cycles 1 --no-gaps
+# Quick Docker test - PyTorch + vLLM both in Docker
+# Run: llem run configs/examples/study-docker-test.yaml
 #
-# Small config for testing CLI display on non-GPU hosts.
+# Small config for verifying Docker + NVIDIA runtime setup.
+# Uses a tiny model (gpt2) with minimal prompts for fast iteration.
 
 name: docker-display-test
 

@@ -1,8 +1,10 @@
-# Realistic study — compare two models across precision and batch size
-# Run: llem run examples/study-realistic.yaml
+# Realistic study - compare two models across precision and batch size
+# Run: llem run configs/examples/study-realistic.yaml
 #
 # A practical study comparing inference efficiency of two small models
-# across precision settings, with multiple cycles for statistical robustness.
+# across precision settings and batch sizes, with multiple cycles for
+# statistical robustness. Demonstrates dotted-path sweep syntax for
+# nested backend parameters.
 
 name: model-precision-comparison
 
@@ -14,7 +16,7 @@ max_output_tokens: 128
 backend: pytorch
 
 decoder:
-  preset: deterministic     # Greedy decoding for reproducible results
+  preset: deterministic      # Greedy decoding for reproducible results
 
 warmup:
   enabled: true
@@ -26,6 +28,8 @@ baseline:
   duration_seconds: 30.0
 
 # --- Sweep ---
+# Each key maps to a list of values. The Cartesian product of all axes
+# produces the experiment grid.
 sweep:
   model:
     - meta-llama/Llama-3.2-1B
@@ -34,6 +38,7 @@ sweep:
     - bf16
     - fp16
     - fp32
+  # Dotted paths target nested backend fields:
   pytorch.batch_size:
     - 1
     - 4
@@ -47,6 +52,6 @@ runners:
 
 execution:
   n_cycles: 3
-  cycle_order: interleaved  # A,B,C,A,B,C... to control for thermal drift
+  cycle_order: interleaved   # A,B,C,A,B,C... to control for thermal drift
   experiment_gap_seconds: 5.0
   cycle_gap_seconds: 15.0

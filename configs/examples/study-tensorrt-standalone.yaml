@@ -1,0 +1,135 @@
+# TensorRT-LLM standalone study - comprehensive engine parameter sweep
+# Run: llem run configs/examples/study-tensorrt-standalone.yaml
+#
+# Sweeps TensorRT-LLM compile-time parameters: precision, batch size, and
+# sequence lengths. Each unique combination triggers a separate engine
+# compilation on first run. Subsequent runs use cached engines.
+#
+# Requires Docker + NVIDIA runtime + Ampere or newer GPU.
+#
+# Sweep: 2 precision x 3 batch_size x 2 max_seq_len = 12 experiments
+# Explicit: 5 experiments (scheduler, KV cache, fast build, dtype)
+# Total: 17 unique experiments x 3 cycles = 51 runs
+
+name: tensorrt-engine-parameter-sweep
+
+# --- Shared fields ---
+model: meta-llama/Llama-3.2-1B
+dataset: aienergyscore
+n: 50
+max_input_tokens: 512
+max_output_tokens: 128
+backend: tensorrt
+
+decoder:
+  preset: deterministic
+
+warmup:
+  enabled: true
+  n_warmup: 3
+  thermal_floor_seconds: 30.0
+
+baseline:
+  enabled: true
+  duration_seconds: 30.0
+
+# --- Shared TRT-LLM backend settings ---
+tensorrt:
+  max_input_len: 1024
+  build_cache:
+    max_cache_storage_gb: 256
+
+# --- Sweep ---
+# Each unique (precision, max_batch_size, max_seq_len) combination
+# triggers a separate engine compilation.
+sweep:
+  precision:
+    - bf16
+    - fp16
+  tensorrt.max_batch_size:
+    - 1
+    - 4
+    - 8
+  tensorrt.max_seq_len:
+    - 1536
+    - 2048
+
+# Produces 2 precision x 3 batch x 2 seq_len = 12 experiments
+
+# --- Explicit experiments (features outside the sweep) ---
+experiments:
+  # Scheduler policy comparison
+  - model: meta-llama/Llama-3.2-1B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      scheduler:
+        capacity_scheduling_policy: MAX_UTILIZATION
+      build_cache:
+        max_cache_storage_gb: 256
+  - model: meta-llama/Llama-3.2-1B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      scheduler:
+        capacity_scheduling_policy: STATIC_BATCH
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # KV cache block reuse
+  - model: meta-llama/Llama-3.2-1B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      kv_cache:
+        enable_block_reuse: true
+        free_gpu_memory_fraction: 0.9
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # Fast build mode (reduced optimisation, faster compilation)
+  - model: meta-llama/Llama-3.2-1B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      fast_build: true
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # float16 dtype explicitly set
+  - model: meta-llama/Llama-3.2-1B
+    backend: tensorrt
+    precision: fp16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      dtype: float16
+      build_cache:
+        max_cache_storage_gb: 256
+
+runners:
+  tensorrt: docker
+
+execution:
+  n_cycles: 3
+  cycle_order: interleaved
+  experiment_gap_seconds: 10.0
+  cycle_gap_seconds: 30.0

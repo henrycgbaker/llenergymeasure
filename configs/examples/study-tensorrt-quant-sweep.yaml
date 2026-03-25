@@ -1,5 +1,5 @@
-# TRT-LLM quantisation sweep — compare quantisation algorithms on the same model
-# Run: llem run examples/study-tensorrt-quant-sweep.yaml
+# TRT-LLM quantisation sweep - compare quantisation algorithms on the same model
+# Run: llem run configs/examples/study-tensorrt-quant-sweep.yaml
 #
 # Sweeps QuantAlgo across INT8, W4A16_AWQ, W8A16 on a single model.
 # Use this to find the best accuracy-efficiency tradeoff for your deployment.
@@ -16,7 +16,7 @@ max_output_tokens: 128
 backend: tensorrt
 
 decoder:
-  preset: deterministic     # Greedy decoding for reproducible results
+  preset: deterministic      # Greedy decoding for reproducible results
 
 warmup:
   enabled: true
@@ -28,10 +28,18 @@ baseline:
   duration_seconds: 30.0
 
 # --- Shared TRT-LLM backend settings ---
+# These apply to all experiments in the grid. Compile-time params are fixed
+# across the sweep to isolate the effect of quantisation algorithm.
 tensorrt:
   max_batch_size: 8
+  max_input_len: 1024
+  max_seq_len: 2048
+  dtype: bfloat16
+  build_cache:
+    max_cache_storage_gb: 256
 
 # --- Sweep ---
+# Dotted path targets the nested quant_algo field inside tensorrt.quant.
 sweep:
   tensorrt.quant.quant_algo:
     - INT8
@@ -46,6 +54,6 @@ runners:
 
 execution:
   n_cycles: 3
-  cycle_order: interleaved  # A,B,C,A,B,C... to control for thermal drift
+  cycle_order: interleaved   # A,B,C,A,B,C... to control for thermal drift
   experiment_gap_seconds: 5.0
   cycle_gap_seconds: 15.0

@@ -1,0 +1,120 @@
+# PyTorch single-experiment configuration
+# Run: llem run configs/examples/experiment-pytorch.yaml
+#
+# Comprehensive template exercising all available PyTorch backend parameters.
+# All fields shown with their defaults - remove or adjust as needed.
+# Commented-out fields show available options with their default values.
+
+model: meta-llama/Llama-3.2-1B
+backend: pytorch
+
+# --- Data ---
+n: 100                       # Number of prompts from dataset
+dataset: aienergyscore       # Built-in dataset (see synthetic alternative below)
+dataset_order: interleaved   # interleaved | grouped | shuffled
+
+# Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
+# dataset:
+#   n: 100                   # Number of synthetic prompts to generate
+#   input_len: 512           # Fixed input token length per prompt
+#   output_len: 128          # Fixed output token length per prompt
+#   seed: 42                 # Reproducible prompt generation
+
+# --- Hardware ---
+precision: bf16              # fp32 | fp16 | bf16
+random_seed: 42
+
+# --- Token limits ---
+max_input_tokens: 512
+max_output_tokens: 128
+
+# --- Energy measurement ---
+energy:
+  backend: auto              # auto | nvml | zeus | codecarbon | null (disables)
+
+# --- Baseline power measurement ---
+baseline:
+  enabled: true
+  duration_seconds: 30.0     # 5.0 - 120.0
+
+# --- Warmup ---
+warmup:
+  enabled: true
+  n_warmup: 5
+  thermal_floor_seconds: 60.0   # Minimum 30s
+  # CV-based convergence detection (opt-in):
+  convergence_detection: false
+  cv_threshold: 0.05            # Target coefficient of variation
+  max_prompts: 20               # Upper bound on warmup prompts
+  window_size: 5                # Rolling window for CV calculation
+  min_prompts: 5                # Minimum before checking convergence
+
+# --- Decoder / sampling ---
+decoder:
+  temperature: 1.0           # 0.0 (greedy) to 2.0
+  do_sample: true
+  top_k: 50                  # 0 = disabled
+  top_p: 1.0                 # 1.0 = disabled (nucleus sampling)
+  repetition_penalty: 1.0    # 1.0 = no penalty
+  min_p: null                # Min probability filter (null = disabled)
+  min_new_tokens: null        # Minimum output tokens (null = no minimum)
+  preset: null               # deterministic | standard | creative | factual
+  #                          # Presets override individual sampling params above.
+  #                          # Use 'deterministic' for reproducible benchmarks.
+
+# --- LoRA adapter (optional) ---
+# Exactly one of adapter_id or adapter_path must be set.
+# lora:
+#   adapter_id: my-org/my-lora-adapter   # HuggingFace Hub adapter ID
+#   # adapter_path: /path/to/local/adapter  # OR local adapter weights
+#   merge_weights: false      # Merge adapter into base model at load time
+
+# --- PyTorch backend configuration ---
+pytorch:
+  # Batching
+  batch_size: 1
+
+  # Attention
+  attn_implementation: sdpa   # sdpa | flash_attention_2 | flash_attention_3 | eager
+
+  # Compilation (torch.compile)
+  torch_compile: false
+  # torch_compile_mode: default        # default | reduce-overhead | max-autotune
+  # torch_compile_backend: inductor    # Requires torch_compile: true
+
+  # BitsAndBytes quantization (mutually exclusive: 4-bit vs 8-bit)
+  load_in_4bit: false
+  load_in_8bit: false
+  # bnb_4bit_compute_dtype: bfloat16   # float16 | bfloat16 | float32 (requires load_in_4bit)
+  # bnb_4bit_quant_type: nf4           # nf4 | fp4 (requires load_in_4bit)
+  # bnb_4bit_use_double_quant: false   # Requires load_in_4bit
+
+  # KV caching
+  use_cache: true
+  # cache_implementation: null   # static | offloaded_static | sliding_window
+
+  # Beam search
+  # num_beams: 1               # Beam width (1 = greedy/sampling, >1 = beam search)
+  # early_stopping: false      # Stop beams at first EOS
+  # length_penalty: 1.0        # >1.0 favours longer sequences
+
+  # N-gram repetition prevention
+  # no_repeat_ngram_size: 0    # 0 = disabled
+
+  # Speculative decoding (prompt-lookup)
+  # prompt_lookup_num_tokens: null   # null = disabled
+
+  # Model loading
+  device_map: auto
+  # max_memory: null           # e.g. {"0": "10GiB", "cpu": "50GiB"}
+  # revision: null             # Git commit hash or branch for reproducibility
+  trust_remote_code: true
+
+# --- Passthrough kwargs (advanced) ---
+# Extra keyword arguments forwarded directly to the backend at execution time.
+# Keys must not collide with ExperimentConfig top-level field names.
+# passthrough_kwargs:
+#   use_safetensors: true
+
+# --- Output ---
+# output_dir: null             # Per-experiment output directory override
