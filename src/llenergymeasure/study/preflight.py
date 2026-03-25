@@ -23,7 +23,7 @@ def run_study_preflight(
     skip_preflight: bool = False,
     yaml_runners: dict[str, str] | None = None,
     user_config: UserRunnersConfig | None = None,
-) -> dict:
+) -> dict[str, object]:
     """Pre-flight checks for a study configuration.
 
     Single-backend studies pass through — per-experiment pre-flight runs later
