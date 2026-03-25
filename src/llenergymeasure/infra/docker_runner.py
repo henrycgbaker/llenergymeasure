@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from llenergymeasure.domain.progress import ProgressCallback
 
+from llenergymeasure.config.ssot import BACKEND_TENSORRT
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerTimeoutError,
@@ -560,7 +561,7 @@ class DockerRunner:
             cmd.extend(["--env-file", str(env_path)])
 
         # TRT-LLM engine cache: persist compiled engines across ephemeral containers
-        if config.backend == "tensorrt":
+        if config.backend == BACKEND_TENSORRT:
             cache_host = str(Path.home() / ".cache" / "trt-llm")
             cache_container = "/root/.cache/trt-llm"
             # Only add if not already in extra_mounts (user may override path)

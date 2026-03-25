@@ -15,7 +15,12 @@ from typing import Annotated, Any
 
 import typer
 
-from llenergymeasure.config.ssot import BACKEND_PACKAGES
+from llenergymeasure.config.ssot import (
+    BACKEND_PACKAGES,
+    BACKEND_PYTORCH,
+    BACKEND_TENSORRT,
+    BACKEND_VLLM,
+)
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -47,15 +52,15 @@ def _probe_gpu() -> list[dict[str, Any]] | None:
 def _probe_backend_version(backend: str) -> str | None:
     """Try to retrieve version string for an installed inference backend."""
     try:
-        if backend == "pytorch":
+        if backend == BACKEND_PYTORCH:
             import torch
 
             return str(torch.__version__)
-        elif backend == "vllm":
+        elif backend == BACKEND_VLLM:
             import vllm
 
             return str(vllm.__version__)
-        elif backend == "tensorrt":
+        elif backend == BACKEND_TENSORRT:
             import tensorrt_llm
 
             return str(tensorrt_llm.__version__)

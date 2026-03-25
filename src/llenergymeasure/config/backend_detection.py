@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-KNOWN_BACKENDS: list[str] = ["pytorch", "vllm", "tensorrt"]
+from llenergymeasure.config.ssot import BACKEND_PYTORCH, BACKEND_TENSORRT, BACKEND_VLLM
+
+KNOWN_BACKENDS: list[str] = [BACKEND_PYTORCH, BACKEND_VLLM, BACKEND_TENSORRT]
 
 
 def is_backend_available(backend: str) -> bool:
@@ -15,11 +17,11 @@ def is_backend_available(backend: str) -> bool:
         True if backend is importable, False otherwise.
     """
     try:
-        if backend == "pytorch":
+        if backend == BACKEND_PYTORCH:
             import torch  # noqa: F401
-        elif backend == "vllm":
+        elif backend == BACKEND_VLLM:
             import vllm  # noqa: F401
-        elif backend == "tensorrt":
+        elif backend == BACKEND_TENSORRT:
             import tensorrt_llm  # noqa: F401
         else:
             # Unknown backend

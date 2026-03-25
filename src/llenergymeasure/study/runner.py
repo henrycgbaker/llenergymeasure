@@ -30,6 +30,7 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_LOCAL
 from llenergymeasure.study.gaps import run_gap
 
@@ -573,7 +574,7 @@ class StudyRunner:
 
         # Docker dispatch path — check runner spec for this backend
         spec = self._runner_specs.get(config.backend) if self._runner_specs else None
-        if spec is not None and spec.mode == "docker":
+        if spec is not None and spec.mode == RUNNER_DOCKER:
             return self._run_one_docker(
                 config, spec, config_hash=config_hash, cycle=cycle, index=index
             )

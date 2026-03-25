@@ -21,6 +21,7 @@ from llenergymeasure.domain.metrics import (
     WarmupResult,
 )
 from llenergymeasure.results.aggregation import (
+    AggregationContext,
     _check_temporal_overlap,
     aggregate_latency_measurements,
     aggregate_results,
@@ -79,11 +80,11 @@ def make_raw_result():
 def test_aggregate_single_process(make_raw_result):
     """Single RawProcessResult produces ExperimentResult with matching metrics."""
     raw = make_raw_result()
-    result = aggregate_results(
-        raw_results=[raw],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw], ctx)
     assert result.total_tokens == 500
     assert result.total_energy_j == 25.0
     assert result.total_flops == 5e11
@@ -94,11 +95,11 @@ def test_aggregate_single_process(make_raw_result):
 def test_aggregate_returns_experiment_result(make_raw_result):
     """Return type is ExperimentResult, not some other class."""
     raw = make_raw_result()
-    result = aggregate_results(
-        raw_results=[raw],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw], ctx)
     assert type(result).__name__ == "ExperimentResult"
     assert isinstance(result, ExperimentResult)
 
@@ -106,22 +107,22 @@ def test_aggregate_returns_experiment_result(make_raw_result):
 def test_aggregate_schema_version(make_raw_result):
     """Aggregated result carries schema_version == '2.0'."""
     raw = make_raw_result()
-    result = aggregate_results(
-        raw_results=[raw],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw], ctx)
     assert result.schema_version == "2.0"
 
 
 def test_aggregate_measurement_config_hash(make_raw_result):
     """measurement_config_hash passed through to result unchanged."""
     raw = make_raw_result()
-    result = aggregate_results(
-        raw_results=[raw],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="deadbeef12345678",
     )
+    result = aggregate_results([raw], ctx)
     assert result.measurement_config_hash == "deadbeef12345678"
 
 
@@ -129,20 +130,20 @@ def test_aggregate_measurement_methodology(make_raw_result):
     """measurement_methodology passed through to result unchanged."""
     raw = make_raw_result()
 
-    result_total = aggregate_results(
-        raw_results=[raw],
+    ctx_total = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
         measurement_methodology="total",
     )
+    result_total = aggregate_results([raw], ctx_total)
     assert result_total.measurement_methodology == "total"
 
-    result_ss = aggregate_results(
-        raw_results=[raw],
+    ctx_ss = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
         measurement_methodology="steady_state",
     )
+    result_ss = aggregate_results([raw], ctx_ss)
     assert result_ss.measurement_methodology == "steady_state"
 
 
@@ -163,11 +164,11 @@ def test_aggregate_energy_sum(make_raw_result):
         gpu_id=1,
         energy_metrics=EnergyMetrics(total_energy_j=30.0, duration_sec=10.0),
     )
-    result = aggregate_results(
-        raw_results=[raw0, raw1],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw0, raw1], ctx)
     assert result.total_energy_j == pytest.approx(55.0)
 
 
@@ -197,11 +198,11 @@ def test_aggregate_tokens_sum(make_raw_result):
             latency_per_token_ms=2.0,
         ),
     )
-    result = aggregate_results(
-        raw_results=[raw0, raw1],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw0, raw1], ctx)
     assert result.total_tokens == 1100
 
 
@@ -213,11 +214,11 @@ def test_aggregate_late_aggregation_latencies(make_raw_result):
     raw0 = make_raw_result(process_index=0, gpu_id=0, per_request_latencies_ms=latencies_p0)
     raw1 = make_raw_result(process_index=1, gpu_id=1, per_request_latencies_ms=latencies_p1)
 
-    result = aggregate_results(
-        raw_results=[raw0, raw1],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw0, raw1], ctx)
 
     # The extended_metrics should reflect the combined latency distribution
     # (late aggregation means raw latencies were concatenated before computing stats)
@@ -235,11 +236,11 @@ def test_aggregate_process_results_embedded(make_raw_result):
     raw0 = make_raw_result(process_index=0, gpu_id=0)
     raw1 = make_raw_result(process_index=1, gpu_id=1)
 
-    result = aggregate_results(
-        raw_results=[raw0, raw1],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw0, raw1], ctx)
 
     assert len(result.process_results) == 2
     indices = {p.process_index for p in result.process_results}
@@ -252,11 +253,11 @@ def test_aggregate_metadata_num_processes(make_raw_result):
     raw1 = make_raw_result(process_index=1, gpu_id=1)
     raw2 = make_raw_result(process_index=2, gpu_id=2)
 
-    result = aggregate_results(
-        raw_results=[raw0, raw1, raw2],
+    ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw0, raw1, raw2], ctx)
 
     assert result.aggregation is not None
     assert result.aggregation.num_processes == 3
@@ -387,11 +388,11 @@ def test_aggregate_uses_wall_clock_not_sum(make_raw_result):
             latency_per_token_ms=2.0,
         ),
     )
-    result = aggregate_results(
-        raw_results=[raw0, raw1],
+    ctx = AggregationContext(
         experiment_id="test-wall-clock",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw0, raw1], ctx)
 
     # Wall-clock is max(end) - min(start) = 14:00:12 - 14:00:00 = 12 seconds
     assert result.total_inference_time_sec == pytest.approx(12.0)
@@ -457,11 +458,11 @@ def test_aggregate_populates_flops_derived_fields(make_raw_result):
         compute_metrics=ComputeMetrics(flops_total=2e12),
     )
 
-    result = aggregate_results(
-        raw_results=[raw0, raw1],
+    ctx = AggregationContext(
         experiment_id="test-flops-derived",
         measurement_config_hash="abc123def456abcd",
     )
+    result = aggregate_results([raw0, raw1], ctx)
 
     assert result.flops_per_output_token is not None
     assert result.flops_per_input_token is not None
@@ -491,11 +492,11 @@ class TestEnergyBreakdownAggregation:
             gpu_id=1,
             energy_breakdown=EnergyBreakdown(raw_j=15.0, adjusted_j=12.0, baseline_power_w=5.0),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="eb-test",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.energy_breakdown is not None
         assert result.energy_breakdown.raw_j == pytest.approx(25.0)
 
@@ -510,11 +511,11 @@ class TestEnergyBreakdownAggregation:
             gpu_id=1,
             energy_breakdown=EnergyBreakdown(raw_j=15.0, adjusted_j=12.0),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="eb-adj",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.energy_breakdown.adjusted_j == pytest.approx(20.0)
 
     def test_none_adjusted_handled(self, make_raw_result):
@@ -528,11 +529,11 @@ class TestEnergyBreakdownAggregation:
             gpu_id=1,
             energy_breakdown=EnergyBreakdown(raw_j=15.0, adjusted_j=None),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="eb-none-adj",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.energy_breakdown.adjusted_j is None
 
     def test_baseline_power_from_first(self, make_raw_result):
@@ -546,20 +547,20 @@ class TestEnergyBreakdownAggregation:
             gpu_id=1,
             energy_breakdown=EnergyBreakdown(raw_j=15.0, baseline_power_w=99.0),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="eb-baseline",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.energy_breakdown.baseline_power_w == pytest.approx(42.0)
 
     def test_no_breakdowns_no_aggregated_breakdown(self, make_raw_result):
         raw0 = make_raw_result(process_index=0, gpu_id=0)
-        result = aggregate_results(
-            raw_results=[raw0],
+        ctx = AggregationContext(
             experiment_id="eb-none",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0], ctx)
         assert result.energy_breakdown is None
 
 
@@ -582,11 +583,11 @@ class TestThermalThrottleAggregation:
             gpu_id=1,
             thermal_throttle=ThermalThrottleInfo(detected=True, max_temperature_c=85.0),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="tt-any",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.thermal_throttle.detected is True
 
     def test_max_temperature(self, make_raw_result):
@@ -600,11 +601,11 @@ class TestThermalThrottleAggregation:
             gpu_id=1,
             thermal_throttle=ThermalThrottleInfo(max_temperature_c=85.0, throttle_duration_sec=1.5),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="tt-max",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.thermal_throttle.max_temperature_c == pytest.approx(85.0)
         assert result.thermal_throttle.throttle_duration_sec == pytest.approx(1.5)
 
@@ -619,11 +620,11 @@ class TestThermalThrottleAggregation:
             gpu_id=1,
             thermal_throttle=ThermalThrottleInfo(detected=False),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="tt-false",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.thermal_throttle.detected is False
 
     def test_none_temperatures_handled(self, make_raw_result):
@@ -637,20 +638,20 @@ class TestThermalThrottleAggregation:
             gpu_id=1,
             thermal_throttle=ThermalThrottleInfo(max_temperature_c=None),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="tt-none-temp",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.thermal_throttle.max_temperature_c is None
 
     def test_no_throttle_info(self, make_raw_result):
         raw0 = make_raw_result(process_index=0, gpu_id=0)
-        result = aggregate_results(
-            raw_results=[raw0],
+        ctx = AggregationContext(
             experiment_id="tt-no-info",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0], ctx)
         assert result.thermal_throttle is None
 
 
@@ -668,22 +669,22 @@ class TestWarmupResultCarryForward:
         )
         raw0 = make_raw_result(process_index=0, gpu_id=0, warmup_result=None)
         raw1 = make_raw_result(process_index=1, gpu_id=1, warmup_result=warmup)
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="wu-first",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.warmup_result is not None
         assert result.warmup_result.converged is True
 
     def test_all_none_returns_none(self, make_raw_result):
         raw0 = make_raw_result(process_index=0, gpu_id=0)
         raw1 = make_raw_result(process_index=1, gpu_id=1)
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="wu-none",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.warmup_result is None
 
     def test_first_process_has_warmup(self, make_raw_result):
@@ -691,11 +692,11 @@ class TestWarmupResultCarryForward:
             converged=False, final_cv=0.15, iterations_completed=10, target_cv=0.01, max_prompts=10
         )
         raw0 = make_raw_result(process_index=0, gpu_id=0, warmup_result=warmup)
-        result = aggregate_results(
-            raw_results=[raw0],
+        ctx = AggregationContext(
             experiment_id="wu-single",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0], ctx)
         assert result.warmup_result is not None
         assert result.warmup_result.converged is False
 
@@ -770,11 +771,11 @@ class TestExtendedMetricsAggregationPath:
     def test_collects_per_request_latencies(self, make_raw_result):
         raw0 = make_raw_result(process_index=0, gpu_id=0, per_request_latencies_ms=[100.0, 110.0])
         raw1 = make_raw_result(process_index=1, gpu_id=1, per_request_latencies_ms=[200.0, 210.0])
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="ext-lat",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         # Should have request latency stats from 4 concatenated samples
         assert result.extended_metrics is not None
         assert result.extended_metrics.request_latency.e2e_latency_samples == 4
@@ -782,22 +783,22 @@ class TestExtendedMetricsAggregationPath:
     def test_collects_gpu_utilisation_samples(self, make_raw_result):
         raw0 = make_raw_result(process_index=0, gpu_id=0, gpu_utilisation_samples=[50.0, 60.0])
         raw1 = make_raw_result(process_index=1, gpu_id=1, gpu_utilisation_samples=[70.0, 80.0])
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="ext-gpu",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert result.extended_metrics is not None
         assert result.extended_metrics.gpu_utilisation.sm_utilisation_samples == 4
         assert result.extended_metrics.gpu_utilisation.sm_utilisation_mean == pytest.approx(65.0)
 
     def test_empty_samples_graceful(self, make_raw_result):
         raw0 = make_raw_result(process_index=0, gpu_id=0)
-        result = aggregate_results(
-            raw_results=[raw0],
+        ctx = AggregationContext(
             experiment_id="ext-empty",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0], ctx)
         assert result.extended_metrics is not None
 
     def test_extended_metrics_has_tei(self, make_raw_result):
@@ -815,11 +816,11 @@ class TestExtendedMetricsAggregationPath:
             ),
             energy_metrics=EnergyMetrics(total_energy_j=25.0, duration_sec=10.0),
         )
-        result = aggregate_results(
-            raw_results=[raw0],
+        ctx = AggregationContext(
             experiment_id="ext-tei",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0], ctx)
         assert result.extended_metrics.token_efficiency_index is not None
         assert result.extended_metrics.token_efficiency_index > 0
 
@@ -834,11 +835,11 @@ class TestExtendedMetricsAggregationPath:
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         raw0 = make_raw_result(process_index=0, gpu_id=0)
-        result = aggregate_results(
-            raw_results=[raw0],
+        ctx = AggregationContext(
             experiment_id="ext-boom",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0], ctx)
         # The exception is caught; extended_metrics falls back to empty
         assert result.extended_metrics is not None
 
@@ -910,9 +911,9 @@ class TestTemporalOverlapCheck:
                 datetime(2026, 2, 26, 14, 0, 20),
             ),
         )
-        result = aggregate_results(
-            raw_results=[raw0, raw1],
+        ctx = AggregationContext(
             experiment_id="overlap-warn",
             measurement_config_hash="abc123def456abcd",
         )
+        result = aggregate_results([raw0, raw1], ctx)
         assert any("concurrently" in w for w in result.measurement_warnings)
