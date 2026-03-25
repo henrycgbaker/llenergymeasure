@@ -325,10 +325,10 @@ def build_preflight_panel(
                 body.append(f"    {label}\n")
             elif indent_level == 2:
                 # Sub-config field
-                body.append(f"      {label:<16}{value}\n")
+                body.append(f"      {label:<18}{value}\n")
             else:
                 # Top-level field
-                body.append(f"  {label:<20}{value}\n")
+                body.append(f"    {label:<18}{value}\n")
 
     body.append("\n")
     # Hash line with dim styling
