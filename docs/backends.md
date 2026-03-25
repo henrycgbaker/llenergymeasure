@@ -110,11 +110,27 @@ Note: `load_in_4bit` and `load_in_8bit` are mutually exclusive.
 | `early_stopping` | bool | false | Stop when all beams hit EOS |
 | `length_penalty` | float | 1.0 | Length penalty: >1 shorter, <1 longer |
 
+**N-gram Repetition:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `no_repeat_ngram_size` | int | 0 | Prevent n-gram repetition (0 = disabled) |
+
 **Speculative Decoding:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `prompt_lookup_num_tokens` | int | null | Prompt-lookup speculative decoding (disabled when null) |
+
+**Tensor Parallelism (HF Transformers >= 4.50):**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tp_plan` | `auto` \| null | null | Native HF tensor parallelism plan. Mutually exclusive with `device_map`. Requires `torchrun` launch. |
+| `tp_size` | int | WORLD_SIZE | Number of tensor parallel ranks. Only used when `tp_plan` is set. |
+
+Note: `tp_plan` and `device_map` are mutually exclusive — tensor parallelism handles its own
+device placement. When `tp_plan='auto'`, `device_map` is automatically omitted.
 
 ---
 
@@ -572,7 +588,10 @@ These parameters live in `ExperimentConfig` and are shared across all backends:
 | `pytorch.load_in_8bit` | Yes | N/A | N/A | BitsAndBytes 8-bit quantization |
 | `pytorch.device_map` | Yes | N/A | N/A | Device placement strategy |
 | `pytorch.num_beams` | Yes | N/A | N/A | Beam search width |
+| `pytorch.no_repeat_ngram_size` | Yes | N/A | N/A | Prevent n-gram repetition |
 | `pytorch.prompt_lookup_num_tokens` | Yes | N/A | N/A | Prompt-lookup speculative decoding |
+| `pytorch.tp_plan` | Yes | N/A | N/A | Native HF tensor parallelism plan |
+| `pytorch.tp_size` | Yes | N/A | N/A | Tensor parallel rank count |
 
 ### vLLM-Specific Parameters
 
