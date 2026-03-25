@@ -457,7 +457,7 @@ class MeasurementHarness:
         Iterates over gpu_indices (defaults to [0] when None), queries
         max_memory_allocated(device=idx) per GPU, and returns the max across
         all ranks. This ensures tensor-parallel experiments report the peak
-        across all participating GPUs (M18).
+        across all participating GPUs.
 
         Returns 0.0 if torch is unavailable or CUDA is not available.
         """
