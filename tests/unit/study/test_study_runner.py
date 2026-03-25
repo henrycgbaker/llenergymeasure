@@ -1213,3 +1213,45 @@ def test_grace_period_uses_killpg(study_config: StudyConfig) -> None:
     )
     # Direct p.kill() must NOT have been called
     proc.kill.assert_not_called()
+
+
+# =============================================================================
+# Timeseries parquet: output_dir set on config for local subprocess path
+# =============================================================================
+
+
+def test_local_subprocess_sets_output_dir_on_config(
+    study_config: StudyConfig, basic_config: ExperimentConfig
+) -> None:
+    """_run_one sets output_dir on the config so the harness writes timeseries parquet.
+
+    The config passed to the subprocess target must have a non-None output_dir
+    pointing to a temp directory. After the experiment, the temp dir is cleaned up.
+    """
+    manifest = MagicMock()
+
+    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+    config_hash = compute_measurement_config_hash(basic_config)
+    fake_result = {"config_hash": config_hash, "status": "success"}
+
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result, pipe_has_data=True)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-output-dir"))
+        runner.run()
+
+    # Check the config passed to Process target has output_dir set
+    process_call = ctx.Process.call_args
+    assert process_call is not None, "Process() was never called"
+    worker_config = process_call.kwargs.get(
+        "args", process_call.args[0] if process_call.args else None
+    )
+    if isinstance(worker_config, tuple):
+        worker_config = worker_config[0]
+    assert worker_config is not None
+    assert worker_config.output_dir is not None, "output_dir must be set on config for subprocess"
+    assert worker_config.output_dir.startswith("/tmp/llem-ts-"), (
+        f"output_dir should be a temp dir, got: {worker_config.output_dir}"
+    )

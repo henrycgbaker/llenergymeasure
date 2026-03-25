@@ -22,6 +22,7 @@ import os
 import shutil
 import signal
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -587,6 +588,13 @@ class StudyRunner:
 
         exp_start = time.monotonic()
 
+        # Create a temp dir for timeseries parquet output. The harness gates
+        # parquet writing on config.output_dir being non-None, so we must set
+        # it here. The temp dir is cleaned up after _handle_result copies the
+        # parquet into the study directory.
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-"))
+        config = config.model_copy(update={"output_dir": str(ts_tmpdir)})
+
         # Resolve cached snapshot in parent — serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
 
@@ -649,6 +657,11 @@ class StudyRunner:
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(result, config_hash, cycle, index, exp_elapsed)
+
+        # Clean up the temp dir created for timeseries parquet output.
+        # _save_and_record already copied the parquet into the study dir.
+        shutil.rmtree(ts_tmpdir, ignore_errors=True)
+
         return result
 
     def _handle_result(
@@ -751,6 +764,14 @@ class StudyRunner:
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(result, config_hash, cycle, index, exp_elapsed)
+
+        # Clean up the temp dir that DockerRunner created for the rescued
+        # timeseries parquet (now copied into the study dir by _save_and_record).
+        if not isinstance(result, dict) and hasattr(result, "effective_config"):
+            ts_tmpdir = result.effective_config.get("output_dir")
+            if ts_tmpdir and Path(ts_tmpdir).exists():
+                shutil.rmtree(ts_tmpdir, ignore_errors=True)
+
         return result
 
     def _persist_container_log(

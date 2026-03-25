@@ -165,6 +165,10 @@ class DockerRunner:
             self._ensure_image(progress=_p)
 
             # --- Write config JSON ---
+            # Set output_dir to the container-side exchange dir mount so the
+            # harness writes timeseries.parquet there (appears on host as
+            # exchange_dir/timeseries.parquet).
+            config = config.model_copy(update={"output_dir": "/run/llem"})
             config_path = exchange_dir / f"{config_hash}_config.json"
             config_path.write_text(config.model_dump_json(), encoding="utf-8")
 
@@ -243,6 +247,17 @@ class DockerRunner:
             # --- Read result ---
             result = self._read_result(exchange_dir, config_hash)
 
+            # --- Rescue timeseries parquet before cleanup ---
+            # The harness inside the container wrote timeseries.parquet to
+            # /run/llem (= exchange_dir on host). Move it to a temp dir so
+            # _save_and_record can find it via effective_config["output_dir"]
+            # after the exchange dir is deleted.
+            ts_parquet = exchange_dir / "timeseries.parquet"
+            ts_tmpdir: Path | None = None
+            if ts_parquet.exists() and not isinstance(result, dict):
+                ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-"))
+                shutil.move(str(ts_parquet), str(ts_tmpdir / "timeseries.parquet"))
+
             # --- Success: clean up ---
             self._cleanup_exchange_dir(exchange_dir)
             exchange_dir = None  # type: ignore[assignment]
@@ -252,7 +267,16 @@ class DockerRunner:
             if isinstance(result, dict):
                 return result
 
-            return self._inject_runner_metadata(result)
+            result = self._inject_runner_metadata(result)
+
+            # Rewrite output_dir to point at the host-side temp dir (not the
+            # now-deleted /run/llem container path) so _save_and_record can
+            # resolve the parquet sidecar.
+            if ts_tmpdir is not None:
+                updated_ec = {**result.effective_config, "output_dir": str(ts_tmpdir)}
+                result = result.model_copy(update={"effective_config": updated_ec})
+
+            return result
 
         finally:
             # Exchange dir is set to None when we've handed off or already cleaned up.
