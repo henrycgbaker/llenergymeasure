@@ -295,8 +295,14 @@ class PyTorchBackend:
 
         pt = config.pytorch
 
-        # Device placement — default "auto" unless researcher overrides
-        if pt is not None and pt.device_map is not None:
+        # Device placement / tensor parallelism — mutually exclusive
+        if pt is not None and pt.tp_plan is not None:
+            # Tensor parallelism: tp_plan replaces device_map entirely
+            kwargs["tp_plan"] = pt.tp_plan
+            if pt.tp_size is not None:
+                kwargs["tp_size"] = pt.tp_size
+            # Do NOT set device_map — TP handles device placement
+        elif pt is not None and pt.device_map is not None:
             kwargs["device_map"] = pt.device_map
         else:
             kwargs["device_map"] = "auto"
