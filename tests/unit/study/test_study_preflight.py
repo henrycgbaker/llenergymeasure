@@ -9,8 +9,11 @@ from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.utils.exceptions import PreFlightError
 
 
-def test_single_backend_passes():
+def test_single_backend_passes(monkeypatch):
     """Single-backend study passes pre-flight without error."""
+    monkeypatch.setattr(
+        "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
+    )
     study = StudyConfig(
         experiments=[
             ExperimentConfig(model="m1", backend="pytorch"),
