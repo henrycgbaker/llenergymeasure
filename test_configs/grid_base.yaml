@@ -1,6 +1,0 @@
-config_name: grid-test
-model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
-max_input_tokens: 64
-max_output_tokens: 32
-decoder:
-  preset: deterministic

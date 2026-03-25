@@ -1,9 +1,0 @@
-# Test sorted batching strategies (groups similar-length prompts)
-config_name: batching_sorted
-model_name: gpt2
-
-batching:
-  strategy: sorted_static  # or sorted_dynamic
-  batch_size: 4
-
-max_new_tokens: 64

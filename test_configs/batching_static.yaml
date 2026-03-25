@@ -1,9 +1,0 @@
-# Test static batching strategy (default)
-config_name: batching_static
-model_name: gpt2
-
-batching:
-  strategy: static
-  batch_size: 4
-
-max_new_tokens: 64
