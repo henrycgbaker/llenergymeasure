@@ -73,12 +73,38 @@ def _save_and_record(
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
+    Resolves the timeseries parquet sidecar from the result object and passes it
+    to save_result() so it is copied into the experiment subdirectory. The stale
+    flat file written by MeasurementHarness is removed after the copy.
+
     On save failure, marks the experiment as completed with empty path.
     """
     try:
         from llenergymeasure.results.persistence import save_result
 
-        result_path = save_result(result, study_dir)
+        # Resolve timeseries sidecar from result fields.
+        # MeasurementHarness writes timeseries.parquet to config.output_dir and
+        # sets result.timeseries = "timeseries.parquet". Both must be present for
+        # the copy to proceed.
+        ts_source: Path | None = None
+        ts_filename = getattr(result, "timeseries", None)
+        output_dir_str = (
+            result.effective_config.get("output_dir")
+            if hasattr(result, "effective_config")
+            else None
+        )
+        if ts_filename and output_dir_str:
+            candidate = Path(output_dir_str) / ts_filename
+            if candidate.exists():
+                ts_source = candidate
+
+        result_path = save_result(result, study_dir, timeseries_source=ts_source)
+
+        # Clean up the stale flat parquet file after it has been copied into the
+        # experiment subdirectory (mirrors cli/run.py line 288).
+        if ts_source is not None:
+            ts_source.unlink(missing_ok=True)
+
         result_files.append(str(result_path))
         rel_path = str(result_path.relative_to(study_dir))
         manifest.mark_completed(config_hash, cycle, rel_path)
