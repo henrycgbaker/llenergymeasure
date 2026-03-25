@@ -100,12 +100,10 @@ def test_detect_default_backend_returns_tensorrt_when_only_trt():
 
     import llenergymeasure.backends as backends_mod
 
-    def mock_find_spec(name):
-        if name == "tensorrt_llm":
-            return True  # truthy = installed
-        return None  # transformers and vllm not installed
+    def mock_available(name):
+        return name == "tensorrt"  # Only tensorrt is "installed"
 
-    with patch("llenergymeasure.backends.importlib.util.find_spec", side_effect=mock_find_spec):
+    with patch("llenergymeasure.backends.is_backend_available", side_effect=mock_available):
         result = backends_mod.detect_default_backend()
         assert result == "tensorrt"
 
@@ -117,9 +115,9 @@ def test_detect_default_backend_raises_when_no_backends():
     import llenergymeasure.backends as backends_mod
     from llenergymeasure.utils.exceptions import BackendError
 
-    # Patch find_spec inside the backends module so all backend checks return None
+    # Patch is_backend_available so all backend checks return False
     with (
-        patch("llenergymeasure.backends.importlib.util.find_spec", return_value=None),
+        patch("llenergymeasure.backends.is_backend_available", return_value=False),
         pytest.raises(BackendError, match="No inference backend"),
     ):
         backends_mod.detect_default_backend()
@@ -132,9 +130,9 @@ def test_detect_default_backend_error_message_has_install_hint():
     import llenergymeasure.backends as backends_mod
     from llenergymeasure.utils.exceptions import BackendError
 
-    # Patch find_spec inside the backends module so all backend checks return None
+    # Patch is_backend_available so all backend checks return False
     with (
-        patch("llenergymeasure.backends.importlib.util.find_spec", return_value=None),
+        patch("llenergymeasure.backends.is_backend_available", return_value=False),
         pytest.raises(BackendError, match="pip install"),
     ):
         backends_mod.detect_default_backend()

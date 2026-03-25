@@ -138,7 +138,7 @@ class EnvironmentMetadata(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# EnvironmentSnapshot — full software + hardware context (CM-32)
+# EnvironmentSnapshot — full software + hardware context
 # ---------------------------------------------------------------------------
 
 
@@ -154,7 +154,7 @@ class EnvironmentSnapshot(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# CUDA version detection (CM-33) — multi-source fallback chain
+# CUDA version detection — multi-source fallback chain
 # ---------------------------------------------------------------------------
 
 

@@ -198,12 +198,12 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         "vllm.sampling.max_tokens": [0],  # ge=1: 0 violates ge
         "vllm.sampling.presence_penalty": [3.0],  # ge=-2.0, le=2.0: 3.0 violates le
         "vllm.sampling.frequency_penalty": [-3.0],  # ge=-2.0, le=2.0: -3.0 violates ge
-        # VLLMEngineConfig: Phase 19.2 new fields
+        # VLLMEngineConfig: constrained fields
         "vllm.engine.offload_num_in_group": [0],  # ge=1: 0 violates ge
         "vllm.engine.kv_cache_memory_bytes": [0],  # ge=1: 0 violates ge
-        # VLLMSamplingConfig: Phase 19.2 new field
+        # VLLMSamplingConfig: constrained field
         "vllm.sampling.n": [0],  # ge=1: 0 violates ge
-        # VLLMBeamSearchConfig: Phase 19.2 new model
+        # VLLMBeamSearchConfig: constrained fields
         "vllm.beam_search.beam_width": [0],  # ge=1: 0 violates ge
         "vllm.beam_search.max_tokens": [0],  # ge=1: 0 violates ge
         # TensorRTConfig: compile-time params
@@ -520,7 +520,7 @@ def get_backend_specific_params() -> dict[str, list[str]]:
             "vllm.engine.quantization",
             "vllm.engine.speculative_model",
             "vllm.engine.num_speculative_tokens",
-            # Engine-level Phase 19.2 additions
+            # Engine-level offloading + memory params
             "vllm.engine.offload_group_size",
             "vllm.engine.offload_num_in_group",
             "vllm.engine.offload_prefetch_step",
@@ -674,19 +674,19 @@ def get_param_skip_conditions() -> dict[str, str]:
 
 
 def get_streaming_constraints() -> dict[str, str]:
-    """Streaming is a Phase 5 concern.
+    """Streaming constraints (not yet implemented).
 
     Returns:
-        Empty dict — streaming parameters are not part of v2.0 M1 scope.
+        Empty dict — streaming parameters are not in scope.
     """
     return {}
 
 
 def get_streaming_incompatible_tests() -> list[tuple[str, str]]:
-    """Streaming is a Phase 5 concern.
+    """Streaming incompatible tests (not yet implemented).
 
     Returns:
-        Empty list — streaming parameters are not part of v2.0 M1 scope.
+        Empty list — streaming parameters are not in scope.
     """
     return []
 
@@ -805,12 +805,12 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
         },
         "beam_search": {
             "pytorch": "num_beams" in pytorch_fields,
-            "vllm": True,  # VLLMBeamSearchConfig added in Phase 19.2
+            "vllm": True,
             "tensorrt": False,
         },
         "speculative_decoding": {
             "pytorch": "prompt_lookup_num_tokens" in pytorch_fields,
-            "vllm": "speculative_model" in vllm_fields,  # Phase 19.1 added speculative_model
+            "vllm": "speculative_model" in vllm_fields,
             "tensorrt": False,
         },
         "static_kv_cache": {

@@ -7,7 +7,7 @@ experiment failures, timeouts, and SIGINT without data corruption.
 Key design decisions (locked in .product/decisions/experiment-isolation.md):
 - spawn context: CUDA-safe; fork causes silent CUDA corruption (CP-1)
 - daemon=False: clean CUDA teardown if parent exits unexpectedly (CP-4)
-- Pipe-only IPC: ExperimentResult fits in Pipe buffer for M2 experiment sizes
+- Pipe-only IPC: ExperimentResult fits in Pipe buffer for typical experiment sizes
 - SIGKILL on timeout: SIGTERM may be ignored by hung CUDA operations
 - Process group kill: worker calls os.setpgrp() to become group leader so all
   descendant processes (vLLM workers, MPI ranks, etc.) are killed together
@@ -30,6 +30,7 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_LOCAL
 from llenergymeasure.study.gaps import run_gap
 
@@ -59,7 +60,7 @@ logger = logging.getLogger(__name__)
 def _calculate_timeout(config: ExperimentConfig) -> int:
     """Generous timeout heuristic: 2 seconds per prompt, minimum 10 minutes.
 
-    No model-size scaling — keep it simple for M2.
+    No model-size scaling — keep it simple.
     """
     return max(config.n * 2, 600)
 
@@ -573,7 +574,7 @@ class StudyRunner:
 
         # Docker dispatch path — check runner spec for this backend
         spec = self._runner_specs.get(config.backend) if self._runner_specs else None
-        if spec is not None and spec.mode == "docker":
+        if spec is not None and spec.mode == RUNNER_DOCKER:
             return self._run_one_docker(
                 config, spec, config_hash=config_hash, cycle=cycle, index=index
             )

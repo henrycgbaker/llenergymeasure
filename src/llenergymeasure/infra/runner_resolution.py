@@ -23,10 +23,12 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserRunnersConfig
+
+from llenergymeasure.config.ssot import RUNNER_DOCKER, RUNNER_LOCAL, RunnerMode
 
 # Re-exported from image_registry for convenience — parse_runner_value is defined
 # there (canonical home) but used heavily in this module and its tests.
@@ -53,7 +55,7 @@ def is_docker_available() -> bool:
     """Return True if Docker CLI and NVIDIA Container Toolkit are both on PATH.
 
     This is a quick host-level check (PATH inspection only). Container-level GPU
-    validation is done at pre-flight time (Phase 18).
+    validation is done at pre-flight time.
 
     Checks:
         1. ``docker`` CLI is on PATH (via shutil.which)
@@ -83,7 +85,7 @@ class RunnerSpec:
                 "env", "yaml", "user_config", "auto_detected", "default".
     """
 
-    mode: Literal["local", "docker"]
+    mode: RunnerMode
     image: str | None
     source: str
     extra_mounts: list[tuple[str, str]] = field(default_factory=list)
@@ -129,35 +131,34 @@ def resolve_runner(
     env_key = f"LLEM_RUNNER_{backend.upper()}"
     if env_val := os.environ.get(env_key):
         mode, image = parse_runner_value(env_val)
-        return RunnerSpec(mode=mode, image=image, source="env")  # type: ignore[arg-type]
-
+        return RunnerSpec(mode=mode, image=image, source="env")
     # 2. Study/experiment YAML runners section
     if yaml_runners is not None and backend in yaml_runners:
         yaml_val = yaml_runners[backend]
         if yaml_val is not None:
             mode, image = parse_runner_value(yaml_val)
-            return RunnerSpec(mode=mode, image=image, source="yaml")  # type: ignore[arg-type]
-
+            return RunnerSpec(mode=mode, image=image, source="yaml")
     # 3. User config — "auto" means no explicit preference, fall through to auto-detection.
     #    Passing user_config=None means "no user config file present" → auto-detect.
     if user_config is not None:
         user_val: str = getattr(user_config, backend, "auto")
         if user_val != "auto":
             mode, image = parse_runner_value(user_val)
-            return RunnerSpec(mode=mode, image=image, source="user_config")  # type: ignore[arg-type]
-        # "auto" -> fall through to auto-detection
+            return RunnerSpec(
+                mode=mode, image=image, source="user_config"
+            )  # "auto" -> fall through to auto-detection
 
     # 4. Auto-detection: Docker + NVIDIA Container Toolkit available?
     if is_docker_available():
         logger.info("Docker detected. Using containerised execution for reproducible measurements.")
-        return RunnerSpec(mode="docker", image=None, source="auto_detected")
+        return RunnerSpec(mode=RUNNER_DOCKER, image=None, source="auto_detected")
 
     # 5. Default: local with nudge message
     logger.info(
         "Docker not detected. Install Docker + NVIDIA Container Toolkit "
         "for reproducible isolated measurements."
     )
-    return RunnerSpec(mode="local", image=None, source="default")
+    return RunnerSpec(mode=RUNNER_LOCAL, image=None, source="default")
 
 
 # ---------------------------------------------------------------------------

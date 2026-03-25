@@ -12,14 +12,13 @@ Priority (highest wins): cli_overrides > path YAML > user_config_defaults
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config._dict_utils import _unflatten
+from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.grid import (
     CycleOrder,
     apply_cycles,
@@ -131,7 +130,7 @@ def load_study_config(
     Args:
         path: Path to study YAML file.
         cli_overrides: Optional dict of CLI flag overrides for execution block
-            (e.g. {"execution": {"n_cycles": 5}}). Phase 12 translates
+            (e.g. {"execution": {"n_cycles": 5}}). The CLI translates
             --cycles/--order/--no-gaps flags into this dict.
 
     Returns:
@@ -145,7 +144,7 @@ def load_study_config(
     path = Path(path)
     raw = _load_file(path)  # reuse existing _load_file — raises ConfigError on missing/parse error
 
-    # Apply CLI overrides (Phase 12 translates --cycles etc. into this dict)
+    # Apply CLI overrides (--cycles etc. translated into this dict)
     if cli_overrides:
         raw = deep_merge(raw, cli_overrides)
 
@@ -201,30 +200,6 @@ def load_study_config(
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in skipped],
     )
-
-
-# =============================================================================
-# Utility: deep merge
-# =============================================================================
-
-
-def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Deep merge two dictionaries, with overlay taking precedence.
-
-    Args:
-        base: Base dictionary.
-        overlay: Dictionary to overlay on base.
-
-    Returns:
-        Merged dictionary (new object, originals unchanged).
-    """
-    result = deepcopy(base)
-    for key, value in overlay.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge(result[key], value)
-        else:
-            result[key] = deepcopy(value)
-    return result
 
 
 # =============================================================================

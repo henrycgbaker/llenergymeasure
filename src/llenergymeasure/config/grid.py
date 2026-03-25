@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from rich.panel import Panel
 from rich.text import Text
 
-from llenergymeasure.config._dict_utils import _deep_merge, _unflatten
+from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -556,7 +556,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
                     # "engine.block_size" -> {"engine": {"block_size": value}}
                     backend_dict = config_dict.get(backend, {})
                     nested_update = _unflatten({dim_key: value})
-                    config_dict[backend] = _deep_merge(backend_dict, nested_update)
+                    config_dict[backend] = deep_merge(backend_dict, nested_update)
                 else:
                     # Universal parameter: goes at top level
                     config_dict[dim_key] = value

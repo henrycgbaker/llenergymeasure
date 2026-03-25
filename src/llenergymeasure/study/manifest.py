@@ -44,8 +44,7 @@ class StudyManifest(BaseModel):
     """In-progress checkpoint written after every experiment state transition.
 
     Distinct from StudyResult (the final return value of _run()).
-    StudyManifest is always-on in M2 and provides the foundation for --resume
-    support in M4.
+    StudyManifest is always-on and provides the foundation for --resume support.
     """
 
     model_config = {"extra": "forbid"}

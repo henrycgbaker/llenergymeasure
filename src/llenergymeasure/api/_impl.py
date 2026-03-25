@@ -9,11 +9,9 @@ import time
 from pathlib import Path
 from typing import Any, overload
 
-# ---------------------------------------------------------------------------
-# GPU index resolution
-# ---------------------------------------------------------------------------
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.domain.progress import ProgressCallback
@@ -108,7 +106,7 @@ def run_experiment(
 
 
 # ---------------------------------------------------------------------------
-# run_study — M2 implementation
+# run_study
 # ---------------------------------------------------------------------------
 
 
@@ -120,8 +118,7 @@ def run_study(
 ) -> StudyResult:
     """Run a multi-experiment study.
 
-    Always writes manifest.json to disk (LA-05 — documented side-effect).
-    Returns StudyResult with full schema (RES-13).
+    Always writes manifest.json to disk (documented side-effect).
 
     Args:
         config: YAML file path or resolved StudyConfig.
@@ -136,7 +133,7 @@ def run_study(
 
     Raises:
         ConfigError: Invalid config path or parse error.
-        PreFlightError: Multi-backend study without Docker (CM-10).
+        PreFlightError: Multi-backend study without Docker.
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     if isinstance(config, (str, Path)):
@@ -197,11 +194,10 @@ def _run(
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
     Always:
-    - Calls run_study_preflight(study, skip_preflight) first (CM-10 multi-backend guard
-      and Docker pre-flight checks)
+    - Calls run_study_preflight() first (multi-backend guard and Docker pre-flight checks)
     - Resolves runner specs for all backends in the study
-    - Creates study output directory and ManifestWriter (LA-05)
-    - Returns fully populated StudyResult (RES-13 + RES-15)
+    - Creates study output directory and ManifestWriter
+    - Returns fully populated StudyResult
 
     Single-experiment / n_cycles=1:  runs in-process or via DockerRunner directly.
     Otherwise:                         delegates to StudyRunner.
@@ -210,7 +206,6 @@ def _run(
 
     from llenergymeasure.config.user_config import load_user_config
     from llenergymeasure.domain.experiment import StudySummary
-    from llenergymeasure.infra.runner_resolution import resolve_study_runners
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
     from llenergymeasure.study.preflight import run_study_preflight
 
@@ -218,17 +213,17 @@ def _run(
 
     # Load user config first so runner context can be forwarded to preflight,
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
-    backends: list[str] = list({exp.backend for exp in study.experiments})
     user_config = load_user_config()
 
-    # Multi-backend guard — raises PreFlightError for multi-backend studies (CM-10)
-    # or auto-elevates to Docker when available (DOCK-05). Also runs Docker pre-flight
+    # Multi-backend guard — raises PreFlightError for multi-backend studies without
+    # Docker, or auto-elevates to Docker when available. Also runs Docker pre-flight
     # checks when any backend resolves to a Docker runner.
+    # Preflight returns resolved runner specs so we don't resolve them twice.
     if progress:
         progress.on_step_start("preflight", "Checking", "environment and Docker")
         t0_pf = time.perf_counter()
     try:
-        run_study_preflight(
+        runner_specs = run_study_preflight(
             study,
             skip_preflight=skip_preflight,
             yaml_runners=study.runners,
@@ -241,13 +236,6 @@ def _run(
     if progress:
         progress.on_step_done("preflight", time.perf_counter() - t0_pf)
 
-    # Resolve runner specs for all backends in the study
-    runner_specs = resolve_study_runners(
-        backends,
-        yaml_runners=study.runners,
-        user_config=user_config.runners,
-    )
-
     # Warn on mixed runners (some local, some docker)
     modes = {spec.mode for spec in runner_specs.values()}
     if len(modes) > 1:
@@ -256,7 +244,7 @@ def _run(
             "consider running all backends in Docker."
         )
 
-    # Always create study dir + manifest (LA-05)
+    # Always create study dir + manifest
     study_dir = create_study_dir(study.name, Path("results"))
     manifest = ManifestWriter(study, study_dir)
 
@@ -274,7 +262,7 @@ def _run(
         if study_cb is not None:
             config = study.experiments[0]
             spec = runner_specs.get(config.backend) if runner_specs else None
-            steps = list(STEPS_DOCKER if (spec and spec.mode == "docker") else STEPS_LOCAL)
+            steps = list(STEPS_DOCKER if (spec and spec.mode == RUNNER_DOCKER) else STEPS_LOCAL)
             study_cb.begin_experiment(1, config.model, config.backend, config.precision, steps)
 
         exp_start = time.monotonic()
@@ -372,7 +360,7 @@ def _run_in_process(
 
     manifest.mark_running(config_hash, cycle)
 
-    if spec is not None and spec.mode == "docker":
+    if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image

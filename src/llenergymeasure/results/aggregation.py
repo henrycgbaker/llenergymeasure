@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -119,30 +120,58 @@ def validate_process_completeness(
     )
 
 
+@dataclass
+class AggregationContext:
+    """All parameters needed by aggregate_results(), grouped logically.
+
+    Required fields must be provided; everything else has sensible defaults
+    matching the previous keyword-argument interface.
+    """
+
+    # -- Required --------------------------------------------------------
+    experiment_id: str
+    measurement_config_hash: str
+
+    # -- Measurement context ---------------------------------------------
+    measurement_methodology: Literal["total", "steady_state", "windowed"] = "total"
+    steady_state_window: tuple[float, float] | None = None
+    baseline_power_w: float | None = None
+    energy_adjusted_j: float | None = None
+    energy_per_device_j: list[float] | None = None
+    energy_breakdown: EnergyBreakdown | None = None
+    multi_gpu: MultiGPUMetrics | None = None
+
+    # -- Environment -----------------------------------------------------
+    environment_snapshot: EnvironmentSnapshot | None = None
+    thermal_throttle: ThermalThrottleInfo | None = None
+
+    # -- Warmup ----------------------------------------------------------
+    warmup_excluded_samples: int | None = None
+    warmup_result: WarmupResult | None = None
+
+    # -- Verification ----------------------------------------------------
+    verify_temporal_overlap: bool = True
+    verify_gpu_attribution: bool = True
+    expected_processes: int | None = None
+
+    # -- Output ----------------------------------------------------------
+    results_dir: Path | None = None
+    strict: bool = True
+    allow_mixed_backends: bool = False
+
+    # -- Timeseries + config ---------------------------------------------
+    timeseries: str | None = None
+    effective_config: dict[str, Any] | None = None
+    measurement_warnings: list[str] | None = None
+
+
+# NOTE: Not yet wired into the harness. The harness currently builds
+# ExperimentResult directly via _build_result() for single-process runs.
+# This function is designed for future data-parallel multi-process
+# experiments where multiple workers each produce a RawProcessResult.
 def aggregate_results(
     raw_results: list[RawProcessResult],
-    experiment_id: str,
-    measurement_config_hash: str,
-    measurement_methodology: Literal["total", "steady_state", "windowed"] = "total",
-    steady_state_window: tuple[float, float] | None = None,
-    baseline_power_w: float | None = None,
-    energy_adjusted_j: float | None = None,
-    energy_per_device_j: list[float] | None = None,
-    energy_breakdown: EnergyBreakdown | None = None,
-    multi_gpu: MultiGPUMetrics | None = None,
-    environment_snapshot: EnvironmentSnapshot | None = None,
-    measurement_warnings: list[str] | None = None,
-    warmup_excluded_samples: int | None = None,
-    warmup_result: WarmupResult | None = None,
-    thermal_throttle: ThermalThrottleInfo | None = None,
-    timeseries: str | None = None,
-    effective_config: dict[str, Any] | None = None,
-    verify_temporal_overlap: bool = True,
-    verify_gpu_attribution: bool = True,
-    expected_processes: int | None = None,
-    results_dir: Path | None = None,
-    strict: bool = True,
-    allow_mixed_backends: bool = False,
+    ctx: AggregationContext,
 ) -> ExperimentResult:
     """Aggregate raw per-process results into a single ExperimentResult (v2.0).
 
@@ -156,28 +185,7 @@ def aggregate_results(
 
     Args:
         raw_results: List of raw results from each process.
-        experiment_id: Unique experiment identifier.
-        measurement_config_hash: SHA-256[:16] of ExperimentConfig.
-        measurement_methodology: What was measured ("total", "steady_state", "windowed").
-        steady_state_window: (start_sec, end_sec) relative to experiment start.
-        baseline_power_w: Idle GPU power (W) measured before experiment.
-        energy_adjusted_j: Baseline-subtracted energy.
-        energy_per_device_j: Per-GPU energy (Zeus backend).
-        energy_breakdown: Detailed energy breakdown with baseline adjustment.
-        multi_gpu: Multi-GPU metrics. None for single-GPU runs.
-        environment_snapshot: Full software+hardware environment snapshot.
-        measurement_warnings: Measurement quality warnings.
-        warmup_excluded_samples: Number of prompts excluded during warmup.
-        warmup_result: Warmup convergence detection result.
-        thermal_throttle: GPU thermal and power throttling information.
-        timeseries: Relative filename of timeseries sidecar.
-        effective_config: Full resolved config (taken from first process if None).
-        verify_temporal_overlap: Check that processes ran concurrently.
-        verify_gpu_attribution: Check that GPU IDs are unique.
-        expected_processes: Expected number of processes (for completeness validation).
-        results_dir: Results directory (for marker checking).
-        strict: If True, raise on incomplete; if False, warn and proceed.
-        allow_mixed_backends: If False (default), reject results from different backends.
+        ctx: AggregationContext with all configuration parameters.
 
     Returns:
         ExperimentResult (v2.0) combining all process data.
@@ -189,7 +197,7 @@ def aggregate_results(
     if not raw_results:
         raise AggregationError("Cannot aggregate empty results list")
 
-    warnings: list[str] = list(measurement_warnings or [])
+    warnings: list[str] = list(ctx.measurement_warnings or [])
     num_processes = len(raw_results)
 
     # Backend consistency validation
@@ -200,7 +208,7 @@ def aggregate_results(
             f"Mixed backends detected: {backend_list}. "
             "Aggregating results from different backends produces statistically invalid comparisons."
         )
-        if not allow_mixed_backends:
+        if not ctx.allow_mixed_backends:
             raise AggregationError(
                 f"{msg} Use --allow-mixed-backends to override (not recommended)."
             )
@@ -208,12 +216,12 @@ def aggregate_results(
         logger.warning("Proceeding with mixed-backend aggregation: %s", backend_list)
 
     # Completeness validation
-    if expected_processes is not None and results_dir is not None:
+    if ctx.expected_processes is not None and ctx.results_dir is not None:
         report = validate_process_completeness(
-            experiment_id, raw_results, expected_processes, results_dir
+            ctx.experiment_id, raw_results, ctx.expected_processes, ctx.results_dir
         )
         if not report.is_complete:
-            if strict:
+            if ctx.strict:
                 raise AggregationError(f"Incomplete experiment results: {report.error_message}")
             else:
                 warnings.append(f"Incomplete results: {report.error_message}")
@@ -221,7 +229,7 @@ def aggregate_results(
 
     # Verify temporal overlap
     temporal_overlap_ok = False
-    if verify_temporal_overlap and num_processes > 1:
+    if ctx.verify_temporal_overlap and num_processes > 1:
         temporal_overlap_ok = _check_temporal_overlap(raw_results)
         if not temporal_overlap_ok:
             warnings.append("Processes did not run concurrently - aggregation may be inaccurate")
@@ -229,7 +237,7 @@ def aggregate_results(
 
     # Verify GPU attribution
     gpu_attribution_ok = False
-    if verify_gpu_attribution:
+    if ctx.verify_gpu_attribution:
         gpu_attribution_ok = _check_gpu_attribution(raw_results)
         if not gpu_attribution_ok:
             warnings.append("Duplicate GPU IDs detected - energy may be double-counted")
@@ -312,13 +320,14 @@ def aggregate_results(
     )
 
     # Resolve effective_config and backend from first result if not provided
-    resolved_effective_config: dict[str, Any] = effective_config or (
+    resolved_effective_config: dict[str, Any] = ctx.effective_config or (
         raw_results[0].effective_config if raw_results else {}
     )
     backend = raw_results[0].backend if raw_results else "pytorch"
     backend_version: str | None = raw_results[0].backend_version if raw_results else None
 
     # Energy breakdown: sum raw_j and adjusted_j across processes (if not provided)
+    energy_breakdown = ctx.energy_breakdown
     if energy_breakdown is None:
         breakdowns = [p.energy_breakdown for p in raw_results if p.energy_breakdown]
         if breakdowns:
@@ -336,6 +345,7 @@ def aggregate_results(
             )
 
     # Thermal throttle: merge across processes (if not provided)
+    thermal_throttle = ctx.thermal_throttle
     if thermal_throttle is None:
         throttles = [p.thermal_throttle for p in raw_results if p.thermal_throttle]
         if throttles:
@@ -352,6 +362,7 @@ def aggregate_results(
             )
 
     # Warmup result: take from first process if not provided
+    warmup_result = ctx.warmup_result
     if warmup_result is None:
         warmup_result = next((p.warmup_result for p in raw_results if p.warmup_result), None)
 
@@ -362,12 +373,12 @@ def aggregate_results(
 
     return ExperimentResult(
         schema_version="2.0",
-        experiment_id=experiment_id,
-        measurement_config_hash=measurement_config_hash,
+        experiment_id=ctx.experiment_id,
+        measurement_config_hash=ctx.measurement_config_hash,
         backend=backend,
         backend_version=backend_version,
-        measurement_methodology=measurement_methodology,
-        steady_state_window=steady_state_window,
+        measurement_methodology=ctx.measurement_methodology,
+        steady_state_window=ctx.steady_state_window,
         total_tokens=total_tokens,
         total_energy_j=total_energy_j,
         total_inference_time_sec=wall_clock_duration,
@@ -377,15 +388,15 @@ def aggregate_results(
         flops_per_output_token=flops_per_output_token,
         flops_per_input_token=flops_per_input_token,
         flops_per_second=flops_per_second,
-        baseline_power_w=baseline_power_w,
-        energy_adjusted_j=energy_adjusted_j,
-        energy_per_device_j=energy_per_device_j,
+        baseline_power_w=ctx.baseline_power_w,
+        energy_adjusted_j=ctx.energy_adjusted_j,
+        energy_per_device_j=ctx.energy_per_device_j,
         energy_breakdown=energy_breakdown,
-        multi_gpu=multi_gpu,
-        environment_snapshot=environment_snapshot,
+        multi_gpu=ctx.multi_gpu,
+        environment_snapshot=ctx.environment_snapshot,
         measurement_warnings=warnings,
-        warmup_excluded_samples=warmup_excluded_samples,
-        timeseries=timeseries,
+        warmup_excluded_samples=ctx.warmup_excluded_samples,
+        timeseries=ctx.timeseries,
         start_time=start_time,
         end_time=end_time,
         effective_config=resolved_effective_config,

@@ -1,7 +1,6 @@
 """Domain models for LLM Bench."""
 
 from llenergymeasure.domain.experiment import (
-    AggregatedResult,
     AggregationMetadata,
     ExperimentResult,
     RawProcessResult,
@@ -19,7 +18,6 @@ from llenergymeasure.domain.model_info import ModelInfo, QuantizationSpec
 from llenergymeasure.domain.progress import ProgressCallback, StudyProgressCallback
 
 __all__ = [
-    "AggregatedResult",
     "AggregationMetadata",
     "CombinedMetrics",
     "ComputeMetrics",

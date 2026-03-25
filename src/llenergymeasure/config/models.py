@@ -334,7 +334,6 @@ class ExperimentConfig(BaseModel):
     )
 
     # Backend sections (None = use backend's own defaults)
-    # GPU detection and cpu-precision cross-validation is Phase 4 (pre-flight).
     # All current backends (pytorch, vllm, tensorrt) are GPU-only; cpu backend is future scope.
     pytorch: PyTorchConfig | None = Field(
         default=None,
@@ -442,8 +441,7 @@ class ExecutionConfig(BaseModel):
     seed override (default: derived from study_design_hash for reproducibility).
 
     Pydantic defaults are conservative (1 cycle, sequential, no gaps). The CLI
-    will apply research-appropriate effective defaults (e.g. 3 cycles, interleaved)
-    in Phase 12.
+    will apply research-appropriate effective defaults (e.g. 3 cycles, interleaved).
     """
 
     model_config = {"extra": "forbid"}

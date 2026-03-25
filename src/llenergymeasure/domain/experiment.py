@@ -165,7 +165,7 @@ class ExperimentResult(BaseModel):
         default=None, description="Backend version string for reproducibility"
     )
 
-    # Methodology (RES-03, RES-04)
+    # Methodology
     measurement_methodology: Literal["total", "steady_state", "windowed"] = Field(
         ..., description="What was measured — total run, steady-state window, or explicit window"
     )
@@ -196,7 +196,7 @@ class ExperimentResult(BaseModel):
         description="FLOPs throughput (total_flops / inference_time_sec). None if time=0 or flops=0.",
     )
 
-    # Energy detail (RES-06, RES-07)
+    # Energy detail
     baseline_power_w: float | None = Field(
         default=None, description="Idle GPU power (W) measured before experiment"
     )
@@ -215,12 +215,12 @@ class ExperimentResult(BaseModel):
         default=None, description="Multi-GPU metrics. None for single-GPU runs."
     )
 
-    # Environment (RES-09)
+    # Environment
     environment_snapshot: EnvironmentSnapshot | None = Field(
         default=None, description="Full software+hardware environment snapshot"
     )
 
-    # Quality (RES-08, RES-10, RES-11)
+    # Quality
     measurement_warnings: list[str] = Field(
         default_factory=list,
         description="Measurement quality warnings (e.g., short duration, thermal drift)",
@@ -310,7 +310,7 @@ class StudySummary(BaseModel):
 
 
 class StudyResult(BaseModel):
-    """Final return value of a study run (RES-13).
+    """Final return value of a study run.
 
     Distinct from StudyManifest (the in-progress checkpoint). StudyResult is
     assembled once after all experiments complete (or after interrupt) and returned
@@ -333,10 +333,6 @@ class StudyResult(BaseModel):
     )
     result_files: list[str] = Field(
         default_factory=list,
-        description="Paths to per-experiment result.json files (RES-15: paths, not embedded)",
+        description="Paths to per-experiment result.json files (paths, not embedded)",
     )
     summary: StudySummary | None = Field(default=None, description="Aggregate summary statistics")
-
-
-# v1.x compatibility alias -- remove in v3.0
-AggregatedResult = ExperimentResult

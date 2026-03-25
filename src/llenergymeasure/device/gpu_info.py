@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
+from llenergymeasure.config.ssot import BACKEND_PYTORCH, BACKEND_TENSORRT, BACKEND_VLLM
+
 logger = logging.getLogger(__name__)
 
 
@@ -262,8 +264,7 @@ def _get_device_info_pynvml(handle: Any, index: int, mig_instance_count: int = 0
     # Get compute capability
     compute_capability = None
     try:
-        major = pynvml.nvmlDeviceGetCudaComputeCapability(handle)[0]
-        minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)[1]
+        major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
         compute_capability = f"{major}.{minor}"
     except (pynvml.NVMLError, AttributeError):
         pass
@@ -541,7 +542,7 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    if config.backend == "vllm" and config.vllm is not None:
+    if config.backend == BACKEND_VLLM and config.vllm is not None:
         tp = 1
         pp = 1
         if config.vllm.engine is not None:
@@ -550,12 +551,12 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         total = tp * pp
         if total > 1:
             return list(range(total))
-    elif config.backend == "tensorrt" and config.tensorrt is not None:
+    elif config.backend == BACKEND_TENSORRT and config.tensorrt is not None:
         tp = config.tensorrt.tp_size or 1
         if tp > 1:
             return list(range(tp))
     elif (
-        config.backend == "pytorch"
+        config.backend == BACKEND_PYTORCH
         and config.pytorch is not None
         and config.pytorch.device_map is not None
     ):
@@ -564,11 +565,8 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         try:
             import pynvml
 
-            pynvml.nvmlInit()
-            try:
+            with nvml_context():
                 count = pynvml.nvmlDeviceGetCount()
-            finally:
-                pynvml.nvmlShutdown()
             if count > 1:
                 return list(range(count))
         except Exception:
