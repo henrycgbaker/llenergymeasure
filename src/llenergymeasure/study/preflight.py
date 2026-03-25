@@ -14,6 +14,7 @@ from llenergymeasure.utils.exceptions import PreFlightError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserRunnersConfig
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ def run_study_preflight(
     skip_preflight: bool = False,
     yaml_runners: dict[str, str] | None = None,
     user_config: UserRunnersConfig | None = None,
-) -> dict[str, object]:
+) -> dict[str, RunnerSpec]:
     """Pre-flight checks for a study configuration.
 
     Single-backend studies pass through — per-experiment pre-flight runs later
