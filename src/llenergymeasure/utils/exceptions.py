@@ -58,13 +58,5 @@ class InvalidStateTransitionError(ExperimentError):
         self.to_state = to_state
 
 
-# ---------------------------------------------------------------------------
-# v1.x compatibility aliases — removed in a later phase when consumers migrate
-# ---------------------------------------------------------------------------
-ConfigurationError = ConfigError
+# Used by results/aggregation.py
 AggregationError = ExperimentError
-BackendInferenceError = BackendError
-BackendInitializationError = BackendError
-BackendNotAvailableError = BackendError
-BackendConfigError = ConfigError
-BackendTimeoutError = BackendError

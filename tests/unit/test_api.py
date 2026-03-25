@@ -331,6 +331,14 @@ class _MockBackend:
         pass
 
 
+def _mock_preflight_return(study, **kw):
+    """Mock preflight that returns a local RunnerSpec for each backend in the study."""
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
+
+    backends = {exp.backend for exp in study.experiments}
+    return {b: RunnerSpec(mode="local", image=None, source="test") for b in backends}
+
+
 def _patch_harness(monkeypatch, result: ExperimentResult) -> None:
     """Patch MeasurementHarness.run to return a pre-built result.
 
@@ -360,7 +368,7 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -401,7 +409,7 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
         return mock_backend
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -436,7 +444,7 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -473,7 +481,7 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
         raise PreFlightError(["CUDA not available"])
 
     monkeypatch.setattr(pf_module, "run_preflight", failing_preflight)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -504,7 +512,7 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
         raise BackendError("GPU out of memory")
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -534,7 +542,7 @@ def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
     mock_backend = _MockBackend(expected_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -571,7 +579,7 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -610,7 +618,7 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -649,7 +657,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
         original_runner_init(self, *args, **kwargs)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -713,11 +721,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
         captured_runner_specs.append(runner_specs)
         return original_run_via_runner(study, manifest, study_dir, runner_specs=runner_specs)
 
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
-    monkeypatch.setattr(
-        "llenergymeasure.infra.runner_resolution.resolve_study_runners",
-        lambda backends, yaml_runners=None, user_config=None: resolved_specs,
-    )
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: resolved_specs)
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
         lambda **kwargs: type("C", (), {"runners": None})(),
@@ -822,14 +826,10 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     mock_result = _make_experiment_result()
     mock_backend = _MockBackend(mock_result)
 
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: mixed_specs)
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)
-    monkeypatch.setattr(
-        "llenergymeasure.infra.runner_resolution.resolve_study_runners",
-        lambda backends, yaml_runners=None, user_config=None: mixed_specs,
-    )
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
         lambda **kwargs: type("C", (), {"runners": None})(),
@@ -878,11 +878,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
         result_files = [str(tmp_path / f"result-{i}.json") for i in range(6)]
         return result_files, mock_results, []
 
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: None)
-    monkeypatch.setattr(
-        "llenergymeasure.infra.runner_resolution.resolve_study_runners",
-        lambda backends, yaml_runners=None, user_config=None: {},
-    )
+    monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
         lambda **kwargs: type("C", (), {"runners": None})(),

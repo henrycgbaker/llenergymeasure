@@ -12,14 +12,13 @@ Priority (highest wins): cli_overrides > path YAML > user_config_defaults
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import ValidationError
 
-from llenergymeasure.config._dict_utils import _unflatten
+from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.grid import (
     CycleOrder,
     apply_cycles,
@@ -201,30 +200,6 @@ def load_study_config(
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in skipped],
     )
-
-
-# =============================================================================
-# Utility: deep merge
-# =============================================================================
-
-
-def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Deep merge two dictionaries, with overlay taking precedence.
-
-    Args:
-        base: Base dictionary.
-        overlay: Dictionary to overlay on base.
-
-    Returns:
-        Merged dictionary (new object, originals unchanged).
-    """
-    result = deepcopy(base)
-    for key, value in overlay.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge(result[key], value)
-        else:
-            result[key] = deepcopy(value)
-    return result
 
 
 # =============================================================================

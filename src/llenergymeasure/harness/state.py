@@ -272,10 +272,11 @@ class StateManager:
             True if a state file was deleted, False if none existed.
         """
         path = self._state_path(experiment_id)
-        if path.exists():
+        try:
             path.unlink()
             return True
-        return False
+        except FileNotFoundError:
+            return False
 
     def list_experiments(self) -> list[str]:
         """Return all experiment IDs that have persisted state.

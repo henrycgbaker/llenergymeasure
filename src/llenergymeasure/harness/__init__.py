@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 def _cuda_sync() -> None:
-    """Synchronise CUDA at measurement boundary (CM-15).
+    """Synchronise CUDA at measurement boundary.
 
     Best-effort — failures are non-fatal and silently ignored.
     """
@@ -235,13 +235,13 @@ class MeasurementHarness:
             if _p:
                 _p.on_substep(step, text, elapsed)
 
-        # 1. Environment snapshot — start background thread (BEFORE model loading — CM-32)
+        # 1. Environment snapshot — start background thread (before model loading)
         snapshot_future: Future[EnvironmentSnapshot] | None = None
         if snapshot is None:
             logger.debug("Collecting environment snapshot (background thread)")
             snapshot_future = collect_environment_snapshot_async()
 
-        # 2. Baseline power measurement (BEFORE model load — CM-17, CM-20)
+        # 2. Baseline power measurement (before model load)
         baseline = None
         if config.baseline.enabled:
             dur = config.baseline.duration_seconds
@@ -295,7 +295,7 @@ class MeasurementHarness:
             _p.on_step_done("prompts", time.perf_counter() - t0_prompts)
 
         try:
-            # 5. Warmup (CM-21, CM-24) — returns WarmupResult
+            # 5. Warmup
             if _p:
                 _p.on_step_start(
                     "warmup", "Warming up", f"up to {config.warmup.max_prompts} prompts"
@@ -316,7 +316,7 @@ class MeasurementHarness:
                 + (f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""),
             )
 
-            # 6. Thermal floor (CM-22) — show step BEFORE sleeping
+            # 6. Thermal floor — show step before sleeping
             floor_secs = config.warmup.thermal_floor_seconds if config.warmup.enabled else 0
             if _p:
                 if floor_secs > 0:
@@ -332,7 +332,7 @@ class MeasurementHarness:
             if _p and wait_s > 0:
                 _p.on_step_done("thermal_floor", wait_s)
 
-            # 7. Select energy backend (CM-14)
+            # 7. Select energy backend
             if _p:
                 _p.on_step_start("energy_select", "Selecting", "energy backend")
                 t0_energy = time.perf_counter()
@@ -348,7 +348,7 @@ class MeasurementHarness:
             if energy_backend is not None:
                 energy_tracker = energy_backend.start_tracking()
 
-            # 9. CUDA sync BEFORE inference (CM-15 — Zeus best practice)
+            # 9. CUDA sync before inference (Zeus best practice)
             _cuda_sync()
             _substep("measure", "CUDA sync (pre)")
 
@@ -356,17 +356,16 @@ class MeasurementHarness:
                 _p.on_step_start("measure", "Measuring", f"inference ({config.n} prompts)")
             _substep("measure", "energy tracker started")
 
-            t_inference_start = time.perf_counter()  # Canonical timer start (H1)
-            # 10. Record start time and run inference
+            t_inference_start = time.perf_counter()
             start_time = datetime.now()
 
             # Start thermal sampler around inference for timeseries + throttle detection
             with PowerThermalSampler(gpu_indices=gpu_indices) as sampler:
                 output = backend.run_inference(config, model, prompts)
 
-            t_inference_end = time.perf_counter()  # Canonical timer end (H1)
+            t_inference_end = time.perf_counter()
 
-            # 11. CUDA sync AFTER inference, before stopping energy (CM-15)
+            # 11. CUDA sync after inference, before stopping energy
             _cuda_sync()
             _substep("measure", "CUDA sync (post)")
 
@@ -376,7 +375,7 @@ class MeasurementHarness:
             thermal_info = sampler.get_thermal_throttle_info()
             timeseries_samples = sampler.get_samples()
 
-            # Harness sets canonical inference timer (H1) — overrides backend's elapsed_time_sec
+            # Harness sets canonical inference timer — overrides backend's elapsed_time_sec
             output.inference_time_sec = t_inference_end - t_inference_start
 
             # 12. Stop energy tracking
@@ -385,7 +384,7 @@ class MeasurementHarness:
                 energy_measurement = energy_backend.stop_tracking(energy_tracker)
             end_time = datetime.now()
 
-            # 13. FLOPs estimation (CM-26, CM-28 — warmup tokens excluded)
+            # 13. FLOPs estimation (warmup tokens excluded)
             if _p:
                 _p.on_step_start("flops", "Estimating", "FLOPs (PaLM formula)")
                 t0_flops = time.perf_counter()
@@ -401,7 +400,7 @@ class MeasurementHarness:
             # Always release model from memory even on exception
             backend.cleanup(model)
 
-        # 14. Write timeseries Parquet sidecar (if output_dir set — CM-16)
+        # 14. Write timeseries Parquet sidecar (if output_dir set)
         if _p:
             _p.on_step_start(
                 "save",
@@ -419,7 +418,7 @@ class MeasurementHarness:
             timeseries_path = ts_file.name  # relative name in result JSON
             _substep("save", "timeseries parquet written")
 
-        # 15. Collect measurement quality warnings (CM-25 implied)
+        # 15. Collect measurement quality warnings
         duration_sec = (end_time - start_time).total_seconds()
         measurement_warnings = self._collect_warnings(duration_sec, timeseries_samples, gpu_indices)
 
@@ -484,9 +483,9 @@ class MeasurementHarness:
     ) -> Any:
         """Estimate FLOPs from model and token counts.
 
-        Fallback chain (M5):
+        Fallback chain:
         1. AutoConfig path — uses estimate_flops_palm_from_config(config.model).
-           Works for ALL backends including vLLM and TensorRT-LLM (no model weights needed).
+           Works for all backends (no model weights needed).
         2. hf_model path — uses estimate_flops_palm(hf_model) when extras['hf_model'] is set.
            Higher-confidence since it counts actual loaded parameters.
         3. None — FLOPs unavailable.
@@ -602,18 +601,18 @@ class MeasurementHarness:
             else 0.0
         )
 
-        # Real energy values from measurement backend (CM-18, CM-19)
+        # Real energy values from measurement backend
         total_energy_j = energy_measurement.total_j if energy_measurement is not None else 0.0
         # duration_sec is passed in from run() — computed once, not recalculated here
 
-        # Energy per token (CM-25): output tokens only (input tokens are not "generated")
+        # Energy per token: output tokens only (input tokens are not "generated")
         output_tokens = output.output_tokens if output.output_tokens > 0 else output.total_tokens
         avg_energy_per_token_j = (
             total_energy_j / output_tokens if (total_energy_j > 0 and output_tokens > 0) else 0.0
         )
 
         # Energy breakdown with baseline adjustment.
-        # H1: use energy backend's sampler window duration for baseline adjustment,
+        # Use energy backend's sampler window duration for baseline adjustment,
         # not harness datetime duration, to avoid CUDA sync latency skew.
         energy_duration = (
             energy_measurement.duration_sec if energy_measurement is not None else duration_sec
@@ -639,7 +638,7 @@ class MeasurementHarness:
         # FLOPs from PaLM formula (0.0 if estimation unavailable)
         total_flops = flops_result.value if flops_result is not None else 0.0
 
-        # FLOPs derived fields (B2 fix — no longer hardcoded to 0.0)
+        # FLOPs derived fields
         flops_per_output_token = (
             total_flops / output.output_tokens
             if (total_flops > 0 and output.output_tokens > 0)

@@ -17,13 +17,7 @@ from llenergymeasure.utils.exceptions import PreFlightError
 
 logger = logging.getLogger(__name__)
 
-# Map from backend name to the package that provides it.
-_BACKEND_PACKAGES: dict[str, str] = {
-    "pytorch": "transformers",
-    "vllm": "vllm",
-    "tensorrt": "tensorrt_llm",
-}
-
+from llenergymeasure.config.ssot import BACKEND_PACKAGES
 
 # ---------------------------------------------------------------------------
 # Internal check helpers
@@ -45,7 +39,7 @@ def _check_cuda_available() -> bool:
 
 def _check_backend_installed(backend: str) -> bool:
     """Return True if the package that provides *backend* is importable."""
-    package = _BACKEND_PACKAGES.get(backend)
+    package = BACKEND_PACKAGES.get(backend)
     if package is None:
         # Unknown backend — Pydantic already blocked invalid values; treat as missing.
         return False
@@ -138,7 +132,7 @@ def run_preflight(config: ExperimentConfig) -> None:
 
     # Check 2: Backend installed
     if not _check_backend_installed(config.backend):
-        package = _BACKEND_PACKAGES.get(config.backend, config.backend)
+        package = BACKEND_PACKAGES.get(config.backend, config.backend)
         failures.append(
             f"{config.backend} not installed — pip install llenergymeasure[{config.backend}]"
             f" (missing: {package})"

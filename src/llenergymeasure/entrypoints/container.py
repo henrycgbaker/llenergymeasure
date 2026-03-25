@@ -1,8 +1,8 @@
 """Container-side entry point for running an experiment inside Docker.
 
-This module is invoked by the DockerRunner (Plan 02) inside the container.
+This module is invoked by the DockerRunner inside the container.
 It reads an ExperimentConfig from a JSON file on the shared volume, runs the
-experiment via the library API (not CLI re-entry — DOCK-11), and writes the
+experiment via the library API (not CLI re-entry), and writes the
 ExperimentResult back to the same volume for the host to collect.
 
 Volume layout (managed by DockerRunner on the host):
