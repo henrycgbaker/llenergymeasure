@@ -1,0 +1,675 @@
+# Full-suite multi-backend study - comprehensive coverage across all backends
+# Run: llem run configs/examples/study-full-suite.yaml
+#
+# The "run everything" config: combines the complete parameter spaces of
+# PyTorch (local), vLLM (Docker), and TensorRT-LLM (Docker) into one study.
+# Backend-specific sweep axes use dotted paths (e.g. pytorch.batch_size) so
+# each backend's parameters are crossed only with each other and with
+# universal params - never with another backend's params.
+#
+# Note: FP8 quantisation requires SM >= 8.9 (Ada Lovelace / Hopper).
+#       A100 users should use INT8, W4A16_AWQ, or W8A16.
+#
+# Sweep experiments:
+#   PyTorch:   2 precision x 4 batch_size x 3 attn_implementation   =  24
+#   vLLM:      2 precision x 3 gpu_mem x 2 eager x 3 seqs x 2 prefill = 72
+#   TensorRT:  2 precision x 3 max_batch_size x 2 max_seq_len        =  12
+#   Total sweep:                                                       = 108
+# Explicit experiments:
+#   PyTorch:   10 active + 2 commented (LoRA, synthetic)
+#   vLLM:       8 active + 2 commented (speculative, LoRA)
+#   TensorRT:  11 active + 2 commented (FP8, TRT sampling)
+#   Total explicit:                                                    =  29
+# Grand total: 137 unique experiments x 3 cycles = 411 runs
+
+name: full-suite-all-backends
+
+# =====================================================================
+# Shared fields (applied to every experiment in the study)
+# =====================================================================
+model: Qwen/Qwen2.5-0.5B
+
+# --- Data ---
+n: 50
+dataset: aienergyscore           # Built-in dataset (see synthetic alternative below)
+dataset_order: interleaved       # interleaved | grouped | shuffled
+
+# Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
+# dataset:
+#   n: 50                        # Number of synthetic prompts to generate
+#   input_len: 512               # Fixed input token length per prompt
+#   output_len: 128              # Fixed output token length per prompt
+#   seed: 42                     # Reproducible prompt generation
+
+# --- Hardware ---
+precision: bf16                  # Overridden per-experiment; also a sweep axis
+random_seed: 42
+
+# --- Token limits ---
+max_input_tokens: 512
+max_output_tokens: 128
+
+# --- Energy measurement ---
+energy:
+  backend: auto                  # auto | nvml | zeus | codecarbon | null (disables)
+
+# --- Baseline power measurement ---
+baseline:
+  enabled: true
+  duration_seconds: 30.0         # 5.0 - 120.0
+
+# --- Warmup ---
+warmup:
+  enabled: true
+  n_warmup: 3
+  thermal_floor_seconds: 30.0    # Minimum 30s
+  # CV-based convergence detection (opt-in, additive to n_warmup):
+  # convergence_detection: true
+  # cv_threshold: 0.05           # Target coefficient of variation
+  # max_prompts: 20              # Upper bound on warmup prompts
+  # window_size: 5               # Rolling window for CV calculation
+  # min_prompts: 5               # Minimum before checking convergence
+
+# --- Decoder / sampling (universal, shared across backends) ---
+decoder:
+  preset: deterministic          # Greedy decoding for reproducible comparison
+  # Presets override individual params below. Available: deterministic | standard | creative | factual
+  # temperature: 1.0             # 0.0 (greedy) to 2.0
+  # do_sample: true
+  # top_k: 50                   # 0 = disabled
+  # top_p: 1.0                  # 1.0 = disabled (nucleus sampling)
+  # repetition_penalty: 1.0     # 1.0 = no penalty
+  # min_p: null                 # Min probability filter (null = disabled)
+  # min_new_tokens: null         # Minimum output tokens (null = no minimum)
+
+# --- LoRA adapter (optional, applies to all experiments) ---
+# lora:
+#   adapter_id: my-org/my-lora-adapter   # HuggingFace Hub adapter ID
+#   # adapter_path: /path/to/local/adapter  # OR local adapter weights
+#   merge_weights: false         # Merge adapter into base model at load time
+
+# --- Passthrough kwargs (advanced) ---
+# passthrough_kwargs:
+#   use_safetensors: true
+
+# --- Output ---
+# output_dir: null               # Per-experiment output directory override
+
+# --- Shared TRT-LLM backend settings ---
+# Applied to all TensorRT sweep experiments. Explicit TRT experiments
+# override these where needed.
+tensorrt:
+  max_input_len: 1024
+  build_cache:
+    max_cache_storage_gb: 256
+
+# =====================================================================
+# Sweep axes (Cartesian product, per-backend)
+# =====================================================================
+# Dotted paths (e.g. pytorch.batch_size) scope params to that backend.
+# Each backend's scoped params are crossed only with each other and with
+# universal params - never with another backend's params.
+sweep:
+  # --- Universal (applies to all three backends) ---
+  precision:
+    - bf16
+    - fp16
+
+  # --- PyTorch parameter space ---
+  # Produces: 2 precision x 4 batch_size x 3 attn_implementation = 24 experiments
+  pytorch.batch_size:
+    - 1
+    - 4
+    - 8
+    - 16
+  pytorch.attn_implementation:
+    - sdpa
+    - flash_attention_2
+    - eager
+
+  # --- vLLM parameter space ---
+  # Produces: 2 precision x 3 gpu_mem x 2 eager x 3 seqs x 2 prefill = 72 experiments
+  vllm.engine.gpu_memory_utilization:
+    - 0.7
+    - 0.85
+    - 0.95
+  vllm.engine.enforce_eager:
+    - true
+    - false
+  vllm.engine.max_num_seqs:
+    - 64
+    - 128
+    - 256
+  vllm.engine.enable_chunked_prefill:
+    - true
+    - false
+
+  # --- TensorRT parameter space ---
+  # Produces: 2 precision x 3 max_batch_size x 2 max_seq_len = 12 experiments
+  tensorrt.max_batch_size:
+    - 1
+    - 4
+    - 8
+  tensorrt.max_seq_len:
+    - 1536
+    - 2048
+
+# =====================================================================
+# Explicit experiments (mutually exclusive or feature-specific params)
+# =====================================================================
+experiments:
+
+  # =================================================================
+  # PYTORCH explicit experiments
+  # =================================================================
+
+  # -----------------------------------------------------------------
+  # torch.compile modes
+  # -----------------------------------------------------------------
+  # torch_compile_mode requires torch_compile: true - can't be swept
+  # with torch_compile: false configs, so listed explicitly.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      torch_compile: true
+      torch_compile_mode: default
+      torch_compile_backend: inductor
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      torch_compile: true
+      torch_compile_mode: reduce-overhead
+      torch_compile_backend: inductor
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      torch_compile: true
+      torch_compile_mode: max-autotune
+      torch_compile_backend: inductor
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # BitsAndBytes quantization
+  # -----------------------------------------------------------------
+  # 4-bit and 8-bit are mutually exclusive - cannot be swept together.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp16
+    n: 50
+    pytorch:
+      batch_size: 4
+      load_in_8bit: true
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp16
+    n: 50
+    pytorch:
+      batch_size: 4
+      load_in_4bit: true
+      bnb_4bit_compute_dtype: float16
+      bnb_4bit_quant_type: nf4
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp16
+    n: 50
+    pytorch:
+      batch_size: 4
+      load_in_4bit: true
+      bnb_4bit_compute_dtype: float16
+      bnb_4bit_quant_type: nf4
+      bnb_4bit_use_double_quant: true
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # PyTorch beam search
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    decoder:
+      temperature: 0.0
+      do_sample: false
+    pytorch:
+      batch_size: 4
+      num_beams: 4
+      early_stopping: true
+      length_penalty: 1.0
+      no_repeat_ngram_size: 3
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # PyTorch speculative decoding (prompt-lookup)
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 1
+      prompt_lookup_num_tokens: 3
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # Static KV cache
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      use_cache: true
+      cache_implementation: static
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # fp32 precision baseline
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp32
+    n: 50
+    pytorch:
+      batch_size: 4
+      device_map: auto
+      trust_remote_code: true
+
+  # PyTorch LoRA adapter (commented out - requires a real adapter)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   precision: bf16
+  #   n: 50
+  #   lora:
+  #     adapter_id: my-org/my-lora-adapter
+  #     merge_weights: false
+  #   pytorch:
+  #     batch_size: 4
+  #     device_map: auto
+  #     trust_remote_code: true
+
+  # PyTorch synthetic dataset (commented out)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   precision: bf16
+  #   n: 50
+  #   dataset:
+  #     n: 50
+  #     input_len: 256
+  #     output_len: 64
+  #     seed: 42
+  #   pytorch:
+  #     batch_size: 4
+  #     device_map: auto
+  #     trust_remote_code: true
+
+  # =================================================================
+  # VLLM explicit experiments
+  # =================================================================
+
+  # -----------------------------------------------------------------
+  # vLLM beam search
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    decoder:
+      temperature: 0.0
+      do_sample: false
+    vllm:
+      beam_search:
+        beam_width: 4
+        early_stopping: true
+        length_penalty: 1.0
+
+  # -----------------------------------------------------------------
+  # Sampling with penalties
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    decoder:
+      temperature: 0.8
+      do_sample: true
+    vllm:
+      sampling:
+        presence_penalty: 0.6
+        frequency_penalty: 0.6
+
+  # -----------------------------------------------------------------
+  # Prefix caching
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        enable_prefix_caching: true
+        gpu_memory_utilization: 0.9
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        enable_prefix_caching: false
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # KV cache block sizes
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        block_size: 8
+        gpu_memory_utilization: 0.9
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        block_size: 32
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # KV cache dtype fp8
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        kv_cache_dtype: fp8
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # Tensor parallel - multi-GPU
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        tensor_parallel_size: 2
+        gpu_memory_utilization: 0.9
+
+  # vLLM speculative decoding (commented out - requires a real draft model)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   precision: bf16
+  #   n: 50
+  #   vllm:
+  #     engine:
+  #       speculative_model: my-org/my-draft-model
+  #       num_speculative_tokens: 5
+  #       gpu_memory_utilization: 0.9
+
+  # vLLM LoRA adapter (commented out - requires a real adapter)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   precision: bf16
+  #   n: 50
+  #   lora:
+  #     adapter_id: my-org/my-lora-adapter
+  #     merge_weights: false
+
+  # =================================================================
+  # TENSORRT explicit experiments
+  # =================================================================
+
+  # -----------------------------------------------------------------
+  # Quantisation algorithms
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: INT8
+      build_cache:
+        max_cache_storage_gb: 256
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: W4A16_AWQ
+      build_cache:
+        max_cache_storage_gb: 256
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: W8A16
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # INT8 + KV cache quantisation (combined)
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: INT8
+        kv_cache_quant_algo: INT8
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: tensorrt
+  #   precision: bf16
+  #   n: 50
+  #   tensorrt:
+  #     max_batch_size: 8
+  #     max_input_len: 1024
+  #     max_seq_len: 2048
+  #     quant:
+  #       quant_algo: FP8
+  #     build_cache:
+  #       max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Scheduler policies
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      scheduler:
+        capacity_scheduling_policy: MAX_UTILIZATION
+      build_cache:
+        max_cache_storage_gb: 256
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      scheduler:
+        capacity_scheduling_policy: STATIC_BATCH
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # KV cache variants
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      kv_cache:
+        enable_block_reuse: true
+        free_gpu_memory_fraction: 0.9
+      build_cache:
+        max_cache_storage_gb: 256
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      kv_cache:
+        host_cache_size: 1073741824    # 1 GiB in bytes
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Fast build mode
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      fast_build: true
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Explicit dtype: float16
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: fp16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      dtype: float16
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # PTQ calibration parameters
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: INT8
+      calib:
+        calib_batches: 512
+        calib_dataset: cnn_dailymail
+        calib_max_seq_length: 512
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # TRT-LLM sampling extensions (commented out)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: tensorrt
+  #   precision: bf16
+  #   n: 50
+  #   tensorrt:
+  #     max_batch_size: 8
+  #     max_input_len: 1024
+  #     max_seq_len: 2048
+  #     sampling:
+  #       min_tokens: 10
+  #       ignore_eos: false
+  #       return_perf_metrics: true
+  #       n: 1
+  #     build_cache:
+  #       max_cache_storage_gb: 256
+
+# =====================================================================
+# Runner configuration
+# =====================================================================
+# Determines how each backend executes: locally or via Docker.
+# Values: 'local', 'docker', or 'docker:<custom-image-tag>'
+runners:
+  pytorch: local                 # Or docker for fully containerised runs
+  vllm: docker
+  tensorrt: docker
+  # Custom image override example:
+  # vllm: "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"
+
+# =====================================================================
+# Execution controls
+# =====================================================================
+execution:
+  n_cycles: 3
+  cycle_order: interleaved       # sequential | interleaved | shuffled
+  experiment_gap_seconds: 60.0   # Gap for thermal stabilisation between experiments
+  cycle_gap_seconds: 300.0       # 5-minute gap between full cycles
+  # shuffle_seed: null           # Explicit seed for shuffled order (null = derived from study hash)
+  # skip_preflight: false        # Skip Docker pre-flight checks (not recommended)
