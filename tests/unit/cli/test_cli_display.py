@@ -203,6 +203,50 @@ def test_format_error_verbose_with_traceback():
     assert "Traceback" in result or "ExperimentError" in result
 
 
+def test_format_error_docker_error_with_suggestion_and_stderr():
+    """format_error surfaces fix_suggestion and stderr_snippet for DockerError subclasses."""
+    from llenergymeasure.infra.docker_errors import DockerContainerError
+
+    err = DockerContainerError(
+        message="Container exited with code 1.",
+        fix_suggestion="Check container logs above for details.",
+        stderr_snippet="RuntimeError: CUDA out of memory\nKilled",
+    )
+    result = format_error(err, verbose=False)
+
+    assert "DockerContainerError" in result
+    assert "Container exited with code 1" in result
+    assert "Suggestion: Check container logs above for details." in result
+    assert "Container stderr (last 20 lines):" in result
+    assert "CUDA out of memory" in result
+    assert "Killed" in result
+
+
+def test_format_error_docker_error_without_optional_fields():
+    """format_error with DockerError that has no suggestion or stderr omits those sections."""
+    from llenergymeasure.infra.docker_errors import DockerContainerError
+
+    err = DockerContainerError(
+        message="Container exited with code 1.",
+        fix_suggestion="",
+        stderr_snippet=None,
+    )
+    result = format_error(err, verbose=False)
+
+    assert "DockerContainerError" in result
+    assert "Suggestion:" not in result
+    assert "Container stderr" not in result
+
+
+def test_format_error_regular_llem_error_no_docker_fields():
+    """format_error with a non-Docker LLEMError does not include Docker-specific output."""
+    err = ConfigError("bad config")
+    result = format_error(err, verbose=False)
+
+    assert "Suggestion:" not in result
+    assert "Container stderr" not in result
+
+
 # =============================================================================
 # print_result_summary tests
 # =============================================================================

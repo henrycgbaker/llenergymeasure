@@ -223,7 +223,19 @@ class DockerRunner:
                     returncode,
                     exchange_dir,
                 )
+                # Persist container stderr to a log file in the exchange dir
+                # so it survives for post-mortem debugging.
+                container_log_path = exchange_dir / "container.log"
+                try:
+                    container_log_path.write_text(
+                        stderr_text or "(no stderr captured)", encoding="utf-8"
+                    )
+                    logger.debug("Container log written to %s", container_log_path)
+                except Exception as write_exc:
+                    logger.warning("Failed to write container.log: %s", write_exc)
+
                 error = translate_docker_error(returncode, stderr_text, self.image)
+                error.exchange_dir = str(exchange_dir)
                 # Do NOT clean up — preserve for debugging
                 exchange_dir = None  # type: ignore[assignment]
                 raise error

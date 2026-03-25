@@ -910,3 +910,62 @@ class TestExtraMounts:
         cmd = self._build_cmd(config, tmp_path, runner)
 
         assert not any("trt-llm" in arg for arg in cmd)
+
+
+# ---------------------------------------------------------------------------
+# Test 15: container.log persistence on failure
+# ---------------------------------------------------------------------------
+
+
+class TestContainerLogPersistence:
+    def test_container_log_written_on_failure(self, tmp_path):
+        """Non-zero exit writes stderr_text to container.log in exchange dir."""
+        config = make_config()
+        exchange_dir = tmp_path / "llem-logtest"
+        exchange_dir.mkdir()
+
+        stderr_content = "ERROR: CUDA out of memory\nKilled by OOM\nstack trace here"
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(
+                    _make_proc(137, stderr=stderr_content)
+                ),
+            ),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerOOMError):
+                runner.run(config)
+
+        log_path = exchange_dir / "container.log"
+        assert log_path.exists()
+        assert log_path.read_text(encoding="utf-8") == stderr_content
+
+    def test_exchange_dir_set_on_error(self, tmp_path):
+        """Error carries exchange_dir attribute for log discovery."""
+        config = make_config()
+        exchange_dir = tmp_path / "llem-logmsg"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(
+                    _make_proc(1, stderr="some error text")
+                ),
+            ),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerContainerError) as exc_info:
+                runner.run(config)
+
+            assert exc_info.value.exchange_dir == str(exchange_dir)

@@ -33,6 +33,7 @@ class ExperimentManifestEntry(BaseModel):
     cycle: int
     status: Literal["pending", "running", "completed", "failed"]
     result_file: str | None = None
+    log_file: str | None = None
     error_type: str | None = None
     error_message: str | None = None
     started_at: datetime | None = None
@@ -171,12 +172,14 @@ class ManifestWriter:
         cycle: int,
         error_type: str,
         error_message: str,
+        log_file: str | None = None,
     ) -> None:
         """Mark a running experiment as failed."""
         entry = self._find(config_hash, cycle)
         entry.status = "failed"
         entry.error_type = error_type
         entry.error_message = error_message
+        entry.log_file = log_file
         entry.completed_at = datetime.now(timezone.utc)
         self._recount()
         self._write()

@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
-from llenergymeasure.utils.exceptions import LLEMError
+from llenergymeasure.utils.exceptions import DockerError, LLEMError
 from llenergymeasure.utils.formatting import format_elapsed as _format_duration
 from llenergymeasure.utils.formatting import sig3 as _sig3
 
@@ -162,13 +162,24 @@ def format_error(error: LLEMError, verbose: bool = False) -> str:
 
     With verbose=True, includes full traceback.
     Otherwise, just the error class name and message.
+
+    For DockerError subclasses, appends fix_suggestion and stderr_snippet
+    so the user sees actionable guidance without needing to dig into logs.
     """
     class_name = type(error).__name__
     message = f"{class_name}: {error}"
     if verbose:
         tb = traceback.format_exc()
         if tb and tb.strip() != "NoneType: None":
-            return f"{tb}\n{message}"
+            message = f"{tb}\n{message}"
+
+    # Append Docker-specific details when available
+    if isinstance(error, DockerError):
+        if error.fix_suggestion:
+            message += f"\n\nSuggestion: {error.fix_suggestion}"
+        if error.stderr_snippet:
+            message += f"\n\nContainer stderr (last 20 lines):\n{error.stderr_snippet}"
+
     return message
 
 
