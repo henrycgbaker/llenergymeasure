@@ -209,13 +209,13 @@ llenergymeasure uses pre-built Docker images from GitHub Container Registry. Ima
 this naming convention:
 
 ```
-ghcr.io/henrycgbaker/llenergymeasure/{backend}:{version}-cuda{cuda_major}
+ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}
 ```
 
 For example:
 ```
-ghcr.io/henrycgbaker/llenergymeasure/vllm:0.10.0-cuda12
-ghcr.io/henrycgbaker/llenergymeasure/tensorrt:0.10.0-cuda12
+ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0
+ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0
 ```
 
 **Auto-pull on first use.** When you run a backend for the first time, `llem` automatically
@@ -224,12 +224,11 @@ pulls the correct image. No manual `docker pull` is needed.
 **Pre-fetch an image** (optional, useful for offline environments):
 
 ```bash
-docker pull ghcr.io/henrycgbaker/llenergymeasure/vllm:0.10.0-cuda12
-docker pull ghcr.io/henrycgbaker/llenergymeasure/tensorrt:0.10.0-cuda12
+docker pull ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0
+docker pull ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0
 ```
 
-Replace `0.10.0` with your installed `llenergymeasure` version and `12` with your CUDA major
-version. Run `llem config` to see which version is installed.
+Replace `0.9.0` with your installed `llenergymeasure` version (run `llem --version` to check).
 
 **Future backends.** SGLang (M5) images will follow the same naming convention and auto-pull
 behaviour. No additional setup is needed when SGLang ships.

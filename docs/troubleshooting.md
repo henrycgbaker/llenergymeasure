@@ -196,7 +196,7 @@ model, or package requirements.
 
 | Backend | Parameter | Limitation | Resolution |
 |---------|-----------|------------|------------|
-| pytorch | `pytorch.attn_implementation: flash_attention_2` | flash-attn package not installed in Docker image | Install flash-attn or use `attn_implementation: sdpa` |
+| pytorch | `pytorch.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
 | vllm | `vllm.engine.kv_cache_dtype: fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use `kv_cache_dtype: auto` for automatic selection |
 | vllm | `vllm.engine.attention.backend: FLASHINFER` | FlashInfer requires JIT compilation on first use | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.attention.backend: TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use `attention.backend: auto` or `FLASH_ATTN` |
@@ -207,12 +207,12 @@ model, or package requirements.
 
 | Feature | PyTorch | vLLM | TensorRT |
 |---------|---------|------|----------|
-| Tensor Parallel | No | Yes | Yes |
+| Tensor Parallel | Yes (HF native) | Yes | Yes |
 | Data Parallel | Yes | No | No |
 | BitsAndBytes (4-bit) | Yes | No | No |
 | BitsAndBytes (8-bit) | Yes | No | No |
-| Native Quantization | No | AWQ / GPTQ / FP8 | INT8 / INT4 / FP8 |
-| float32 precision | Yes | Yes | No |
+| Native Quantization | No | AWQ / GPTQ / FP8 | INT8 / W4A16 (AWQ/GPTQ) / FP8 |
+| float32 precision | Yes | No | No |
 | float16 precision | Yes | Yes | Yes |
 | bfloat16 precision | Yes | Yes | Yes |
 | Prefix Caching | No | Yes | No |
@@ -223,6 +223,8 @@ model, or package requirements.
 | Static KV Cache | Yes | No | No |
 
 Notes:
+- PyTorch Tensor Parallel uses HF native TP via `tp_plan`/`tp_size` (requires Transformers >= 4.50 and `torchrun` launch).
+- vLLM does not support FP32 precision. Use FP16 or BF16.
 - vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes.
 - TensorRT-LLM is optimised for FP16/BF16/INT8 precision, not FP32.
 

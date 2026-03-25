@@ -56,7 +56,7 @@ uv run llem --version
 Expected output:
 
 ```
-llem v0.8.0
+llem v0.9.0
 ```
 
 ---
