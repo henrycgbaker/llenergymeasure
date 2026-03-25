@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import ValidationError
+from rich.panel import Panel
+from rich.text import Text
 
 from llenergymeasure.config._dict_utils import _deep_merge, _unflatten
 from llenergymeasure.config.models import ExperimentConfig
@@ -247,6 +249,212 @@ def format_preflight_summary(
             )
 
     return "\n".join(lines)
+
+
+def build_preflight_panel(
+    study_config: StudyConfig,
+    skipped: list[SkippedConfig] | None = None,
+) -> Panel:
+    """Return a Rich Panel with study metadata, sweep dimensions, and design hash.
+
+    The panel shows:
+    - Border title: "Study: <name>"
+    - Metadata section: Experiments (pluralised), Order, Backends (with runner mode),
+      Dataset, Energy
+    - Sweep dimensions section: varying fields with nested sub-config grouping
+    - Dimmed design hash at the bottom
+
+    Skipped configs are NOT included in the panel; callers display them separately.
+    """
+    n_cycles = study_config.execution.n_cycles
+    n_runs = len(study_config.experiments)
+    n_configs = n_runs // n_cycles if n_cycles > 0 else n_runs
+    cycle_order = study_config.execution.cycle_order
+    hash_display = study_config.study_design_hash or "unknown"
+
+    # --- Pluralisation helper ---
+    def _pl(n: int, singular: str, plural: str | None = None) -> str:
+        if n == 1:
+            return f"{n} {singular}"
+        return f"{n} {plural or singular + 's'}"
+
+    # --- Metadata values ---
+    unique_backends = sorted(set(exp.backend for exp in study_config.experiments))
+    runners = study_config.runners or {}
+    backend_strs = []
+    for b in unique_backends:
+        mode = runners.get(b, "local")
+        backend_strs.append(f"{b} ({mode})")
+    backends_display = ", ".join(backend_strs)
+
+    unique_datasets = sorted(set(str(exp.dataset) for exp in study_config.experiments))
+    dataset_display = ", ".join(unique_datasets)
+
+    unique_energy = sorted(set(str(exp.energy.backend) for exp in study_config.experiments))
+    energy_display = ", ".join(unique_energy)
+
+    experiments_line = (
+        f"{_pl(n_configs, 'config')} x {_pl(n_cycles, 'cycle')} = {_pl(n_runs, 'run')}"
+    )
+
+    # --- Metadata lines ---
+    meta_lines = [
+        ("Experiments", experiments_line),
+        ("Order", str(cycle_order)),
+        ("Backends", backends_display),
+        ("Dataset", dataset_display),
+        ("Energy", energy_display),
+    ]
+
+    # --- Sweep dimensions ---
+    sweep_dimensions = _collect_sweep_dimensions(list(study_config.experiments))
+
+    # --- Assemble body ---
+    body = Text()
+    body.append("\n")
+
+    for label, value in meta_lines:
+        body.append(f"  {label:<14}{value}\n")
+
+    if sweep_dimensions:
+        body.append("\n")
+        body.append("  Sweep dimensions\n")
+        for label, value, indent_level in sweep_dimensions:
+            if indent_level == 1:
+                # Sub-config header (no value)
+                body.append(f"    {label}\n")
+            elif indent_level == 2:
+                # Sub-config field
+                body.append(f"      {label:<18}{value}\n")
+            else:
+                # Top-level field
+                body.append(f"    {label:<18}{value}\n")
+
+    body.append("\n")
+    # Hash line with dim styling
+    hash_line = f"  {hash_display}"
+    hash_start = len(body.plain)
+    body.append(hash_line)
+    body.stylize("dim", hash_start, hash_start + len(hash_line))
+    body.append("\n")
+
+    return Panel(
+        body,
+        title=f"Study: {study_config.name or 'unnamed'}",
+        title_align="left",
+        padding=(0, 1),
+    )
+
+
+def _collect_sweep_dimensions(
+    experiments: list[ExperimentConfig],
+) -> list[tuple[str, str, int]]:
+    """Return (label, value_str, indent_level) triples for sweep display.
+
+    indent_level=0  top-level scalar fields
+    indent_level=1  sub-config header (label only, value is "")
+    indent_level=2  sub-config field
+    """
+    if not experiments:
+        return []
+
+    result: list[tuple[str, str, int]] = []
+
+    # --- Top-level scalar fields (always show if they vary OR are key sweep fields) ---
+    KEY_SCALAR_FIELDS = (
+        "model",
+        "backend",
+        "precision",
+        "n",
+        "max_input_tokens",
+        "max_output_tokens",
+    )
+    SCALAR_FIELDS = (*KEY_SCALAR_FIELDS, "dataset", "random_seed")
+
+    for field_name in SCALAR_FIELDS:
+        values = [getattr(exp, field_name) for exp in experiments]
+        unique_vals = set(str(v) for v in values)
+        always_show = field_name in KEY_SCALAR_FIELDS
+        if len(unique_vals) > 1 or always_show:
+            result.append((field_name, ", ".join(sorted(unique_vals)), 0))
+
+    # --- Sub-config fields ---
+    # (sub_config_name, sub_field_name) pairs to check
+    # Only mandatory sub-configs (always present): decoder, warmup, baseline, energy
+    # Optional sub-configs (may be None): pytorch, vllm, tensorrt, lora
+    SUB_CONFIGS_MANDATORY = ("decoder", "warmup", "baseline", "energy")
+    SUB_CONFIGS_OPTIONAL = ("pytorch", "vllm", "tensorrt", "lora")
+
+    def _get_sub_config_defaults(sub_config_name: str) -> dict[str, Any]:
+        """Get default field values for a sub-config class."""
+        from llenergymeasure.config.models import (
+            BaselineConfig,
+            DecoderConfig,
+            EnergyConfig,
+            WarmupConfig,
+        )
+
+        defaults_map = {
+            "decoder": DecoderConfig(),
+            "warmup": WarmupConfig(),
+            "baseline": BaselineConfig(),
+            "energy": EnergyConfig(),
+        }
+        if sub_config_name in defaults_map:
+            obj = defaults_map[sub_config_name]
+            return {k: getattr(obj, k) for k in obj.model_fields}
+        return {}
+
+    def _process_sub_config(sub_config_name: str, is_optional: bool) -> None:
+        """Process a sub-config and add varying/non-default fields to result."""
+        if is_optional:
+            # Only process if at least one experiment has this sub-config
+            sub_configs = [getattr(exp, sub_config_name) for exp in experiments]
+            active = [sc for sc in sub_configs if sc is not None]
+            if not active:
+                return
+        else:
+            active = [getattr(exp, sub_config_name) for exp in experiments]
+
+        # Collect fields from the first active sub-config
+        first = active[0]
+        if not hasattr(first, "model_fields"):
+            return
+
+        defaults = _get_sub_config_defaults(sub_config_name)
+        sub_fields_to_show: list[tuple[str, str]] = []
+
+        for sub_field in first.model_fields:
+            # Collect unique values across all experiments that have this sub-config
+            if is_optional:
+                vals = []
+                for exp in experiments:
+                    sc = getattr(exp, sub_config_name)
+                    if sc is not None:
+                        vals.append(getattr(sc, sub_field))
+            else:
+                vals = [getattr(getattr(exp, sub_config_name), sub_field) for exp in experiments]
+
+            unique_vals = set(str(v) for v in vals)
+            default_val = defaults.get(sub_field)
+            all_default = all(v == default_val for v in vals)
+
+            # Show if: varies across experiments OR non-default value
+            if len(unique_vals) > 1 or not all_default:
+                sub_fields_to_show.append((sub_field, ", ".join(sorted(unique_vals))))
+
+        if sub_fields_to_show:
+            result.append((sub_config_name, "", 1))
+            for sf_name, sf_vals in sub_fields_to_show:
+                result.append((sf_name, sf_vals, 2))
+
+    for sc_name in SUB_CONFIGS_MANDATORY:
+        _process_sub_config(sc_name, is_optional=False)
+
+    for sc_name in SUB_CONFIGS_OPTIONAL:
+        _process_sub_config(sc_name, is_optional=True)
+
+    return result
 
 
 # =============================================================================

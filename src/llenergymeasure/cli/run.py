@@ -355,7 +355,7 @@ def _run_study_impl(
     import yaml
 
     from llenergymeasure.cli._display import print_study_dry_run
-    from llenergymeasure.config.grid import format_preflight_summary
+    from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.loader import load_study_config
 
     # Check what the YAML execution block specifies (to apply CLI effective defaults)
@@ -404,18 +404,26 @@ def _run_study_impl(
     # Create live study display before the run so per-experiment progress is shown
     study_display = None
     if effective_mode != "quiet":
+        from rich.console import Console as RichConsole
+
         from llenergymeasure.cli._step_display import StudyStepDisplay
 
         n_exp = len(study_config.experiments)
         n_cycles = study_config.execution.n_cycles
         name = study_config.name or "unnamed"
 
-        # Print header + preflight summary (static, before live display starts)
-        print(f"Study: {name} | {n_exp} experiments | {n_cycles} cycles", file=sys.stderr)
+        # Print Rich Panel with study metadata (static, before live display starts)
+        _stderr_console = RichConsole(stderr=True)
+        panel = build_preflight_panel(study_config)
+        _stderr_console.print(panel)
 
-        summary = format_preflight_summary(study_config)
-        print(summary, file=sys.stderr)
-        print(file=sys.stderr)
+        if study_config.skipped_configs:
+            skip_lines = [f"Skipping {len(study_config.skipped_configs)} config(s):"]
+            for s in study_config.skipped_configs:
+                label = s.get("short_label", "unknown")
+                reason = s.get("reason", "unknown error")
+                skip_lines.append(f"  - {label}: {reason}")
+            _stderr_console.print("\n".join(skip_lines))
 
         study_display = StudyStepDisplay(
             total_experiments=n_exp,
