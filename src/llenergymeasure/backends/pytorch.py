@@ -310,7 +310,9 @@ class PyTorchBackend:
         # Apply PyTorch-specific config options
         if pt is not None:
             if pt.attn_implementation is not None:
-                kwargs["attn_implementation"] = pt.attn_implementation
+                kwargs["attn_implementation"] = self._resolve_attn_implementation(
+                    pt.attn_implementation
+                )
 
             # BitsAndBytes quantization — use BitsAndBytesConfig, not raw kwargs
             if pt.load_in_4bit or pt.load_in_8bit:
@@ -351,6 +353,34 @@ class PyTorchBackend:
             kwargs.update(config.passthrough_kwargs)
 
         return kwargs
+
+    @staticmethod
+    def _resolve_attn_implementation(requested: str) -> str:
+        """Validate the requested attention implementation is available.
+
+        If flash_attention_2 is requested but the flash_attn package is not
+        installed, falls back to sdpa with a warning rather than crashing
+        at model load time.
+
+        Args:
+            requested: The attention implementation string from config.
+
+        Returns:
+            The resolved attention implementation string.
+        """
+        if requested in ("flash_attention_2", "flash_attention_3"):
+            import importlib.util
+
+            if importlib.util.find_spec("flash_attn") is None:
+                fallback = "sdpa"
+                logger.warning(
+                    "attn_implementation=%r requested but flash_attn is not installed; "
+                    "falling back to %r. Install flash-attn to use FlashAttention.",
+                    requested,
+                    fallback,
+                )
+                return fallback
+        return requested
 
     @staticmethod
     def _precision_to_dtype(precision: str) -> Any:

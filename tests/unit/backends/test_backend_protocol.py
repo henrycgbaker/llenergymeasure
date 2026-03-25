@@ -219,6 +219,111 @@ def test_model_load_kwargs_pytorch_config_attn_implementation():
     assert kwargs["attn_implementation"] == "sdpa"
 
 
+# =============================================================================
+# _resolve_attn_implementation — flash_attn availability guard
+# =============================================================================
+
+
+def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
+    """flash_attention_2 falls back to sdpa when flash_attn package is missing."""
+    pytest.importorskip("torch")
+    from unittest.mock import patch
+
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(
+        model="gpt2",
+        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+    )
+
+    # Simulate flash_attn not being installed
+    with patch("importlib.util.find_spec", return_value=None):
+        kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["attn_implementation"] == "sdpa"
+
+
+def test_model_load_kwargs_flash_attention_kept_when_installed():
+    """flash_attention_2 is kept when flash_attn package is available."""
+    pytest.importorskip("torch")
+    from unittest.mock import MagicMock, patch
+
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(
+        model="gpt2",
+        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+    )
+
+    # Simulate flash_attn being installed
+    with patch("importlib.util.find_spec", return_value=MagicMock()):
+        kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["attn_implementation"] == "flash_attention_2"
+
+
+def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
+    """sdpa attention is passed through without flash_attn availability check."""
+    pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(
+        model="gpt2",
+        pytorch=PyTorchConfig(attn_implementation="sdpa"),
+    )
+    kwargs = backend._model_load_kwargs(config)
+
+    # sdpa should never be affected by flash_attn availability
+    assert kwargs["attn_implementation"] == "sdpa"
+
+
+def test_model_load_kwargs_eager_not_affected_by_flash_guard():
+    """eager attention is passed through without flash_attn availability check."""
+    pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(
+        model="gpt2",
+        pytorch=PyTorchConfig(attn_implementation="eager"),
+    )
+    kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["attn_implementation"] == "eager"
+
+
+def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
+    """flash_attention_3 also falls back to sdpa when flash_attn is missing."""
+    pytest.importorskip("torch")
+    from unittest.mock import patch
+
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(
+        model="gpt2",
+        pytorch=PyTorchConfig(attn_implementation="flash_attention_3"),
+    )
+
+    with patch("importlib.util.find_spec", return_value=None):
+        kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["attn_implementation"] == "sdpa"
+
+
 def test_model_load_kwargs_pytorch_config_load_in_4bit():
     """PyTorchConfig.load_in_4bit=True produces a BitsAndBytesConfig quantization_config."""
     pytest.importorskip("torch")
