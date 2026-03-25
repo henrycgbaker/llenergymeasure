@@ -4,7 +4,7 @@ These dicts define which precision modes and decoding strategies each backend
 supports. They are consumed by:
 - ExperimentConfig cross-validators (structural validation)
 - config/introspection.py (backend capability metadata)
-- Future CLI help generation (Phase 7)
+- CLI help generation
 
 Do not inline these values in validators — always import from here.
 """
@@ -12,7 +12,7 @@ Do not inline these values in validators — always import from here.
 # Precision modes supported by each backend.
 # "fp32" = full precision, "fp16" = half, "bf16" = bfloat16.
 # Note: fp16/bf16 require GPU. The cpu backend (future) would be fp32-only.
-# GPU detection and cpu-precision cross-validation is Phase 4 (pre-flight).
+# GPU detection and cpu-precision cross-validation is handled at pre-flight.
 PRECISION_SUPPORT: dict[str, list[str]] = {
     "pytorch": ["fp32", "fp16", "bf16"],
     "vllm": ["fp16", "bf16"],  # vLLM does not support fp32 inference
@@ -31,11 +31,19 @@ DECODING_SUPPORT: dict[str, list[str]] = {
 # All current backends support these — this dict exists to make future
 # backend additions explicit rather than implicit.
 # min_p and min_new_tokens: pytorch and vLLM support them (identical semantics).
-# vLLM/TensorRT support for min_p/min_new_tokens confirmed in M1 audit; TensorRT deferred to M3.
+# min_p/min_new_tokens: vLLM supports; TensorRT support varies by version.
 DECODER_PARAM_SUPPORT: dict[str, list[str]] = {
     "pytorch": ["temperature", "top_k", "top_p", "repetition_penalty", "min_p", "min_new_tokens"],
     "vllm": ["temperature", "top_k", "top_p", "repetition_penalty"],
     "tensorrt": ["temperature", "top_k", "top_p"],  # TRT-LLM: repetition_penalty support varies
 }
 
-__all__ = ["DECODER_PARAM_SUPPORT", "DECODING_SUPPORT", "PRECISION_SUPPORT"]
+# Map from backend name to the Python package that provides it.
+# Used by preflight checks and CLI to verify backend availability.
+BACKEND_PACKAGES: dict[str, str] = {
+    "pytorch": "transformers",
+    "vllm": "vllm",
+    "tensorrt": "tensorrt_llm",
+}
+
+__all__ = ["BACKEND_PACKAGES", "DECODER_PARAM_SUPPORT", "DECODING_SUPPORT", "PRECISION_SUPPORT"]

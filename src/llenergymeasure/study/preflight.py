@@ -14,6 +14,7 @@ from llenergymeasure.utils.exceptions import PreFlightError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserRunnersConfig
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,12 @@ def run_study_preflight(
     skip_preflight: bool = False,
     yaml_runners: dict[str, str] | None = None,
     user_config: UserRunnersConfig | None = None,
-) -> None:
+) -> dict[str, RunnerSpec]:
     """Pre-flight checks for a study configuration.
 
     Single-backend studies pass through — per-experiment pre-flight runs later
     in the subprocess. Multi-backend studies auto-elevate to Docker when Docker
-    is available (DOCK-05); raise PreFlightError otherwise.
+    is available; raise PreFlightError otherwise.
 
     When any experiment in the study will use a Docker runner, runs Docker
     pre-flight checks (GPU visibility, CUDA/driver compat) unless skipped.
@@ -43,6 +44,9 @@ def run_study_preflight(
             runner resolution as the actual dispatch path.
         user_config: Loaded UserRunnersConfig. Forwarded to
             ``resolve_study_runners()`` to match actual dispatch precedence.
+
+    Returns:
+        Resolved runner specs dict (backend -> RunnerSpec) for reuse by caller.
 
     Raises:
         PreFlightError: Multi-backend study and Docker is not available.
@@ -76,3 +80,5 @@ def run_study_preflight(
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 
         run_docker_preflight(skip=effective_skip)
+
+    return runner_specs

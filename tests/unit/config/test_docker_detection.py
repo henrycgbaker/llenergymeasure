@@ -2,9 +2,8 @@
 
 Covers:
 - is_inside_docker() — detects Docker environment via /.dockerenv and /proc/1/cgroup
-- should_use_docker_for_campaign() — decides local vs Docker dispatch
 
-All filesystem and subprocess I/O is mocked.
+All filesystem I/O is mocked.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from pathlib import Path
 from unittest.mock import mock_open, patch
 
 import llenergymeasure.config.docker_detection as detection_mod
-from llenergymeasure.config.docker_detection import is_inside_docker, should_use_docker_for_campaign
+from llenergymeasure.config.docker_detection import is_inside_docker
 
 
 def _make_dockerenv_patch(exists_result: bool):
@@ -119,67 +118,3 @@ class TestIsInsideDocker:
         ):
             # Should return True without reading cgroup
             assert is_inside_docker() is True
-
-
-# ---------------------------------------------------------------------------
-# should_use_docker_for_campaign
-# ---------------------------------------------------------------------------
-
-
-class TestShouldUseDockerForCampaign:
-    def test_returns_false_when_already_in_docker(self):
-        """Already in Docker → no nested containers."""
-        with patch("llenergymeasure.config.docker_detection.is_inside_docker", return_value=True):
-            result = should_use_docker_for_campaign(["pytorch"])
-        assert result is False
-
-    def test_returns_false_for_single_installed_backend(self):
-        """Single backend installed locally → run locally."""
-        with (
-            patch("llenergymeasure.config.docker_detection.is_inside_docker", return_value=False),
-            patch(
-                "llenergymeasure.config.backend_detection.is_backend_available", return_value=True
-            ),
-        ):
-            result = should_use_docker_for_campaign(["pytorch"])
-        assert result is False
-
-    def test_returns_true_for_single_uninstalled_backend(self):
-        """Backend not installed → dispatch to Docker."""
-        with (
-            patch("llenergymeasure.config.docker_detection.is_inside_docker", return_value=False),
-            patch(
-                "llenergymeasure.config.backend_detection.is_backend_available", return_value=False
-            ),
-        ):
-            result = should_use_docker_for_campaign(["vllm"])
-        assert result is True
-
-    def test_returns_true_for_multiple_backends(self):
-        """Multi-backend → always use Docker."""
-        with (
-            patch("llenergymeasure.config.docker_detection.is_inside_docker", return_value=False),
-            patch(
-                "llenergymeasure.config.backend_detection.is_backend_available", return_value=True
-            ),
-        ):
-            result = should_use_docker_for_campaign(["pytorch", "vllm"])
-        assert result is True
-
-    def test_inside_docker_overrides_multi_backend(self):
-        """Already in Docker → False even with multiple backends."""
-        with patch("llenergymeasure.config.docker_detection.is_inside_docker", return_value=True):
-            result = should_use_docker_for_campaign(["pytorch", "vllm"])
-        assert result is False
-
-    def test_empty_backend_list_uses_docker(self):
-        """No backends specified → len != 1 → Docker."""
-        with (
-            patch("llenergymeasure.config.docker_detection.is_inside_docker", return_value=False),
-            patch(
-                "llenergymeasure.config.backend_detection.is_backend_available",
-                return_value=True,
-            ),
-        ):
-            result = should_use_docker_for_campaign([])
-        assert result is True

@@ -41,7 +41,12 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     from llenergymeasure.study.manifest import ManifestWriter
 
     monkeypatch.setattr(
-        llenergymeasure.study.preflight, "run_study_preflight", lambda study, **kw: None
+        llenergymeasure.study.preflight,
+        "run_study_preflight",
+        lambda study, **kw: {
+            exp.backend: RunnerSpec(mode="local", image=None, source="default")
+            for exp in study.experiments
+        },
     )
     monkeypatch.setattr(llenergymeasure.harness.preflight, "run_preflight", lambda config: None)
     monkeypatch.setattr(

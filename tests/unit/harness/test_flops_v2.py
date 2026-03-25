@@ -1,12 +1,11 @@
-"""Unit tests for FLOPs estimation: PaLM formula, FlopsEstimator dispatch chain, precision detection.
+"""Unit tests for FLOPs estimation: PaLM formula and AutoConfig fallback.
 
 Covers:
 - _count_non_embedding_params (embedding exclusion, case-insensitive)
 - estimate_flops_palm (formula, batch_size, method/confidence/precision fields)
-- FlopsEstimator dispatch chain: calflops -> architecture -> parameter
-- _get_compute_precision: BNB 4bit/8bit, standard precision, no config
-- get_flops_estimator singleton behaviour
-- estimate_flops convenience wrapper
+- _count_params_from_config (AutoConfig-based parameter extraction)
+- estimate_flops_palm_from_config (config-based FLOPs estimation)
+- FlopsResult validation and derived fields on ExperimentResult
 """
 
 from __future__ import annotations
@@ -19,13 +18,10 @@ from pydantic import ValidationError
 
 from llenergymeasure.domain.metrics import FlopsResult
 from llenergymeasure.harness.flops import (
-    FlopsEstimator,
     _count_non_embedding_params,
     _count_params_from_config,
-    estimate_flops,
     estimate_flops_palm,
     estimate_flops_palm_from_config,
-    get_flops_estimator,
 )
 
 # =============================================================================
@@ -244,27 +240,7 @@ def test_flops_result_invalid_method_rejected() -> None:
 
 
 # =============================================================================
-# Backward compatibility — estimate_flops still exists
-# =============================================================================
-
-
-def test_legacy_estimate_flops_still_works() -> None:
-    """estimate_flops (legacy wrapper) is still importable and falls back to parameter estimate."""
-    model = make_model(non_embed_count=1_000_000)
-
-    # Provide a mock input_ids supporting .dim() and .shape used by the fallback chain
-    class MockInputIds:
-        shape = (1, 512)
-
-        def dim(self) -> int:
-            return 2
-
-    result = estimate_flops(model, MockInputIds())
-    assert result.value > 0
-
-
-# =============================================================================
-# B2 fix: FLOPs derived fields on ExperimentResult
+# FLOPs derived fields on ExperimentResult
 # =============================================================================
 
 
@@ -327,305 +303,7 @@ def test_flops_derived_fields_none_when_zero() -> None:
 
 
 # =============================================================================
-# FlopsEstimator helpers
-# =============================================================================
-
-
-class _MockInputIds:
-    """Minimal mock for input_ids supporting .dim() and .shape used by FlopsEstimator."""
-
-    def __init__(self, seq_len: int = 512) -> None:
-        self.shape = (1, seq_len)
-
-    def dim(self) -> int:
-        return 2
-
-
-class _MockModelWithConfig:
-    """Mock model with .config attribute exposing architecture fields."""
-
-    def __init__(
-        self,
-        hidden: int = 4096,
-        layers: int = 32,
-        heads: int = 32,
-        model_type: str = "llama",
-    ) -> None:
-        self._params = [("layer.weight", MockParam(1_000_000))]
-
-        class _Config:
-            hidden_size = hidden
-            num_hidden_layers = layers
-            num_attention_heads = heads
-            intermediate_size = hidden * 4
-            hidden_act = "silu"
-            model_type = "llama"
-
-        self.config = _Config()
-
-    def named_parameters(self):  # type: ignore[return]
-        return iter(self._params)
-
-    def parameters(self):  # type: ignore[return]
-        return iter(p for _, p in self._params)
-
-
-class _MockModelNoConfig:
-    """Mock model without .config — architecture estimation will fail."""
-
-    def __init__(self, param_count: int = 1_000_000) -> None:
-        self._params = [("layer.weight", MockParam(param_count))]
-
-    def named_parameters(self):  # type: ignore[return]
-        return iter(self._params)
-
-    def parameters(self):  # type: ignore[return]
-        return iter(p for _, p in self._params)
-
-
-class _MockModelBrokenParams:
-    """Mock model where .parameters() raises — all estimation methods will fail."""
-
-    def named_parameters(self):  # type: ignore[return]
-        return iter([])
-
-    def parameters(self):
-        raise RuntimeError("parameters() not available")
-
-
-# =============================================================================
-# FlopsEstimator — calflops path
-# =============================================================================
-
-
-def test_estimator_calflops_success() -> None:
-    """When calflops is available and returns valid FLOPs, method='calflops'."""
-    mock_calflops = MagicMock()
-    mock_calflops.calculate_flops.return_value = (1e12, 5e11, 7e9)  # flops, macs, params
-
-    model = _MockModelWithConfig()
-    input_ids = _MockInputIds(seq_len=512)
-
-    with patch.dict(sys.modules, {"calflops": mock_calflops}):
-        estimator = FlopsEstimator()
-        result = estimator.estimate(model, input_ids)
-
-    assert result.method == "calflops"
-    assert result.confidence == "high"
-    assert result.value == pytest.approx(1e12)
-
-
-def test_estimator_calflops_import_error_falls_to_architecture() -> None:
-    """When calflops is not installed, estimator falls to architecture method."""
-    model = _MockModelWithConfig(hidden=4096, layers=32, heads=32)
-    input_ids = _MockInputIds(seq_len=512)
-
-    with patch.dict(sys.modules, {"calflops": None}):
-        estimator = FlopsEstimator()
-        result = estimator.estimate(model, input_ids)
-
-    assert result.method == "architecture"
-    assert result.value > 0
-    assert result.confidence == "medium"
-
-
-# =============================================================================
-# FlopsEstimator — architecture fallback
-# =============================================================================
-
-
-def test_estimator_architecture_missing_attr_falls_to_parameter() -> None:
-    """When model.config lacks hidden_size, estimator falls to parameter estimate."""
-    model = _MockModelNoConfig(param_count=1_000_000)
-    input_ids = _MockInputIds(seq_len=512)
-
-    with patch.dict(sys.modules, {"calflops": None}):
-        estimator = FlopsEstimator()
-        result = estimator.estimate(model, input_ids)
-
-    assert result.method == "parameter_estimate"
-    assert result.value > 0
-    assert result.confidence == "low"
-
-
-# =============================================================================
-# FlopsEstimator — parameter estimate fallback
-# =============================================================================
-
-
-def test_estimator_all_methods_fail_returns_zero() -> None:
-    """When parameters() raises, parameter_estimate falls back to 0.0."""
-    model = _MockModelBrokenParams()
-    input_ids = _MockInputIds(seq_len=512)
-
-    with patch.dict(sys.modules, {"calflops": None}):
-        estimator = FlopsEstimator()
-        result = estimator.estimate(model, input_ids)
-
-    assert result.value == 0.0
-    assert result.method == "parameter_estimate"
-
-
-# =============================================================================
-# FlopsEstimator — dispatch chain order
-# =============================================================================
-
-
-def test_estimator_dispatch_chain_calflops_first() -> None:
-    """calflops is tried first; architecture and parameter not reached when calflops succeeds."""
-    mock_calflops = MagicMock()
-    mock_calflops.calculate_flops.return_value = (2e12, 1e12, 8e9)
-
-    model = _MockModelWithConfig()
-    input_ids = _MockInputIds(seq_len=256)
-
-    with patch.dict(sys.modules, {"calflops": mock_calflops}):
-        estimator = FlopsEstimator()
-        with patch.object(estimator, "_try_architecture") as mock_arch:
-            result = estimator.estimate(model, input_ids)
-            mock_arch.assert_not_called()  # architecture not reached
-
-    assert result.method == "calflops"
-
-
-# =============================================================================
-# FlopsEstimator — _get_compute_precision
-# =============================================================================
-
-
-def test_get_compute_precision_no_config() -> None:
-    """None config returns 'fp16'."""
-    estimator = FlopsEstimator()
-    assert estimator._get_compute_precision(None) == "fp16"
-
-
-@pytest.mark.parametrize(
-    "precision_str,expected",
-    [
-        ("fp16", "fp16"),
-        ("float32", "fp32"),
-        ("fp32", "fp32"),
-        ("bfloat16", "bf16"),
-        ("bf16", "bf16"),  # short alias recognised
-        ("float16", "fp16"),  # not a recognised alias → defaults to fp16
-        ("auto", "fp16"),  # unrecognised value → defaults to fp16
-    ],
-)
-def test_get_compute_precision_standard(precision_str: str, expected: str) -> None:
-    """Standard precision strings map to canonical fp16/fp32/bf16."""
-    estimator = FlopsEstimator()
-
-    # Build a minimal mock config with .precision and no pytorch section
-    mock_config = MagicMock()
-    mock_config.pytorch = None
-    mock_config.precision = precision_str
-
-    result = estimator._get_compute_precision(mock_config)
-    assert result == expected
-
-
-def test_get_compute_precision_bnb_8bit() -> None:
-    """BNB 8-bit quantization: compute precision is 'fp16'."""
-    estimator = FlopsEstimator()
-
-    mock_pytorch = MagicMock()
-    mock_pytorch.load_in_4bit = False
-    mock_pytorch.load_in_8bit = True
-
-    mock_config = MagicMock()
-    mock_config.pytorch = mock_pytorch
-
-    result = estimator._get_compute_precision(mock_config)
-    assert result == "fp16"
-
-
-def test_get_compute_precision_bnb_4bit_with_bf16_compute() -> None:
-    """BNB 4-bit with bfloat16 compute dtype: precision comes from bnb_4bit_compute_dtype."""
-    estimator = FlopsEstimator()
-
-    mock_pytorch = MagicMock()
-    mock_pytorch.load_in_4bit = True
-    mock_pytorch.load_in_8bit = False
-    mock_pytorch.bnb_4bit_compute_dtype = "bfloat16"
-
-    mock_config = MagicMock()
-    mock_config.pytorch = mock_pytorch
-
-    result = estimator._get_compute_precision(mock_config)
-    assert result == "bfloat16"
-
-
-def test_get_compute_precision_bnb_4bit_no_compute_dtype() -> None:
-    """BNB 4-bit without bnb_4bit_compute_dtype returns None (raw config value)."""
-    estimator = FlopsEstimator()
-
-    mock_pytorch = MagicMock()
-    mock_pytorch.load_in_4bit = True
-    mock_pytorch.load_in_8bit = False
-    mock_pytorch.bnb_4bit_compute_dtype = None
-
-    mock_config = MagicMock()
-    mock_config.pytorch = mock_pytorch
-
-    result = estimator._get_compute_precision(mock_config)
-    # BNB defaults to FP16 when no explicit compute dtype is set
-    assert result == "fp16"
-
-
-# =============================================================================
-# get_flops_estimator — singleton
-# =============================================================================
-
-
-def test_get_flops_estimator_singleton() -> None:
-    """get_flops_estimator() returns the same instance on repeated calls."""
-    # reset_flops_estimator autouse fixture ensures _default_estimator starts as None
-    estimator_1 = get_flops_estimator()
-    estimator_2 = get_flops_estimator()
-    assert estimator_1 is estimator_2
-
-
-def test_get_flops_estimator_creates_instance() -> None:
-    """get_flops_estimator() returns a FlopsEstimator instance."""
-    estimator = get_flops_estimator()
-    assert isinstance(estimator, FlopsEstimator)
-
-
-# =============================================================================
-# estimate_flops — convenience wrapper
-# =============================================================================
-
-
-def test_estimate_flops_delegates_to_estimator() -> None:
-    """estimate_flops() convenience wrapper delegates to get_flops_estimator().estimate()."""
-    model = _MockModelNoConfig(param_count=2_000_000)
-    input_ids = _MockInputIds(seq_len=256)
-
-    with patch.dict(sys.modules, {"calflops": None}):
-        result = estimate_flops(model, input_ids)
-
-    assert isinstance(result, FlopsResult)
-    assert result.value > 0
-    assert result.method == "parameter_estimate"
-
-
-def test_estimate_flops_uses_singleton() -> None:
-    """estimate_flops() uses the module-level singleton estimator."""
-    import llenergymeasure.harness.flops
-
-    model = _MockModelNoConfig(param_count=1_000_000)
-    input_ids = _MockInputIds(seq_len=128)
-
-    with patch.dict(sys.modules, {"calflops": None}):
-        estimate_flops(model, input_ids)
-
-    # After calling estimate_flops, singleton should be created
-    assert llenergymeasure.harness.flops._default_estimator is not None
-    assert isinstance(llenergymeasure.harness.flops._default_estimator, FlopsEstimator)
-
-
-# =============================================================================
-# M5: _count_params_from_config — AutoConfig-based parameter extraction
+# _count_params_from_config — AutoConfig-based parameter extraction
 # =============================================================================
 
 

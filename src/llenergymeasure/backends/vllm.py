@@ -7,7 +7,6 @@ All measurement lifecycle is delegated to MeasurementHarness. This module
 owns only vLLM-specific inference: model loading via vllm.LLM(), a minimal
 1-prompt warmup, offline batch llm.generate(), and cleanup.
 
-CM-07 (streaming bug) is resolved structurally — no streaming code exists.
 All vLLM and torch imports are lazy so this module can be imported on
 hosts without vLLM or CUDA installed.
 """

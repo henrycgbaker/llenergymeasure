@@ -198,20 +198,6 @@ def clear_baseline_cache():
 
 
 @pytest.fixture(autouse=True)
-def reset_flops_estimator():
-    """Reset _default_estimator to None before and after each test.
-
-    The flops module lazily creates a singleton estimator on first use.
-    Resetting it prevents stale state from propagating across tests.
-    """
-    import llenergymeasure.harness.flops
-
-    llenergymeasure.harness.flops._default_estimator = None
-    yield
-    llenergymeasure.harness.flops._default_estimator = None
-
-
-@pytest.fixture(autouse=True)
 def reset_lru_caches():
     """Clear lru_cache / functools.cache decorated functions between tests.
 

@@ -11,7 +11,6 @@ from pydantic import ValidationError
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import (
-    AggregatedResult,
     ExperimentResult,
     compute_measurement_config_hash,
 )
@@ -266,17 +265,7 @@ def test_frozen_model(make_result):
 
 
 # ---------------------------------------------------------------------------
-# Task 2.19: AggregatedResult alias
-# ---------------------------------------------------------------------------
-
-
-def test_aggregated_result_alias():
-    """AggregatedResult is ExperimentResult."""
-    assert AggregatedResult is ExperimentResult
-
-
-# ---------------------------------------------------------------------------
-# Tasks 2.20-2.21: properties
+# Properties
 # ---------------------------------------------------------------------------
 
 

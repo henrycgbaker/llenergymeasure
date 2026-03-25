@@ -262,8 +262,7 @@ def _get_device_info_pynvml(handle: Any, index: int, mig_instance_count: int = 0
     # Get compute capability
     compute_capability = None
     try:
-        major = pynvml.nvmlDeviceGetCudaComputeCapability(handle)[0]
-        minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)[1]
+        major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
         compute_capability = f"{major}.{minor}"
     except (pynvml.NVMLError, AttributeError):
         pass
@@ -564,11 +563,8 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         try:
             import pynvml
 
-            pynvml.nvmlInit()
-            try:
+            with nvml_context():
                 count = pynvml.nvmlDeviceGetCount()
-            finally:
-                pynvml.nvmlShutdown()
             if count > 1:
                 return list(range(count))
         except Exception:

@@ -15,6 +15,8 @@ from typing import Annotated, Any
 
 import typer
 
+from llenergymeasure.config.ssot import BACKEND_PACKAGES
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -40,13 +42,6 @@ def _probe_gpu() -> list[dict[str, Any]] | None:
         return gpus if gpus else None
     except Exception:
         return None
-
-
-_BACKEND_PACKAGES: dict[str, str] = {
-    "pytorch": "transformers",
-    "vllm": "vllm",
-    "tensorrt": "tensorrt_llm",
-}
 
 
 def _probe_backend_version(backend: str) -> str | None:
@@ -109,7 +104,7 @@ def config_command(
 
     # --- Inference backends ---
     print("Backends")
-    for backend, package in _BACKEND_PACKAGES.items():
+    for backend, package in BACKEND_PACKAGES.items():
         installed = importlib.util.find_spec(package) is not None
         if installed:
             print(f"  {backend}: installed", end="")
