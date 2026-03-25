@@ -1,0 +1,232 @@
+# Canonical PyTorch study - full parameter space
+# Run: llem run configs/examples/study-pytorch.yaml
+#
+# Exercises the full PyTorch backend parameter space using sweep axes for
+# independently-tunable parameters, and explicit experiments for mutually
+# exclusive or feature-specific combinations.
+#
+# Sweep experiments:
+#   2 precision x 4 batch_size x 3 attn_implementation = 24 experiments
+# Explicit experiments: 10 active + 1 commented (LoRA)
+# Total: 34 unique experiments x 3 cycles = 102 runs
+
+name: pytorch-full-parameter-space
+
+# =====================================================================
+# Shared fields (applied to every experiment)
+# =====================================================================
+model: Qwen/Qwen2.5-0.5B
+dataset: aienergyscore
+n: 50
+max_input_tokens: 512
+max_output_tokens: 128
+
+decoder:
+  preset: deterministic          # Greedy decoding for reproducible comparison
+
+warmup:
+  enabled: true
+  n_warmup: 3
+  thermal_floor_seconds: 30.0
+
+baseline:
+  enabled: true
+  duration_seconds: 30.0
+
+energy:
+  backend: auto
+
+# =====================================================================
+# Sweep axes (Cartesian product)
+# =====================================================================
+# These parameters are independently tunable - no mutual exclusivity.
+# Produces 2 x 4 x 3 = 24 PyTorch experiments.
+sweep:
+  precision:
+    - bf16
+    - fp16
+
+  pytorch.batch_size:
+    - 1
+    - 4
+    - 8
+    - 16
+
+  pytorch.attn_implementation:
+    - sdpa
+    - flash_attention_2
+    - eager
+
+# =====================================================================
+# Explicit experiments (mutually exclusive or feature-specific params)
+# =====================================================================
+experiments:
+
+  # -----------------------------------------------------------------
+  # torch.compile modes
+  # -----------------------------------------------------------------
+  # torch_compile_mode requires torch_compile: true - can't be swept
+  # with torch_compile: false configs, so listed explicitly.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      torch_compile: true
+      torch_compile_mode: default
+      torch_compile_backend: inductor
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      torch_compile: true
+      torch_compile_mode: reduce-overhead
+      torch_compile_backend: inductor
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      torch_compile: true
+      torch_compile_mode: max-autotune
+      torch_compile_backend: inductor
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # BitsAndBytes quantization
+  # -----------------------------------------------------------------
+  # 4-bit and 8-bit are mutually exclusive - cannot be swept together.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp16
+    n: 50
+    pytorch:
+      batch_size: 4
+      load_in_8bit: true
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp16
+    n: 50
+    pytorch:
+      batch_size: 4
+      load_in_4bit: true
+      bnb_4bit_compute_dtype: float16
+      bnb_4bit_quant_type: nf4
+      device_map: auto
+      trust_remote_code: true
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp16
+    n: 50
+    pytorch:
+      batch_size: 4
+      load_in_4bit: true
+      bnb_4bit_compute_dtype: float16
+      bnb_4bit_quant_type: nf4
+      bnb_4bit_use_double_quant: true
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # Beam search
+  # -----------------------------------------------------------------
+  # Beam search requires do_sample: false and overrides decoder preset.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    decoder:
+      temperature: 0.0
+      do_sample: false
+    pytorch:
+      batch_size: 4
+      num_beams: 4
+      early_stopping: true
+      length_penalty: 1.0
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # Speculative decoding (prompt-lookup)
+  # -----------------------------------------------------------------
+  # prompt_lookup_num_tokens requires batch_size: 1.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 1
+      prompt_lookup_num_tokens: 3
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # Static KV cache
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: bf16
+    n: 50
+    pytorch:
+      batch_size: 4
+      use_cache: true
+      cache_implementation: static
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # fp32 precision baseline
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    precision: fp32
+    n: 50
+    pytorch:
+      batch_size: 4
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # LoRA adapter (commented out - requires a real adapter)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   precision: bf16
+  #   n: 50
+  #   lora:
+  #     adapter_id: my-org/my-lora-adapter   # Replace with real adapter HF ID
+  #     merge_weights: false
+  #   pytorch:
+  #     batch_size: 4
+  #     device_map: auto
+  #     trust_remote_code: true
+
+# =====================================================================
+# Runner configuration
+# =====================================================================
+runners:
+  pytorch: local                 # Use docker for fully containerised runs
+
+# =====================================================================
+# Execution controls
+# =====================================================================
+execution:
+  n_cycles: 3
+  cycle_order: interleaved       # A,B,C,...,A,B,C... to control for thermal drift
+  experiment_gap_seconds: 60.0   # Gap for thermal stabilisation between experiments
+  cycle_gap_seconds: 300.0       # 5-minute gap between full cycles

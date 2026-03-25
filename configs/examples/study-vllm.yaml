@@ -1,0 +1,206 @@
+# Canonical vLLM study - full parameter space
+# Run: llem run configs/examples/study-vllm.yaml
+#
+# Exercises the full vLLM backend parameter space using sweep axes for
+# independently-tunable engine parameters, and explicit experiments for
+# mutually exclusive or feature-specific combinations.
+# Requires Docker + NVIDIA runtime.
+#
+# Sweep experiments:
+#   2 precision x 3 gpu_memory_utilization x 2 enforce_eager
+#   x 3 max_num_seqs x 2 enable_chunked_prefill = 72 experiments
+# Explicit experiments: 8 active + 1 commented (speculative decoding)
+# Total: 80 unique experiments x 3 cycles = 240 runs
+
+name: vllm-full-parameter-space
+
+# =====================================================================
+# Shared fields (applied to every experiment)
+# =====================================================================
+model: Qwen/Qwen2.5-0.5B
+dataset: aienergyscore
+n: 50
+max_input_tokens: 512
+max_output_tokens: 128
+
+decoder:
+  preset: deterministic          # Greedy decoding for reproducible comparison
+
+warmup:
+  enabled: true
+  n_warmup: 3
+  thermal_floor_seconds: 30.0
+
+baseline:
+  enabled: true
+  duration_seconds: 30.0
+
+energy:
+  backend: auto
+
+# =====================================================================
+# Sweep axes (Cartesian product)
+# =====================================================================
+# These parameters are independently tunable - no mutual exclusivity.
+# Produces 2 x 3 x 2 x 3 x 2 = 72 vLLM experiments.
+sweep:
+  precision:
+    - bf16
+    - fp16
+
+  # Memory management
+  vllm.engine.gpu_memory_utilization:
+    - 0.7
+    - 0.85
+    - 0.95
+
+  # Execution mode
+  vllm.engine.enforce_eager:
+    - true
+    - false
+
+  # Scheduler / batching
+  vllm.engine.max_num_seqs:
+    - 64
+    - 128
+    - 256
+
+  # Chunked prefill
+  vllm.engine.enable_chunked_prefill:
+    - true
+    - false
+
+# =====================================================================
+# Explicit experiments (mutually exclusive or feature-specific params)
+# =====================================================================
+experiments:
+
+  # -----------------------------------------------------------------
+  # Beam search
+  # -----------------------------------------------------------------
+  # vLLM beam_search is mutually exclusive with the sampling section.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    decoder:
+      temperature: 0.0
+      do_sample: false
+    vllm:
+      beam_search:
+        beam_width: 4
+        early_stopping: true
+        length_penalty: 1.0
+
+  # -----------------------------------------------------------------
+  # Sampling with penalties
+  # -----------------------------------------------------------------
+  # Presence/frequency penalties interact with sampling - best isolated.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    decoder:
+      temperature: 0.8
+      do_sample: true
+    vllm:
+      sampling:
+        presence_penalty: 0.6
+        frequency_penalty: 0.6
+
+  # -----------------------------------------------------------------
+  # Prefix caching
+  # -----------------------------------------------------------------
+  # enable_prefix_caching is a feature toggle, not a continuous axis.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        enable_prefix_caching: true
+        gpu_memory_utilization: 0.9
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        enable_prefix_caching: false
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # KV cache block sizes
+  # -----------------------------------------------------------------
+  # block_size is a discrete set (8 | 16 | 32) - best as explicit experiments.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        block_size: 8
+        gpu_memory_utilization: 0.9
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        block_size: 32
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # KV cache dtype fp8
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        kv_cache_dtype: fp8
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # Tensor parallel - multi-GPU
+  # -----------------------------------------------------------------
+  # Requires 2+ GPUs. Adjust tensor_parallel_size to match your hardware.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    precision: bf16
+    n: 50
+    vllm:
+      engine:
+        tensor_parallel_size: 2
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # Speculative decoding (commented out - requires a real draft model)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   precision: bf16
+  #   n: 50
+  #   vllm:
+  #     engine:
+  #       speculative_model: my-org/my-draft-model   # Replace with real draft model HF ID
+  #       num_speculative_tokens: 5
+  #       gpu_memory_utilization: 0.9
+
+# =====================================================================
+# Runner configuration
+# =====================================================================
+runners:
+  vllm: docker
+
+# =====================================================================
+# Execution controls
+# =====================================================================
+execution:
+  n_cycles: 3
+  cycle_order: interleaved       # A,B,C,...,A,B,C... to control for thermal drift
+  experiment_gap_seconds: 60.0   # Gap for thermal stabilisation between experiments
+  cycle_gap_seconds: 300.0       # 5-minute gap between full cycles

@@ -1,0 +1,284 @@
+# Canonical TensorRT-LLM study - full parameter space
+# Run: llem run configs/examples/study-tensorrt.yaml
+#
+# Exercises the full TRT-LLM backend parameter space using sweep axes for
+# compile-time parameters (each unique combination triggers a separate engine
+# compilation on first run), and explicit experiments for quantisation,
+# scheduler policies, KV cache variants, and other feature-specific settings.
+# Requires Docker + NVIDIA runtime + Ampere or newer GPU.
+# Note: FP8 quantisation requires SM >= 8.9 (Ada Lovelace / Hopper).
+#       A100 users should use INT8, W4A16_AWQ, or W8A16.
+#
+# Sweep experiments:
+#   2 precision x 3 max_batch_size x 2 max_seq_len = 12 experiments
+# Explicit experiments: 11 active + 1 commented (FP8)
+# Total: 23 unique experiments x 3 cycles = 69 runs
+
+name: tensorrt-full-parameter-space
+
+# =====================================================================
+# Shared fields (applied to every experiment)
+# =====================================================================
+model: Qwen/Qwen2.5-0.5B
+dataset: aienergyscore
+n: 50
+max_input_tokens: 512
+max_output_tokens: 128
+
+decoder:
+  preset: deterministic          # Greedy decoding for reproducible comparison
+
+warmup:
+  enabled: true
+  n_warmup: 3
+  thermal_floor_seconds: 30.0
+
+baseline:
+  enabled: true
+  duration_seconds: 30.0
+
+energy:
+  backend: auto
+
+# --- Shared TRT-LLM backend settings ---
+# Applied to all sweep experiments. Compile-time shape constants shared
+# across the sweep so only precision/batch/seq_len vary.
+tensorrt:
+  max_input_len: 1024
+  build_cache:
+    max_cache_storage_gb: 256
+
+# =====================================================================
+# Sweep axes (Cartesian product)
+# =====================================================================
+# These are compile-time parameters. Each unique combination triggers a
+# separate engine compilation; subsequent runs use the build cache.
+# Produces 2 x 3 x 2 = 12 TensorRT experiments.
+sweep:
+  precision:
+    - bf16
+    - fp16
+
+  tensorrt.max_batch_size:
+    - 1
+    - 4
+    - 8
+
+  tensorrt.max_seq_len:
+    - 1536
+    - 2048
+
+# =====================================================================
+# Explicit experiments (mutually exclusive or feature-specific params)
+# =====================================================================
+experiments:
+
+  # -----------------------------------------------------------------
+  # Quantisation algorithms
+  # -----------------------------------------------------------------
+  # Each quant_algo triggers a distinct calibration + compilation path.
+  # INT8, W4A16_AWQ, W8A16 are valid on A100 (SM80).
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: INT8
+      build_cache:
+        max_cache_storage_gb: 256
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: W4A16_AWQ
+      build_cache:
+        max_cache_storage_gb: 256
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: W8A16
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # INT8 + KV cache quantisation (combined)
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: INT8
+        kv_cache_quant_algo: INT8
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: tensorrt
+  #   precision: bf16
+  #   n: 50
+  #   tensorrt:
+  #     max_batch_size: 8
+  #     max_input_len: 1024
+  #     max_seq_len: 2048
+  #     quant:
+  #       quant_algo: FP8
+  #     build_cache:
+  #       max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Scheduler policies
+  # -----------------------------------------------------------------
+  # capacity_scheduling_policy controls how the TRT-LLM scheduler
+  # allocates requests - mutually exclusive options.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      scheduler:
+        capacity_scheduling_policy: MAX_UTILIZATION
+      build_cache:
+        max_cache_storage_gb: 256
+
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      scheduler:
+        capacity_scheduling_policy: STATIC_BATCH
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # KV cache variants
+  # -----------------------------------------------------------------
+  # Block reuse for repeated prefixes (useful for shared system prompts)
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      kv_cache:
+        enable_block_reuse: true
+        free_gpu_memory_fraction: 0.9
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # Host offload: spill KV cache to CPU RAM (1 GiB)
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      kv_cache:
+        host_cache_size: 1073741824    # 1 GiB in bytes
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Fast build mode
+  # -----------------------------------------------------------------
+  # Reduced TensorRT optimisation passes - much faster compilation,
+  # slightly lower throughput. Useful for iterative development.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      fast_build: true
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Explicit dtype: float16
+  # -----------------------------------------------------------------
+  # TRT-LLM dtype is a compile-time constant separate from the top-level
+  # precision field - set explicitly to confirm alignment.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: fp16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      dtype: float16
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # PTQ calibration parameters
+  # -----------------------------------------------------------------
+  # Calibration is only needed for algorithms that require it (e.g. INT8).
+  # calib_batches, calib_dataset, and calib_max_seq_length control the
+  # calibration pass that runs before engine compilation.
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    precision: bf16
+    n: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      quant:
+        quant_algo: INT8
+      calib:
+        calib_batches: 512
+        calib_dataset: cnn_dailymail
+        calib_max_seq_length: 512
+      build_cache:
+        max_cache_storage_gb: 256
+
+# =====================================================================
+# Runner configuration
+# =====================================================================
+runners:
+  tensorrt: docker
+
+# =====================================================================
+# Execution controls
+# =====================================================================
+# TRT-LLM compilation is expensive; shorter gaps are acceptable once
+# engines are cached from the first cycle.
+execution:
+  n_cycles: 3
+  cycle_order: interleaved       # A,B,C,...,A,B,C... to control for thermal drift
+  experiment_gap_seconds: 10.0   # Shorter gap - TRT restarts are slower than gap
+  cycle_gap_seconds: 30.0        # Gap between full cycles
