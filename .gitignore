@@ -2,10 +2,12 @@
 .DS_Store
 Thumbs.db
 
-# Editor
+# Editor / IDE
 *.swp
 *.swo
 *~
+.vscode/
+.idea/
 
 # Python
 __pycache__/

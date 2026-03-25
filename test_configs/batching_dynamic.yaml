@@ -1,9 +1,0 @@
-# Test dynamic batching strategy
-config_name: batching_dynamic
-model_name: gpt2
-
-batching:
-  strategy: dynamic
-  batch_size: 8  # Max batch size for dynamic
-
-max_new_tokens: 64
