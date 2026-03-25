@@ -13,11 +13,10 @@ import logging
 from pathlib import Path
 
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.ssot import BACKEND_PACKAGES
 from llenergymeasure.utils.exceptions import PreFlightError
 
 logger = logging.getLogger(__name__)
-
-from llenergymeasure.config.ssot import BACKEND_PACKAGES
 
 # ---------------------------------------------------------------------------
 # Internal check helpers

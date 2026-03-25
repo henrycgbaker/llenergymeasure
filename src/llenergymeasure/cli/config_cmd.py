@@ -15,6 +15,8 @@ from typing import Annotated, Any
 
 import typer
 
+from llenergymeasure.config.ssot import BACKEND_PACKAGES
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -40,9 +42,6 @@ def _probe_gpu() -> list[dict[str, Any]] | None:
         return gpus if gpus else None
     except Exception:
         return None
-
-
-from llenergymeasure.config.ssot import BACKEND_PACKAGES
 
 
 def _probe_backend_version(backend: str) -> str | None:
