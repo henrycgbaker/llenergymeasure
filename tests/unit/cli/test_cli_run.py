@@ -434,7 +434,7 @@ def test_run_study_routing_sweep_yaml(tmp_path):
     with (
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.loader.load_study_config") as mock_load,
-        patch("llenergymeasure.config.grid.format_preflight_summary", return_value="preflight"),
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
     ):
         mock_load.return_value = MagicMock()
@@ -459,7 +459,7 @@ def test_run_study_routing_experiments_yaml(tmp_path):
     with (
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.loader.load_study_config") as mock_load,
-        patch("llenergymeasure.config.grid.format_preflight_summary", return_value="preflight"),
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
     ):
         mock_load.return_value = MagicMock()
@@ -506,12 +506,12 @@ def test_run_study_cli_defaults_applied(tmp_path):
         captured_overrides.append(cli_overrides)
         return MagicMock()
 
-    # load_study_config, run_study, and format_preflight_summary are all lazily
+    # load_study_config, run_study, and build_preflight_panel are all lazily
     # imported inside _run_study_impl — patch at source modules
     with (
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
-        patch("llenergymeasure.config.grid.format_preflight_summary", return_value="preflight"),
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml)])

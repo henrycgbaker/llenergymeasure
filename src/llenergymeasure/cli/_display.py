@@ -1,8 +1,7 @@
-"""Plain-text formatting utilities for CLI output.
+"""CLI output formatting utilities.
 
 All result output goes to stdout (scientific record).
 Progress/header output goes to stderr (transient display area).
-No Rich imports — plain print() and sys.stderr.write() only.
 """
 
 from __future__ import annotations
@@ -237,16 +236,27 @@ def print_study_dry_run(
     Shows grid summary, per-experiment configs, and VRAM estimate for the
     largest model. Mirrors the single-experiment dry-run format.
     """
+    from rich.console import Console as RichConsole
+
     from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
-    from llenergymeasure.config.grid import format_preflight_summary
+    from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.models import StudyConfig
 
     assert isinstance(study_config, StudyConfig)
 
-    # Pre-flight summary (configs x cycles = runs, order)
-    summary = format_preflight_summary(study_config)
-    print(summary)
-    print()
+    # Pre-flight panel (metadata, sweep dims, hash) goes to stdout for dry-run
+    _stdout_console = RichConsole()
+    panel = build_preflight_panel(study_config)
+    _stdout_console.print(panel)
+
+    if study_config.skipped_configs:
+        skip_lines = [f"Skipping {len(study_config.skipped_configs)} config(s):"]
+        for s in study_config.skipped_configs:
+            label = s.get("short_label", "unknown")
+            reason = s.get("reason", "unknown error")
+            skip_lines.append(f"  - {label}: {reason}")
+        _stdout_console.print("\n".join(skip_lines))
+        _stdout_console.print()
 
     # Per-experiment config table
     header = f"{'#':>3}  {'Model':<25}  {'Backend':<10}  {'Precision':<10}  {'n':>5}"
