@@ -423,7 +423,15 @@ class VLLMBackend:
     @staticmethod
     def _build_beam_search_params(config: ExperimentConfig, beam_cfg: Any) -> Any:
         """Build vllm.BeamSearchParams from VLLMBeamSearchConfig."""
-        from vllm import BeamSearchParams
+        try:
+            from vllm import BeamSearchParams
+        except ImportError:
+            raise BackendError(
+                "beam_search config requires vllm.BeamSearchParams which is not "
+                "available in the installed vLLM version (added in vLLM >=0.8). "
+                "Either upgrade vLLM or remove the beam_search section from "
+                "vllm config."
+            ) from None
 
         kwargs: dict[str, Any] = {}
         if beam_cfg.beam_width is not None:
