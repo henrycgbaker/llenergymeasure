@@ -7,16 +7,19 @@ tests pass immediately from the models.py changes.
 
 from __future__ import annotations
 
+from io import StringIO
 from pathlib import Path
 
 import pytest
 import yaml
 from pydantic import ValidationError
+from rich.console import Console
 
 from llenergymeasure.config.grid import (
     CycleOrder,
     SkippedConfig,
     apply_cycles,
+    build_preflight_panel,
     compute_study_design_hash,
     expand_grid,
     format_preflight_summary,
@@ -575,3 +578,183 @@ class TestFormatPreflightSummary:
         summary = format_preflight_summary(sc)
         assert "1 configs x 1 cycles = 1 runs" in summary
         assert "Order: sequential" in summary
+
+
+# =============================================================================
+# build_preflight_panel() tests
+# =============================================================================
+
+
+def _render_panel(study_config: StudyConfig, width: int = 100) -> str:
+    """Helper: render a build_preflight_panel() output to a plain-text string."""
+    panel = build_preflight_panel(study_config)
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=False, no_color=True, width=width)
+    console.print(panel)
+    return buf.getvalue()
+
+
+def _make_panel_study_config(
+    models: list[str] | None = None,
+    backends: list[str] | None = None,
+    precisions: list[str] | None = None,
+    n_cycles: int = 1,
+    cycle_order: str = "sequential",
+    study_name: str = "test-study",
+    study_hash: str = "abc123def456abcd",
+    runners: dict | None = None,
+) -> StudyConfig:
+    """Build a StudyConfig for panel tests with varying fields per experiment."""
+    models = models or ["gpt2"]
+    backends = backends or ["pytorch"]
+    precisions = precisions or ["bf16"]
+
+    # Build one experiment per combination (then replicate for cycles)
+    experiments = []
+    for model in models:
+        for backend in backends:
+            for precision in precisions:
+                experiments.append(
+                    ExperimentConfig(model=model, backend=backend, precision=precision)
+                )
+
+    # Replicate for cycles
+    all_exps = experiments * n_cycles
+    return StudyConfig(
+        experiments=all_exps,
+        name=study_name,
+        execution=ExecutionConfig(n_cycles=n_cycles, cycle_order=cycle_order),
+        study_design_hash=study_hash,
+        runners=runners,
+    )
+
+
+class TestBuildPreflightPanel:
+    def test_panel_contains_study_name_in_title(self):
+        """Panel border title contains the study name."""
+        sc = _make_panel_study_config(study_name="test-study")
+        output = _render_panel(sc)
+        assert "Study: test-study" in output
+
+    def test_panel_metadata_experiments_plural(self):
+        """Panel shows n configs x n cycles = n runs (plural form)."""
+        sc = _make_panel_study_config(
+            models=["gpt2", "gpt2-xl"], n_cycles=3, cycle_order="interleaved"
+        )
+        output = _render_panel(sc)
+        assert "2 configs x 3 cycles = 6 runs" in output
+
+    def test_panel_metadata_experiments_singular(self):
+        """Panel shows 1 config x 1 cycle = 1 run (singular form)."""
+        sc = _make_panel_study_config(models=["gpt2"], n_cycles=1, cycle_order="sequential")
+        output = _render_panel(sc)
+        assert "1 config x 1 cycle = 1 run" in output
+
+    def test_panel_pluralisation_singular(self):
+        """1 config x 1 cycle = 1 run (all singular)."""
+        sc = _make_panel_study_config(models=["gpt2"], n_cycles=1)
+        output = _render_panel(sc)
+        assert "1 config x 1 cycle = 1 run" in output
+
+    def test_panel_pluralisation_plural(self):
+        """2 configs x 3 cycles = 6 runs (all plural)."""
+        sc = _make_panel_study_config(
+            models=["gpt2", "gpt2-xl"], n_cycles=3, cycle_order="sequential"
+        )
+        output = _render_panel(sc)
+        assert "2 configs x 3 cycles = 6 runs" in output
+
+    def test_panel_metadata_order(self):
+        """Panel shows cycle order in Order row."""
+        sc = _make_panel_study_config(n_cycles=2, cycle_order="interleaved")
+        output = _render_panel(sc)
+        assert "interleaved" in output
+
+    def test_panel_metadata_backends_with_runners(self):
+        """Panel shows backend with runner mode when runners dict is provided."""
+        sc = _make_panel_study_config(
+            models=["gpt2", "gpt2"],
+            backends=["pytorch", "vllm"],
+            runners={"pytorch": "local", "vllm": "docker"},
+        )
+        output = _render_panel(sc)
+        assert "pytorch (local)" in output
+        assert "vllm (docker)" in output
+
+    def test_panel_metadata_backends_default_local(self):
+        """Panel shows (local) for backends when runners is None."""
+        sc = _make_panel_study_config(backends=["pytorch"])
+        output = _render_panel(sc)
+        assert "pytorch (local)" in output
+
+    def test_panel_metadata_dataset(self):
+        """Panel shows dataset name in Dataset row."""
+        sc = _make_panel_study_config()
+        output = _render_panel(sc)
+        assert "aienergyscore" in output
+
+    def test_panel_metadata_energy(self):
+        """Panel shows energy backend in Energy row."""
+        sc = _make_panel_study_config()
+        output = _render_panel(sc)
+        assert "auto" in output
+
+    def test_panel_sweep_dimensions_model(self):
+        """Sweep dimensions section contains model names when multiple models used."""
+        sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"])
+        output = _render_panel(sc)
+        assert "gpt2" in output
+        assert "gpt2-xl" in output
+
+    def test_panel_sweep_dimensions_nested_decoder(self):
+        """Non-default decoder config shows decoder header and sub-fields."""
+        from llenergymeasure.config.models import DecoderConfig
+
+        exp1 = ExperimentConfig(
+            model="gpt2", decoder=DecoderConfig(temperature=0.0, do_sample=False)
+        )
+        exp2 = ExperimentConfig(
+            model="gpt2", decoder=DecoderConfig(temperature=0.0, do_sample=False)
+        )
+        sc = StudyConfig(
+            experiments=[exp1, exp2],
+            name="decoder-test",
+            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+            study_design_hash="deadbeef01234567",
+        )
+        output = _render_panel(sc)
+        # decoder sub-config header should appear since temperature and do_sample differ from defaults
+        assert "decoder" in output
+        # temperature=0.0 is non-default (default is 1.0)
+        assert "temperature" in output
+
+    def test_panel_hash_displayed(self):
+        """Panel contains the study design hash."""
+        sc = _make_panel_study_config(study_hash="deadbeef01234567")
+        output = _render_panel(sc)
+        assert "deadbeef01234567" in output
+
+    def test_panel_unnamed_study(self):
+        """Panel with no study name shows 'unnamed' in title."""
+        exps = [ExperimentConfig(model="gpt2")]
+        sc = StudyConfig(
+            experiments=exps,
+            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+        )
+        output = _render_panel(sc)
+        assert "Study: unnamed" in output
+
+    def test_panel_multiple_backends_sorted(self):
+        """Multiple backends are sorted alphabetically."""
+        exps = [
+            ExperimentConfig(model="gpt2", backend="vllm"),
+            ExperimentConfig(model="gpt2", backend="pytorch"),
+        ]
+        sc = StudyConfig(
+            experiments=exps,
+            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+        )
+        output = _render_panel(sc)
+        # Both backends appear
+        assert "pytorch" in output
+        assert "vllm" in output
