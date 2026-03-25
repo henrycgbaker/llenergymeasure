@@ -316,7 +316,7 @@ experiments:
 # Determines how the backend executes: locally or via Docker.
 # Values: 'local', 'docker', or 'docker:<custom-image-tag>'
 runners:
-  pytorch: docker
+  pytorch: local                 # Use docker for fully containerised runs
 
 # =====================================================================
 # Execution controls
