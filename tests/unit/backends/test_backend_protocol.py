@@ -227,6 +227,29 @@ def test_model_load_kwargs_pytorch_config_attn_implementation():
 def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
     """flash_attention_2 falls back to sdpa when flash_attn package is missing."""
     pytest.importorskip("torch")
+
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(
+        model="gpt2",
+        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+    )
+
+    # flash_attn is not installed in the test environment, so the guard
+    # catches the ImportError and falls back to sdpa automatically.
+    kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["attn_implementation"] == "sdpa"
+
+
+def test_model_load_kwargs_flash_attention_kept_when_installed():
+    """flash_attention_2 is kept when flash_attn package is available."""
+    pytest.importorskip("torch")
+    import sys
+    import types
     from unittest.mock import patch
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
@@ -239,30 +262,17 @@ def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
         pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
     )
 
-    # Simulate flash_attn not being installed
-    with patch("importlib.util.find_spec", return_value=None):
-        kwargs = backend._model_load_kwargs(config)
-
-    assert kwargs["attn_implementation"] == "sdpa"
-
-
-def test_model_load_kwargs_flash_attention_kept_when_installed():
-    """flash_attention_2 is kept when flash_attn package is available."""
-    pytest.importorskip("torch")
-    from unittest.mock import MagicMock, patch
-
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
-    from llenergymeasure.config.models import ExperimentConfig
-
-    backend = PyTorchBackend()
-    config = ExperimentConfig(
-        model="gpt2",
-        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
-    )
-
-    # Simulate flash_attn being installed
-    with patch("importlib.util.find_spec", return_value=MagicMock()):
+    # Simulate flash_attn and flash_attn.bert_padding being importable by
+    # temporarily injecting stub modules into sys.modules.
+    fake_flash = types.ModuleType("flash_attn")
+    fake_bert_padding = types.ModuleType("flash_attn.bert_padding")
+    with patch.dict(
+        sys.modules,
+        {
+            "flash_attn": fake_flash,
+            "flash_attn.bert_padding": fake_bert_padding,
+        },
+    ):
         kwargs = backend._model_load_kwargs(config)
 
     assert kwargs["attn_implementation"] == "flash_attention_2"
@@ -306,7 +316,6 @@ def test_model_load_kwargs_eager_not_affected_by_flash_guard():
 def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
     """flash_attention_3 also falls back to sdpa when flash_attn is missing."""
     pytest.importorskip("torch")
-    from unittest.mock import patch
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.backend_configs import PyTorchConfig
@@ -318,8 +327,9 @@ def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
         pytorch=PyTorchConfig(attn_implementation="flash_attention_3"),
     )
 
-    with patch("importlib.util.find_spec", return_value=None):
-        kwargs = backend._model_load_kwargs(config)
+    # flash_attn is not installed in the test environment, so the guard
+    # catches the ImportError and falls back to sdpa automatically.
+    kwargs = backend._model_load_kwargs(config)
 
     assert kwargs["attn_implementation"] == "sdpa"
 
