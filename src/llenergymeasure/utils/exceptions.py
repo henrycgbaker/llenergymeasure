@@ -28,10 +28,17 @@ class StudyError(LLEMError):
 class DockerError(LLEMError):
     """Base class for Docker container dispatch errors."""
 
-    def __init__(self, message: str, fix_suggestion: str = "", stderr_snippet: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        fix_suggestion: str = "",
+        stderr_snippet: str | None = None,
+        exchange_dir: str | None = None,
+    ):
         super().__init__(message)
         self.fix_suggestion = fix_suggestion
         self.stderr_snippet = stderr_snippet
+        self.exchange_dir = exchange_dir
 
 
 class DockerPreFlightError(PreFlightError):

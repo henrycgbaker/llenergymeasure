@@ -16,8 +16,10 @@ Key design decisions (locked in .product/decisions/experiment-isolation.md):
 from __future__ import annotations
 
 import contextlib
+import logging
 import multiprocessing
 import os
+import shutil
 import signal
 import sys
 import threading
@@ -44,6 +46,8 @@ __all__ = [
     "_run_experiment_worker",
     "_save_and_record",
 ]
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -633,7 +637,10 @@ class StudyRunner:
         if isinstance(result, dict) and "type" in result:
             error_type = result.get("type", "UnknownError")
             error_message = result.get("message", "")
-            self.manifest.mark_failed(config_hash, cycle, error_type, error_message)
+            log_file = result.get("log_file")
+            self.manifest.mark_failed(
+                config_hash, cycle, error_type, error_message, log_file=log_file
+            )
             if self._progress:
                 self._progress.end_experiment_fail(index, elapsed, error=error_message)
         else:
@@ -713,7 +720,40 @@ class StudyRunner:
                 "message": str(exc),
                 "config_hash": config_hash,
             }
+            # Persist container.log from exchange dir into the study results directory
+            self._persist_container_log(exc, config_hash, cycle, result)
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(result, config_hash, cycle, index, exp_elapsed)
         return result
+
+    def _persist_container_log(
+        self,
+        exc: Any,
+        config_hash: str,
+        cycle: int,
+        result: dict[str, Any],
+    ) -> None:
+        """Copy container.log from the Docker exchange dir into the study results directory.
+
+        On success, adds a ``log_file`` key to the result dict (relative path
+        within the study directory) so the manifest records where to find it.
+        """
+        exchange_dir_str = getattr(exc, "exchange_dir", None)
+        if not exchange_dir_str:
+            return
+
+        src = Path(exchange_dir_str) / "container.log"
+        if not src.exists():
+            return
+
+        # Build a descriptive filename: {config_hash[:8]}_cycle{N}_container.log
+        dest_name = f"{config_hash[:8]}_cycle{cycle}_container.log"
+        dest = self.study_dir / dest_name
+
+        try:
+            shutil.copy2(src, dest)
+            result["log_file"] = dest_name
+            logger.debug("Container log persisted to %s", dest)
+        except Exception as copy_exc:
+            logger.warning("Failed to persist container.log to %s: %s", dest, copy_exc)
