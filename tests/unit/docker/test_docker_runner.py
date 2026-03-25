@@ -969,3 +969,149 @@ class TestContainerLogPersistence:
                 runner.run(config)
 
             assert exc_info.value.exchange_dir == str(exchange_dir)
+
+
+# ---------------------------------------------------------------------------
+# Test: Timeseries parquet rescue before exchange dir cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestTimeseriesParquetRescue:
+    """DockerRunner must rescue timeseries.parquet from the exchange dir before cleanup.
+
+    The harness inside the container writes timeseries.parquet to /run/llem
+    (= exchange_dir on host). DockerRunner must move it to a temp dir and
+    rewrite effective_config["output_dir"] to point there, so the study
+    runner's _save_and_record can find it.
+    """
+
+    def test_parquet_rescued_and_output_dir_rewritten(self, tmp_path):
+        """When timeseries.parquet exists, it is rescued and output_dir points to temp dir."""
+        config = make_config()
+        result = make_result(
+            timeseries="timeseries.parquet",
+            effective_config={
+                "model": "gpt2",
+                "backend": "pytorch",
+                "output_dir": "/run/llem",
+            },
+        )
+
+        exchange_dir = tmp_path / "llem-ts-rescue"
+        exchange_dir.mkdir()
+        rescue_dir = tmp_path / "llem-ts-rescued"
+        rescue_dir.mkdir()
+
+        # tempfile.mkdtemp is called twice: once for exchange dir, once for rescue dir
+        mkdtemp_returns = iter([str(exchange_dir), str(rescue_dir)])
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                side_effect=lambda **kw: next(mkdtemp_returns),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.shutil.rmtree",
+            ) as mock_rmtree,
+        ):
+            from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+            config_hash = compute_measurement_config_hash(config)
+            result_path = exchange_dir / f"{config_hash}_result.json"
+            result_path.write_text(result.model_dump_json(), encoding="utf-8")
+
+            # Simulate harness writing timeseries.parquet inside container
+            ts_path = exchange_dir / "timeseries.parquet"
+            ts_path.write_bytes(b"PARQUET_CONTENT")
+
+            runner = DockerRunner(image=IMAGE)
+            returned = runner.run(config)
+
+        # output_dir must NOT be /run/llem (container path) — must be rewritten
+        # to the host-side rescue dir containing the rescued parquet
+        output_dir = returned.effective_config.get("output_dir")
+        assert output_dir == str(rescue_dir)
+        assert (rescue_dir / "timeseries.parquet").exists()
+        assert (rescue_dir / "timeseries.parquet").read_bytes() == b"PARQUET_CONTENT"
+
+        # Exchange dir must still be cleaned up
+        mock_rmtree.assert_called_once()
+
+    def test_no_parquet_no_rescue(self, tmp_path):
+        """When no timeseries.parquet exists, output_dir stays as /run/llem."""
+        config = make_config()
+        # The container harness includes output_dir in effective_config
+        # (from the config we set it on), so the result must reflect that.
+        result = make_result(
+            effective_config={
+                "model": "gpt2",
+                "backend": "pytorch",
+                "output_dir": "/run/llem",
+            },
+        )
+
+        exchange_dir = tmp_path / "llem-no-ts"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+        ):
+            from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+            config_hash = compute_measurement_config_hash(config)
+            result_path = exchange_dir / f"{config_hash}_result.json"
+            result_path.write_text(result.model_dump_json(), encoding="utf-8")
+
+            runner = DockerRunner(image=IMAGE)
+            returned = runner.run(config)
+
+        # output_dir should reflect the /run/llem we set on the config
+        # (no rescue needed, no rewrite)
+        output_dir = returned.effective_config.get("output_dir")
+        assert output_dir == "/run/llem"
+
+    def test_config_serialised_with_output_dir(self, tmp_path):
+        """Config JSON written to exchange dir must have output_dir=/run/llem."""
+        config = make_config()
+        assert config.output_dir is None, "Pre-condition: config starts with output_dir=None"
+
+        result = make_result()
+        exchange_dir = tmp_path / "llem-cfg-check"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+        ):
+            from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+            config_hash = compute_measurement_config_hash(config)
+            result_path = exchange_dir / f"{config_hash}_result.json"
+            result_path.write_text(result.model_dump_json(), encoding="utf-8")
+
+            runner = DockerRunner(image=IMAGE)
+            runner.run(config)
+
+        # Read back the config JSON that was written for the container
+        config_path = exchange_dir / f"{config_hash}_config.json"
+        written_config = json.loads(config_path.read_text(encoding="utf-8"))
+        assert written_config["output_dir"] == "/run/llem"

@@ -22,6 +22,7 @@ import os
 import shutil
 import signal
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -73,12 +74,38 @@ def _save_and_record(
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
+    Resolves the timeseries parquet sidecar from the result object and passes it
+    to save_result() so it is copied into the experiment subdirectory. The stale
+    flat file written by MeasurementHarness is removed after the copy.
+
     On save failure, marks the experiment as completed with empty path.
     """
     try:
         from llenergymeasure.results.persistence import save_result
 
-        result_path = save_result(result, study_dir)
+        # Resolve timeseries sidecar from result fields.
+        # MeasurementHarness writes timeseries.parquet to config.output_dir and
+        # sets result.timeseries = "timeseries.parquet". Both must be present for
+        # the copy to proceed.
+        ts_source: Path | None = None
+        ts_filename = getattr(result, "timeseries", None)
+        output_dir_str = (
+            result.effective_config.get("output_dir")
+            if hasattr(result, "effective_config")
+            else None
+        )
+        if ts_filename and output_dir_str:
+            candidate = Path(output_dir_str) / ts_filename
+            if candidate.exists():
+                ts_source = candidate
+
+        result_path = save_result(result, study_dir, timeseries_source=ts_source)
+
+        # Clean up the stale flat parquet file after it has been copied into the
+        # experiment subdirectory (mirrors cli/run.py line 288).
+        if ts_source is not None:
+            ts_source.unlink(missing_ok=True)
+
         result_files.append(str(result_path))
         rel_path = str(result_path.relative_to(study_dir))
         manifest.mark_completed(config_hash, cycle, rel_path)
@@ -561,6 +588,13 @@ class StudyRunner:
 
         exp_start = time.monotonic()
 
+        # Create a temp dir for timeseries parquet output. The harness gates
+        # parquet writing on config.output_dir being non-None, so we must set
+        # it here. The temp dir is cleaned up after _handle_result copies the
+        # parquet into the study directory.
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-"))
+        config = config.model_copy(update={"output_dir": str(ts_tmpdir)})
+
         # Resolve cached snapshot in parent — serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
 
@@ -623,6 +657,11 @@ class StudyRunner:
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(result, config_hash, cycle, index, exp_elapsed)
+
+        # Clean up the temp dir created for timeseries parquet output.
+        # _save_and_record already copied the parquet into the study dir.
+        shutil.rmtree(ts_tmpdir, ignore_errors=True)
+
         return result
 
     def _handle_result(
@@ -725,6 +764,14 @@ class StudyRunner:
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(result, config_hash, cycle, index, exp_elapsed)
+
+        # Clean up the temp dir that DockerRunner created for the rescued
+        # timeseries parquet (now copied into the study dir by _save_and_record).
+        if not isinstance(result, dict) and hasattr(result, "effective_config"):
+            ts_tmpdir = result.effective_config.get("output_dir")
+            if ts_tmpdir and Path(ts_tmpdir).exists():
+                shutil.rmtree(ts_tmpdir, ignore_errors=True)
+
         return result
 
     def _persist_container_log(
