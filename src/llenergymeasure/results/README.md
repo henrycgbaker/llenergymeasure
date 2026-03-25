@@ -55,18 +55,16 @@ results/
 Aggregate raw results from multiple processes.
 
 ```python
-from llenergymeasure.results import aggregate_results, calculate_efficiency_metrics
+from llenergymeasure.results.aggregation import AggregationContext, aggregate_results
+
+# Build context with all aggregation parameters
+ctx = AggregationContext(
+    experiment_id="exp_20240115_123456",
+    measurement_config_hash="abc123def456abcd",
+)
 
 # Aggregate raw results into single result
-aggregated = aggregate_results(experiment_id, raw_results)
-
-# Calculate derived metrics
-metrics = calculate_efficiency_metrics(aggregated)
-# {
-#   'tokens_per_second': 819.2,
-#   'tokens_per_joule': 6.83,
-#   'joules_per_token': 0.146,
-# }
+aggregated = aggregate_results(raw_results, ctx)
 ```
 
 **Aggregation logic:**

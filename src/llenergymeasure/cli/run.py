@@ -19,6 +19,11 @@ from llenergymeasure.cli._display import (
 )
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
+from llenergymeasure.config.ssot import (
+    BACKEND_PYTORCH,
+    RUNNER_DOCKER,
+    RUNNER_LOCAL,
+)
 from llenergymeasure.utils.exceptions import (
     BackendError,
     ConfigError,
@@ -306,31 +311,38 @@ def _resolve_runner_tag(config: Any) -> str:
     Returns "local" or "docker" based on the runner field.
     """
     runner = getattr(config, "runner", "auto")
-    if runner == "local":
-        return "local"
-    if runner == "docker" or (isinstance(runner, str) and runner.startswith("docker:")):
-        return "docker"
+    if runner == RUNNER_LOCAL:
+        return RUNNER_LOCAL
+    if runner == RUNNER_DOCKER or (isinstance(runner, str) and runner.startswith("docker:")):
+        return RUNNER_DOCKER
     # auto: pytorch defaults to local, vllm/tensorrt default to docker
-    backend = getattr(config, "backend", "pytorch")
-    return "local" if backend == "pytorch" else "docker"
+    backend = getattr(config, "backend", BACKEND_PYTORCH)
+    return RUNNER_LOCAL if backend == BACKEND_PYTORCH else RUNNER_DOCKER
 
 
-def _build_header(config: Any, runner_tag: str = "local") -> str:
+def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     """Build compact experiment header: model | backend [runner] + deviation fields.
 
     Args:
         config: ExperimentConfig with model, backend, precision, n, dataset fields.
         runner_tag: Runner tag string ("local" or "docker").
     """
+    from llenergymeasure.config.models import ExperimentConfig
+
+    _fields = ExperimentConfig.model_fields
+    default_precision = _fields["precision"].default
+    default_n = _fields["n"].default
+    default_dataset = _fields["dataset"].default
+
     # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
     model = config.model.split("/")[-1] if "/" in config.model else config.model
     parts = [f"{model} | {config.backend}"]
     # Deviation fields (only when non-default)
-    if config.precision != "bf16":
+    if config.precision != default_precision:
         parts.append(config.precision)
-    if config.n != 100:
+    if config.n != default_n:
         parts.append(f"n={config.n}")
-    if getattr(config, "dataset", "aienergyscore") != "aienergyscore":
+    if getattr(config, "dataset", default_dataset) != default_dataset:
         parts.append(config.dataset)
     return f"{' | '.join(parts)} [{runner_tag}]"
 

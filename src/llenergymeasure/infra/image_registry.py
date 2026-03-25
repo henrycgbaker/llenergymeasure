@@ -24,6 +24,14 @@ from __future__ import annotations
 import subprocess
 from functools import lru_cache
 
+from llenergymeasure.config.ssot import (
+    BACKEND_PYTORCH,
+    BACKEND_TENSORRT,
+    BACKEND_VLLM,
+    RUNNER_DOCKER,
+    RUNNER_LOCAL,
+)
+
 __all__ = [
     "DEFAULT_IMAGE_TEMPLATE",
     "get_cuda_major_version",
@@ -39,7 +47,7 @@ __all__ = [
 DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}"
 
 # Backends that have a Docker image in the registry.
-_SUPPORTED_BACKENDS = frozenset({"pytorch", "vllm", "tensorrt"})
+_SUPPORTED_BACKENDS = frozenset({BACKEND_PYTORCH, BACKEND_VLLM, BACKEND_TENSORRT})
 
 
 # ---------------------------------------------------------------------------
@@ -160,11 +168,11 @@ def parse_runner_value(value: str) -> tuple[str, str | None]:
         ValueError: If ``"docker:"`` is given with an empty image name, or if
                     the value is not one of the recognised runner types.
     """
-    if value == "local":
-        return ("local", None)
+    if value == RUNNER_LOCAL:
+        return (RUNNER_LOCAL, None)
 
-    if value == "docker":
-        return ("docker", None)
+    if value == RUNNER_DOCKER:
+        return (RUNNER_DOCKER, None)
 
     if value.startswith("docker:"):
         image = value[len("docker:") :]
@@ -174,7 +182,7 @@ def parse_runner_value(value: str) -> tuple[str, str | None]:
                 "use 'docker' (bare) to select the built-in default image, "
                 "or 'docker:full/image:tag' for an explicit image."
             )
-        return ("docker", image)
+        return (RUNNER_DOCKER, image)
 
     raise ValueError(
         f"Unrecognised runner value {value!r}. "

@@ -1,8 +1,8 @@
 """Inference backends for llenergymeasure."""
 
-import importlib.util
-
 from llenergymeasure.backends.protocol import BackendPlugin
+from llenergymeasure.config.backend_detection import is_backend_available
+from llenergymeasure.config.ssot import BACKEND_PYTORCH, BACKEND_TENSORRT, BACKEND_VLLM
 from llenergymeasure.utils.exceptions import BackendError
 
 __all__ = ["BackendPlugin", "detect_default_backend", "get_backend"]
@@ -18,12 +18,12 @@ def detect_default_backend() -> str:
     Raises:
         BackendError: If no supported backend is installed.
     """
-    if importlib.util.find_spec("transformers") is not None:
-        return "pytorch"
-    if importlib.util.find_spec("tensorrt_llm") is not None:
-        return "tensorrt"
-    if importlib.util.find_spec("vllm") is not None:
-        return "vllm"
+    if is_backend_available(BACKEND_PYTORCH):
+        return BACKEND_PYTORCH
+    if is_backend_available(BACKEND_TENSORRT):
+        return BACKEND_TENSORRT
+    if is_backend_available(BACKEND_VLLM):
+        return BACKEND_VLLM
     raise BackendError(
         "No inference backend installed. Install one with: "
         "pip install llenergymeasure[pytorch], "
@@ -44,15 +44,15 @@ def get_backend(name: str) -> BackendPlugin:
     Raises:
         BackendError: If the backend name is unknown.
     """
-    if name == "pytorch":
+    if name == BACKEND_PYTORCH:
         from llenergymeasure.backends.pytorch import PyTorchBackend
 
         return PyTorchBackend()
-    if name == "vllm":
+    if name == BACKEND_VLLM:
         from llenergymeasure.backends.vllm import VLLMBackend
 
         return VLLMBackend()
-    if name == "tensorrt":
+    if name == BACKEND_TENSORRT:
         from llenergymeasure.backends.tensorrt import TensorRTBackend
 
         return TensorRTBackend()

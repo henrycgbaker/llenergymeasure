@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from llenergymeasure.config.models import StudyConfig
+from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.utils.exceptions import PreFlightError
 
 if TYPE_CHECKING:
@@ -76,7 +77,7 @@ def run_study_preflight(
     runner_specs = resolve_study_runners(
         list(backends), yaml_runners=yaml_runners, user_config=user_config
     )
-    if any(spec.mode == "docker" for spec in runner_specs.values()):
+    if any(spec.mode == RUNNER_DOCKER for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 
         run_docker_preflight(skip=effective_skip)

@@ -11,6 +11,7 @@ from typing import Any, overload
 
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.domain.progress import ProgressCallback
@@ -261,7 +262,7 @@ def _run(
         if study_cb is not None:
             config = study.experiments[0]
             spec = runner_specs.get(config.backend) if runner_specs else None
-            steps = list(STEPS_DOCKER if (spec and spec.mode == "docker") else STEPS_LOCAL)
+            steps = list(STEPS_DOCKER if (spec and spec.mode == RUNNER_DOCKER) else STEPS_LOCAL)
             study_cb.begin_experiment(1, config.model, config.backend, config.precision, steps)
 
         exp_start = time.monotonic()
@@ -359,7 +360,7 @@ def _run_in_process(
 
     manifest.mark_running(config_hash, cycle)
 
-    if spec is not None and spec.mode == "docker":
+    if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
