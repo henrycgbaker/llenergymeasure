@@ -30,6 +30,7 @@ from llenergymeasure.config.ssot import (
     BACKEND_VLLM,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
+    RunnerMode,
 )
 
 __all__ = [
@@ -148,7 +149,7 @@ def get_default_image(backend: str) -> str:
     )
 
 
-def parse_runner_value(value: str) -> tuple[str, str | None]:
+def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
     """Parse a runner config value into ``(runner_type, image_override)``.
 
     Accepted forms::

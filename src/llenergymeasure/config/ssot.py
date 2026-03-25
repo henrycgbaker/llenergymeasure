@@ -11,15 +11,15 @@ Do not inline these values in validators — always import from here.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 # ---------------------------------------------------------------------------
 # Backend name constants — use these instead of raw string literals
 # ---------------------------------------------------------------------------
 
-BACKEND_PYTORCH = "pytorch"
-BACKEND_VLLM = "vllm"
-BACKEND_TENSORRT = "tensorrt"
+BACKEND_PYTORCH: Final = "pytorch"
+BACKEND_VLLM: Final = "vllm"
+BACKEND_TENSORRT: Final = "tensorrt"
 
 BackendName = Literal["pytorch", "vllm", "tensorrt"]
 
@@ -27,8 +27,8 @@ BackendName = Literal["pytorch", "vllm", "tensorrt"]
 # Runner mode constants
 # ---------------------------------------------------------------------------
 
-RUNNER_LOCAL = "local"
-RUNNER_DOCKER = "docker"
+RUNNER_LOCAL: Final = "local"
+RUNNER_DOCKER: Final = "docker"
 
 RunnerMode = Literal["local", "docker"]
 

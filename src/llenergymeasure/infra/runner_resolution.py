@@ -131,23 +131,22 @@ def resolve_runner(
     env_key = f"LLEM_RUNNER_{backend.upper()}"
     if env_val := os.environ.get(env_key):
         mode, image = parse_runner_value(env_val)
-        return RunnerSpec(mode=mode, image=image, source="env")  # type: ignore[arg-type]
-
+        return RunnerSpec(mode=mode, image=image, source="env")
     # 2. Study/experiment YAML runners section
     if yaml_runners is not None and backend in yaml_runners:
         yaml_val = yaml_runners[backend]
         if yaml_val is not None:
             mode, image = parse_runner_value(yaml_val)
-            return RunnerSpec(mode=mode, image=image, source="yaml")  # type: ignore[arg-type]
-
+            return RunnerSpec(mode=mode, image=image, source="yaml")
     # 3. User config — "auto" means no explicit preference, fall through to auto-detection.
     #    Passing user_config=None means "no user config file present" → auto-detect.
     if user_config is not None:
         user_val: str = getattr(user_config, backend, "auto")
         if user_val != "auto":
             mode, image = parse_runner_value(user_val)
-            return RunnerSpec(mode=mode, image=image, source="user_config")  # type: ignore[arg-type]
-        # "auto" -> fall through to auto-detection
+            return RunnerSpec(
+                mode=mode, image=image, source="user_config"
+            )  # "auto" -> fall through to auto-detection
 
     # 4. Auto-detection: Docker + NVIDIA Container Toolkit available?
     if is_docker_available():
