@@ -4,7 +4,7 @@ Shared exceptions, constants, and security utilities. Layer 0 in the six-layer a
 
 ## Purpose
 
-Provides the foundation all other layers import: exception hierarchy, framework-wide constants, and filesystem security helpers. Moved here in Phase 38 from top-level `exceptions.py`, `constants.py`, and `security.py`.
+Provides the foundation all other layers import: exception hierarchy, framework-wide constants, and filesystem security helpers.
 
 ## Modules
 

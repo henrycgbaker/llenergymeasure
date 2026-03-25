@@ -7,7 +7,7 @@ experiment failures, timeouts, and SIGINT without data corruption.
 Key design decisions (locked in .product/decisions/experiment-isolation.md):
 - spawn context: CUDA-safe; fork causes silent CUDA corruption (CP-1)
 - daemon=False: clean CUDA teardown if parent exits unexpectedly (CP-4)
-- Pipe-only IPC: ExperimentResult fits in Pipe buffer for M2 experiment sizes
+- Pipe-only IPC: ExperimentResult fits in Pipe buffer for typical experiment sizes
 - SIGKILL on timeout: SIGTERM may be ignored by hung CUDA operations
 - Process group kill: worker calls os.setpgrp() to become group leader so all
   descendant processes (vLLM workers, MPI ranks, etc.) are killed together
@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 def _calculate_timeout(config: ExperimentConfig) -> int:
     """Generous timeout heuristic: 2 seconds per prompt, minimum 10 minutes.
 
-    No model-size scaling — keep it simple for M2.
+    No model-size scaling — keep it simple.
     """
     return max(config.n * 2, 600)
 

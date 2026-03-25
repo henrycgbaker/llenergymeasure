@@ -53,7 +53,7 @@ def is_docker_available() -> bool:
     """Return True if Docker CLI and NVIDIA Container Toolkit are both on PATH.
 
     This is a quick host-level check (PATH inspection only). Container-level GPU
-    validation is done at pre-flight time (Phase 18).
+    validation is done at pre-flight time.
 
     Checks:
         1. ``docker`` CLI is on PATH (via shutil.which)

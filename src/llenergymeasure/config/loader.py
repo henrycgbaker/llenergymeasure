@@ -130,7 +130,7 @@ def load_study_config(
     Args:
         path: Path to study YAML file.
         cli_overrides: Optional dict of CLI flag overrides for execution block
-            (e.g. {"execution": {"n_cycles": 5}}). Phase 12 translates
+            (e.g. {"execution": {"n_cycles": 5}}). The CLI translates
             --cycles/--order/--no-gaps flags into this dict.
 
     Returns:
@@ -144,7 +144,7 @@ def load_study_config(
     path = Path(path)
     raw = _load_file(path)  # reuse existing _load_file — raises ConfigError on missing/parse error
 
-    # Apply CLI overrides (Phase 12 translates --cycles etc. into this dict)
+    # Apply CLI overrides (--cycles etc. translated into this dict)
     if cli_overrides:
         raw = deep_merge(raw, cli_overrides)
 
