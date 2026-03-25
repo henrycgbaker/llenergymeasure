@@ -165,6 +165,26 @@ class PyTorchConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
+    # Tensor parallelism (HF Transformers >=4.50)
+    # -------------------------------------------------------------------------
+
+    tp_plan: Literal["auto"] | None = Field(
+        default=None,
+        description=(
+            "Tensor parallelism plan for native HF TP (None -> disabled). "
+            "Only 'auto' is currently supported by Transformers. "
+            "Mutually exclusive with device_map. Requires torchrun launch."
+        ),
+    )
+    tp_size: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
     # Cross-validators
     # -------------------------------------------------------------------------
 
@@ -203,6 +223,16 @@ class PyTorchConfig(BaseModel):
         if self.cache_implementation is not None and self.use_cache is False:
             raise ValueError(
                 "cache_implementation requires use_cache to be True or None (not explicitly False)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_tp_device_map_exclusive(self) -> PyTorchConfig:
+        """tp_plan and device_map are mutually exclusive."""
+        if self.tp_plan is not None and self.device_map is not None:
+            raise ValueError(
+                "tp_plan and device_map are mutually exclusive. "
+                "Tensor parallelism uses its own device placement; remove device_map."
             )
         return self
 

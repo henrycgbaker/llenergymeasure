@@ -565,3 +565,70 @@ def test_get_backend_unknown_message_lists_tensorrt():
 
     with pytest.raises(BackendError, match="tensorrt"):
         get_backend("badbackend")
+
+
+# =============================================================================
+# _model_load_kwargs — tensor parallelism (tp_plan / tp_size)
+# =============================================================================
+
+
+def test_model_load_kwargs_tp_plan_forwarded():
+    """With PyTorchConfig(tp_plan='auto'), kwargs contains tp_plan and no device_map."""
+    pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_plan="auto"))
+    kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["tp_plan"] == "auto"
+    assert "device_map" not in kwargs
+
+
+def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
+    """With PyTorchConfig(tp_plan='auto', tp_size=4), kwargs contains both and no device_map."""
+    pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_plan="auto", tp_size=4))
+    kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["tp_plan"] == "auto"
+    assert kwargs["tp_size"] == 4
+    assert "device_map" not in kwargs
+
+
+def test_model_load_kwargs_tp_size_without_tp_plan_ignored():
+    """With PyTorchConfig(tp_size=4) and no tp_plan, tp_size is not in kwargs and device_map defaults."""
+    pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_size=4))
+    kwargs = backend._model_load_kwargs(config)
+
+    assert "tp_size" not in kwargs
+    assert "tp_plan" not in kwargs
+    assert kwargs["device_map"] == "auto"
+
+
+def test_model_load_kwargs_device_map_still_works():
+    """PyTorchConfig(device_map='cpu') produces device_map='cpu', no tp_plan in kwargs."""
+    pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.models import ExperimentConfig
+
+    backend = PyTorchBackend()
+    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(device_map="cpu"))
+    kwargs = backend._model_load_kwargs(config)
+
+    assert kwargs["device_map"] == "cpu"
+    assert "tp_plan" not in kwargs

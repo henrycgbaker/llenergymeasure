@@ -332,3 +332,67 @@ def test_experiment_config_energy_disabled() -> None:
 
     cfg = ExperimentConfig(model="gpt2", energy=EnergyConfig(backend=None))
     assert cfg.energy.backend is None
+
+
+# ---------------------------------------------------------------------------
+# PyTorchConfig tensor parallelism fields (tp_plan, tp_size)
+# ---------------------------------------------------------------------------
+
+
+def test_pytorch_config_tp_plan_accepts_auto():
+    """PyTorchConfig(tp_plan='auto') succeeds."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    cfg = PyTorchConfig(tp_plan="auto")
+    assert cfg.tp_plan == "auto"
+
+
+def test_pytorch_config_tp_plan_rejects_invalid():
+    """PyTorchConfig(tp_plan='custom') raises ValidationError (Literal enforcement)."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    with pytest.raises(ValidationError):
+        PyTorchConfig(tp_plan="custom")  # type: ignore[arg-type]
+
+
+def test_pytorch_config_tp_size_accepts_positive():
+    """PyTorchConfig(tp_plan='auto', tp_size=4) succeeds."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    cfg = PyTorchConfig(tp_plan="auto", tp_size=4)
+    assert cfg.tp_plan == "auto"
+    assert cfg.tp_size == 4
+
+
+def test_pytorch_config_tp_size_rejects_zero():
+    """PyTorchConfig(tp_size=0) raises ValidationError (ge=1)."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    with pytest.raises(ValidationError):
+        PyTorchConfig(tp_size=0)
+
+
+def test_pytorch_config_tp_plan_device_map_exclusive():
+    """PyTorchConfig(tp_plan='auto', device_map='auto') raises ValidationError."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    with pytest.raises(ValidationError, match="mutually exclusive"):
+        PyTorchConfig(tp_plan="auto", device_map="auto")
+
+
+def test_pytorch_config_tp_plan_without_device_map_ok():
+    """PyTorchConfig(tp_plan='auto') succeeds (no conflict)."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    cfg = PyTorchConfig(tp_plan="auto")
+    assert cfg.tp_plan == "auto"
+    assert cfg.device_map is None
+
+
+def test_pytorch_config_device_map_without_tp_plan_ok():
+    """PyTorchConfig(device_map='auto') succeeds (no conflict)."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    cfg = PyTorchConfig(device_map="auto")
+    assert cfg.device_map == "auto"
+    assert cfg.tp_plan is None
