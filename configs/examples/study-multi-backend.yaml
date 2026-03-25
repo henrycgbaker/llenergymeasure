@@ -23,7 +23,7 @@ name: multi-backend-full-parameter-space
 # =====================================================================
 # Shared fields (applied to every experiment)
 # =====================================================================
-model: meta-llama/Llama-3.2-1B
+model: Qwen/Qwen2.5-0.5B
 dataset: aienergyscore
 n: 50
 max_input_tokens: 512
@@ -98,7 +98,7 @@ experiments:
   # -----------------------------------------------------------------
   # torch_compile_mode requires torch_compile: true, so can't be swept
   # alongside torch_compile: false configs.
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
     n: 50
@@ -109,7 +109,7 @@ experiments:
       torch_compile_backend: inductor
       device_map: auto
       trust_remote_code: true
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
     n: 50
@@ -120,7 +120,7 @@ experiments:
       torch_compile_backend: inductor
       device_map: auto
       trust_remote_code: true
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
     n: 50
@@ -136,7 +136,7 @@ experiments:
   # PYTORCH - BitsAndBytes quantization
   # -----------------------------------------------------------------
   # 4-bit and 8-bit are mutually exclusive - can't be swept together.
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: fp16
     n: 50
@@ -145,7 +145,7 @@ experiments:
       load_in_8bit: true
       device_map: auto
       trust_remote_code: true
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: fp16
     n: 50
@@ -156,7 +156,7 @@ experiments:
       bnb_4bit_quant_type: nf4
       device_map: auto
       trust_remote_code: true
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: fp16
     n: 50
@@ -172,7 +172,7 @@ experiments:
   # -----------------------------------------------------------------
   # PYTORCH - Beam search
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
     n: 50
@@ -190,7 +190,7 @@ experiments:
   # -----------------------------------------------------------------
   # PYTORCH - Speculative decoding (prompt-lookup)
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
     n: 50
@@ -203,7 +203,7 @@ experiments:
   # -----------------------------------------------------------------
   # PYTORCH - Static KV cache
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
     n: 50
@@ -217,7 +217,7 @@ experiments:
   # -----------------------------------------------------------------
   # PYTORCH - fp32 precision baseline
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: fp32
     n: 50
@@ -229,7 +229,7 @@ experiments:
   # -----------------------------------------------------------------
   # VLLM - Prefix caching
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
     n: 50
@@ -237,7 +237,7 @@ experiments:
       engine:
         enable_prefix_caching: true
         gpu_memory_utilization: 0.9
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
     n: 50
@@ -249,7 +249,7 @@ experiments:
   # -----------------------------------------------------------------
   # VLLM - KV cache block sizes
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
     n: 50
@@ -257,7 +257,7 @@ experiments:
       engine:
         block_size: 8
         gpu_memory_utilization: 0.9
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
     n: 50
@@ -269,7 +269,7 @@ experiments:
   # -----------------------------------------------------------------
   # VLLM - Beam search
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
     n: 50
@@ -285,7 +285,7 @@ experiments:
   # -----------------------------------------------------------------
   # VLLM - Sampling penalties
   # -----------------------------------------------------------------
-  - model: meta-llama/Llama-3.2-1B
+  - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
     n: 50

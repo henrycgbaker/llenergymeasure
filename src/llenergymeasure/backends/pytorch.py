@@ -358,9 +358,15 @@ class PyTorchBackend:
     def _resolve_attn_implementation(requested: str) -> str:
         """Validate the requested attention implementation is available.
 
-        If flash_attention_2 is requested but the flash_attn package is not
-        installed, falls back to sdpa with a warning rather than crashing
-        at model load time.
+        If flash_attention_2 is requested but the flash_attn package (or any
+        of its transitive dependencies such as einops) cannot be imported,
+        falls back to sdpa with a warning rather than crashing at model load
+        time.
+
+        A simple ``find_spec`` check is insufficient because flash_attn may
+        be installed while its dependencies (e.g. einops) are missing.  We
+        therefore attempt a real import of the submodule that transformers
+        actually uses (``flash_attn.bert_padding``).
 
         Args:
             requested: The attention implementation string from config.
@@ -369,14 +375,19 @@ class PyTorchBackend:
             The resolved attention implementation string.
         """
         if requested in ("flash_attention_2", "flash_attention_3"):
-            import importlib.util
-
-            if importlib.util.find_spec("flash_attn") is None:
-                fallback = "sdpa"
+            fallback = "sdpa"
+            try:
+                import flash_attn
+                import flash_attn.bert_padding  # noqa: F401
+            except Exception as exc:
                 logger.warning(
-                    "attn_implementation=%r requested but flash_attn is not installed; "
-                    "falling back to %r. Install flash-attn to use FlashAttention.",
+                    "attn_implementation=%r requested but flash_attn is not "
+                    "fully usable (%s: %s); falling back to %r. "
+                    "Install flash-attn and its dependencies (einops) to use "
+                    "FlashAttention.",
                     requested,
+                    type(exc).__name__,
+                    exc,
                     fallback,
                 )
                 return fallback
