@@ -516,6 +516,9 @@ class StudyStepDisplay:
         self._inner_skipped: dict[str, str] = {}  # step -> reason
         self._inner_substeps: dict[str, list[tuple[str, float]]] = {}
 
+        # Per-experiment save paths: (index, host_path, container_path | None)
+        self._saved_paths: list[tuple[int, str, str | None]] = []
+
         self._live: Live | None = None
         self._total_start: float = 0.0
         self._gap_text: str = ""
@@ -631,8 +634,20 @@ class StudyStepDisplay:
             table = self._build_table()
             self._console.print(table)
 
+        # Print study results directory
         if save_path:
-            self._console.print(f"\nSaved: {save_path}", highlight=False)
+            self._console.print(f"\n  Results: {save_path}", style="dim", highlight=False)
+
+        # Print per-experiment save paths (only in TTY mode — non-TTY prints inline)
+        if was_live and self._saved_paths:
+            for idx, host_path, container_path in self._saved_paths:
+                if container_path:
+                    self._console.print(
+                        f"  [{idx}] container: {container_path}", style="dim", highlight=False
+                    )
+                self._console.print(
+                    f"  [{idx}] host:      {host_path}", style="dim", highlight=False
+                )
 
     # -- ProgressCallback for inner steps --
 
@@ -680,11 +695,12 @@ class StudyStepDisplay:
         self, index: int, host_path: str, container_path: str | None = None
     ) -> None:
         """Display save path info after experiment results are written to disk."""
+        with self._lock:
+            self._saved_paths.append((index, host_path, container_path))
         if not self._is_tty:
             if container_path:
                 self._console.print(f"         \u00b7 container: {container_path}", highlight=False)
             self._console.print(f"         \u00b7 host:      {host_path}", highlight=False)
-        # TTY mode: paths are shown in the finish() footer, not inline
 
     # -- Gap display --
 

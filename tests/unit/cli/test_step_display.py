@@ -313,7 +313,7 @@ def test_study_display_finish_prints_summary_table():
     output = buf.getvalue()
     assert "Study completed in 1m 15s" in output
     assert "10.0 J" in output
-    assert "Saved: ./results/finish-test/" in output
+    assert "Results: ./results/finish-test/" in output
 
 
 def test_study_display_finish_total_elapsed_parameter():

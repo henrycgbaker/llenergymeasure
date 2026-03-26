@@ -370,9 +370,9 @@ def build_preflight_panel(
     constants.append(("Energy sampler", energy_display))
 
     if constants:
-        body.append("\n")
+        _section(body, "Constants")
         for label, value in constants:
-            body.append(f"  {label:<18}{value}\n")
+            _line(body, label, value)
 
     # -- Split sweep dimensions into shared (universal) and backend-scoped --
     _BACKEND_NAMES = {"pytorch", "vllm", "tensorrt"}
@@ -440,7 +440,7 @@ def _resolve_energy_display(unique_energy: list[str], *, skip_probe: bool = Fals
     for e in unique_energy:
         if e == "auto":
             if skip_probe:
-                parts.append("auto (resolved in container)")
+                parts.append("auto")
                 continue
             # Attempt lightweight probe on host
             resolved = _probe_energy_sampler()
