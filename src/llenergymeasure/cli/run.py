@@ -429,7 +429,7 @@ def _run_study_impl(
     effective_mode = _resolve_progress_mode(quiet, verbose)
 
     # Create study dir early so the panel can show the exact results path.
-    from llenergymeasure.study.manifest import create_study_dir
+    from llenergymeasure.api import create_study_dir
 
     study_dir = create_study_dir(study_config.name, Path("results"))
 
@@ -447,8 +447,9 @@ def _run_study_impl(
         # Print Rich Panel with study metadata (static, before live display starts).
         # Pass resolved runner_specs so the panel shows effective runner modes.
         _stderr_console = RichConsole(stderr=True)
-        panel = build_preflight_panel(study_config, runner_specs=runner_specs, study_dir=study_dir)
+        panel = build_preflight_panel(study_config, runner_specs=runner_specs)
         _stderr_console.print(panel)
+        _stderr_console.print(f"  results dir: [dim]{study_dir}/[/dim]")
 
         if study_config.skipped_configs:
             skip_lines = [f"Skipping {len(study_config.skipped_configs)} config(s):"]
