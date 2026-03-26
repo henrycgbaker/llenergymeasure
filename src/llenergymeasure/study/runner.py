@@ -703,12 +703,7 @@ class StudyRunner:
                 # inner step display). This makes paths visible inline in TTY mode.
                 if self.result_files:
                     host_path = self.result_files[-1]
-                    # Docker experiments: show container path first, then host path
-                    container_out = (
-                        result.effective_config.get("output_dir")
-                        if hasattr(result, "effective_config")
-                        else None
-                    )
+                    # Docker experiments: show container path first, then host path.
                     # The original container path is /run/llem; by this point output_dir
                     # has been rewritten to the host temp dir, so use the known constant.
                     spec = (
