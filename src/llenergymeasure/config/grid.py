@@ -9,7 +9,6 @@ import logging
 import random
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -410,26 +409,12 @@ def build_preflight_panel(
         _render_dims(body, backend_dims)
 
     body.append("\n")
-    # Hash line with dim styling
-    hash_line = f"  {hash_display}"
-    hash_start = len(body.plain)
-    body.append(hash_line)
-    body.stylize("dim", hash_start, hash_start + len(hash_line))
-    body.append("\n")
-
-    # Expected results directory (dimmed, below hash)
+    # Hash + results path (dimmed)
+    dim_start = len(body.plain)
+    body.append(f"  {hash_display}\n")
     if study_dir is not None:
-        results_hint = f"  {study_dir}/"
-    else:
-        prefix = study_config.name or "study"
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
-        results_hint = f"  results/{prefix}_{timestamp}/"
-    hint_start = len(body.plain)
-    body.append("\n")
-    body.append("results dir:")
-    body.append(results_hint)
-    body.stylize("dim", hint_start, hint_start + len(results_hint))
-    body.append("\n")
+        body.append(f"  {study_dir}/\n")
+    body.stylize("dim", dim_start, len(body.plain))
 
     return Panel(
         body,
