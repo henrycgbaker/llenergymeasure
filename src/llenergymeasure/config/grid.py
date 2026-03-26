@@ -354,7 +354,6 @@ def build_preflight_panel(
         _line(body, b, mode_str)
 
     # -- Study-wide constants (shown when NOT varying across experiments) --
-    has_constants = False
     constants: list[tuple[str, str]] = []
     if len(unique_models) == 1:
         constants.append(("Model", unique_models[0]))
