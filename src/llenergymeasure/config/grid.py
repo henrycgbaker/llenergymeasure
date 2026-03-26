@@ -409,12 +409,15 @@ def build_preflight_panel(
         _render_dims(body, backend_dims)
 
     body.append("\n")
-    # Hash + results path (dimmed)
-    dim_start = len(body.plain)
+    # Hash (dimmed)
+    hash_start = len(body.plain)
     body.append(f"  {hash_display}\n")
+    body.stylize("dim", hash_start, len(body.plain))
+    # Results path (bold cyan)
     if study_dir is not None:
+        dir_start = len(body.plain)
         body.append(f"  {study_dir}/\n")
-    body.stylize("dim", dim_start, len(body.plain))
+        body.stylize("bold cyan", dir_start, len(body.plain))
 
     return Panel(
         body,
