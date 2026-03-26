@@ -264,7 +264,6 @@ def format_preflight_summary(
 
 def build_preflight_panel(
     study_config: StudyConfig,
-    skipped: list[SkippedConfig] | None = None,
     runner_specs: dict[str, RunnerSpec] | None = None,
     study_dir: Path | None = None,
 ) -> Panel:
@@ -281,7 +280,8 @@ def build_preflight_panel(
     When ``runner_specs`` is provided (resolved by pre-flight), the panel shows
     effective runner modes. Otherwise falls back to YAML-declared runners.
 
-    Skipped configs are NOT included in the panel; callers display them separately.
+    When ``study_dir`` is provided, the expected results path is shown below
+    the hash. Skipped configs are NOT included; callers display them separately.
     """
     exec_cfg = study_config.execution
     n_cycles = exec_cfg.n_cycles
@@ -297,10 +297,13 @@ def build_preflight_panel(
 
     # --- Helpers ---
     def _section(body: Text, title: str) -> None:
-        body.append(f"\n  {title}\n")
+        body.append("\n  ")
+        body.append(title, style="bold")
+        body.append("\n")
 
     def _line(body: Text, label: str, value: str, indent: int = 4) -> None:
-        body.append(f"{' ' * indent}{label:<18}{value}\n")
+        body.append(f"{' ' * indent}{label:<18}")
+        body.append(f"{value}\n")
 
     # --- Unique values across experiments ---
     unique_backends = sorted(set(exp.backend for exp in study_config.experiments))
@@ -349,12 +352,13 @@ def build_preflight_panel(
     for b in unique_backends:
         if runner_specs and b in runner_specs:
             spec = runner_specs[b]
-            mode_str = str(spec.mode)
+            body.append(f"    {b:<18}{spec.mode}")
             if getattr(spec, "source", None) == "multi_backend_elevation":
-                mode_str += " (auto-elevated)"
+                body.append(" (auto-elevated)", style="yellow")
+            body.append("\n")
         else:
             mode_str = str(yaml_runners.get(b, "local"))
-        _line(body, b, mode_str)
+            _line(body, b, mode_str)
 
     # -- Study-wide constants (shown when NOT varying across experiments) --
     constants: list[tuple[str, str]] = []
@@ -396,9 +400,12 @@ def build_preflight_panel(
         for label, value, depth in dims:
             indent = "    " + "  " * depth
             if value:
-                body.append(f"{indent}{label:<18}{value}\n")
+                body.append(f"{indent}{label:<18}")
+                body.append(f"{value}\n", style="dim")
             else:
-                body.append(f"{indent}{label}\n")
+                # Sub-config header (e.g. "pytorch", "decoder")
+                body.append(f"{indent}")
+                body.append(f"{label}\n", style="bold dim")
 
     if shared_dims:
         _section(body, "Sweep Dimensions")
@@ -410,18 +417,14 @@ def build_preflight_panel(
 
     body.append("\n")
     # Hash (dimmed)
-    hash_start = len(body.plain)
-    body.append(f"  {hash_display}\n")
-    body.stylize("dim", hash_start, len(body.plain))
+    body.append(f"  {hash_display}\n", style="dim")
     # Results path (bold cyan)
     if study_dir is not None:
-        dir_start = len(body.plain)
-        body.append(f"  {study_dir}/\n")
-        body.stylize("bold cyan", dir_start, len(body.plain))
+        body.append(f"  {study_dir}/\n", style="bold cyan")
 
     return Panel(
         body,
-        title=f"Study: {study_config.name or 'unnamed'}",
+        title=f"[bold cyan]Study: {study_config.name or 'unnamed'}[/]",
         title_align="left",
         padding=(0, 1),
     )

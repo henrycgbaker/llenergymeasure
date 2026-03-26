@@ -428,14 +428,11 @@ def _run_study_impl(
 
     effective_mode = _resolve_progress_mode(quiet, verbose)
 
-    # Create study dir early so the panel can show the exact results path.
-    from llenergymeasure.api import create_study_dir
-
-    study_dir = create_study_dir(study_config.name, Path("results"))
-
     # Create live study display before the run so per-experiment progress is shown
     study_display = None
     if effective_mode != "quiet":
+        from datetime import datetime, timezone
+
         from rich.console import Console as RichConsole
 
         from llenergymeasure.cli._step_display import StudyStepDisplay
@@ -444,10 +441,15 @@ def _run_study_impl(
         n_cycles = study_config.execution.n_cycles
         name = study_config.name or "unnamed"
 
-        # Print Rich Panel with study metadata (static, before live display starts).
-        # Pass resolved runner_specs so the panel shows effective runner modes.
+        # Preview path - matches the {prefix}_{timestamp} format used by create_study_dir.
+        prefix = study_config.name or "study"
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        expected_dir = Path("results") / f"{prefix}_{ts}"
+
         _stderr_console = RichConsole(stderr=True)
-        panel = build_preflight_panel(study_config, runner_specs=runner_specs, study_dir=study_dir)
+        panel = build_preflight_panel(
+            study_config, runner_specs=runner_specs, study_dir=expected_dir
+        )
         _stderr_console.print(panel)
 
         if study_config.skipped_configs:
@@ -477,9 +479,7 @@ def _run_study_impl(
     from llenergymeasure import run_study
 
     try:
-        result = run_study(
-            study_config, skip_preflight=True, progress=study_display, study_dir=study_dir
-        )
+        result = run_study(study_config, skip_preflight=True, progress=study_display)
     finally:
         # Safety stop — ensures Rich Live is torn down even on exceptions
         if study_display is not None:

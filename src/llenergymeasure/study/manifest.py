@@ -84,6 +84,13 @@ def build_config_summary(experiment: ExperimentConfig) -> str:
     return format_experiment_header(experiment)
 
 
+def study_dir_name(name: str | None) -> str:
+    """Return the study directory basename: ``{name}_{timestamp}``."""
+    prefix = name if name else "study"
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    return f"{prefix}_{timestamp}"
+
+
 def create_study_dir(name: str | None, output_dir: Path) -> Path:
     """Create study output directory with {name}_{timestamp}/ layout.
 
@@ -97,9 +104,7 @@ def create_study_dir(name: str | None, output_dir: Path) -> Path:
     Raises:
         StudyError: If directory creation fails.
     """
-    prefix = name if name else "study"
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
-    study_dir = output_dir / f"{prefix}_{timestamp}"
+    study_dir = output_dir / study_dir_name(name)
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         study_dir.mkdir(parents=True, exist_ok=True)
