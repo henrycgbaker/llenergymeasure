@@ -583,8 +583,10 @@ class StudyRunner:
 
         # Signal study display: new experiment starting (subprocess = local steps)
         if self._progress:
+            from llenergymeasure.utils.formatting import format_experiment_header
+
             self._progress.begin_experiment(
-                index, config.model, config.backend, config.precision, list(STEPS_LOCAL)
+                index, format_experiment_header(config), list(STEPS_LOCAL)
             )
 
         exp_start = time.monotonic()
@@ -696,6 +698,17 @@ class StudyRunner:
                     energy_j=energy_j if energy_j and energy_j > 0 else None,
                     throughput_tok_s=throughput if throughput and throughput > 0 else None,
                 )
+                # Emit save path (host path from result_files, container path from effective_config)
+                if self.result_files:
+                    host_path = self.result_files[-1]
+                    container_path = None
+                    if hasattr(result, "effective_config"):
+                        out_dir = result.effective_config.get("output_dir")
+                        if out_dir and out_dir.startswith("/run/"):
+                            container_path = out_dir
+                    self._progress.on_experiment_saved(
+                        index, host_path, container_path=container_path
+                    )
 
     def _run_one_docker(
         self,
@@ -744,8 +757,10 @@ class StudyRunner:
 
         # Signal study display: new experiment starting (Docker steps)
         if self._progress:
+            from llenergymeasure.utils.formatting import format_experiment_header
+
             self._progress.begin_experiment(
-                index, config.model, config.backend, config.precision, list(STEPS_DOCKER)
+                index, format_experiment_header(config), list(STEPS_DOCKER)
             )
             # Host-side preflight doesn't run in Docker path — mark as skipped
             self._progress.on_step_skip("preflight", "Docker path")

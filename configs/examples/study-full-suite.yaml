@@ -25,13 +25,16 @@
 name: full-suite-all-backends
 
 # =====================================================================
-# Shared fields (applied to every experiment in the study)
+# Shared fields - applied to every experiment unless overridden by
+# sweep or explicit experiments.  All fields below are sweepable:
+# moving any of them into the sweep: block generates additional
+# experiment variants via Cartesian product.
 # =====================================================================
-model: Qwen/Qwen2.5-0.5B
+model: Qwen/Qwen2.5-0.5B        # Sweepable - add to sweep: to compare models
 
-# --- Data ---
-n: 50
-dataset: aienergyscore           # Built-in dataset (see synthetic alternative below)
+# --- Data (sweepable) ---
+n: 50                            # Sweepable - add to sweep: to compare prompt counts
+dataset: aienergyscore           # Sweepable - built-in dataset (see synthetic alternative below)
 dataset_order: interleaved       # interleaved | grouped | shuffled
 
 # Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
@@ -41,13 +44,13 @@ dataset_order: interleaved       # interleaved | grouped | shuffled
 #   output_len: 128              # Fixed output token length per prompt
 #   seed: 42                     # Reproducible prompt generation
 
-# --- Hardware ---
-precision: bf16                  # Overridden per-experiment; also a sweep axis
+# --- Hardware (sweepable) ---
+precision: bf16                  # Sweepable - swept below as a universal axis
 random_seed: 42
 
-# --- Token limits ---
-max_input_tokens: 512
-max_output_tokens: 256
+# --- Token limits (sweepable) ---
+max_input_tokens: 256            # Sweepable - add to sweep: to compare input lengths
+max_output_tokens: 256           # Sweepable - add to sweep: to compare output lengths
 
 # --- Energy measurement ---
 energy:
@@ -669,7 +672,7 @@ runners:
 execution:
   n_cycles: 3
   cycle_order: interleaved       # sequential | interleaved | shuffled
-  experiment_gap_seconds: 60.0   # Gap for thermal stabilisation between experiments
-  cycle_gap_seconds: 300.0       # 5-minute gap between full cycles
+  experiment_gap_seconds: 30.0   # Gap for thermal stabilisation between experiments TODO CHANGE BACK TO 60  
+  cycle_gap_seconds: 30.0       # 5-minute gap between full cycles TODO CHANGE BACK TO 300
   # shuffle_seed: null           # Explicit seed for shuffled order (null = derived from study hash)
   # skip_preflight: false        # Skip Docker pre-flight checks (not recommended)

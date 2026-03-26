@@ -737,21 +737,25 @@ class TestBuildPreflightPanel:
         assert "interleaved" in output
 
     def test_panel_metadata_backends_with_runners(self):
-        """Panel shows backend with runner mode when runners dict is provided."""
+        """Panel shows backend with runner mode in Runners section."""
         sc = _make_panel_study_config(
             models=["gpt2", "gpt2"],
             backends=["pytorch", "vllm"],
             runners={"pytorch": "local", "vllm": "docker"},
         )
         output = _render_panel(sc)
-        assert "pytorch (local)" in output
-        assert "vllm (docker)" in output
+        assert "Runners" in output
+        assert "pytorch" in output
+        assert "local" in output
+        assert "vllm" in output
+        assert "docker" in output
 
     def test_panel_metadata_backends_default_local(self):
-        """Panel shows (local) for backends when runners is None."""
+        """Panel shows 'local' for backends when runners is None."""
         sc = _make_panel_study_config(backends=["pytorch"])
         output = _render_panel(sc)
-        assert "pytorch (local)" in output
+        assert "pytorch" in output
+        assert "local" in output
 
     def test_panel_metadata_dataset(self):
         """Panel shows dataset name in Dataset row."""
@@ -760,10 +764,10 @@ class TestBuildPreflightPanel:
         assert "aienergyscore" in output
 
     def test_panel_metadata_energy(self):
-        """Panel shows energy backend in Energy row."""
+        """Panel shows energy sampler in Energy sampler row."""
         sc = _make_panel_study_config()
         output = _render_panel(sc)
-        assert "auto" in output
+        assert "Energy sampler" in output
 
     def test_panel_sweep_dimensions_model(self):
         """Sweep dimensions section contains model names when multiple models used."""

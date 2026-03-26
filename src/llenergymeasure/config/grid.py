@@ -23,6 +23,7 @@ from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -264,22 +265,27 @@ def format_preflight_summary(
 def build_preflight_panel(
     study_config: StudyConfig,
     skipped: list[SkippedConfig] | None = None,
+    runner_specs: dict[str, RunnerSpec] | None = None,
 ) -> Panel:
     """Return a Rich Panel with study metadata, sweep dimensions, and design hash.
 
     The panel shows:
     - Border title: "Study: <name>"
-    - Metadata section: Experiments (pluralised), Order, Backends (with runner mode),
-      Dataset, Energy
-    - Sweep dimensions section: varying fields with nested sub-config grouping
+    - Execution Controls: experiments, cycle order, gaps, shuffle seed, skip preflight
+    - Runners: per-backend runner mode with auto-elevation annotation
+    - Study-wide constants: model, n, dataset, energy sampler (when not swept)
+    - Sweep dimensions: varying fields with nested sub-config grouping
     - Dimmed design hash at the bottom
+
+    When ``runner_specs`` is provided (resolved by pre-flight), the panel shows
+    effective runner modes. Otherwise falls back to YAML-declared runners.
 
     Skipped configs are NOT included in the panel; callers display them separately.
     """
-    n_cycles = study_config.execution.n_cycles
+    exec_cfg = study_config.execution
+    n_cycles = exec_cfg.n_cycles
     n_runs = len(study_config.experiments)
     n_configs = n_runs // n_cycles if n_cycles > 0 else n_runs
-    cycle_order = study_config.execution.cycle_order
     hash_display = study_config.study_design_hash or "unknown"
 
     # --- Pluralisation helper ---
@@ -288,44 +294,87 @@ def build_preflight_panel(
             return f"{n} {singular}"
         return f"{n} {plural or singular + 's'}"
 
-    # --- Metadata values ---
+    # --- Helpers ---
+    def _section(body: Text, title: str) -> None:
+        body.append(f"\n  {title}\n")
+
+    def _line(body: Text, label: str, value: str, indent: int = 4) -> None:
+        body.append(f"{' ' * indent}{label:<18}{value}\n")
+
+    # --- Unique values across experiments ---
     unique_backends = sorted(set(exp.backend for exp in study_config.experiments))
-    runners = study_config.runners or {}
-    backend_strs = []
-    for b in unique_backends:
-        mode = runners.get(b, "local")
-        backend_strs.append(f"{b} ({mode})")
-    backends_display = ", ".join(backend_strs)
-
+    unique_models = sorted(set(exp.model for exp in study_config.experiments))
+    unique_n = sorted(set(exp.n for exp in study_config.experiments))
     unique_datasets = sorted(set(str(exp.dataset) for exp in study_config.experiments))
-    dataset_display = ", ".join(unique_datasets)
-
+    unique_max_in = sorted(set(exp.max_input_tokens for exp in study_config.experiments))
+    unique_max_out = sorted(set(exp.max_output_tokens for exp in study_config.experiments))
     unique_energy = sorted(set(str(exp.energy.backend) for exp in study_config.experiments))
-    energy_display = ", ".join(unique_energy)
 
     experiments_line = (
         f"{_pl(n_configs, 'config')} x {_pl(n_cycles, 'cycle')} = {_pl(n_runs, 'run')}"
     )
 
-    # --- Metadata lines ---
-    meta_lines = [
-        ("Experiments", experiments_line),
-        ("Order", str(cycle_order)),
-        ("Backends", backends_display),
-        ("Dataset", dataset_display),
-        ("Energy", energy_display),
-    ]
+    # --- Resolve energy sampler display ---
+    energy_display = _resolve_energy_display(unique_energy)
 
     # --- Sweep dimensions ---
     sweep_dimensions = _collect_sweep_dimensions(list(study_config.experiments))
 
     # --- Assemble body ---
     body = Text()
-    body.append("\n")
 
-    for label, value in meta_lines:
-        body.append(f"  {label:<14}{value}\n")
+    # -- Execution Controls --
+    _section(body, "Execution Controls")
+    _line(body, "Experiments", experiments_line)
+    _line(body, "Cycle order", str(exec_cfg.cycle_order))
+    exp_gap = (
+        f"{exec_cfg.experiment_gap_seconds}s"
+        if exec_cfg.experiment_gap_seconds is not None
+        else "0s"
+    )
+    cyc_gap = f"{exec_cfg.cycle_gap_seconds}s" if exec_cfg.cycle_gap_seconds is not None else "0s"
+    _line(body, "Experiment gap", exp_gap)
+    _line(body, "Cycle gap", cyc_gap)
+    shuffle_val = str(exec_cfg.shuffle_seed) if exec_cfg.shuffle_seed is not None else "auto"
+    _line(body, "Shuffle seed", shuffle_val)
+    skip_val = "yes" if getattr(exec_cfg, "skip_preflight", False) else "no"
+    _line(body, "Skip preflight", skip_val)
 
+    # -- Runners --
+    _section(body, "Runners")
+    yaml_runners = study_config.runners or {}
+    for b in unique_backends:
+        if runner_specs and b in runner_specs:
+            spec = runner_specs[b]
+            mode_str = str(spec.mode)
+            if getattr(spec, "source", None) == "multi_backend_elevation":
+                mode_str += " (auto-elevated)"
+        else:
+            mode_str = str(yaml_runners.get(b, "local"))
+        _line(body, b, mode_str)
+
+    # -- Study-wide constants (shown when NOT varying across experiments) --
+    has_constants = False
+    constants: list[tuple[str, str]] = []
+    if len(unique_models) == 1:
+        constants.append(("Model", unique_models[0]))
+    if len(unique_n) == 1:
+        constants.append(("n", str(unique_n[0])))
+    if len(unique_max_in) == 1:
+        constants.append(("max_input_tokens", str(unique_max_in[0])))
+    if len(unique_max_out) == 1:
+        constants.append(("max_output_tokens", str(unique_max_out[0])))
+    if len(unique_datasets) == 1:
+        constants.append(("Dataset", unique_datasets[0]))
+    constants.append(("Energy sampler", energy_display))
+
+    if constants:
+        has_constants = True
+        body.append("\n")
+        for label, value in constants:
+            body.append(f"  {label:<18}{value}\n")
+
+    # -- Sweep dimensions --
     if sweep_dimensions:
         body.append("\n")
         body.append("  Sweep dimensions\n")
@@ -334,7 +383,6 @@ def build_preflight_panel(
             if value:
                 body.append(f"{indent}{label:<18}{value}\n")
             else:
-                # Header (sub-config or nested sub-config)
                 body.append(f"{indent}{label}\n")
 
     body.append("\n")
@@ -351,6 +399,42 @@ def build_preflight_panel(
         title_align="left",
         padding=(0, 1),
     )
+
+
+_ENERGY_SAMPLER_NAMES: dict[str, str] = {
+    "nvml": "NVMLSampler",
+    "zeus": "ZeusSampler",
+    "codecarbon": "CodeCarbonSampler",
+}
+
+
+def _resolve_energy_display(unique_energy: list[str]) -> str:
+    """Build the energy sampler display string, resolving 'auto' when possible."""
+    parts: list[str] = []
+    for e in unique_energy:
+        if e == "auto":
+            # Attempt lightweight probe on host
+            resolved = _probe_energy_sampler()
+            if resolved:
+                parts.append(f"{resolved} (auto)")
+            else:
+                parts.append("auto")
+        elif e in _ENERGY_SAMPLER_NAMES:
+            parts.append(_ENERGY_SAMPLER_NAMES[e])
+        else:
+            parts.append(e)
+    return ", ".join(parts)
+
+
+def _probe_energy_sampler() -> str | None:
+    """Best-effort probe for the auto-selected energy sampler on this host."""
+    try:
+        from llenergymeasure.energy import select_energy_sampler
+
+        sampler = select_energy_sampler("auto")
+        return type(sampler).__name__ if sampler else None
+    except Exception:
+        return None
 
 
 def _collect_sweep_dimensions(

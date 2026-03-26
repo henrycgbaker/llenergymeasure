@@ -502,8 +502,10 @@ class StudyStepDisplay:
         self._is_tty = self._console.is_terminal and not force_plain
         self._lock = threading.Lock()
 
-        # Completed experiment rows: (index, status, config, elapsed, energy_j, throughput)
-        self._completed_rows: list[tuple[int, str, str, float, float | None, float | None]] = []
+        # Completed experiment rows: (index, status, config, elapsed, energy_j, throughput, mj_per_tok)
+        self._completed_rows: list[
+            tuple[int, str, str, float, float | None, float | None, float | None]
+        ] = []
 
         # Active experiment state
         self._active_index: int = 0
@@ -546,13 +548,11 @@ class StudyStepDisplay:
             self._live.stop()
             self._live = None
 
-    def begin_experiment(
-        self, index: int, model: str, backend: str, precision: str, steps: list[str]
-    ) -> None:
+    def begin_experiment(self, index: int, header: str, steps: list[str]) -> None:
         """Start tracking a new experiment within the study."""
         with self._lock:
             self._active_index = index
-            self._active_header = f"{model} / {backend} / {precision}"
+            self._active_header = header
             self._inner_completed = []
             self._inner_active = None
             self._inner_steps = steps
@@ -568,14 +568,21 @@ class StudyStepDisplay:
         throughput_tok_s: float | None = None,
     ) -> None:
         """Mark experiment as successfully completed."""
+        # Compute mJ/tok from energy and throughput
+        mj_tok: float | None = None
+        if energy_j and throughput_tok_s and elapsed > 0:
+            total_tokens = throughput_tok_s * elapsed
+            if total_tokens > 0:
+                mj_tok = (energy_j / total_tokens) * 1000
+
         with self._lock:
             self._inner_active = None
             self._completed_rows.append(
-                (index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s)
+                (index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s, mj_tok)
             )
         if not self._is_tty:
             self._print_completed_row(
-                index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s
+                index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s, mj_tok
             )
         self._refresh()
 
@@ -583,9 +590,11 @@ class StudyStepDisplay:
         """Mark experiment as failed."""
         with self._lock:
             self._inner_active = None
-            self._completed_rows.append((index, "FAIL", self._active_header, elapsed, None, None))
+            self._completed_rows.append(
+                (index, "FAIL", self._active_header, elapsed, None, None, None)
+            )
         if not self._is_tty:
-            self._print_completed_row(index, "FAIL", self._active_header, elapsed, None, None)
+            self._print_completed_row(index, "FAIL", self._active_header, elapsed, None, None, None)
             if error:
                 self._console.print(f"         {error}", highlight=False)
         self._refresh()
@@ -667,6 +676,16 @@ class StudyStepDisplay:
             self._inner_substeps[step].append((text, elapsed_sec))
         self._refresh()
 
+    def on_experiment_saved(
+        self, index: int, host_path: str, container_path: str | None = None
+    ) -> None:
+        """Display save path info after experiment results are written to disk."""
+        if not self._is_tty:
+            if container_path:
+                self._console.print(f"         \u00b7 container: {container_path}", highlight=False)
+            self._console.print(f"         \u00b7 host:      {host_path}", highlight=False)
+        # TTY mode: paths are shown in the finish() footer, not inline
+
     # -- Gap display --
 
     def show_gap(self, text: str) -> None:
@@ -687,12 +706,13 @@ class StudyStepDisplay:
         """Build the Rich Table of completed experiments."""
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
         table.add_column("#", width=3, justify="right")
-        table.add_column("Status", width=6)
+        table.add_column("", width=2)
         table.add_column("Config")
         table.add_column("Time", justify="right")
         table.add_column("Energy", justify="right")
         table.add_column("tok/s", justify="right")
-        for idx, status, config, elapsed, energy, throughput in self._completed_rows:
+        table.add_column("mJ/tok", justify="right")
+        for idx, status, config, elapsed, energy, throughput, mj_tok in self._completed_rows:
             status_text = (
                 Text("\u2713", style="bold green")
                 if status == "OK"
@@ -700,6 +720,7 @@ class StudyStepDisplay:
             )
             energy_str = f"{energy:.1f} J" if energy is not None else "-"
             throughput_str = f"{throughput:.1f}" if throughput is not None else "-"
+            mj_str = f"{mj_tok:.1f}" if mj_tok is not None else "-"
             table.add_row(
                 str(idx),
                 status_text,
@@ -707,6 +728,7 @@ class StudyStepDisplay:
                 _format_elapsed(elapsed),
                 energy_str,
                 throughput_str,
+                mj_str,
             )
         return table
 
@@ -796,13 +818,15 @@ class StudyStepDisplay:
         elapsed: float,
         energy: float | None,
         throughput: float | None,
+        mj_tok: float | None = None,
     ) -> None:
         """Print a completed experiment row in non-TTY mode."""
-        status_str = "OK" if status == "OK" else "FAIL"
+        status_icon = "\u2713" if status == "OK" else "\u2717"
         energy_str = f"  {energy:.1f} J" if energy is not None else ""
         throughput_str = f"  {throughput:.1f} tok/s" if throughput is not None else ""
+        mj_str = f"  {mj_tok:.1f} mJ/tok" if mj_tok is not None else ""
         line = (
-            f" [{index:>2d}/{self._total}]  {status_str:<4s}  {config:<42s}"
-            f" {_format_elapsed(elapsed):>8s}{energy_str}{throughput_str}"
+            f" [{index:>2d}/{self._total}]  {status_icon}  {config:<42s}"
+            f" {_format_elapsed(elapsed):>8s}{energy_str}{throughput_str}{mj_str}"
         )
         self._console.print(line, highlight=False)

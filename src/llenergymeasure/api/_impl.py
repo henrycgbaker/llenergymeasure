@@ -260,10 +260,12 @@ def _run(
             progress if isinstance(progress, StudyProgressCallback) else None
         )
         if study_cb is not None:
+            from llenergymeasure.utils.formatting import format_experiment_header
+
             config = study.experiments[0]
             spec = runner_specs.get(config.backend) if runner_specs else None
             steps = list(STEPS_DOCKER if (spec and spec.mode == RUNNER_DOCKER) else STEPS_LOCAL)
-            study_cb.begin_experiment(1, config.model, config.backend, config.precision, steps)
+            study_cb.begin_experiment(1, format_experiment_header(config), steps)
 
         exp_start = time.monotonic()
         result_files, experiment_results, warnings = _run_in_process(
