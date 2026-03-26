@@ -417,9 +417,12 @@ def build_preflight_panel(
 
     body.append("\n")
     # Hash (dimmed)
+    body.append("Study design hasH:\n ", style="dim")
     body.append(f"  {hash_display}\n", style="dim")
     # Results path (bold cyan)
     if study_dir is not None:
+        body.append("\n")
+        body.append("Study results path:\n", style="bold cyan")
         body.append(f"  {study_dir}/\n", style="bold cyan")
 
     return Panel(
