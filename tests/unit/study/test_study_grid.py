@@ -777,14 +777,14 @@ class TestBuildPreflightPanel:
         assert "gpt2-xl" in output
 
     def test_panel_sweep_dimensions_nested_decoder(self):
-        """Non-default decoder config shows decoder header and sub-fields."""
+        """Varying decoder config shows decoder header and sub-fields in sweep dims."""
         from llenergymeasure.config.models import DecoderConfig
 
         exp1 = ExperimentConfig(
             model="gpt2", decoder=DecoderConfig(temperature=0.0, do_sample=False)
         )
         exp2 = ExperimentConfig(
-            model="gpt2", decoder=DecoderConfig(temperature=0.0, do_sample=False)
+            model="gpt2", decoder=DecoderConfig(temperature=0.8, do_sample=True)
         )
         sc = StudyConfig(
             experiments=[exp1, exp2],
@@ -793,9 +793,8 @@ class TestBuildPreflightPanel:
             study_design_hash="deadbeef01234567",
         )
         output = _render_panel(sc)
-        # decoder sub-config header should appear since temperature and do_sample differ from defaults
+        # decoder sub-config header should appear since temperature varies
         assert "decoder" in output
-        # temperature=0.0 is non-default (default is 1.0)
         assert "temperature" in output
 
     def test_panel_hash_displayed(self):

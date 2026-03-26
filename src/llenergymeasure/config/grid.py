@@ -315,7 +315,9 @@ def build_preflight_panel(
     )
 
     # --- Resolve energy sampler display ---
-    energy_display = _resolve_energy_display(unique_energy)
+    # Skip host probe when all runners are Docker (container has different samplers).
+    all_docker = bool(runner_specs) and all(spec.mode == "docker" for spec in runner_specs.values())
+    energy_display = _resolve_energy_display(unique_energy, skip_probe=all_docker)
 
     # --- Sweep dimensions ---
     sweep_dimensions = _collect_sweep_dimensions(list(study_config.experiments))
@@ -372,16 +374,38 @@ def build_preflight_panel(
         for label, value in constants:
             body.append(f"  {label:<18}{value}\n")
 
-    # -- Sweep dimensions --
-    if sweep_dimensions:
-        body.append("\n")
-        body.append("  Sweep dimensions\n")
-        for label, value, depth in sweep_dimensions:
+    # -- Split sweep dimensions into shared (universal) and backend-scoped --
+    _BACKEND_NAMES = {"pytorch", "vllm", "tensorrt"}
+    shared_dims: list[tuple[str, str, int]] = []
+    backend_dims: list[tuple[str, str, int]] = []
+
+    in_backend_section = False
+    for label, value, depth in sweep_dimensions:
+        if depth == 0 and not value and label in _BACKEND_NAMES:
+            in_backend_section = True
+        elif depth == 0 and label not in _BACKEND_NAMES:
+            in_backend_section = False
+
+        if in_backend_section:
+            backend_dims.append((label, value, depth))
+        else:
+            shared_dims.append((label, value, depth))
+
+    def _render_dims(body: Text, dims: list[tuple[str, str, int]]) -> None:
+        for label, value, depth in dims:
             indent = "    " + "  " * depth
             if value:
                 body.append(f"{indent}{label:<18}{value}\n")
             else:
                 body.append(f"{indent}{label}\n")
+
+    if shared_dims:
+        _section(body, "Sweep Dimensions")
+        _render_dims(body, shared_dims)
+
+    if backend_dims:
+        _section(body, "Backend Sweep Dimensions")
+        _render_dims(body, backend_dims)
 
     body.append("\n")
     # Hash line with dim styling
@@ -406,11 +430,18 @@ _ENERGY_SAMPLER_NAMES: dict[str, str] = {
 }
 
 
-def _resolve_energy_display(unique_energy: list[str]) -> str:
-    """Build the energy sampler display string, resolving 'auto' when possible."""
+def _resolve_energy_display(unique_energy: list[str], *, skip_probe: bool = False) -> str:
+    """Build the energy sampler display string, resolving 'auto' when possible.
+
+    When ``skip_probe`` is True (all runners are Docker), the host probe is
+    skipped because the container may have different energy samplers available.
+    """
     parts: list[str] = []
     for e in unique_energy:
         if e == "auto":
+            if skip_probe:
+                parts.append("auto (resolved in container)")
+                continue
             # Attempt lightweight probe on host
             resolved = _probe_energy_sampler()
             if resolved:
@@ -465,8 +496,7 @@ def _collect_sweep_dimensions(
     for field_name in SCALAR_FIELDS:
         values = [getattr(exp, field_name) for exp in experiments]
         unique_vals = set(str(v) for v in values)
-        always_show = field_name in KEY_SCALAR_FIELDS
-        if len(unique_vals) > 1 or always_show:
+        if len(unique_vals) > 1:
             result.append((field_name, ", ".join(sorted(unique_vals)), 0))
 
     # --- Sub-config fields (recursive) ---
@@ -525,10 +555,10 @@ def _collect_sweep_dimensions(
                 continue
 
             unique_vals = set(str(v) for v in vals)
-            default_val = defaults.get(field_name)
-            all_default = all(v == default_val for v in vals)
 
-            if len(unique_vals) > 1 or not all_default:
+            # Only show fields that actually vary across experiments.
+            # Constant non-default values belong in the panel metadata, not sweep dims.
+            if len(unique_vals) > 1:
                 entries.append((field_name, ", ".join(sorted(unique_vals)), field_depth))
 
         return entries
