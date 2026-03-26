@@ -168,6 +168,14 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
             or ("nvml" in stderr_lower and "driver" in stderr_lower)
             or ("initialize nvml" in stderr_lower and "driver" in stderr_lower)
         )
+        # GPU quota / resource allocation failure: server-side quota systems
+        # (e.g. shared GPU servers) reject the container with a clear allocation
+        # error rather than a toolkit misconfiguration.
+        _is_quota_error = (
+            "quota" in stderr_lower
+            or "allocation failed" in stderr_lower
+            or "gpu allocation" in stderr_lower
+        )
         if _is_cuda_compat_error:
             host_info = (
                 f"Host driver: {host_driver_version}"
@@ -179,11 +187,22 @@ def _probe_container_gpu(host_driver_version: str | None) -> list[str]:
                 "     The container CUDA version may require a newer host driver.\n"
                 f"     See: {_CUDA_COMPAT_URL}"
             )
+        elif _is_quota_error:
+            stderr_detail = result.stderr.strip()
+            errors.append(
+                "GPU quota or allocation limit reached — the probe container could not "
+                "acquire a GPU.\n"
+                "     Free up GPU quota (e.g. stop a running container) and retry.\n"
+                f"     Docker stderr: {stderr_detail}"
+            )
         else:
+            stderr_detail = result.stderr.strip()
+            detail_suffix = f"\n     Docker stderr: {stderr_detail}" if stderr_detail else ""
             errors.append(
                 "GPU not accessible inside Docker container\n"
                 "     Possible cause: NVIDIA Container Toolkit not configured correctly.\n"
                 f"     Fix: {_NVIDIA_TOOLKIT_INSTALL_URL}"
+                f"{detail_suffix}"
             )
         return errors
 
