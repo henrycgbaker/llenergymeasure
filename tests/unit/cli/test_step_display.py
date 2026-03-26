@@ -359,6 +359,43 @@ def test_step_display_satisfies_protocol():
     assert isinstance(display, ProgressCallback)
 
 
+def test_study_display_skipped_steps_render_dim():
+    """StudyStepDisplay renders skipped steps with SKIP label in correct position."""
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=True, no_color=True, width=120)
+    display = StudyStepDisplay(total_experiments=1, console=console)
+    display.start()
+
+    steps = ["preflight", "image_check", "pull", "container_start", "model", "measure"]
+    display.begin_experiment(1, "gpt2", "pytorch", "bf16", steps)
+
+    # Skip preflight (Docker path)
+    display.on_step_skip("preflight", "Docker path")
+    # Complete image_check
+    display.on_step_start("image_check", "Inspecting", "pytorch:v0.9.0 (cached)")
+    display.on_step_done("image_check", 0.1)
+    # Skip pull (cached)
+    display.on_step_skip("pull", "cached")
+    # Complete remaining
+    display.on_step_start("container_start", "Starting", "pytorch:v0.9.0")
+    display.on_step_done("container_start", 2.0)
+    display.on_step_start("model", "Loading", "gpt2")
+    display.on_step_done("model", 3.0)
+    display.on_step_start("measure", "Measuring", "50 prompts")
+    display.on_step_done("measure", 10.0)
+    display.end_experiment_ok(1, elapsed=15.0, energy_j=50.0)
+
+    display.stop()
+    output = buf.getvalue()
+
+    # Skipped steps should show SKIP
+    assert "SKIP" in output
+    # All 6 steps should be counted (not just 4 visible)
+    assert "[1/6]" in output  # preflight (skipped)
+    assert "[3/6]" in output  # pull (skipped)
+    assert "[6/6]" in output  # measure (last step)
+
+
 def test_study_display_satisfies_protocol():
     """StudyStepDisplay satisfies the ProgressCallback protocol."""
     from llenergymeasure.domain.progress import ProgressCallback

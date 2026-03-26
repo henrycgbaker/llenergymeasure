@@ -511,6 +511,7 @@ class StudyStepDisplay:
         self._inner_completed: list[tuple[str, str, str, float]] = []
         self._inner_active: tuple[str, str, str, float] | None = None  # step, label, detail, start
         self._inner_steps: list[str] = []
+        self._inner_skipped: dict[str, str] = {}  # step -> reason
         self._inner_substeps: dict[str, list[tuple[str, float]]] = {}
 
         self._live: Live | None = None
@@ -555,6 +556,7 @@ class StudyStepDisplay:
             self._inner_completed = []
             self._inner_active = None
             self._inner_steps = steps
+            self._inner_skipped = {}
             self._inner_substeps = {}
         self._refresh()
 
@@ -647,7 +649,10 @@ class StudyStepDisplay:
         self._refresh()
 
     def on_step_skip(self, step: str, reason: str = "") -> None:
-        """No-op for study display (inner steps don't show SKIP)."""
+        """Record a skipped step (rendered dim grey in the step list)."""
+        with self._lock:
+            self._inner_skipped[step] = reason or "-"
+        self._refresh()
 
     def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
         """Record a completed sub-operation within the active step.
@@ -706,7 +711,13 @@ class StudyStepDisplay:
         return table
 
     def _render_active_steps(self) -> Text:
-        """Render the active experiment's step progress."""
+        """Render the active experiment's step progress.
+
+        Iterates registered steps in order so completed, skipped, and active
+        steps all appear at their correct [x/N] position. Skipped steps
+        render dim grey with SKIP label (mirrors StepDisplay behaviour).
+        Pending steps are not shown (Docker BuildKit-style progressive output).
+        """
         lines = Text()
         if not self._active_header:
             return lines
@@ -714,34 +725,52 @@ class StudyStepDisplay:
         lines.append(f"\n  [{self._active_index}/{self._total}] {self._active_header}\n")
 
         inner_total = len(self._inner_steps) or (
-            len(self._inner_completed) + (1 if self._inner_active else 0)
+            len(self._inner_completed) + len(self._inner_skipped) + (1 if self._inner_active else 0)
         )
 
-        for i, (_step, label, detail, elapsed) in enumerate(self._inner_completed):
-            idx = i + 1
-            counter = f"[{idx}/{inner_total}]"
-            trunc_detail = _truncate_detail(detail)
-            lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
-            lines.append("  \u2713", style="bold green")
-            lines.append(f"  {_format_elapsed(elapsed)}\n")
-            _render_substep_lines(
-                lines, self._inner_substeps.get(_step, []), indent="                    "
-            )
+        # Index completed steps by name for O(1) lookup while preserving order
+        completed_map: dict[str, tuple[str, str, float]] = {}
+        for step, label, detail, elapsed in self._inner_completed:
+            completed_map[step] = (label, detail, elapsed)
 
-        if self._inner_active:
-            _step, label, detail, start = self._inner_active
-            idx = len(self._inner_completed) + 1
-            elapsed = time.monotonic() - start
-            frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
-            spinner = _SPINNER_FRAMES[frame_idx]
-            counter = f"[{idx}/{inner_total}]"
-            trunc_detail = _truncate_detail(detail)
-            lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
-            lines.append(f"  {spinner}", style="yellow")
-            lines.append(f"  {_format_elapsed(elapsed)}\n")
-            _render_substep_lines(
-                lines, self._inner_substeps.get(_step, []), indent="                    "
-            )
+        idx = 0
+        for step in self._inner_steps:
+            if step in completed_map:
+                idx += 1
+                label, detail, elapsed = completed_map[step]
+                counter = f"[{idx}/{inner_total}]"
+                trunc_detail = _truncate_detail(detail)
+                lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
+                lines.append("  \u2713", style="bold green")
+                lines.append(f"  {_format_elapsed(elapsed)}\n")
+                _render_substep_lines(
+                    lines, self._inner_substeps.get(step, []), indent="                    "
+                )
+            elif step in self._inner_skipped:
+                idx += 1
+                label = STEP_LABELS.get(step, step)
+                reason = self._inner_skipped[step]
+                counter = f"[{idx}/{inner_total}]"
+                trunc_reason = _truncate_detail(reason)
+                lines.append(
+                    f"      {counter:>7s}  {label:<16s} {trunc_reason:<34s}  SKIP\n",
+                    style="dim",
+                )
+            elif self._inner_active and self._inner_active[0] == step:
+                idx += 1
+                _step, label, detail, start = self._inner_active
+                elapsed = time.monotonic() - start
+                frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
+                spinner = _SPINNER_FRAMES[frame_idx]
+                counter = f"[{idx}/{inner_total}]"
+                trunc_detail = _truncate_detail(detail)
+                lines.append(f"      {counter:>7s}  {label:<16s} {trunc_detail:<34s}")
+                lines.append(f"  {spinner}", style="yellow")
+                lines.append(f"  {_format_elapsed(elapsed)}\n")
+                _render_substep_lines(
+                    lines, self._inner_substeps.get(step, []), indent="                    "
+                )
+            # Pending steps: not shown (Docker BuildKit-style progressive output)
 
         return lines
 

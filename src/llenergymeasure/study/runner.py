@@ -110,8 +110,8 @@ def _save_and_record(
         result_files.append(str(result_path))
         rel_path = str(result_path.relative_to(study_dir))
         manifest.mark_completed(config_hash, cycle, rel_path)
-    except Exception:
-        manifest.mark_completed(config_hash, cycle, result_file="")
+    except Exception as exc:
+        manifest.mark_failed(config_hash, cycle, type(exc).__name__, str(exc))
 
 
 def _kill_process_group(pid: int, sig: int) -> None:
@@ -747,6 +747,8 @@ class StudyRunner:
             self._progress.begin_experiment(
                 index, config.model, config.backend, config.precision, list(STEPS_DOCKER)
             )
+            # Host-side preflight doesn't run in Docker path — mark as skipped
+            self._progress.on_step_skip("preflight", "Docker path")
 
         exp_start = time.monotonic()
 
