@@ -265,7 +265,8 @@ def test_study_display_table_output():
     # Table column headers
     assert "#" in output
     assert "Config" in output
-    assert "Time" in output
+    assert "Total" in output
+    assert "Infer" in output
     assert "Energy" in output
     assert "tok/s" in output
     assert "mJ/tok" in output

@@ -118,6 +118,7 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         elapsed: float,
         energy_j: float | None = None,
         throughput_tok_s: float | None = None,
+        inference_time_sec: float | None = None,
     ) -> None:
         """Signal that an experiment completed successfully.
 
@@ -126,6 +127,7 @@ class StudyProgressCallback(ProgressCallback, Protocol):
             elapsed: Total wall-clock time in seconds.
             energy_j: Total energy in joules (None if unavailable).
             throughput_tok_s: Throughput in tokens/second (None if unavailable).
+            inference_time_sec: Measurement window duration (None if unavailable).
         """
         ...
 

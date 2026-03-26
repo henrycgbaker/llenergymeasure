@@ -278,7 +278,10 @@ def _run(
             if r is not None:
                 energy = r.total_energy_j if r.total_energy_j > 0 else None
                 tp = r.avg_tokens_per_second if r.avg_tokens_per_second > 0 else None
-                study_cb.end_experiment_ok(1, exp_elapsed, energy_j=energy, throughput_tok_s=tp)
+                infer = r.total_inference_time_sec if r.total_inference_time_sec > 0 else None
+                study_cb.end_experiment_ok(
+                    1, exp_elapsed, energy_j=energy, throughput_tok_s=tp, inference_time_sec=infer
+                )
             else:
                 study_cb.end_experiment_fail(1, exp_elapsed)
     else:

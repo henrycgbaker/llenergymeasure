@@ -718,11 +718,13 @@ class StudyRunner:
 
                 energy_j = getattr(result, "total_energy_j", None)
                 throughput = getattr(result, "avg_tokens_per_second", None)
+                infer_sec = getattr(result, "total_inference_time_sec", None)
                 self._progress.end_experiment_ok(
                     index,
                     elapsed,
                     energy_j=energy_j if energy_j and energy_j > 0 else None,
                     throughput_tok_s=throughput if throughput and throughput > 0 else None,
+                    inference_time_sec=infer_sec if infer_sec and infer_sec > 0 else None,
                 )
                 # Also store for finish() footer
                 if self.result_files:

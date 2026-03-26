@@ -502,9 +502,10 @@ class StudyStepDisplay:
         self._is_tty = self._console.is_terminal and not force_plain
         self._lock = threading.Lock()
 
-        # Completed experiment rows: (index, status, config, elapsed, energy_j, throughput, mj_per_tok)
+        # Completed experiment rows:
+        # (index, status, config, elapsed, inference_sec, energy_j, throughput, mj_per_tok)
         self._completed_rows: list[
-            tuple[int, str, str, float, float | None, float | None, float | None]
+            tuple[int, str, str, float, float | None, float | None, float | None, float | None]
         ] = []
 
         # Active experiment state
@@ -569,6 +570,7 @@ class StudyStepDisplay:
         elapsed: float,
         energy_j: float | None = None,
         throughput_tok_s: float | None = None,
+        inference_time_sec: float | None = None,
     ) -> None:
         """Mark experiment as successfully completed."""
         # Compute mJ/tok from energy and throughput
@@ -581,11 +583,27 @@ class StudyStepDisplay:
         with self._lock:
             self._inner_active = None
             self._completed_rows.append(
-                (index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s, mj_tok)
+                (
+                    index,
+                    "OK",
+                    self._active_header,
+                    elapsed,
+                    inference_time_sec,
+                    energy_j,
+                    throughput_tok_s,
+                    mj_tok,
+                )
             )
         if not self._is_tty:
             self._print_completed_row(
-                index, "OK", self._active_header, elapsed, energy_j, throughput_tok_s, mj_tok
+                index,
+                "OK",
+                self._active_header,
+                elapsed,
+                inference_time_sec,
+                energy_j,
+                throughput_tok_s,
+                mj_tok,
             )
         self._refresh()
 
@@ -594,10 +612,12 @@ class StudyStepDisplay:
         with self._lock:
             self._inner_active = None
             self._completed_rows.append(
-                (index, "FAIL", self._active_header, elapsed, None, None, None)
+                (index, "FAIL", self._active_header, elapsed, None, None, None, None)
             )
         if not self._is_tty:
-            self._print_completed_row(index, "FAIL", self._active_header, elapsed, None, None, None)
+            self._print_completed_row(
+                index, "FAIL", self._active_header, elapsed, None, None, None, None
+            )
             if error:
                 self._console.print(f"         {error}", highlight=False)
         self._refresh()
@@ -724,16 +744,27 @@ class StudyStepDisplay:
         table.add_column("#", width=3, justify="right")
         table.add_column("", width=2)
         table.add_column("Config")
-        table.add_column("Time", justify="right")
+        table.add_column("Total", justify="right")
+        table.add_column("Infer", justify="right")
         table.add_column("Energy", justify="right")
         table.add_column("tok/s", justify="right")
         table.add_column("mJ/tok", justify="right")
-        for idx, status, config, elapsed, energy, throughput, mj_tok in self._completed_rows:
+        for (
+            idx,
+            status,
+            config,
+            elapsed,
+            infer_sec,
+            energy,
+            throughput,
+            mj_tok,
+        ) in self._completed_rows:
             status_text = (
                 Text("\u2713", style="bold green")
                 if status == "OK"
                 else Text("\u2717", style="bold red")
             )
+            infer_str = _format_elapsed(infer_sec) if infer_sec is not None else "-"
             energy_str = f"{energy:.1f} J" if energy is not None else "-"
             throughput_str = f"{throughput:.1f}" if throughput is not None else "-"
             mj_str = f"{mj_tok:.1f}" if mj_tok is not None else "-"
@@ -742,6 +773,7 @@ class StudyStepDisplay:
                 status_text,
                 config,
                 _format_elapsed(elapsed),
+                infer_str,
                 energy_str,
                 throughput_str,
                 mj_str,
@@ -832,17 +864,19 @@ class StudyStepDisplay:
         status: str,
         config: str,
         elapsed: float,
+        inference_sec: float | None,
         energy: float | None,
         throughput: float | None,
         mj_tok: float | None = None,
     ) -> None:
         """Print a completed experiment row in non-TTY mode."""
         status_icon = "\u2713" if status == "OK" else "\u2717"
+        infer_str = f"  infer={_format_elapsed(inference_sec)}" if inference_sec is not None else ""
         energy_str = f"  {energy:.1f} J" if energy is not None else ""
         throughput_str = f"  {throughput:.1f} tok/s" if throughput is not None else ""
         mj_str = f"  {mj_tok:.1f} mJ/tok" if mj_tok is not None else ""
         line = (
             f" [{index:>2d}/{self._total}]  {status_icon}  {config:<42s}"
-            f" {_format_elapsed(elapsed):>8s}{energy_str}{throughput_str}{mj_str}"
+            f" {_format_elapsed(elapsed):>8s}{infer_str}{energy_str}{throughput_str}{mj_str}"
         )
         self._console.print(line, highlight=False)

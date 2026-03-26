@@ -346,7 +346,10 @@ def print_study_summary(result: StudyResult) -> None:
     print()
 
     # Table header
-    header = f"{'#':>3}  {'':>2}  {'Config':<40}  {'Time':>8}  {'Energy':>10}  {'tok/s':>8}  {'mJ/tok':>8}"
+    header = (
+        f"{'#':>3}  {'':>2}  {'Config':<40}  {'Total':>8}  {'Infer':>8}"
+        f"  {'Energy':>10}  {'tok/s':>8}  {'mJ/tok':>8}"
+    )
     print(header)
     print("-" * len(header))
 
@@ -369,7 +372,13 @@ def print_study_summary(result: StudyResult) -> None:
         is_ok = exp.total_energy_j is not None and exp.total_energy_j > 0
         status_icon = "\u2713" if is_ok else "\u2717"
 
-        time_str = _format_duration(exp.duration_sec)
+        total_str = _format_duration(exp.duration_sec)
+        infer_val = getattr(exp, "total_inference_time_sec", None)
+        infer_str = (
+            _format_duration(infer_val)
+            if isinstance(infer_val, (int, float)) and infer_val > 0
+            else "-"
+        )
         energy_str = f"{_sig3(exp.total_energy_j)} J" if exp.total_energy_j else "-"
         toks_str = _sig3(exp.avg_tokens_per_second) if exp.avg_tokens_per_second else "-"
 
@@ -379,7 +388,8 @@ def print_study_summary(result: StudyResult) -> None:
         mj_str = _sig3(mj_tok) if mj_tok is not None else "-"
 
         print(
-            f"{i:>3}  {status_icon:>2}  {config_str:<40}  {time_str:>8}  {energy_str:>10}  {toks_str:>8}  {mj_str:>8}"
+            f"{i:>3}  {status_icon:>2}  {config_str:<40}  {total_str:>8}  {infer_str:>8}"
+            f"  {energy_str:>10}  {toks_str:>8}  {mj_str:>8}"
         )
 
     print("-" * len(header))
