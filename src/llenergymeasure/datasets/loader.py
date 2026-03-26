@@ -60,7 +60,7 @@ def load_prompts(config: ExperimentConfig) -> list[str]:
     from llenergymeasure.config.models import SyntheticDatasetConfig
 
     if isinstance(config.dataset, SyntheticDatasetConfig):
-        return _load_synthetic(config.dataset, config.n)
+        return _load_synthetic(config.dataset, config.n, fallback_seed=config.random_seed)
 
     if isinstance(config.dataset, str):
         # Built-in alias
@@ -187,7 +187,7 @@ def _load_jsonl(
     return prompts
 
 
-def _load_synthetic(config: object, n: int) -> list[str]:
+def _load_synthetic(config: object, n: int, fallback_seed: int = 42) -> list[str]:
     """Generate deterministic synthetic prompts.
 
     Uses the same word-repetition approach as the M1 placeholder but with
@@ -196,12 +196,15 @@ def _load_synthetic(config: object, n: int) -> list[str]:
     Args:
         config: SyntheticDatasetConfig instance (duck-typed to avoid circular import).
         n: Number of prompts to generate.
+        fallback_seed: Seed to use when config.seed is None (typically
+            ExperimentConfig.random_seed).
 
     Returns:
         List of n synthetic prompt strings.
     """
     input_len: int = getattr(config, "input_len", 512)
-    seed: int = getattr(config, "seed", 42)
+    explicit_seed: int | None = getattr(config, "seed", None)
+    seed: int = explicit_seed if explicit_seed is not None else fallback_seed
 
     # Approximate: ~4 chars per token
     words_per_prompt = max(1, input_len // 4)
