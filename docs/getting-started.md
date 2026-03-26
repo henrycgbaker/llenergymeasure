@@ -114,7 +114,7 @@ llem run experiment.yaml
 What happens:
 
 1. Pre-flight checks run: Docker CLI, NVIDIA Container Toolkit, GPU visibility inside container, CUDA/driver compatibility.
-2. The vLLM Docker image is pulled on first run (`ghcr.io/henrycgbaker/llenergymeasure/vllm:0.8.0-cuda12`).
+2. The vLLM Docker image is pulled on first run (`ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0`).
 3. The container launches, runs the experiment, and streams results back.
 4. Results are printed to stdout and saved to `results/`.
 
@@ -174,7 +174,7 @@ llem run experiment.yaml
 What happens:
 
 1. Pre-flight checks run: Docker CLI, NVIDIA Container Toolkit, GPU visibility, SM version check.
-2. The TensorRT-LLM Docker image is pulled on first run (`ghcr.io/henrycgbaker/llenergymeasure/tensorrt:0.10.0-cuda12`).
+2. The TensorRT-LLM Docker image is pulled on first run (`ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0`).
 3. The container compiles the TensorRT engine from the model weights. **First run only — this takes several minutes.** Progress is shown in the terminal.
 4. The compiled engine is cached on disk (`~/.cache/tensorrt_llm` inside the container, mounted from the host).
 5. Inference runs against the compiled engine.

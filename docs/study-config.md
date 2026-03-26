@@ -505,11 +505,11 @@ output:
 runners:
   pytorch: local
   vllm: docker         # always use Docker for vLLM
-  tensorrt: local
+  tensorrt: docker     # TensorRT-LLM requires Docker
 
 measurement:
   datacenter_pue: 1.0
-  grid_carbon_intensity: 0.233
+  carbon_intensity_gco2_kwh: 0.233
 ```
 
 Run `llem config` to display the current effective configuration and check which backends
