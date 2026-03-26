@@ -629,6 +629,167 @@ class TestProbeImageConstant:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# TestTier2QuotaAndFallbackStderr
+# ---------------------------------------------------------------------------
+
+
+class TestTier2QuotaAndFallbackStderr:
+    """GPU quota / allocation errors and generic fallback stderr surfacing."""
+
+    def _which_all_present(self, name: str) -> str | None:
+        known = {"docker", "nvidia-container-runtime", "nvidia-smi"}
+        return f"/usr/bin/{name}" if name in known else None
+
+    # --- quota keyword detection ---
+
+    def test_quota_keyword_in_stderr_raises_quota_error(self) -> None:
+        """Stderr containing 'quota' → DockerPreFlightError with quota message."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _make_nvidia_smi_result(),
+                _make_subprocess_result(
+                    returncode=1,
+                    stderr=(
+                        "DS01 GPU Allocation Failed - You have reached your GPU quota limit. "
+                        "To free up quota: Stop an existing container: docker stop <name>"
+                    ),
+                ),
+            ]
+            with pytest.raises(DockerPreFlightError) as exc_info:
+                run_docker_preflight()
+
+        msg = str(exc_info.value)
+        assert "quota" in msg.lower()
+
+    def test_quota_error_surfaces_actual_stderr(self) -> None:
+        """Quota error message must include the raw stderr text from Docker."""
+        raw_stderr = (
+            "DS01 GPU Allocation Failed - You have reached your GPU quota limit. "
+            "To free up quota: Stop an existing container: docker stop <name>"
+        )
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _make_nvidia_smi_result(),
+                _make_subprocess_result(returncode=1, stderr=raw_stderr),
+            ]
+            with pytest.raises(DockerPreFlightError) as exc_info:
+                run_docker_preflight()
+
+        assert raw_stderr in str(exc_info.value)
+
+    def test_allocation_failed_keyword_triggers_quota_path(self) -> None:
+        """Stderr with 'allocation failed' also triggers the quota error path."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _make_nvidia_smi_result(),
+                _make_subprocess_result(returncode=1, stderr="GPU Allocation Failed"),
+            ]
+            with pytest.raises(DockerPreFlightError) as exc_info:
+                run_docker_preflight()
+
+        msg = str(exc_info.value)
+        # Must NOT say "NVIDIA Container Toolkit not configured correctly"
+        assert "quota" in msg.lower() or "allocation" in msg.lower()
+        assert "NVIDIA Container Toolkit not configured correctly" not in msg
+
+    def test_quota_error_does_not_mention_toolkit_misconfiguration(self) -> None:
+        """Quota error must not blame NVIDIA Container Toolkit."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _make_nvidia_smi_result(),
+                _make_subprocess_result(returncode=1, stderr="gpu quota limit reached"),
+            ]
+            with pytest.raises(DockerPreFlightError) as exc_info:
+                run_docker_preflight()
+
+        assert "Toolkit not configured correctly" not in str(exc_info.value)
+
+    # --- generic fallback stderr surfacing ---
+
+    def test_unknown_error_surfaces_stderr_in_message(self) -> None:
+        """Unknown probe failure with non-empty stderr → stderr text in error message."""
+        raw_stderr = "some unknown docker error: exit status 42"
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _make_nvidia_smi_result(),
+                _make_subprocess_result(returncode=1, stderr=raw_stderr),
+            ]
+            with pytest.raises(DockerPreFlightError) as exc_info:
+                run_docker_preflight()
+
+        assert raw_stderr in str(exc_info.value)
+
+    def test_unknown_error_empty_stderr_no_docker_stderr_line(self) -> None:
+        """Unknown probe failure with empty stderr → no 'Docker stderr:' line appended."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _make_nvidia_smi_result(),
+                _make_subprocess_result(returncode=1, stderr=""),
+            ]
+            with pytest.raises(DockerPreFlightError) as exc_info:
+                run_docker_preflight()
+
+        assert "Docker stderr:" not in str(exc_info.value)
+
+    def test_unknown_error_still_includes_toolkit_url(self) -> None:
+        """Generic fallback still includes the toolkit install URL for misconfiguration hints."""
+        with (
+            patch(
+                "llenergymeasure.infra.docker_preflight.shutil.which",
+                side_effect=self._which_all_present,
+            ),
+            patch("llenergymeasure.infra.docker_preflight.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _make_nvidia_smi_result(),
+                _make_subprocess_result(
+                    returncode=125,
+                    stderr='could not select device driver "" with capabilities: [[gpu]]',
+                ),
+            ]
+            with pytest.raises(DockerPreFlightError) as exc_info:
+                run_docker_preflight()
+
+        assert _NVIDIA_TOOLKIT_INSTALL_URL in str(exc_info.value)
+
+
 class TestWiring:
     """Tests that run_study_preflight correctly wires into run_docker_preflight."""
 
