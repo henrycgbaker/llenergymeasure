@@ -415,6 +415,14 @@ def build_preflight_panel(
     body.stylize("dim", hash_start, hash_start + len(hash_line))
     body.append("\n")
 
+    # Expected results directory (dimmed, below hash)
+    prefix = study_config.name or "study"
+    results_hint = f"  results/{prefix}_<timestamp>/"
+    hint_start = len(body.plain)
+    body.append(results_hint)
+    body.stylize("dim", hint_start, hint_start + len(results_hint))
+    body.append("\n")
+
     return Panel(
         body,
         title=f"Study: {study_config.name or 'unnamed'}",
