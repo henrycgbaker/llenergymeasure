@@ -319,16 +319,13 @@ def build_preflight_panel(
     if sweep_dimensions:
         body.append("\n")
         body.append("  Sweep dimensions\n")
-        for label, value, indent_level in sweep_dimensions:
-            if indent_level == 1:
-                # Sub-config header (no value)
-                body.append(f"    {label}\n")
-            elif indent_level == 2:
-                # Sub-config field
-                body.append(f"      {label:<18}{value}\n")
+        for label, value, depth in sweep_dimensions:
+            indent = "    " + "  " * depth
+            if value:
+                body.append(f"{indent}{label:<18}{value}\n")
             else:
-                # Top-level field
-                body.append(f"    {label:<18}{value}\n")
+                # Header (sub-config or nested sub-config)
+                body.append(f"{indent}{label}\n")
 
     body.append("\n")
     # Hash line with dim styling
@@ -349,11 +346,13 @@ def build_preflight_panel(
 def _collect_sweep_dimensions(
     experiments: list[ExperimentConfig],
 ) -> list[tuple[str, str, int]]:
-    """Return (label, value_str, indent_level) triples for sweep display.
+    """Return (label, value_str, depth) triples for sweep display.
 
-    indent_level=0  top-level scalar fields
-    indent_level=1  sub-config header (label only, value is "")
-    indent_level=2  sub-config field
+    depth=0  top-level fields and sub-config headers
+    depth=1  sub-config fields and nested sub-config headers
+    depth=2+ nested sub-config fields (recursion)
+
+    A triple with an empty value string is a header; non-empty is a field.
     """
     if not experiments:
         return []
@@ -378,10 +377,7 @@ def _collect_sweep_dimensions(
         if len(unique_vals) > 1 or always_show:
             result.append((field_name, ", ".join(sorted(unique_vals)), 0))
 
-    # --- Sub-config fields ---
-    # (sub_config_name, sub_field_name) pairs to check
-    # Only mandatory sub-configs (always present): decoder, warmup, baseline, energy
-    # Optional sub-configs (may be None): pytorch, vllm, tensorrt, lora
+    # --- Sub-config fields (recursive) ---
     SUB_CONFIGS_MANDATORY = ("decoder", "warmup", "baseline", "energy")
     SUB_CONFIGS_OPTIONAL = ("pytorch", "vllm", "tensorrt", "lora")
 
@@ -405,10 +401,49 @@ def _collect_sweep_dimensions(
             return {k: getattr(obj, k) for k in obj.model_fields}
         return {}
 
+    def _collect_fields(
+        objs: list[Any],
+        defaults: dict[str, Any],
+        field_depth: int,
+    ) -> list[tuple[str, str, int]]:
+        """Collect varying/non-default fields from a list of config objects.
+
+        When a field's values are Pydantic models (nested sub-configs), recurse
+        and emit a header + nested fields instead of the full repr string.
+
+        Returns (label, value_str, depth) triples. Empty value_str = header.
+        The caller is responsible for prepending the parent header.
+        """
+        first = objs[0]
+        if not hasattr(first, "model_fields"):
+            return []
+
+        entries: list[tuple[str, str, int]] = []
+
+        for field_name in first.model_fields:
+            vals = [getattr(o, field_name) for o in objs]
+            non_none = [v for v in vals if v is not None]
+
+            # Detect nested Pydantic models - recurse instead of str()
+            if non_none and hasattr(non_none[0], "model_fields"):
+                nested = _collect_fields(non_none, {}, field_depth + 1)
+                if nested:
+                    entries.append((field_name, "", field_depth))  # nested header
+                    entries.extend(nested)
+                continue
+
+            unique_vals = set(str(v) for v in vals)
+            default_val = defaults.get(field_name)
+            all_default = all(v == default_val for v in vals)
+
+            if len(unique_vals) > 1 or not all_default:
+                entries.append((field_name, ", ".join(sorted(unique_vals)), field_depth))
+
+        return entries
+
     def _process_sub_config(sub_config_name: str, is_optional: bool) -> None:
         """Process a sub-config and add varying/non-default fields to result."""
         if is_optional:
-            # Only process if at least one experiment has this sub-config
             sub_configs = [getattr(exp, sub_config_name) for exp in experiments]
             active = [sc for sc in sub_configs if sc is not None]
             if not active:
@@ -416,37 +451,12 @@ def _collect_sweep_dimensions(
         else:
             active = [getattr(exp, sub_config_name) for exp in experiments]
 
-        # Collect fields from the first active sub-config
-        first = active[0]
-        if not hasattr(first, "model_fields"):
-            return
-
         defaults = _get_sub_config_defaults(sub_config_name)
-        sub_fields_to_show: list[tuple[str, str]] = []
+        entries = _collect_fields(active, defaults, field_depth=1)
 
-        for sub_field in first.model_fields:
-            # Collect unique values across all experiments that have this sub-config
-            if is_optional:
-                vals = []
-                for exp in experiments:
-                    sc = getattr(exp, sub_config_name)
-                    if sc is not None:
-                        vals.append(getattr(sc, sub_field))
-            else:
-                vals = [getattr(getattr(exp, sub_config_name), sub_field) for exp in experiments]
-
-            unique_vals = set(str(v) for v in vals)
-            default_val = defaults.get(sub_field)
-            all_default = all(v == default_val for v in vals)
-
-            # Show if: varies across experiments OR non-default value
-            if len(unique_vals) > 1 or not all_default:
-                sub_fields_to_show.append((sub_field, ", ".join(sorted(unique_vals))))
-
-        if sub_fields_to_show:
-            result.append((sub_config_name, "", 1))
-            for sf_name, sf_vals in sub_fields_to_show:
-                result.append((sf_name, sf_vals, 2))
+        if entries:
+            result.append((sub_config_name, "", 0))  # parent header
+            result.extend(entries)
 
     for sc_name in SUB_CONFIGS_MANDATORY:
         _process_sub_config(sc_name, is_optional=False)
