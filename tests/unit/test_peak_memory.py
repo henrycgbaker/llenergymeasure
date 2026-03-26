@@ -145,7 +145,7 @@ def test_pytorch_backend_seeds_rng_before_inference():
     seeded_values: list[int] = []
 
     with (
-        patch("torch.cuda.is_available", return_value=False),
+        patch("torch.cuda.is_available", return_value=True),
         patch("torch.cuda.reset_peak_memory_stats"),
         patch("torch.cuda.max_memory_allocated", return_value=0),
         patch("torch.manual_seed", side_effect=lambda s: seeded_values.append(s)),

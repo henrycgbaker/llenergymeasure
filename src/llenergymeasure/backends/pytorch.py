@@ -190,12 +190,10 @@ class PyTorchBackend:
         reset_cuda_peak_memory()
 
         # Seed PyTorch RNG for reproducible sampling (mirrors vLLM's seed= kwarg).
-        # Only affects non-greedy generation (do_sample=True, temperature>0).
+        # manual_seed seeds both CPU and all CUDA devices since PyTorch 1.12+.
         import torch as _torch
 
         _torch.manual_seed(config.random_seed)
-        if _torch.cuda.is_available():
-            _torch.cuda.manual_seed_all(config.random_seed)
 
         generate_kwargs = self._build_generate_kwargs(config)
         total_input_tokens = 0

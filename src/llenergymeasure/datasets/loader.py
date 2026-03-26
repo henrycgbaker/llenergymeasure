@@ -107,7 +107,8 @@ def _load_jsonl(
     n: int,
     name: str,
     order: str = "interleaved",
-    seed: int = 42,
+    *,
+    seed: int,
 ) -> list[str]:
     """Load prompts from a JSONL file.
 
@@ -187,7 +188,7 @@ def _load_jsonl(
     return prompts
 
 
-def _load_synthetic(config: object, n: int, fallback_seed: int = 42) -> list[str]:
+def _load_synthetic(config: object, n: int, *, fallback_seed: int) -> list[str]:
     """Generate deterministic synthetic prompts.
 
     Uses the same word-repetition approach as the M1 placeholder but with
