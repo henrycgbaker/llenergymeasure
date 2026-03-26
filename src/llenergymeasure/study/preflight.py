@@ -53,30 +53,52 @@ def run_study_preflight(
         PreFlightError: Multi-backend study and Docker is not available.
         DockerPreFlightError: Docker pre-flight check failed (inherits PreFlightError).
     """
-    from llenergymeasure.infra.runner_resolution import is_docker_available, resolve_study_runners
+    from llenergymeasure.infra.runner_resolution import (
+        RunnerSpec,
+        is_docker_available,
+        resolve_study_runners,
+    )
 
     backends = {exp.backend for exp in study.experiments}
-    if len(backends) > 1:
+    is_multi_backend = len(backends) > 1
+
+    if is_multi_backend:
         backend_list = ", ".join(sorted(backends))
-        if is_docker_available():
-            logger.info(
-                "Multi-backend study detected (%s). Auto-elevating all backends to Docker "
-                "for isolation.",
-                backend_list,
-            )
-        else:
+        if not is_docker_available():
             raise PreFlightError(
                 f"Multi-backend study requires Docker isolation. "
                 f"Found backends: {backend_list}. "
                 "Install Docker + NVIDIA Container Toolkit, or use a single backend."
             )
+        logger.info(
+            "Multi-backend study detected (%s). Auto-elevating all backends to Docker "
+            "for isolation.",
+            backend_list,
+        )
+
+    # Resolve runners using normal precedence chain.
+    runner_specs = resolve_study_runners(
+        list(backends), yaml_runners=yaml_runners, user_config=user_config
+    )
+
+    # Multi-backend enforcement: override any local runners to Docker.
+    # The YAML may say pytorch: local, but multi-backend studies require
+    # Docker isolation for all backends.
+    if is_multi_backend:
+        for backend, spec in runner_specs.items():
+            if spec.mode != RUNNER_DOCKER:
+                logger.info(
+                    "Overriding %s runner from %s to docker (multi-backend isolation).",
+                    backend,
+                    spec.mode,
+                )
+                runner_specs[backend] = RunnerSpec(
+                    mode=RUNNER_DOCKER, image=spec.image, source="multi_backend_elevation"
+                )
 
     # Docker pre-flight: run once if any backend resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
     effective_skip = skip_preflight or getattr(study.execution, "skip_preflight", False)
-    runner_specs = resolve_study_runners(
-        list(backends), yaml_runners=yaml_runners, user_config=user_config
-    )
     if any(spec.mode == RUNNER_DOCKER for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 

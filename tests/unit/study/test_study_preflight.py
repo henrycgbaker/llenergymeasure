@@ -70,6 +70,26 @@ def test_multi_backend_error_lists_backends(monkeypatch):
     assert "vllm" in str(exc_info.value)
 
 
+def test_multi_backend_auto_elevates_local_to_docker(monkeypatch):
+    """Multi-backend study overrides local runners to Docker when Docker is available."""
+    monkeypatch.setattr("llenergymeasure.infra.runner_resolution.is_docker_available", lambda: True)
+    # Mock docker preflight to avoid real Docker checks
+    monkeypatch.setattr(
+        "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
+    )
+
+    study = StudyConfig(
+        experiments=[
+            ExperimentConfig(model="m1", backend="pytorch"),
+            ExperimentConfig(model="m2", backend="vllm"),
+        ]
+    )
+    specs = run_study_preflight(study, yaml_runners={"pytorch": "local", "vllm": "docker"})
+    assert specs["pytorch"].mode == "docker"
+    assert specs["pytorch"].source == "multi_backend_elevation"
+    assert specs["vllm"].mode == "docker"
+
+
 def test_preflight_forwards_runner_context(monkeypatch):
     """run_study_preflight forwards yaml_runners and user_config to resolve_study_runners."""
     captured_calls: list[dict] = []
