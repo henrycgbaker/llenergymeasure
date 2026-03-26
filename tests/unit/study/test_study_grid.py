@@ -356,6 +356,72 @@ class TestExpandGridInvalidHandling:
             expand_grid(raw)
 
 
+class TestMultiBackendSectionStripping:
+    """Top-level backend sections are stripped for non-matching backends in multi-backend studies."""
+
+    def test_sweep_strips_inherited_backend_sections(self):
+        """A top-level tensorrt: section must not leak into pytorch/vllm sweep configs."""
+        raw = {
+            "model": "gpt2",
+            "tensorrt": {"max_input_len": 1024},
+            "sweep": {
+                "precision": ["bf16"],
+                "pytorch.batch_size": [1],
+                "tensorrt.max_batch_size": [4],
+            },
+        }
+        valid, skipped = expand_grid(raw)
+        assert len(skipped) == 0, f"Expected 0 skipped, got: {[s.reason for s in skipped]}"
+        # One pytorch config, one tensorrt config
+        pytorch_configs = [c for c in valid if c.backend == "pytorch"]
+        tensorrt_configs = [c for c in valid if c.backend == "tensorrt"]
+        assert len(pytorch_configs) == 1
+        assert len(tensorrt_configs) == 1
+        # Pytorch config must NOT have tensorrt section
+        assert pytorch_configs[0].tensorrt is None
+        # Tensorrt config inherits the top-level tensorrt section
+        assert tensorrt_configs[0].tensorrt is not None
+        assert tensorrt_configs[0].tensorrt.max_input_len == 1024
+
+    def test_explicit_experiment_strips_inherited_not_explicit(self):
+        """Inherited backend sections are stripped; explicitly written ones still fail."""
+        raw = {
+            "tensorrt": {"max_input_len": 1024},
+            "experiments": [
+                # Inherited tensorrt: should be stripped for this pytorch experiment
+                {"model": "gpt2", "backend": "pytorch"},
+                # Explicit vllm: section with backend=pytorch is a user error — should fail
+                {
+                    "model": "gpt2",
+                    "backend": "pytorch",
+                    "vllm": {"engine": {"max_num_seqs": 64}},
+                },
+            ],
+        }
+        valid, skipped = expand_grid(raw)
+        assert len(valid) == 1
+        assert valid[0].backend == "pytorch"
+        assert valid[0].tensorrt is None
+        assert len(skipped) == 1
+        assert "vllm" in skipped[0].reason.lower()
+
+    def test_sweep_with_all_three_backends(self):
+        """Three-backend sweep with a shared tensorrt section produces valid configs for all."""
+        raw = {
+            "model": "gpt2",
+            "tensorrt": {"max_input_len": 512},
+            "sweep": {
+                "pytorch.batch_size": [1],
+                "vllm.engine.max_num_seqs": [64],
+                "tensorrt.max_batch_size": [4],
+            },
+        }
+        valid, skipped = expand_grid(raw)
+        assert len(skipped) == 0, f"Unexpected skips: {[s.reason for s in skipped]}"
+        backends = sorted(c.backend for c in valid)
+        assert backends == ["pytorch", "tensorrt", "vllm"]
+
+
 # =============================================================================
 # compute_study_design_hash() tests
 # =============================================================================

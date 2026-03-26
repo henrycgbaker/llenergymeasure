@@ -107,8 +107,18 @@ def expand_grid(
     sweep_raw_configs = _expand_sweep(sweep, merged_fixed)
 
     # Step 4: Append explicit experiments: list entries
+    # Strip non-matching backend sections *inherited from fixed*, but preserve
+    # any the user wrote directly in the experiment entry (those are genuine
+    # misconfigurations and should fail Pydantic validation).
     explicit_entries = raw_study.get("experiments", [])
-    explicit_raw_configs = [{**merged_fixed, **exp} for exp in explicit_entries]
+    explicit_raw_configs = []
+    for exp in explicit_entries:
+        merged = {**merged_fixed, **exp}
+        backend = merged.get("backend", merged_fixed.get("backend", "pytorch"))
+        for key in _BACKEND_SECTION_KEYS:
+            if key != backend and key in merged and key not in exp:
+                del merged[key]
+        explicit_raw_configs.append(merged)
 
     all_raw_configs = sweep_raw_configs + explicit_raw_configs
 
@@ -493,6 +503,20 @@ def _load_base(base_path_str: str | None, study_yaml_path: Path | None) -> dict[
     return {k: v for k, v in raw.items() if k not in _STUDY_ONLY_KEYS}
 
 
+_BACKEND_SECTION_KEYS = frozenset({"pytorch", "vllm", "tensorrt"})
+
+
+def _strip_other_backend_sections(config_dict: dict[str, Any], backend: str) -> dict[str, Any]:
+    """Remove backend-specific sections that don't match *backend*.
+
+    In a multi-backend study, top-level backend sections (e.g. ``tensorrt:``)
+    are shared defaults for that backend's experiments.  When the grid expander
+    assigns a different backend, those sections must be stripped before Pydantic
+    validation - otherwise ``validate_backend_section_match`` rejects the config.
+    """
+    return {k: v for k, v in config_dict.items() if k not in _BACKEND_SECTION_KEYS or k == backend}
+
+
 def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str, Any]]:
     """Expand a sweep: block into a flat list of raw experiment config dicts.
 
@@ -504,7 +528,8 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     """
     if not sweep:
         if fixed.get("model"):
-            return [dict(fixed)]
+            backend = fixed.get("backend", "pytorch")
+            return [_strip_other_backend_sections(dict(fixed), backend)]
         return []
 
     # Separate universal dims from backend-scoped dims
@@ -539,14 +564,14 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
 
         if not all_dim_keys:
             # No dimensions for this backend — produce one config
-            config_dict: dict[str, Any] = dict(fixed)
+            config_dict: dict[str, Any] = _strip_other_backend_sections(dict(fixed), backend)
             # Remove list-valued backend field
             config_dict["backend"] = backend
             results.append(config_dict)
             continue
 
         for combo in itertools.product(*all_dim_values):
-            config_dict = dict(fixed)
+            config_dict = _strip_other_backend_sections(dict(fixed), backend)
             # Override list-valued backend with the specific backend string
             config_dict["backend"] = backend
 
