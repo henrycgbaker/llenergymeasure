@@ -115,6 +115,7 @@ def run_study(
     *,
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
+    study_dir: Path | None = None,
 ) -> StudyResult:
     """Run a multi-experiment study.
 
@@ -144,7 +145,7 @@ def run_study(
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
-    return _run(study, skip_preflight=skip_preflight, progress=progress)
+    return _run(study, skip_preflight=skip_preflight, progress=progress, study_dir=study_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +191,7 @@ def _run(
     study: StudyConfig,
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
+    study_dir: Path | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -245,7 +247,8 @@ def _run(
         )
 
     # Always create study dir + manifest
-    study_dir = create_study_dir(study.name, Path("results"))
+    if study_dir is None:
+        study_dir = create_study_dir(study.name, Path("results"))
     manifest = ManifestWriter(study, study_dir)
 
     wall_start = time.monotonic()

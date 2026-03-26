@@ -9,6 +9,7 @@ import logging
 import random
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -266,6 +267,7 @@ def build_preflight_panel(
     study_config: StudyConfig,
     skipped: list[SkippedConfig] | None = None,
     runner_specs: dict[str, RunnerSpec] | None = None,
+    study_dir: Path | None = None,
 ) -> Panel:
     """Return a Rich Panel with study metadata, sweep dimensions, and design hash.
 
@@ -416,9 +418,15 @@ def build_preflight_panel(
     body.append("\n")
 
     # Expected results directory (dimmed, below hash)
-    prefix = study_config.name or "study"
-    results_hint = f"  results/{prefix}_<timestamp>/"
+    if study_dir is not None:
+        results_hint = f"  {study_dir}/"
+    else:
+        prefix = study_config.name or "study"
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        results_hint = f"  results/{prefix}_{timestamp}/"
     hint_start = len(body.plain)
+    body.append("\n")
+    body.append("results dir:")
     body.append(results_hint)
     body.stylize("dim", hint_start, hint_start + len(results_hint))
     body.append("\n")

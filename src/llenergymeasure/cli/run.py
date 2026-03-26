@@ -428,6 +428,11 @@ def _run_study_impl(
 
     effective_mode = _resolve_progress_mode(quiet, verbose)
 
+    # Create study dir early so the panel can show the exact results path.
+    from llenergymeasure.study.manifest import create_study_dir
+
+    study_dir = create_study_dir(study_config.name, Path("results"))
+
     # Create live study display before the run so per-experiment progress is shown
     study_display = None
     if effective_mode != "quiet":
@@ -442,7 +447,7 @@ def _run_study_impl(
         # Print Rich Panel with study metadata (static, before live display starts).
         # Pass resolved runner_specs so the panel shows effective runner modes.
         _stderr_console = RichConsole(stderr=True)
-        panel = build_preflight_panel(study_config, runner_specs=runner_specs)
+        panel = build_preflight_panel(study_config, runner_specs=runner_specs, study_dir=study_dir)
         _stderr_console.print(panel)
 
         if study_config.skipped_configs:
@@ -472,7 +477,9 @@ def _run_study_impl(
     from llenergymeasure import run_study
 
     try:
-        result = run_study(study_config, skip_preflight=True, progress=study_display)
+        result = run_study(
+            study_config, skip_preflight=True, progress=study_display, study_dir=study_dir
+        )
     finally:
         # Safety stop — ensures Rich Live is torn down even on exceptions
         if study_display is not None:
