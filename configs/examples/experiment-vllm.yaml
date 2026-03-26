@@ -26,7 +26,7 @@ random_seed: 42
 
 # --- Token limits ---
 max_input_tokens: 512
-max_output_tokens: 128
+max_output_tokens: 256
 
 # --- Energy measurement ---
 energy:

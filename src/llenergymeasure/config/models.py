@@ -317,7 +317,7 @@ class ExperimentConfig(BaseModel):
 
     # Token limits
     max_input_tokens: int = Field(default=512, ge=1, description="Max input tokens")
-    max_output_tokens: int = Field(default=128, ge=1, description="Max output tokens")
+    max_output_tokens: int = Field(default=256, ge=1, description="Max output tokens")
 
     # Sub-configs
     decoder: DecoderConfig = Field(
