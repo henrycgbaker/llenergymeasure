@@ -335,6 +335,18 @@ class TestBuildSamplingParams:
         assert isinstance(params, _FakeSamplingParams)
         assert params._kwargs["max_new_tokens"] == config.max_output_tokens
 
+    def test_build_sampling_params_passes_random_seed(self, monkeypatch):
+        """random_seed from ExperimentConfig is forwarded to SamplingParams."""
+        mock_trt = _make_fake_tensorrt_llm_module()
+        monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
+        monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
+
+        config = make_config(**_TRT_DEFAULTS, random_seed=123)
+        backend = TensorRTBackend()
+        params = backend._build_sampling_params(config)
+
+        assert params._kwargs["random_seed"] == 123
+
     def test_build_sampling_params_greedy(self, monkeypatch):
         """temperature=0 omits temperature key (greedy decoding)."""
         mock_trt = _make_fake_tensorrt_llm_module()

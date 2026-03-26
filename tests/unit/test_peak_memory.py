@@ -132,6 +132,33 @@ def test_peak_memory_reset_precedes_measurement():
 
 
 # ---------------------------------------------------------------------------
+# Seed test — PyTorchBackend seeds torch RNG before inference
+# ---------------------------------------------------------------------------
+
+
+def test_pytorch_backend_seeds_rng_before_inference():
+    """PyTorchBackend.run_inference calls torch.manual_seed with config.random_seed."""
+    pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.config.models import ExperimentConfig
+
+    seeded_values: list[int] = []
+
+    with (
+        patch("torch.cuda.is_available", return_value=False),
+        patch("torch.cuda.reset_peak_memory_stats"),
+        patch("torch.cuda.max_memory_allocated", return_value=0),
+        patch("torch.manual_seed", side_effect=lambda s: seeded_values.append(s)),
+        patch.object(PyTorchBackend, "_run_batch", return_value=(10, 20, 0.5)),
+    ):
+        backend = PyTorchBackend()
+        config = ExperimentConfig(model="test-model", backend="pytorch", n=1, random_seed=123)
+        backend.run_inference(config, (object(), None), ["test prompt"])
+
+    assert 123 in seeded_values, "torch.manual_seed must be called with config.random_seed"
+
+
+# ---------------------------------------------------------------------------
 # Domain model tests — MemoryEfficiencyMetrics field existence
 # ---------------------------------------------------------------------------
 
