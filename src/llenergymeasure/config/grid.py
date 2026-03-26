@@ -305,14 +305,29 @@ def build_preflight_panel(
         body.append(f"{' ' * indent}{label:<18}")
         body.append(f"{value}\n")
 
-    # --- Unique values across experiments ---
-    unique_backends = sorted(set(exp.backend for exp in study_config.experiments))
-    unique_models = sorted(set(exp.model for exp in study_config.experiments))
-    unique_n = sorted(set(exp.n for exp in study_config.experiments))
-    unique_datasets = sorted(set(str(exp.dataset) for exp in study_config.experiments))
-    unique_max_in = sorted(set(exp.max_input_tokens for exp in study_config.experiments))
-    unique_max_out = sorted(set(exp.max_output_tokens for exp in study_config.experiments))
-    unique_energy = sorted(set(str(exp.energy.backend) for exp in study_config.experiments))
+    # --- Unique values across experiments (single pass) ---
+    _backends: set[str] = set()
+    _models: set[str] = set()
+    _ns: set[int] = set()
+    _datasets: set[str] = set()
+    _max_ins: set[int] = set()
+    _max_outs: set[int] = set()
+    _energy: set[str] = set()
+    for exp in study_config.experiments:
+        _backends.add(exp.backend)
+        _models.add(exp.model)
+        _ns.add(exp.n)
+        _datasets.add(str(exp.dataset))
+        _max_ins.add(exp.max_input_tokens)
+        _max_outs.add(exp.max_output_tokens)
+        _energy.add(str(exp.energy.backend))
+    unique_backends = sorted(_backends)
+    unique_models = sorted(_models)
+    unique_n = sorted(_ns)
+    unique_datasets = sorted(_datasets)
+    unique_max_in = sorted(_max_ins)
+    unique_max_out = sorted(_max_outs)
+    unique_energy = sorted(_energy)
 
     experiments_line = (
         f"{_pl(n_configs, 'config')} x {_pl(n_cycles, 'cycle')} = {_pl(n_runs, 'run')}"

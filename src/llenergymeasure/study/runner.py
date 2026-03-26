@@ -713,7 +713,9 @@ class StudyRunner:
                     )
                     is_docker = spec is not None and spec.mode == RUNNER_DOCKER
                     if is_docker:
-                        self._progress.on_substep("save", "container: /run/llem")
+                        from llenergymeasure.config.ssot import CONTAINER_EXCHANGE_DIR
+
+                        self._progress.on_substep("save", f"container: {CONTAINER_EXCHANGE_DIR}")
                     self._progress.on_substep("save", f"host: {host_path}")
 
                 energy_j = getattr(result, "total_energy_j", None)

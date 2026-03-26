@@ -573,12 +573,9 @@ class StudyStepDisplay:
         inference_time_sec: float | None = None,
     ) -> None:
         """Mark experiment as successfully completed."""
-        # Compute mJ/tok from energy and throughput
-        mj_tok: float | None = None
-        if energy_j and throughput_tok_s and elapsed > 0:
-            total_tokens = throughput_tok_s * elapsed
-            if total_tokens > 0:
-                mj_tok = (energy_j / total_tokens) * 1000
+        from llenergymeasure.utils.formatting import compute_mj_per_tok
+
+        mj_tok = compute_mj_per_tok(energy_j or 0, throughput_tok_s or 0, elapsed)
 
         with self._lock:
             self._inner_active = None

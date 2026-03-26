@@ -69,6 +69,26 @@ def sig3(value: float) -> str:
     return formatted
 
 
+def model_short_name(full_model: str) -> str:
+    """Strip provider prefix from model name (e.g. ``Qwen/Qwen2.5-0.5B`` -> ``Qwen2.5-0.5B``)."""
+    return str(full_model).rsplit("/", 1)[-1]
+
+
+def compute_mj_per_tok(
+    energy_j: float, throughput_tok_s: float, duration_sec: float
+) -> float | None:
+    """Compute millijoules per token from energy, throughput, and duration.
+
+    Returns None if any input is missing or zero.
+    """
+    if not energy_j or not throughput_tok_s or not duration_sec:
+        return None
+    total_tokens = throughput_tok_s * duration_sec
+    if total_tokens <= 0:
+        return None
+    return (energy_j / total_tokens) * 1000
+
+
 _HEADER_MAX_LEN = 70
 """Maximum experiment header length before truncation."""
 
@@ -107,8 +127,7 @@ def format_experiment_header(config: ExperimentConfig) -> str:
     parameters that differ from ExperimentConfig class defaults. Truncated
     to ~70 chars with ``...`` if too long.
     """
-    # Strip provider prefix (e.g. "Qwen/Qwen2.5-0.5B" -> "Qwen2.5-0.5B")
-    model_short = config.model.rsplit("/", 1)[-1]
+    model_short = model_short_name(config.model)
 
     # Collect non-default top-level params
     params: list[str] = []

@@ -115,8 +115,8 @@ def test_save_directory_name_format(tmp_path: Path, minimal_result: ExperimentRe
     """Directory name matches {model_short}-{backend}[-params]_{timestamp} pattern."""
     result_path = save_result(minimal_result, tmp_path)
     dir_name = result_path.parent.name
-    # Pattern: gpt2-pytorch_2026-02-26T14-00 (model_short-backend_timestamp)
-    pattern = re.compile(r"^[\w\.\-]+-[a-z]+_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}(_\d+)?$")
+    # Pattern: gpt2-pytorch[-key=val]_2026-02-26T14-00 (model_short-backend[-params]_timestamp)
+    pattern = re.compile(r"^[\w\.\-]+-[a-z]+[\w\.\-=]*_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}(_\d+)?$")
     assert pattern.match(dir_name), f"Directory name '{dir_name}' does not match expected pattern"
 
 

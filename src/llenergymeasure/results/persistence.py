@@ -34,10 +34,10 @@ def _experiment_dir_name(result: ExperimentResult, *, experiment_index: int | No
         ``001_Qwen2.5-0.5B-pytorch-n50-batch4_2026-03-26T14-30``
         ``Qwen2.5-0.5B-vllm_2026-03-26T14-30``  (single experiment, no index)
     """
-    from llenergymeasure.utils.formatting import _EXPERIMENT_DEFAULTS
+    from llenergymeasure.utils.formatting import _EXPERIMENT_DEFAULTS, model_short_name
 
     raw_model = result.effective_config.get("model", "unknown")
-    model_short = str(raw_model).rsplit("/", 1)[-1]
+    model_short = model_short_name(raw_model)
     backend = result.backend
 
     # Collect non-default params (matching format_experiment_header logic)
@@ -45,7 +45,7 @@ def _experiment_dir_name(result: ExperimentResult, *, experiment_index: int | No
     for field_name, default_val in _EXPERIMENT_DEFAULTS.items():
         actual = result.effective_config.get(field_name)
         if actual is not None and actual != default_val:
-            params.append(f"{field_name}{actual}")
+            params.append(f"{field_name}={actual}")
 
     # Build slug: model-backend[-params]_timestamp
     parts = [model_short, backend]

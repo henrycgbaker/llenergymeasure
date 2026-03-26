@@ -15,23 +15,10 @@ from pydantic import ValidationError
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.utils.exceptions import DockerError, LLEMError
+from llenergymeasure.utils.formatting import compute_mj_per_tok as _compute_mj_per_tok
 from llenergymeasure.utils.formatting import format_elapsed as _format_duration
+from llenergymeasure.utils.formatting import model_short_name
 from llenergymeasure.utils.formatting import sig3 as _sig3
-
-
-def _compute_mj_per_tok(
-    energy_j: float, throughput_tok_s: float, duration_sec: float
-) -> float | None:
-    """Compute millijoules per token from energy, throughput, and duration.
-
-    Returns None if any input is missing or zero.
-    """
-    if not energy_j or not throughput_tok_s or not duration_sec:
-        return None
-    total_tokens = throughput_tok_s * duration_sec
-    if total_tokens <= 0:
-        return None
-    return (energy_j / total_tokens) * 1000
 
 
 def print_result_summary(result: ExperimentResult) -> None:
@@ -357,7 +344,7 @@ def print_study_summary(result: StudyResult) -> None:
     for i, exp in enumerate(result.experiments, 1):
         # Build compact config string: model_short / backend / non-default params
         model_raw = exp.effective_config.get("model", "unknown")
-        model_short = model_raw.rsplit("/", 1)[-1]
+        model_short = model_short_name(model_raw)
         if len(model_short) > 20:
             model_short = "..." + model_short[-17:]
         backend = exp.backend

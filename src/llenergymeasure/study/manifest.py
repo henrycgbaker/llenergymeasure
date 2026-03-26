@@ -125,7 +125,9 @@ def experiment_result_filename(
     Format: "{model_short}-{backend}_{hash[:8]}{extension}"
     model_short: last component after '/' (preserves casing).
     """
-    model_short = model.rsplit("/", 1)[-1]
+    from llenergymeasure.utils.formatting import model_short_name
+
+    model_short = model_short_name(model)
     return f"{model_short}-{backend}_{config_hash[:8]}{extension}"
 
 
