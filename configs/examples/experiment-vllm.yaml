@@ -18,7 +18,7 @@ dataset_order: interleaved   # interleaved | grouped | shuffled
 #   n: 100
 #   input_len: 512
 #   output_len: 128
-#   seed: 42
+#   # seed: null              # null = uses random_seed (override to decouple)
 
 # --- Hardware ---
 precision: bf16              # fp32 | fp16 | bf16
