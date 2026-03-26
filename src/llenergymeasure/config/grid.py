@@ -369,7 +369,6 @@ def build_preflight_panel(
     constants.append(("Energy sampler", energy_display))
 
     if constants:
-        has_constants = True
         body.append("\n")
         for label, value in constants:
             body.append(f"  {label:<18}{value}\n")
