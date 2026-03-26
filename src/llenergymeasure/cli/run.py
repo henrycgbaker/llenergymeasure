@@ -447,9 +447,8 @@ def _run_study_impl(
         # Print Rich Panel with study metadata (static, before live display starts).
         # Pass resolved runner_specs so the panel shows effective runner modes.
         _stderr_console = RichConsole(stderr=True)
-        panel = build_preflight_panel(study_config, runner_specs=runner_specs)
+        panel = build_preflight_panel(study_config, runner_specs=runner_specs, study_dir=study_dir)
         _stderr_console.print(panel)
-        _stderr_console.print(f"  results dir: [dim]{study_dir}/[/dim]")
 
         if study_config.skipped_configs:
             skip_lines = [f"Skipping {len(study_config.skipped_configs)} config(s):"]
