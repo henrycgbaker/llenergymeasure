@@ -166,3 +166,37 @@ def test_save_and_record_missing_source_file(tmp_path: Path) -> None:
     call_args = manifest.mark_completed.call_args
     rel_path = call_args[0][2] if len(call_args[0]) >= 3 else call_args[1].get("result_file", "")
     assert rel_path, "mark_completed must be called with a non-empty result_file"
+
+
+def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:
+    """When save_result raises, manifest.mark_failed is called (not mark_completed).
+
+    Previously the except clause called mark_completed with result_file="" which
+    silently recorded a failure as a success with no result path. This test
+    verifies the corrected behaviour: mark_failed is called with a meaningful
+    error type and message.
+    """
+    from unittest.mock import patch
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    result = _make_result(tmp_path, with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    with patch(
+        "llenergymeasure.results.persistence.save_result",
+        side_effect=OSError("disk full"),
+    ):
+        _save_and_record(result, study_dir, manifest, "aabb1122", 1, result_files)
+
+    # mark_failed must be called — NOT mark_completed
+    manifest.mark_failed.assert_called_once()
+    call_args = manifest.mark_failed.call_args[0]
+    assert call_args[0] == "aabb1122"  # config_hash
+    assert call_args[1] == 1  # cycle
+    assert "OSError" in call_args[2]  # error_type
+    assert "disk full" in call_args[3]  # error_message
+
+    manifest.mark_completed.assert_not_called()

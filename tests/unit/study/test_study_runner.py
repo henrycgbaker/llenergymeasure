@@ -171,7 +171,7 @@ def test_daemon_false(study_config: StudyConfig) -> None:
 
 
 def test_study_runner_success_path(
-    study_config: StudyConfig, basic_config: ExperimentConfig
+    study_config: StudyConfig, basic_config: ExperimentConfig, tmp_path: Path
 ) -> None:
     """Happy path: fake worker sends result via Pipe; mark_completed is called."""
     manifest = MagicMock()
@@ -184,8 +184,19 @@ def test_study_runner_success_path(
     proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
     ctx = _make_mock_context(proc, pipe_data=fake_result, pipe_has_data=True)
 
-    with patch("multiprocessing.get_context", return_value=ctx):
-        runner = StudyRunner(study_config, manifest, Path("/tmp/test-study"))
+    # Patch save_result so the success path completes without a real filesystem write.
+    # The fake dict result has no "type" key, so _handle_result calls _save_and_record.
+    fake_result_path = tmp_path / "result.json"
+    fake_result_path.write_text("{}", encoding="utf-8")
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch(
+            "llenergymeasure.results.persistence.save_result",
+            return_value=fake_result_path,
+        ),
+    ):
+        runner = StudyRunner(study_config, manifest, tmp_path)
         results = runner.run()
 
     assert len(results) == 1

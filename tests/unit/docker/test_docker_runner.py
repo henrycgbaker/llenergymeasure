@@ -29,6 +29,18 @@ from tests.conftest import make_config, make_result
 IMAGE = "ghcr.io/llenergymeasure/vllm:1.19.0-cuda12"
 
 
+def _docker_config_hash(config) -> str:
+    """Return the config hash as DockerRunner computes it: after setting output_dir=/run/llem.
+
+    DockerRunner mutates output_dir before computing the hash so the container
+    (which reads the mutated config and recomputes) produces the same hash.
+    Tests that write result files must use this helper to match the actual file name.
+    """
+    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+    return compute_measurement_config_hash(config.model_copy(update={"output_dir": "/run/llem"}))
+
+
 def _make_proc(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
     """Return a mock CompletedProcess."""
     proc = MagicMock()
@@ -75,9 +87,7 @@ class TestSuccessPath:
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree") as mock_rmtree,
         ):
             # Write a valid result JSON before runner reads it
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -87,6 +97,55 @@ class TestSuccessPath:
         assert returned.experiment_id == result.experiment_id
         # Exchange dir should be cleaned up on success
         mock_rmtree.assert_called_once()
+
+    def test_hash_consistent_with_container_output_dir(self, tmp_path):
+        """Config hash is computed AFTER setting output_dir=/run/llem.
+
+        Regression test for: host computed hash from original config (output_dir=None)
+        but container recomputed from mutated config (output_dir=/run/llem), producing
+        different hashes. Result file was written under the container hash but host looked
+        for it under the original hash → DockerContainerError → experiment marked failed.
+
+        The fix: hash is computed after mutation so both sides agree.
+        """
+        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+        config = make_config()  # output_dir=None
+        result = make_result()
+
+        # Hash of ORIGINAL config (output_dir=None) — the old broken behaviour
+        original_hash = compute_measurement_config_hash(config)
+        # Hash of MUTATED config (output_dir="/run/llem") — what both sides must agree on
+        mutated_hash = compute_measurement_config_hash(
+            config.model_copy(update={"output_dir": "/run/llem"})
+        )
+
+        # The two hashes must differ (otherwise this test is trivially passing)
+        assert original_hash != mutated_hash, "Precondition: output_dir affects the hash"
+
+        exchange_dir = tmp_path / "llem-hashfix"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+        ):
+            # Write result under the MUTATED hash (what the container does)
+            result_path = exchange_dir / f"{mutated_hash}_result.json"
+            result_path.write_text(result.model_dump_json(), encoding="utf-8")
+
+            runner = DockerRunner(image=IMAGE)
+            # Must succeed — runner now looks for the mutated-hash file
+            returned = runner.run(config)
+
+        assert returned.experiment_id == result.experiment_id
 
     def test_runner_metadata_injected_into_effective_config(self, tmp_path):
         """Runner metadata is injected into the result's effective_config."""
@@ -107,9 +166,7 @@ class TestSuccessPath:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -337,9 +394,7 @@ class TestErrorPayloadFromContainer:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(json.dumps(error_payload), encoding="utf-8")
 
@@ -505,9 +560,7 @@ class TestRunnerMetadata:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -537,9 +590,7 @@ class TestRunnerMetadata:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -582,9 +633,7 @@ class TestCleanupWarning:
             ),
             caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -1018,9 +1067,7 @@ class TestTimeseriesParquetRescue:
                 "llenergymeasure.infra.docker_runner.shutil.rmtree",
             ) as mock_rmtree,
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -1068,9 +1115,7 @@ class TestTimeseriesParquetRescue:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
@@ -1102,9 +1147,7 @@ class TestTimeseriesParquetRescue:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            from llenergymeasure.domain.experiment import compute_measurement_config_hash
-
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = _docker_config_hash(config)
             result_path = exchange_dir / f"{config_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 

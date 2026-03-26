@@ -150,7 +150,6 @@ class DockerRunner:
         # Lazy import to avoid heavy domain imports at module load time
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
-        config_hash = compute_measurement_config_hash(config)
         exchange_dir = Path(tempfile.mkdtemp(prefix="llem-"))
 
         # Collect secrets for env-file (never pass as CLI args)
@@ -169,7 +168,11 @@ class DockerRunner:
             # Set output_dir to the container-side exchange dir mount so the
             # harness writes timeseries.parquet there (appears on host as
             # exchange_dir/timeseries.parquet).
+            # IMPORTANT: compute config_hash AFTER mutating output_dir so the
+            # container (which reads this mutated config and recomputes the hash)
+            # produces the same hash as the host uses for result file lookup.
             config = config.model_copy(update={"output_dir": "/run/llem"})
+            config_hash = compute_measurement_config_hash(config)
             config_path = exchange_dir / f"{config_hash}_config.json"
             config_path.write_text(config.model_dump_json(), encoding="utf-8")
 
