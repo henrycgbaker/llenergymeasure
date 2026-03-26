@@ -22,18 +22,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _experiment_dir_name(result: ExperimentResult) -> str:
-    """Generate {model_slug}_{backend}_{timestamp} directory name.
+def _experiment_dir_name(result: ExperimentResult, *, experiment_index: int | None = None) -> str:
+    """Generate a human-readable directory name matching CLI experiment headers.
 
-    model_slug: from effective_config["model"], / replaced by -, lowercased.
-    backend: from result.backend.
-    timestamp: ISO 8601 minute-granular (2026-02-18T14-30), colons -> hyphens.
+    Format: ``[{index:03d}_]{model_short}-{backend}[-{non_default_params}]_{timestamp}``
+
+    When ``experiment_index`` is provided (study context), the directory is
+    prefixed with a zero-padded index for natural sort ordering.
+
+    Examples:
+        ``001_Qwen2.5-0.5B-pytorch-n50-batch4_2026-03-26T14-30``
+        ``Qwen2.5-0.5B-vllm_2026-03-26T14-30``  (single experiment, no index)
     """
+    from llenergymeasure.utils.formatting import _EXPERIMENT_DEFAULTS
+
     raw_model = result.effective_config.get("model", "unknown")
-    model_slug = str(raw_model).replace("/", "-").lower()
+    model_short = str(raw_model).rsplit("/", 1)[-1]
     backend = result.backend
+
+    # Collect non-default params (matching format_experiment_header logic)
+    params: list[str] = []
+    for field_name, default_val in _EXPERIMENT_DEFAULTS.items():
+        actual = result.effective_config.get(field_name)
+        if actual is not None and actual != default_val:
+            params.append(f"{field_name}{actual}")
+
+    # Build slug: model-backend[-params]_timestamp
+    parts = [model_short, backend]
+    parts.extend(params)
+    slug = "-".join(parts)
+    # Sanitise for filesystem: replace spaces, slashes, special chars
+    slug = slug.replace(" ", "_").replace("/", "-").replace(":", "-")
+    # Truncate overly long slugs (filesystem limits)
+    if len(slug) > 120:
+        slug = slug[:120]
+
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M")
-    return f"{model_slug}_{backend}_{timestamp}"
+    if experiment_index is not None:
+        return f"{experiment_index:03d}_{slug}_{timestamp}"
+    return f"{slug}_{timestamp}"
 
 
 def _find_collision_free_dir(base: Path) -> Path:
@@ -71,16 +98,19 @@ def save_result(
     result: ExperimentResult,
     output_dir: Path,
     timeseries_source: Path | None = None,
+    experiment_index: int | None = None,
 ) -> Path:
     """Save ExperimentResult to a collision-safe subdirectory of output_dir.
 
-    Creates: {output_dir}/{model_slug}_{backend}_{timestamp}/result.json
+    Creates: {output_dir}/[{index}_]{model}-{backend}[-params]_{timestamp}/result.json
     If timeseries_source provided: copies to {dir}/timeseries.parquet.
 
     Args:
         result: The experiment result to persist.
         output_dir: Parent directory. Created if missing.
         timeseries_source: Optional path to existing .parquet file to copy in.
+        experiment_index: Optional 1-based experiment index for directory prefix
+            (used in study context for natural sort ordering).
 
     Returns:
         Path to the result.json file (usable with load_result() directly).
@@ -88,7 +118,7 @@ def save_result(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dir_name = _experiment_dir_name(result)
+    dir_name = _experiment_dir_name(result, experiment_index=experiment_index)
     base_dir = output_dir / dir_name
     target_dir = _find_collision_free_dir(base_dir)
 

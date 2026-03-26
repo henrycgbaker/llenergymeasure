@@ -72,6 +72,7 @@ def _save_and_record(
     config_hash: str,
     cycle: int,
     result_files: list[str],
+    experiment_index: int | None = None,
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
@@ -100,7 +101,9 @@ def _save_and_record(
             if candidate.exists():
                 ts_source = candidate
 
-        result_path = save_result(result, study_dir, timeseries_source=ts_source)
+        result_path = save_result(
+            result, study_dir, timeseries_source=ts_source, experiment_index=experiment_index
+        )
 
         # Clean up the stale flat parquet file after it has been copied into the
         # experiment subdirectory (mirrors cli/run.py line 288).
@@ -687,9 +690,37 @@ class StudyRunner:
                 self._progress.end_experiment_fail(index, elapsed, error=error_message)
         else:
             _save_and_record(
-                result, self.study_dir, self.manifest, config_hash, cycle, self.result_files
+                result,
+                self.study_dir,
+                self.manifest,
+                config_hash,
+                cycle,
+                self.result_files,
+                experiment_index=index,
             )
             if self._progress:
+                # Emit save paths as substeps BEFORE end_experiment_ok (which clears
+                # inner step display). This makes paths visible inline in TTY mode.
+                if self.result_files:
+                    host_path = self.result_files[-1]
+                    # Docker experiments: show container path first, then host path
+                    container_out = (
+                        result.effective_config.get("output_dir")
+                        if hasattr(result, "effective_config")
+                        else None
+                    )
+                    # The original container path is /run/llem; by this point output_dir
+                    # has been rewritten to the host temp dir, so use the known constant.
+                    spec = (
+                        self._runner_specs.get(getattr(result, "backend", None) or "")
+                        if self._runner_specs
+                        else None
+                    )
+                    is_docker = spec is not None and spec.mode == RUNNER_DOCKER
+                    if is_docker:
+                        self._progress.on_substep("save", "container: /run/llem")
+                    self._progress.on_substep("save", f"host: {host_path}")
+
                 energy_j = getattr(result, "total_energy_j", None)
                 throughput = getattr(result, "avg_tokens_per_second", None)
                 self._progress.end_experiment_ok(
@@ -698,17 +729,10 @@ class StudyRunner:
                     energy_j=energy_j if energy_j and energy_j > 0 else None,
                     throughput_tok_s=throughput if throughput and throughput > 0 else None,
                 )
-                # Emit save path (host path from result_files, container path from effective_config)
+                # Also store for finish() footer
                 if self.result_files:
                     host_path = self.result_files[-1]
-                    container_path = None
-                    if hasattr(result, "effective_config"):
-                        out_dir = result.effective_config.get("output_dir")
-                        if out_dir and out_dir.startswith("/run/"):
-                            container_path = out_dir
-                    self._progress.on_experiment_saved(
-                        index, host_path, container_path=container_path
-                    )
+                    self._progress.on_experiment_saved(index, host_path)
 
     def _run_one_docker(
         self,

@@ -112,20 +112,20 @@ def test_save_creates_subdirectory(tmp_path: Path, minimal_result: ExperimentRes
 
 
 def test_save_directory_name_format(tmp_path: Path, minimal_result: ExperimentResult) -> None:
-    """Directory name matches {model}_{backend}_{timestamp} pattern."""
+    """Directory name matches {model_short}-{backend}[-params]_{timestamp} pattern."""
     result_path = save_result(minimal_result, tmp_path)
     dir_name = result_path.parent.name
-    # Pattern: gpt2_pytorch_2026-02-26T14-00 (ISO 8601 with hyphens for colons)
-    pattern = re.compile(r"^[a-z0-9\-]+_[a-z]+_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}$")
+    # Pattern: gpt2-pytorch_2026-02-26T14-00 (model_short-backend_timestamp)
+    pattern = re.compile(r"^[\w\.\-]+-[a-z]+_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}(_\d+)?$")
     assert pattern.match(dir_name), f"Directory name '{dir_name}' does not match expected pattern"
 
 
 def test_save_model_slug_normalisation(tmp_path: Path, hf_model_result: ExperimentResult) -> None:
-    """HuggingFace model path (with /) is normalised: / -> -, lowercased."""
+    """HuggingFace model path strips org prefix, uses short model name."""
     result_path = save_result(hf_model_result, tmp_path)
     dir_name = result_path.parent.name
-    # meta-llama/Llama-3.1-8B -> meta-llama-llama-3.1-8b
-    assert dir_name.startswith("meta-llama-llama-3.1-8b_"), f"Slug normalisation failed: {dir_name}"
+    # meta-llama/Llama-3.1-8B -> Llama-3.1-8B (short name, no org prefix)
+    assert dir_name.startswith("Llama-3.1-8B-pytorch_"), f"Slug normalisation failed: {dir_name}"
 
 
 def test_save_returns_result_json_path(tmp_path: Path, minimal_result: ExperimentResult) -> None:
