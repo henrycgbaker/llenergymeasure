@@ -137,11 +137,8 @@ def print_dry_run(
         print(f"  Batch size     {batch_size}")
 
     # Dataset display
-    if isinstance(config.dataset, str):
-        dataset_str = f"{config.dataset} ({config.n} prompts)"
-    else:
-        # SyntheticDatasetConfig
-        dataset_str = f"synthetic ({config.dataset.n} prompts, {config.dataset.input_len} in / {config.dataset.output_len} out)"
+    ds = config.dataset
+    dataset_str = f"{ds.source} ({ds.n_prompts} prompts)"
     print(f"  Dataset        {dataset_str}")
 
     output_dir = config.output_dir or "results/ (default)"

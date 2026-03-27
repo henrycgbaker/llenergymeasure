@@ -17,7 +17,7 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 - **Smart sweep system** — define parameter grids, run Cartesian product experiments automatically; intelligently managed sweep hierarchy scopes available config fields to appropriate backend/component, and ensures invalid combinations are removed
 - **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each backend in registry with full runnder configurability and local mode also available.
 - **Reproducibility** — fixed seeds, cycle ordering, thermal management, environment snapshots, effective config recorded (add others)
-- **Built-in datasets** — AI Energy Score benchmark prompts included; synthetic datasets generation also included
+- **Built-in datasets** — AI Energy Score benchmark prompts included; custom JSONL datasets also supported
 
 ---
 

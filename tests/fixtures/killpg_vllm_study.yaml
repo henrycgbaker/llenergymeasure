@@ -9,7 +9,8 @@ name: killpg-test
 experiments:
   - model: facebook/opt-125m
     backend: vllm
-    n: 1000
+    dataset:
+      n_prompts: 1000
     max_output_tokens: 128
     warmup:
       enabled: false

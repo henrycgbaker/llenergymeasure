@@ -519,13 +519,14 @@ def test_print_experiment_header_defaults(capsys):
 
 def test_print_experiment_header_non_default_n(capsys):
     """Non-default n is included in header."""
+    from llenergymeasure.config.models import DatasetConfig
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", n=50)
+    config = make_config(model="gpt2", dataset=DatasetConfig(n_prompts=50))
     print_experiment_header(config)
     err = capsys.readouterr().err
 
-    assert "n=50" in err
+    assert "n_prompts=50" in err
 
 
 def test_print_experiment_header_non_default_max_output_tokens(capsys):

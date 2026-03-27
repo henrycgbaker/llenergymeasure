@@ -100,9 +100,9 @@ def test_load_nonexistent_file_raises_config_error(tmp_path):
 def test_pydantic_validation_error_passes_through(tmp_path):
     """YAML with valid keys but invalid values raises ValidationError (not ConfigError).
 
-    n=-1 is a valid field name but has an invalid value (ge=1 constraint).
+    dataset.n_prompts=-1 is a valid field path but has an invalid value (ge=1 constraint).
     """
-    path = _write_yaml(tmp_path, "model: gpt2\nn: -1\n")
+    path = _write_yaml(tmp_path, "model: gpt2\ndataset:\n  n_prompts: -1\n")
     with pytest.raises(ValidationError):
         load_experiment_config(path)
 
@@ -226,7 +226,7 @@ def test_load_study_config_grid_sweep(tmp_path):
                 "backend": "pytorch",
                 "sweep": {
                     "precision": ["fp16", "bf16"],
-                    "n": [50, 100],
+                    "dataset.n_prompts": [50, 100],
                 },
             }
         )
@@ -336,7 +336,7 @@ def test_load_study_config_with_base(tmp_path):
             {
                 "model": "gpt2",
                 "backend": "pytorch",
-                "n": 75,
+                "dataset": {"n_prompts": 75},
             }
         )
     )
@@ -353,10 +353,10 @@ def test_load_study_config_with_base(tmp_path):
     )
     sc = load_study_config(study_yaml)
     assert len(sc.experiments) == 2
-    # All experiments should inherit n=75 from base
+    # All experiments should inherit n_prompts=75 from base
     for exp in sc.experiments:
         assert exp.model == "gpt2"
-        assert exp.n == 75
+        assert exp.dataset.n_prompts == 75
 
 
 def test_load_study_config_empty_study_raises(tmp_path):

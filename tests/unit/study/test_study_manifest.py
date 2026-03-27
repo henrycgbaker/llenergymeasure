@@ -408,9 +408,14 @@ def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
     from collections import defaultdict
 
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
+    from llenergymeasure.config.models import DatasetConfig
 
-    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
-    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    exp_a = ExperimentConfig(
+        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
+    exp_b = ExperimentConfig(
+        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
 
