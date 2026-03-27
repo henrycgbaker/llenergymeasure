@@ -24,7 +24,12 @@ from llenergymeasure.config.grid import (
     expand_grid,
     format_preflight_summary,
 )
-from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import (
+    DatasetConfig,
+    ExecutionConfig,
+    ExperimentConfig,
+    StudyConfig,
+)
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
@@ -126,14 +131,14 @@ class TestExpandGridSweep:
             "backend": "pytorch",
             "sweep": {
                 "precision": ["fp16", "bf16"],
-                "n": [50, 100],
+                "dataset.n_prompts": [50, 100],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 4
         assert len(skipped) == 0
         precisions = {c.precision for c in valid}
-        ns = {c.n for c in valid}
+        ns = {c.dataset.n_prompts for c in valid}
         assert precisions == {"fp16", "bf16"}
         assert ns == {50, 100}
 
@@ -238,7 +243,7 @@ class TestExpandGridBase:
         base_config = {
             "model": "gpt2",
             "backend": "pytorch",
-            "n": 50,
+            "dataset": {"n_prompts": 50},
         }
         base_file = tmp_path / "base_experiment.yaml"
         base_file.write_text(yaml.dump(base_config))
@@ -254,7 +259,7 @@ class TestExpandGridBase:
         assert len(valid) == 2
         for c in valid:
             assert c.model == "gpt2"
-            assert c.n == 50
+            assert c.dataset.n_prompts == 50
 
     def test_base_strips_study_only_keys(self, tmp_path: Path):
         """Study-only keys in base file are stripped before merging."""
@@ -435,13 +440,19 @@ class TestComputeStudyDesignHash:
         int(h, 16)  # must be valid hex
 
     def test_same_experiments_same_hash(self):
-        exps1 = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", n=50)]
-        exps2 = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", n=50)]
+        exps1 = [
+            ExperimentConfig(model="gpt2"),
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50)),
+        ]
+        exps2 = [
+            ExperimentConfig(model="gpt2"),
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50)),
+        ]
         assert compute_study_design_hash(exps1) == compute_study_design_hash(exps2)
 
     def test_different_experiments_different_hash(self):
         exps1 = [ExperimentConfig(model="gpt2")]
-        exps2 = [ExperimentConfig(model="gpt2", n=50)]
+        exps2 = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))]
         assert compute_study_design_hash(exps1) != compute_study_design_hash(exps2)
 
     def test_stable_across_calls(self):
@@ -466,7 +477,7 @@ class TestApplyCycles:
     @pytest.fixture
     def two_experiments(self):
         a = ExperimentConfig(model="gpt2")
-        b = ExperimentConfig(model="gpt2", n=50)
+        b = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
         return [a, b]
 
     @pytest.fixture
@@ -477,10 +488,10 @@ class TestApplyCycles:
         """sequential with 3 cycles and [A, B] -> [A, A, A, B, B, B]."""
         result = apply_cycles(two_experiments, 3, ExperimentOrder.SEQUENTIAL, study_hash)
         assert len(result) == 6
-        # First 3 should be A (gpt2, n=100)
-        assert all(r.n == 100 for r in result[:3])
-        # Last 3 should be B (gpt2, n=50)
-        assert all(r.n == 50 for r in result[3:])
+        # First 3 should be A (gpt2, n_prompts=100)
+        assert all(r.dataset.n_prompts == 100 for r in result[:3])
+        # Last 3 should be B (gpt2, n_prompts=50)
+        assert all(r.dataset.n_prompts == 50 for r in result[3:])
 
     def test_interleaved_ordering(self, two_experiments, study_hash):
         """interleave with 3 cycles and [A, B] -> [A, B, A, B, A, B]."""
@@ -488,9 +499,9 @@ class TestApplyCycles:
         assert len(result) == 6
         # Alternating: A, B, A, B, A, B
         for i in range(0, 6, 2):
-            assert result[i].n == 100  # A
+            assert result[i].dataset.n_prompts == 100  # A
         for i in range(1, 6, 2):
-            assert result[i].n == 50  # B
+            assert result[i].dataset.n_prompts == 50  # B
 
     def test_shuffled_with_explicit_seed_deterministic(self, two_experiments, study_hash):
         """Shuffle with explicit seed produces deterministic reproducible order."""
@@ -500,29 +511,31 @@ class TestApplyCycles:
         result2 = apply_cycles(
             two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=42
         )
-        assert [r.n for r in result1] == [r.n for r in result2]
+        assert [r.dataset.n_prompts for r in result1] == [r.dataset.n_prompts for r in result2]
 
     def test_shuffled_with_same_hash_same_order(self, two_experiments, study_hash):
         """Same study_design_hash without explicit seed = same shuffle."""
         result1 = apply_cycles(two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash)
         result2 = apply_cycles(two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash)
-        assert [r.n for r in result1] == [r.n for r in result2]
+        assert [r.dataset.n_prompts for r in result1] == [r.dataset.n_prompts for r in result2]
 
     def test_shuffled_different_seeds_different_orders(self, study_hash):
         """Seeds 1 and 999 produce different orderings (verified deterministic)."""
-        exps = [ExperimentConfig(model="gpt2", n=i) for i in range(1, 6)]
+        exps = [
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in range(1, 6)
+        ]
         result1 = apply_cycles(exps, 2, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=1)
         result2 = apply_cycles(exps, 2, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=999)
         # Seeds 1 and 999 confirmed to produce distinct orderings for 5 experiments x 2 cycles
         # (seed 1 → [3,4,5,1,2,1,3,2,5,4], seed 999 → [3,5,2,4,1,2,4,5,1,3])
-        assert [r.n for r in result1] != [r.n for r in result2]
+        assert [r.dataset.n_prompts for r in result1] != [r.dataset.n_prompts for r in result2]
 
     def test_n_cycles_one_unchanged(self, two_experiments, study_hash):
         """n_cycles=1 returns the original list unchanged."""
         result = apply_cycles(two_experiments, 1, ExperimentOrder.SEQUENTIAL, study_hash)
         assert len(result) == 2
-        assert result[0].n == two_experiments[0].n
-        assert result[1].n == two_experiments[1].n
+        assert result[0].dataset.n_prompts == two_experiments[0].dataset.n_prompts
+        assert result[1].dataset.n_prompts == two_experiments[1].dataset.n_prompts
 
     def test_shuffled_contains_all_experiments_each_cycle(self, two_experiments, study_hash):
         """Each cycle in shuffle mode contains all experiments exactly once."""
@@ -530,7 +543,7 @@ class TestApplyCycles:
         assert len(result) == 6
         # Check that each pair of 2 contains both experiments
         for i in range(0, 6, 2):
-            pair_ns = {result[i].n, result[i + 1].n}
+            pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
             assert pair_ns == {100, 50}
 
     # -- reverse mode --
@@ -539,59 +552,63 @@ class TestApplyCycles:
         """reverse with 4 cycles and [A, B] -> [A, B, B, A, A, B, B, A]."""
         result = apply_cycles(two_experiments, 4, ExperimentOrder.REVERSE, study_hash)
         assert len(result) == 8
-        ns = [r.n for r in result]
+        ns = [r.dataset.n_prompts for r in result]
         assert ns == [100, 50, 50, 100, 100, 50, 50, 100]
 
     def test_reverse_single_cycle(self, two_experiments, study_hash):
         """reverse with 1 cycle = forward order (same as sequential for one cycle)."""
         result = apply_cycles(two_experiments, 1, ExperimentOrder.REVERSE, study_hash)
-        assert [r.n for r in result] == [100, 50]
+        assert [r.dataset.n_prompts for r in result] == [100, 50]
 
     def test_reverse_contains_all_experiments_each_cycle(self, two_experiments, study_hash):
         """Each cycle in reverse mode contains all experiments exactly once."""
         result = apply_cycles(two_experiments, 3, ExperimentOrder.REVERSE, study_hash)
         assert len(result) == 6
         for i in range(0, 6, 2):
-            pair_ns = {result[i].n, result[i + 1].n}
+            pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
             assert pair_ns == {100, 50}
 
     # -- latin_square mode --
 
     def test_latin_square_ordering(self, study_hash):
         """latin_square with 3 experiments x 3 cycles produces balanced rows."""
-        exps = [ExperimentConfig(model="gpt2", n=i) for i in [1, 2, 3]]
+        exps = [
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2, 3]
+        ]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert len(result) == 9
         # Each cycle (row) contains all 3 experiments exactly once
         for i in range(0, 9, 3):
-            row_ns = [r.n for r in result[i : i + 3]]
+            row_ns = [r.dataset.n_prompts for r in result[i : i + 3]]
             assert sorted(row_ns) == [1, 2, 3]
 
     def test_latin_square_each_position_balanced(self, study_hash):
         """Each experiment appears in each position exactly once across k cycles."""
-        exps = [ExperimentConfig(model="gpt2", n=i) for i in [1, 2, 3]]
+        exps = [
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2, 3]
+        ]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         # Column j should contain each experiment exactly once
         for col in range(3):
-            col_ns = [result[row * 3 + col].n for row in range(3)]
+            col_ns = [result[row * 3 + col].dataset.n_prompts for row in range(3)]
             assert sorted(col_ns) == [1, 2, 3]
 
     def test_latin_square_cycles_exceed_k(self, study_hash):
         """When n_cycles > k, rows wrap around the square."""
-        exps = [ExperimentConfig(model="gpt2", n=i) for i in [1, 2]]
+        exps = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2]]
         result = apply_cycles(exps, 4, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert len(result) == 8
         # Cycle 3 (idx 2) should equal cycle 1 (idx 0), cycle 4 = cycle 2
-        row0 = [r.n for r in result[0:2]]
-        row2 = [r.n for r in result[4:6]]
+        row0 = [r.dataset.n_prompts for r in result[0:2]]
+        row2 = [r.dataset.n_prompts for r in result[4:6]]
         assert row0 == row2
 
     def test_latin_square_single_experiment(self, study_hash):
         """latin_square with 1 experiment x 3 cycles = [A, A, A]."""
-        exps = [ExperimentConfig(model="gpt2", n=1)]
+        exps = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=1))]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert len(result) == 3
-        assert all(r.n == 1 for r in result)
+        assert all(r.dataset.n_prompts == 1 for r in result)
 
     def test_latin_square_empty(self, study_hash):
         """latin_square with 0 experiments returns empty list."""
@@ -612,7 +629,10 @@ def _make_study_config(
     skipped_configs: list | None = None,
 ) -> StudyConfig:
     """Helper: build a StudyConfig with the given parameters."""
-    experiments = [ExperimentConfig(model="gpt2", n=i + 1) for i in range(n_configs * n_cycles)]
+    experiments = [
+        ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i + 1))
+        for i in range(n_configs * n_cycles)
+    ]
     return StudyConfig(
         experiments=experiments,
         study_execution=ExecutionConfig(n_cycles=n_cycles, experiment_order=experiment_order),

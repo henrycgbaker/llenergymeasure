@@ -85,7 +85,7 @@ def test_peak_memory_reset_precedes_measurement():
     """
     pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     call_log: list[str] = []
 
@@ -120,7 +120,9 @@ def test_peak_memory_reset_precedes_measurement():
         ),
     ):
         backend = PyTorchBackend()
-        config = ExperimentConfig(model="test-model", backend="pytorch", n=1)
+        config = ExperimentConfig(
+            model="test-model", backend="pytorch", dataset=DatasetConfig(n_prompts=1)
+        )
         backend.run_inference(config, (fake_model, FakeTokenizer()), ["test prompt"])
 
     assert "reset" in call_log, "reset_peak_memory_stats must be called in run_inference"
@@ -140,7 +142,7 @@ def test_pytorch_backend_seeds_rng_before_inference():
     """PyTorchBackend.run_inference calls torch.manual_seed with config.random_seed."""
     pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     seeded_values: list[int] = []
 
@@ -152,7 +154,12 @@ def test_pytorch_backend_seeds_rng_before_inference():
         patch.object(PyTorchBackend, "_run_batch", return_value=(10, 20, 0.5)),
     ):
         backend = PyTorchBackend()
-        config = ExperimentConfig(model="test-model", backend="pytorch", n=1, random_seed=123)
+        config = ExperimentConfig(
+            model="test-model",
+            backend="pytorch",
+            dataset=DatasetConfig(n_prompts=1),
+            random_seed=123,
+        )
         backend.run_inference(config, (object(), None), ["test prompt"])
 
     assert 123 in seeded_values, "torch.manual_seed must be called with config.random_seed"

@@ -46,7 +46,7 @@ def run_experiment(
     *,
     model: str,
     backend: str | None = None,
-    n: int = 100,
+    n_prompts: int = 100,
     dataset: str = "aienergyscore",
     skip_preflight: bool = ...,
     progress: ProgressCallback | None = ...,
@@ -59,7 +59,7 @@ def run_experiment(
     *,
     model: str | None = None,
     backend: str | None = None,
-    n: int = 100,
+    n_prompts: int = 100,
     dataset: str = "aienergyscore",
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
@@ -78,8 +78,8 @@ def run_experiment(
         config: YAML file path, ExperimentConfig object, or None (use kwargs).
         model: Model name/path (kwargs form only).
         backend: Inference backend (kwargs form only, defaults to ExperimentConfig default).
-        n: Number of prompts (kwargs form only, default 100).
-        dataset: Dataset name (kwargs form only, default "aienergyscore").
+        n_prompts: Number of prompts (kwargs form only, default 100).
+        dataset: Dataset source name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
         progress: Optional callback for step-by-step progress reporting.
         **kwargs: Additional ExperimentConfig fields (kwargs form only).
@@ -91,7 +91,9 @@ def run_experiment(
         ConfigError: Invalid config path, missing model in kwargs form.
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
-    study = _to_study_config(config, model=model, backend=backend, n=n, dataset=dataset, **kwargs)
+    study = _to_study_config(
+        config, model=model, backend=backend, n_prompts=n_prompts, dataset=dataset, **kwargs
+    )
     study_result = _run(study, skip_preflight=skip_preflight, progress=progress)
     if not study_result.experiments:
         from llenergymeasure.utils.exceptions import ExperimentError
@@ -157,11 +159,13 @@ def _to_study_config(
     *,
     model: str | None = None,
     backend: str | None = None,
-    n: int = 100,
+    n_prompts: int = 100,
     dataset: str = "aienergyscore",
     **kwargs: Any,
 ) -> StudyConfig:
     """Convert any run_experiment() input form to a degenerate StudyConfig."""
+    from llenergymeasure.config.models import DatasetConfig
+
     if isinstance(config, ExperimentConfig):
         experiment = config
     elif isinstance(config, (str, Path)):
@@ -174,7 +178,10 @@ def _to_study_config(
             )
         # Build kwargs dict for ExperimentConfig — only include non-default values
         # to let Pydantic defaults apply for omitted fields.
-        ec_kwargs: dict[str, Any] = {"model": model, "n": n, "dataset": dataset}
+        ec_kwargs: dict[str, Any] = {
+            "model": model,
+            "dataset": DatasetConfig(source=dataset, n_prompts=n_prompts),
+        }
         if backend is not None:
             ec_kwargs["backend"] = backend
         ec_kwargs.update(kwargs)

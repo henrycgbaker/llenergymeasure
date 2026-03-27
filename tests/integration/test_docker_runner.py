@@ -69,6 +69,7 @@ class TestDockerRunnerIntegration:
         """Create a minimal ExperimentConfig for Docker dispatch."""
         from llenergymeasure.config.models import (
             BaselineConfig,
+            DatasetConfig,
             ExperimentConfig,
             WarmupConfig,
         )
@@ -76,7 +77,7 @@ class TestDockerRunnerIntegration:
         defaults = dict(
             model="gpt2",
             backend="pytorch",
-            n=3,
+            dataset=DatasetConfig(n_prompts=3),
             output_dir=str(tmp_path),
             warmup=WarmupConfig(enabled=False),
             baseline=BaselineConfig(enabled=False),
@@ -146,6 +147,7 @@ class TestDockerRunnerIntegration:
 
         from llenergymeasure.config.models import (
             BaselineConfig,
+            DatasetConfig,
             ExecutionConfig,
             ExperimentConfig,
             StudyConfig,
@@ -157,7 +159,7 @@ class TestDockerRunnerIntegration:
         config = ExperimentConfig(
             model="gpt2",
             backend="pytorch",
-            n=3,
+            dataset=DatasetConfig(n_prompts=3),
             output_dir=str(tmp_path),
             warmup=WarmupConfig(enabled=False),
             baseline=BaselineConfig(enabled=False),

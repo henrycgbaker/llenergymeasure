@@ -94,15 +94,8 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
     kv_gb = 0.0
     if n_layers is not None and n_heads is not None and head_dim is not None:
         # 2 = key + value, 1 = batch size 1
-        kv_bytes = (
-            2
-            * int(n_layers)
-            * 1
-            * config.max_input_tokens
-            * int(n_heads)
-            * int(head_dim)
-            * bytes_per_param
-        )
+        seq_len = config.max_input_tokens or 512  # fallback for VRAM estimate
+        kv_bytes = 2 * int(n_layers) * 1 * seq_len * int(n_heads) * int(head_dim) * bytes_per_param
         kv_gb = kv_bytes / 1e9
 
     # Empirical 15% overhead for activations and framework buffers

@@ -212,22 +212,35 @@ class EnergyConfig(BaseModel):
 
 
 # =============================================================================
-# Synthetic Dataset Configuration
+# Dataset Configuration
 # =============================================================================
 
 
-class SyntheticDatasetConfig(BaseModel):
-    """Synthetic dataset configuration for controlled experiments.
+class DatasetConfig(BaseModel):
+    """Dataset configuration for experiment prompts.
 
-    Generates fixed-length synthetic prompts for reproducible benchmarking
-    when real dataset variance is not desired.
+    Dataset configuration for loading prompts.
+
+    source is one of:
+    - Built-in alias (e.g. "aienergyscore")
+    - Path to a .jsonl file
     """
 
     model_config = {"extra": "forbid"}
 
-    n: int = Field(ge=1, description="Number of synthetic prompts to generate")
-    input_len: int = Field(default=512, ge=1, description="Synthetic input token length")
-    output_len: int = Field(default=128, ge=1, description="Synthetic output token length")
+    source: str = Field(
+        default="aienergyscore",
+        min_length=1,
+        description="Dataset source: built-in alias or .jsonl file path",
+    )
+    n_prompts: int = Field(default=100, ge=1, description="Number of prompts to load or generate")
+    order: Literal["interleaved", "grouped", "shuffled"] = Field(
+        default="interleaved",
+        description=(
+            "Prompt ordering: interleaved (round-robin by source, file order), "
+            "grouped (sorted by source), shuffled (seed-based random)"
+        ),
+    )
 
 
 # =============================================================================
@@ -277,7 +290,9 @@ class ExperimentConfig(BaseModel):
     Field renames from v1.x:
         model_name -> model
         fp_precision -> precision
-        num_input_prompts -> n
+        num_input_prompts -> dataset.n_prompts
+        dataset (str) -> dataset.source
+        dataset_order -> dataset.order
         extra_metadata -> passthrough_kwargs
 
     The backend section (pytorch:, vllm:, tensorrt:) must match the backend field.
@@ -294,18 +309,9 @@ class ExperimentConfig(BaseModel):
         default="pytorch", description="Inference backend"
     )
 
-    # Data
-    n: int = Field(default=100, ge=1, description="Number of prompts from dataset")
-    dataset: str | SyntheticDatasetConfig = Field(
-        default="aienergyscore",
-        description="Dataset name (built-in alias) or synthetic dataset config",
-    )
-    dataset_order: Literal["interleaved", "grouped", "shuffled"] = Field(
-        default="interleaved",
-        description=(
-            "Prompt ordering: interleaved (round-robin by source, file order), "
-            "grouped (sorted by source), shuffled (seed-based random)"
-        ),
+    # Dataset
+    dataset: DatasetConfig = Field(
+        default_factory=DatasetConfig, description="Dataset configuration"
     )
 
     # Hardware
@@ -315,14 +321,30 @@ class ExperimentConfig(BaseModel):
     random_seed: int = Field(
         default=42,
         description=(
-            "Per-experiment seed for all stochasticity: inference RNG, "
-            "dataset ordering, and synthetic prompt generation."
+            "Per-experiment seed for all stochasticity: inference RNG and dataset ordering."
         ),
     )
 
-    # Token limits
-    max_input_tokens: int = Field(default=512, ge=1, description="Max input tokens")
-    max_output_tokens: int = Field(default=256, ge=1, description="Max output tokens")
+    # Token limits — control FLOPs isolation between experiments.
+    # Setting these keeps computation workload constant so that only implementation
+    # parameters (backend, precision, quantisation) vary between experiments.
+    # None = no limit (prompts keep natural length / model generates to EOS).
+    max_input_tokens: int | None = Field(
+        default=256,
+        ge=1,
+        description=(
+            "Max input token length for truncation. Keeps computation workload "
+            "constant across experiments for fair comparison. None = no truncation."
+        ),
+    )
+    max_output_tokens: int | None = Field(
+        default=256,
+        ge=1,
+        description=(
+            "Max output tokens (max_new_tokens for generation). "
+            "None = generate until EOS or model context limit."
+        ),
+    )
 
     # Sub-configs
     decoder: DecoderConfig = Field(

@@ -58,11 +58,13 @@ def _make_mock_config() -> MagicMock:
     config.model = "gpt2"
     config.backend = "pytorch"
     config.precision = "bf16"
-    config.n = 100
-    config.dataset = "aienergyscore"
+    config.dataset = MagicMock()
+    config.dataset.source = "aienergyscore"
+    config.dataset.n_prompts = 100
+    config.dataset.order = "interleaved"
     config.output_dir = None
-    config.max_input_tokens = 512
-    config.max_output_tokens = 128
+    config.max_input_tokens = 256
+    config.max_output_tokens = 256
     config.pytorch = None
     config.baseline = MagicMock()
     config.baseline.enabled = False
@@ -82,7 +84,7 @@ def test_build_header_strips_hf_org_prefix():
     config.model = "meta-llama/Llama-3.2-1B-Instruct"
     config.backend = "vllm"
     config.precision = "bf16"
-    config.n = 100
+    config.dataset.n_prompts = 100
 
     header = _build_header(config, runner_tag="docker")
     assert "Llama-3.2-1B-Instruct" in header
@@ -98,7 +100,7 @@ def test_build_header_default_precision_omitted():
     config.model = "gpt2"
     config.backend = "pytorch"
     config.precision = "bf16"  # default — should not appear
-    config.n = 100
+    config.dataset.n_prompts = 100
 
     header = _build_header(config, runner_tag="local")
     assert "bf16" not in header
@@ -113,11 +115,11 @@ def test_build_header_nondefault_fields_shown():
     config.model = "gpt2"
     config.backend = "pytorch"
     config.precision = "fp16"
-    config.n = 50
+    config.dataset.n_prompts = 50
 
     header = _build_header(config, runner_tag="local")
     assert "fp16" in header
-    assert "n=50" in header
+    assert "n_prompts=50" in header
 
 
 # ---------------------------------------------------------------------------

@@ -36,14 +36,18 @@ from llenergymeasure.study.runner import (
 
 @pytest.fixture
 def basic_config() -> ExperimentConfig:
-    """A minimal ExperimentConfig with n=100."""
-    return ExperimentConfig(model="test/model", backend="pytorch", n=100)
+    """A minimal ExperimentConfig with n_prompts=100."""
+    return ExperimentConfig(model="test/model", backend="pytorch")
 
 
 @pytest.fixture
 def large_config() -> ExperimentConfig:
-    """A minimal ExperimentConfig with n=1000."""
-    return ExperimentConfig(model="test/model", backend="pytorch", n=1000)
+    """A minimal ExperimentConfig with n_prompts=1000."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    return ExperimentConfig(
+        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=1000)
+    )
 
 
 @pytest.fixture
@@ -111,15 +115,15 @@ def _make_mock_context(
 
 
 def test_calculate_timeout_minimum(basic_config: ExperimentConfig) -> None:
-    """_calculate_timeout returns >= 600 for n=100."""
+    """_calculate_timeout returns >= 600 for n_prompts=100."""
     result = _calculate_timeout(basic_config)
     assert result >= 600, f"Expected >= 600, got {result}"
 
 
 def test_calculate_timeout_scales_with_n(large_config: ExperimentConfig) -> None:
-    """_calculate_timeout returns >= 2000 for n=1000 (2s/prompt heuristic)."""
+    """_calculate_timeout returns >= 2000 for n_prompts=1000 (2s/prompt heuristic)."""
     result = _calculate_timeout(large_config)
-    assert result >= 2000, f"Expected >= 2000 for n=1000, got {result}"
+    assert result >= 2000, f"Expected >= 2000 for n_prompts=1000, got {result}"
 
 
 # =============================================================================
@@ -310,9 +314,14 @@ def _make_ordering_study(
     apply_cycles() again.
     """
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
+    from llenergymeasure.config.models import DatasetConfig
 
-    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
-    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    exp_a = ExperimentConfig(
+        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
+    exp_b = ExperimentConfig(
+        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
     ordered = apply_cycles(
         [exp_a, exp_b], n_cycles, ExperimentOrder(experiment_order), "aaaa0000bbbb1111"
     )
@@ -424,8 +433,14 @@ def test_sequential_ordering() -> None:
 
 def _make_sigint_study() -> StudyConfig:
     """Single-experiment study for SIGINT tests."""
+    from llenergymeasure.config.models import DatasetConfig
+
     return StudyConfig(
-        experiments=[ExperimentConfig(model="test/model", backend="pytorch", n=10)],
+        experiments=[
+            ExperimentConfig(
+                model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            )
+        ],
         study_name="sigint-test",
         study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
         study_design_hash="deadbeef12345678",
@@ -471,10 +486,16 @@ def test_sigint_first_ctrl_c_marks_manifest_interrupted() -> None:
 
 def test_sigint_during_gap_exits_immediately() -> None:
     """Interrupt during gap: run loop exits and mark_interrupted is called."""
+    from llenergymeasure.config.models import DatasetConfig
+
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="model-a", backend="pytorch", n=10),
-            ExperimentConfig(model="model-b", backend="pytorch", n=10),
+            ExperimentConfig(
+                model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            ),
+            ExperimentConfig(
+                model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            ),
         ],
         study_name="gap-interrupt-test",
         study_execution=ExecutionConfig(
@@ -535,9 +556,12 @@ def test_sigint_second_ctrl_c_kills_immediately() -> None:
 
 def test_worker_no_longer_stub(monkeypatch) -> None:
     """_run_experiment_worker no longer raises NotImplementedError."""
+    from llenergymeasure.config.models import DatasetConfig
     from tests.conftest import make_result
 
-    config = ExperimentConfig(model="test/model", backend="pytorch", n=10)
+    config = ExperimentConfig(
+        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
     fake_result = make_result()
 
     monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: MagicMock())
@@ -560,9 +584,12 @@ def test_worker_calls_get_backend(monkeypatch) -> None:
 
     Uses a mock conn (not a real Pipe) so MagicMock results don't need pickling.
     """
+    from llenergymeasure.config.models import DatasetConfig
     from tests.conftest import make_result
 
-    config = ExperimentConfig(model="test/model", backend="pytorch", n=10)
+    config = ExperimentConfig(
+        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
 
     backend_calls: list[str] = []
     sent_results: list = []
@@ -607,9 +634,14 @@ def test_multi_cycle_correct_experiment_count() -> None:
     The runner must NOT call apply_cycles() again.
     """
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
+    from llenergymeasure.config.models import DatasetConfig
 
-    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
-    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    exp_a = ExperimentConfig(
+        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
+    exp_b = ExperimentConfig(
+        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
 
@@ -659,10 +691,15 @@ def test_cycle_counter_increments_per_config_hash() -> None:
     - hash_B: cycles should be [1, 2]
     """
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
+    from llenergymeasure.config.models import DatasetConfig
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
-    exp_a = ExperimentConfig(model="model-a", backend="pytorch", n=10)
-    exp_b = ExperimentConfig(model="model-b", backend="pytorch", n=10)
+    exp_a = ExperimentConfig(
+        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
+    exp_b = ExperimentConfig(
+        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
     hash_a = compute_measurement_config_hash(exp_a)
     hash_b = compute_measurement_config_hash(exp_b)
 
@@ -1085,9 +1122,12 @@ def test_parent_conn_closed_after_collect_result(study_config: StudyConfig) -> N
 
 def test_worker_calls_setpgrp(monkeypatch) -> None:
     """_run_experiment_worker calls os.setpgrp() as the first line before any other work."""
+    from llenergymeasure.config.models import DatasetConfig
     from tests.conftest import make_result
 
-    config = ExperimentConfig(model="test/model", backend="pytorch", n=10)
+    config = ExperimentConfig(
+        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+    )
     fake_result = make_result()
 
     setpgrp_calls: list[int] = []
