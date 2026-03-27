@@ -654,12 +654,11 @@ def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> 
         "vllm.engine.quantization=fp8",
         "tensorrt.quant.quant_algo=FP8",
         "pytorch.attn_implementation=flash_attention_2",
+        "pytorch.attn_implementation=flash_attention_3",
     ]
 
     # These features require Hopper (9.0) or newer GPUs
-    hopper_required = [
-        "pytorch.attn_implementation=flash_attention_3",
-    ]
+    hopper_required: list[str] = []
 
     if min_compute_capability >= 9.0:
         return ampere_required + hopper_required
@@ -678,8 +677,8 @@ def get_param_skip_conditions() -> dict[str, str]:
         "tensorrt.tp_size>1": "Requires 2+ GPUs",
         # Flash Attention 2 - requires flash-attn package
         "pytorch.attn_implementation=flash_attention_2": "Requires flash-attn package",
-        # Flash Attention 3 - requires Hopper+ GPU (H100)
-        "pytorch.attn_implementation=flash_attention_3": "Requires Hopper+ GPU (compute capability 9.0+)",
+        # Flash Attention 3 - requires flash_attn_3 package (built from flash-attn hopper/)
+        "pytorch.attn_implementation=flash_attention_3": "Requires flash_attn_3 package (Ampere+ GPU, compute capability 8.0+)",
         # torch.compile - may not work on all model architectures
         "pytorch.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
         # FP8 - Ampere or newer

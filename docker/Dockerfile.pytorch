@@ -14,20 +14,54 @@
 ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
 
-# Build stage: compile flash-attn (needs nvcc from devel image)
+# Build stage: compile flash-attn FA2 + FA3 (needs nvcc from devel image)
+# FA2 = standard flash-attn pip package.
+# FA3 = separate build from flash-attn repo's hopper/ directory; produces
+#        the flash_attn_interface top-level package that transformers checks.
+# SM 8.0 = A100 (Ampere), 9.0 = H100 (Hopper).
+# Set INSTALL_FA3=false to skip FA3 (saves ~1 hour build time for CI smoke tests).
+ARG FLASH_ATTN_VERSION=v2.8.3
+ARG INSTALL_FA3=true
 FROM pytorch/pytorch:${PYTORCH_DEVEL_VERSION} AS builder
+ARG FLASH_ATTN_VERSION
+ARG INSTALL_FA3
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+ENV TORCH_CUDA_ARCH_LIST="8.0;9.0"
+
+# FA2: install from PyPI
 RUN uv pip install --system --no-cache flash-attn --no-build-isolation
+
+# FA3: build hopper extensions from source (produces flash_attn_interface + flash_attn_3_cuda)
+# MAX_JOBS=2 limits parallel nvcc processes to avoid OOM during compilation.
+# Skipped when INSTALL_FA3=false (e.g. CI smoke tests).
+RUN if [ "$INSTALL_FA3" = "true" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && \
+        git clone --depth 1 --branch ${FLASH_ATTN_VERSION} https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention && \
+        MAX_JOBS=2 pip install --no-cache-dir /tmp/flash-attention/hopper --no-build-isolation; \
+    fi
+
+# Stage all flash-attn files for clean copy (version-agnostic)
+# Layout: flash_attn/ (FA2 pkg), flash_attn_2_cuda.*.so, and optionally
+#          flash_attn_3/ (FA3 pkg), flash_attn_interface.py, plus dist-info.
+RUN mkdir /flash-attn-staging && \
+    cp -r /opt/conda/lib/python3.11/site-packages/flash_attn /flash-attn-staging/ && \
+    cp -r /opt/conda/lib/python3.11/site-packages/flash_attn-*.dist-info /flash-attn-staging/ && \
+    for f in /opt/conda/lib/python3.11/site-packages/flash_attn_*_cuda.cpython-*.so; do \
+        [ -f "$f" ] && cp "$f" /flash-attn-staging/; \
+    done && \
+    if [ "$INSTALL_FA3" = "true" ]; then \
+        cp /opt/conda/lib/python3.11/site-packages/flash_attn_interface.py /flash-attn-staging/ && \
+        cp -r /opt/conda/lib/python3.11/site-packages/flash_attn_3 /flash-attn-staging/ && \
+        cp -r /opt/conda/lib/python3.11/site-packages/flash_attn_3*.dist-info /flash-attn-staging/; \
+    fi
 
 # Runtime stage
 FROM pytorch/pytorch:${PYTORCH_VERSION} AS runtime
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy compiled flash-attn from builder (package dir + compiled CUDA extension)
-COPY --from=builder /opt/conda/lib/python3.11/site-packages/flash_attn/ /opt/conda/lib/python3.11/site-packages/flash_attn/
-COPY --from=builder /opt/conda/lib/python3.11/site-packages/flash_attn-2.8.3.dist-info/ /opt/conda/lib/python3.11/site-packages/flash_attn-2.8.3.dist-info/
-COPY --from=builder /opt/conda/lib/python3.11/site-packages/flash_attn_2_cuda.cpython-311-x86_64-linux-gnu.so /opt/conda/lib/python3.11/site-packages/
+# Copy compiled flash-attn from builder (package dir + dist-info + CUDA extensions)
+COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages/
 
 WORKDIR /app
 

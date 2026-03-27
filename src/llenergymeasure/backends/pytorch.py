@@ -402,6 +402,23 @@ class PyTorchBackend:
                     fallback,
                 )
                 return fallback
+            # FA3 additionally requires the flash_attn_interface module
+            # (built separately from the flash-attn repo's hopper/ directory)
+            if requested == "flash_attention_3":
+                try:
+                    import flash_attn_interface  # noqa: F401
+                except Exception as exc:
+                    logger.warning(
+                        "attn_implementation='flash_attention_3' requested but "
+                        "flash_attn_interface is not installed (%s: %s); "
+                        "falling back to %r. Build flash_attn_3 from the "
+                        "flash-attn repo's hopper/ directory, or use the "
+                        "Docker runner.",
+                        type(exc).__name__,
+                        exc,
+                        fallback,
+                    )
+                    return fallback
         return requested
 
     @staticmethod

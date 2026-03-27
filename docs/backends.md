@@ -63,9 +63,10 @@ Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
 |-----------|------|---------|-------------|
 | `attn_implementation` | `sdpa` \| `flash_attention_2` \| `flash_attention_3` \| `eager` | `sdpa` | Attention kernel |
 
-Note: `flash_attention_3` requires Hopper (SM90+, e.g. H100). On A100 (SM80 Ampere) it raises
-a CUDA-level error at runtime even if the package is installed — the import succeeds but the
-kernel will not run. Use `flash_attention_2` (Ampere+) or `sdpa` on A100.
+Note: `flash_attention_3` requires the `flash_attn_3` package (built separately from the
+flash-attn repo's `hopper/` directory) and an Ampere+ GPU (SM80+, e.g. A100 or H100).
+The Docker PyTorch image includes FA3 pre-built. For local installs, see the flash-attn
+repo for build instructions.
 
 **Compilation:**
 

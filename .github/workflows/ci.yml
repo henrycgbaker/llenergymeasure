@@ -158,7 +158,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Build ${{ matrix.dockerfile }} image
-        run: docker build -f docker/Dockerfile.${{ matrix.dockerfile }} . -t smoke-${{ matrix.dockerfile }}
+        run: docker build -f docker/Dockerfile.${{ matrix.dockerfile }} --build-arg INSTALL_FA3=false . -t smoke-${{ matrix.dockerfile }}
       - name: Smoke test ${{ matrix.dockerfile }}
         run: |
           docker run --rm smoke-${{ matrix.dockerfile }} llem --version
