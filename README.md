@@ -4,20 +4,20 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-Measure the energy efficiency of large language model inference.
+Measure the energy efficiency of LLM inference across different implementation configurations.
 
-llenergymeasure is a Python framework for measuring the energy consumption, throughput, and computational cost (FLOPs) of LLM inference across different deployment configurations. It helps researchers compare the energy efficiency of different models, precisions, and inference engines — reproducibly and at publication quality.
+LLenergyMeasure is a Python framework for measuring the energy consumption, throughput, and computational cost (FLOPs) of LLM inference across different deployment configurations. It helps researchers compare the energy efficiency of different models, inference engines, and a wide range of implementation decisions — reproducibly and at publication quality.
 
 ---
 
 ## Key Features
 
-- **Multi-backend inference** — PyTorch (local), vLLM (Docker), TensorRT-LLM (planned)
-- **GPU energy measurement** — NVML (default), Zeus, or CodeCarbon
-- **Study / sweep system** — define parameter grids, run Cartesian product experiments automatically
-- **Docker isolation** — per-experiment containers with full GPU passthrough for vLLM
-- **Reproducibility** — fixed seeds, cycle ordering, thermal management, effective config recorded
-- **Built-in datasets** — AI Energy Score benchmark prompts included
+- **Multi-backend inference** — PyTorch, vLLM, TensorRT-LLM, SGLang (planned)
+- **GPU energy measurement** — NVML, Zeus, CodeCarbon, others 
+- **Smart sweep system** — define parameter grids, run Cartesian product experiments automatically; intelligently managed sweep hierarchy scopes available config fields to appropriate backend/component, and ensures invalid combinations are removed
+- **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each backend in registry with full runnder configurability and local mode also available.
+- **Reproducibility** — fixed seeds, cycle ordering, thermal management, environment snapshots, effective config recorded (add others)
+- **Built-in datasets** — AI Energy Score benchmark prompts included; synthetic datasets generation also included
 
 ---
 
