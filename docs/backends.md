@@ -63,6 +63,10 @@ Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
 |-----------|------|---------|-------------|
 | `attn_implementation` | `sdpa` \| `flash_attention_2` \| `flash_attention_3` \| `eager` | `sdpa` | Attention kernel |
 
+Note: `flash_attention_3` requires Hopper (SM90+, e.g. H100). On A100 (SM80 Ampere) it raises
+a CUDA-level error at runtime even if the package is installed — the import succeeds but the
+kernel will not run. Use `flash_attention_2` (Ampere+) or `sdpa` on A100.
+
 **Compilation:**
 
 | Parameter | Type | Default | Description |
