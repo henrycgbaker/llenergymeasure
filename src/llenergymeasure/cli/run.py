@@ -54,19 +54,17 @@ def run(
         str | None,
         typer.Option("--dataset", "-d", help="Dataset name"),
     ] = None,
-    n: Annotated[
+    n_prompts: Annotated[
         int | None,
-        typer.Option("-n", help="Number of prompts to run"),
+        typer.Option("--n-prompts", "-n", help="Number of prompts to run"),
     ] = None,
     batch_size: Annotated[
         int | None,
         typer.Option("--batch-size", help="Batch size (PyTorch backend)"),
     ] = None,
-    precision: Annotated[
+    dtype: Annotated[
         str | None,
-        typer.Option(
-            "--precision", "-p", help="Floating point precision (fp32, fp16, bf16, int8, int4)"
-        ),
+        typer.Option("--dtype", "-p", help="Model dtype (float32, float16, bfloat16)"),
     ] = None,
     output: Annotated[
         str | None,
@@ -91,7 +89,8 @@ def run(
     order: Annotated[
         str | None,
         typer.Option(
-            "--order", help="Cycle ordering: sequential, interleaved, shuffled (study mode)"
+            "--order",
+            help="Experiment ordering: sequential, interleave, shuffle, reverse, latin_square (study mode)",
         ),
     ] = None,
     no_gaps: Annotated[
@@ -125,9 +124,9 @@ def run(
             model=model,
             backend=backend,
             dataset=dataset,
-            n=n,
+            n_prompts=n_prompts,
             batch_size=batch_size,
-            precision=precision,
+            dtype=dtype,
             output=output,
             dry_run=dry_run,
             quiet=quiet,
@@ -161,9 +160,9 @@ def _run_impl(
     model: str | None,
     backend: str | None,
     dataset: str | None,
-    n: int | None,
+    n_prompts: int | None,
     batch_size: int | None,
-    precision: str | None,
+    dtype: str | None,
     output: str | None,
     dry_run: bool,
     quiet: bool,
@@ -181,14 +180,14 @@ def _run_impl(
     if backend is not None:
         cli_overrides["backend"] = backend
     if dataset is not None:
-        cli_overrides["dataset"] = dataset
-    if n is not None:
-        cli_overrides["n"] = n
+        cli_overrides["dataset.source"] = dataset
+    if n_prompts is not None:
+        cli_overrides["dataset.n_prompts"] = n_prompts
     if batch_size is not None:
         # Dotted key for _unflatten() in loader — maps to pytorch.batch_size
         cli_overrides["pytorch.batch_size"] = batch_size
-    if precision is not None:
-        cli_overrides["precision"] = precision
+    if dtype is not None:
+        cli_overrides["dtype"] = dtype
     if output is not None:
         cli_overrides["output_dir"] = output
 
@@ -324,26 +323,27 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     """Build compact experiment header: model | backend [runner] + deviation fields.
 
     Args:
-        config: ExperimentConfig with model, backend, precision, n, dataset fields.
+        config: ExperimentConfig with model, backend, dtype, dataset fields.
         runner_tag: Runner tag string ("local" or "docker").
     """
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     _fields = ExperimentConfig.model_fields
-    default_precision = _fields["precision"].default
-    default_n = _fields["n"].default
-    default_dataset = _fields["dataset"].default
+    _ds_fields = DatasetConfig.model_fields
+    default_dtype = _fields["dtype"].default
+    default_n = _ds_fields["n_prompts"].default
+    default_source = _ds_fields["source"].default
 
     # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
     model = config.model.split("/")[-1] if "/" in config.model else config.model
     parts = [f"{model} | {config.backend}"]
     # Deviation fields (only when non-default)
-    if config.precision != default_precision:
-        parts.append(config.precision)
-    if config.n != default_n:
-        parts.append(f"n={config.n}")
-    if getattr(config, "dataset", default_dataset) != default_dataset:
-        parts.append(config.dataset)
+    if config.dtype != default_dtype:
+        parts.append(config.dtype)
+    if config.dataset.n_prompts != default_n:
+        parts.append(f"n_prompts={config.dataset.n_prompts}")
+    if config.dataset.source != default_source:
+        parts.append(config.dataset.source)
     return f"{' | '.join(parts)} [{runner_tag}]"
 
 
@@ -372,12 +372,12 @@ def _run_study_impl(
 
     # Check what the YAML execution block specifies (to apply CLI effective defaults)
     raw = yaml.safe_load(config.read_text()) or {}
-    yaml_execution = raw.get("execution", {}) or {}
+    yaml_execution = raw.get("study_execution", {}) or {}
 
     # Build execution overrides from CLI flags
     exec_overrides: dict[str, Any] = {}
 
-    # CLI effective defaults: n_cycles=3, cycle_order="shuffled" when neither YAML nor CLI specifies
+    # CLI effective defaults: n_cycles=3, experiment_order="shuffle" when neither YAML nor CLI specifies
     # These are applied at CLI layer; Pydantic defaults are conservative (n_cycles=1)
     if cycles is not None:
         exec_overrides["n_cycles"] = cycles
@@ -385,9 +385,9 @@ def _run_study_impl(
         exec_overrides["n_cycles"] = 3  # CLI effective default
 
     if order is not None:
-        exec_overrides["cycle_order"] = order
-    elif "cycle_order" not in yaml_execution:
-        exec_overrides["cycle_order"] = "shuffled"  # CLI effective default
+        exec_overrides["experiment_order"] = order
+    elif "experiment_order" not in yaml_execution:
+        exec_overrides["experiment_order"] = "shuffle"  # CLI effective default
 
     if no_gaps:
         exec_overrides["experiment_gap_seconds"] = 0
@@ -398,7 +398,7 @@ def _run_study_impl(
     if cli_overrides:
         study_cli_overrides.update(cli_overrides)
     if exec_overrides:
-        study_cli_overrides["execution"] = exec_overrides
+        study_cli_overrides["study_execution"] = exec_overrides
 
     # Load study config with overrides
     study_config = load_study_config(
@@ -451,7 +451,7 @@ def _run_study_impl(
         from llenergymeasure.cli._step_display import StudyStepDisplay
 
         n_exp = len(study_config.experiments)
-        n_cycles = study_config.execution.n_cycles
+        n_cycles = study_config.study_execution.n_cycles
         name = study_config.study_name or "unnamed"
 
         _stderr_console = RichConsole(stderr=True)

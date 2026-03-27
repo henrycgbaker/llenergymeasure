@@ -95,10 +95,16 @@ _HEADER_MAX_LEN = 70
 # ExperimentConfig defaults for non-default param detection.
 # Keep in sync with config/models.py ExperimentConfig field defaults.
 _EXPERIMENT_DEFAULTS: dict[str, object] = {
-    "precision": "bf16",
-    "n": 100,
-    "max_input_tokens": 512,
+    "dtype": "bfloat16",
+    "max_input_tokens": 256,
     "max_output_tokens": 256,
+}
+
+# DatasetConfig defaults for nested param detection.
+_DATASET_DEFAULTS: dict[str, object] = {
+    "n_prompts": 100,
+    "source": "aienergyscore",
+    "order": "interleaved",
 }
 
 # Short display names for backend-specific params.
@@ -135,6 +141,14 @@ def format_experiment_header(config: ExperimentConfig) -> str:
         actual = getattr(config, field_name, None)
         if actual is not None and actual != default_val:
             params.append(f"{field_name}={actual}")
+
+    # Collect non-default dataset params
+    ds = getattr(config, "dataset", None)
+    if ds is not None:
+        for field_name, default_val in _DATASET_DEFAULTS.items():
+            actual = getattr(ds, field_name, None)
+            if actual is not None and actual != default_val:
+                params.append(f"{field_name}={actual}")
 
     # Collect non-default backend-specific params
     backend_config = getattr(config, config.backend, None)

@@ -1,7 +1,7 @@
 """Unit tests for ExperimentConfig Pydantic validation.
 
 Tests v2.0 field renames, extra=forbid, backend composition, cross-validators,
-and schema-driven precision validation using SSOT constants.
+and schema-driven dtype validation using SSOT constants.
 """
 
 from __future__ import annotations
@@ -59,10 +59,10 @@ def test_field_name_model():
     assert config.model == "gpt2"
 
 
-def test_field_name_precision():
-    """v2.0 'precision' field (not 'fp_precision') is accepted."""
-    config = ExperimentConfig(model="gpt2", precision="fp16")
-    assert config.precision == "fp16"
+def test_field_name_dtype():
+    """v2.0 'dtype' field is accepted."""
+    config = ExperimentConfig(model="gpt2", dtype="float16")
+    assert config.dtype == "float16"
 
 
 def test_field_name_n():
@@ -80,7 +80,7 @@ def test_v1x_field_model_name_rejected():
 def test_v1x_field_fp_precision_rejected():
     """v1.x 'fp_precision' field is NOT accepted (extra='forbid')."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", fp_precision="fp16")  # type: ignore[call-arg]
+        ExperimentConfig(model="gpt2", fp_dtype="float16")  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------
@@ -192,35 +192,35 @@ def test_tensorrt_section_with_wrong_backend_rejected():
 # ---------------------------------------------------------------------------
 
 
-def test_invalid_precision_raises_validation_error():
-    """Invalid precision value raises ValidationError."""
+def test_invalid_dtype_raises_validation_error():
+    """Invalid dtype value raises ValidationError."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", precision="float16")  # wrong alias
+        ExperimentConfig(model="gpt2", dtype="fp16")  # old shorthand
 
 
-def test_valid_precision_fp32():
-    """precision='fp32' is valid."""
-    config = ExperimentConfig(model="gpt2", precision="fp32")
-    assert config.precision == "fp32"
+def test_valid_dtype_float32():
+    """dtype='float32' is valid."""
+    config = ExperimentConfig(model="gpt2", dtype="float32")
+    assert config.dtype == "float32"
 
 
-def test_valid_precision_fp16():
-    """precision='fp16' is valid."""
-    config = ExperimentConfig(model="gpt2", precision="fp16")
-    assert config.precision == "fp16"
+def test_valid_dtype_float16():
+    """dtype='float16' is valid."""
+    config = ExperimentConfig(model="gpt2", dtype="float16")
+    assert config.dtype == "float16"
 
 
-def test_valid_precision_bf16():
-    """precision='bf16' is valid."""
-    config = ExperimentConfig(model="gpt2", precision="bf16")
-    assert config.precision == "bf16"
+def test_valid_dtype_bfloat16():
+    """dtype='bfloat16' is valid."""
+    config = ExperimentConfig(model="gpt2", dtype="bfloat16")
+    assert config.dtype == "bfloat16"
 
 
-@pytest.mark.parametrize("precision", PRECISION_SUPPORT["pytorch"])
-def test_all_pytorch_precisions_valid(precision):
+@pytest.mark.parametrize("dt", PRECISION_SUPPORT["pytorch"])
+def test_all_pytorch_dtypes_valid(dt):
     """Schema-driven: all SSOT PRECISION_SUPPORT['pytorch'] values are valid."""
-    config = make_config(precision=precision)
-    assert config.precision == precision
+    config = make_config(dtype=dt)
+    assert config.dtype == dt
 
 
 # ---------------------------------------------------------------------------
@@ -262,9 +262,9 @@ def test_make_config_helper_returns_valid_config():
 
 def test_make_config_override():
     """make_config(**overrides) applies overrides over defaults."""
-    config = make_config(model="bert-base", precision="fp32")
+    config = make_config(model="bert-base", dtype="float32")
     assert config.model == "bert-base"
-    assert config.precision == "fp32"
+    assert config.dtype == "float32"
 
 
 # ---------------------------------------------------------------------------

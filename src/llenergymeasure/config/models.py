@@ -5,7 +5,7 @@ across all backends. Backend-specific parameters live in backend_configs.py.
 
 v2.0 field renames from v1.x:
     model_name         -> model
-    fp_precision       -> precision
+    fp_precision       -> dtype
     num_input_prompts  -> n
     extra_metadata     -> passthrough_kwargs
 
@@ -212,27 +212,33 @@ class EnergyConfig(BaseModel):
 
 
 # =============================================================================
-# Synthetic Dataset Configuration
+# Dataset Configuration
 # =============================================================================
 
 
-class SyntheticDatasetConfig(BaseModel):
-    """Synthetic dataset configuration for controlled experiments.
+class DatasetConfig(BaseModel):
+    """Dataset configuration for experiment prompts.
 
-    Generates fixed-length synthetic prompts for reproducible benchmarking
-    when real dataset variance is not desired.
+    Dataset configuration for loading prompts.
+
+    source is one of:
+    - Built-in alias (e.g. "aienergyscore")
+    - Path to a .jsonl file
     """
 
     model_config = {"extra": "forbid"}
 
-    n: int = Field(ge=1, description="Number of synthetic prompts to generate")
-    input_len: int = Field(default=512, ge=1, description="Synthetic input token length")
-    output_len: int = Field(default=128, ge=1, description="Synthetic output token length")
-    seed: int | None = Field(
-        default=None,
+    source: str = Field(
+        default="aienergyscore",
+        min_length=1,
+        description="Dataset source: built-in alias or .jsonl file path",
+    )
+    n_prompts: int = Field(default=100, ge=1, description="Number of prompts to load or generate")
+    order: Literal["interleaved", "grouped", "shuffled"] = Field(
+        default="interleaved",
         description=(
-            "Random seed for synthetic data generation. "
-            "None = use ExperimentConfig.random_seed (single seed source)."
+            "Prompt ordering: interleaved (round-robin by source, file order), "
+            "grouped (sorted by source), shuffled (seed-based random)"
         ),
     )
 
@@ -283,8 +289,10 @@ class ExperimentConfig(BaseModel):
 
     Field renames from v1.x:
         model_name -> model
-        fp_precision -> precision
-        num_input_prompts -> n
+        fp_precision -> dtype
+        num_input_prompts -> dataset.n_prompts
+        dataset (str) -> dataset.source
+        dataset_order -> dataset.order
         extra_metadata -> passthrough_kwargs
 
     The backend section (pytorch:, vllm:, tensorrt:) must match the backend field.
@@ -301,29 +309,42 @@ class ExperimentConfig(BaseModel):
         default="pytorch", description="Inference backend"
     )
 
-    # Data
-    n: int = Field(default=100, ge=1, description="Number of prompts from dataset")
-    dataset: str | SyntheticDatasetConfig = Field(
-        default="aienergyscore",
-        description="Dataset name (built-in alias) or synthetic dataset config",
-    )
-    dataset_order: Literal["interleaved", "grouped", "shuffled"] = Field(
-        default="interleaved",
-        description=(
-            "Prompt ordering: interleaved (round-robin by source, file order), "
-            "grouped (sorted by source), shuffled (seed-based random)"
-        ),
+    # Dataset
+    dataset: DatasetConfig = Field(
+        default_factory=DatasetConfig, description="Dataset configuration"
     )
 
     # Hardware
-    precision: Literal["fp32", "fp16", "bf16"] = Field(
-        default="bf16", description="Floating point precision"
+    dtype: Literal["float32", "float16", "bfloat16"] = Field(
+        default="bfloat16", description="Model dtype for inference"
     )
-    random_seed: int = Field(default=42, description="Random seed for reproducibility")
+    random_seed: int = Field(
+        default=42,
+        description=(
+            "Per-experiment seed for all stochasticity: inference RNG and dataset ordering."
+        ),
+    )
 
-    # Token limits
-    max_input_tokens: int = Field(default=512, ge=1, description="Max input tokens")
-    max_output_tokens: int = Field(default=256, ge=1, description="Max output tokens")
+    # Token limits — control FLOPs isolation between experiments.
+    # Setting these keeps computation workload constant so that only implementation
+    # parameters (backend, dtype, quantisation) vary between experiments.
+    # None = no limit (prompts keep natural length / model generates to EOS).
+    max_input_tokens: int | None = Field(
+        default=256,
+        ge=1,
+        description=(
+            "Max input token length for truncation. Keeps computation workload "
+            "constant across experiments for fair comparison. None = no truncation."
+        ),
+    )
+    max_output_tokens: int | None = Field(
+        default=256,
+        ge=1,
+        description=(
+            "Max output tokens (max_new_tokens for generation). "
+            "None = generate until EOS or model context limit."
+        ),
+    )
 
     # Sub-configs
     decoder: DecoderConfig = Field(
@@ -442,12 +463,12 @@ class ExecutionConfig(BaseModel):
     """Execution controls for a study (cycle repetition, ordering, gaps).
 
     Controls how many times the experiment list is repeated (n_cycles), the order
-    in which experiments are executed across cycles (cycle_order), optional gaps
+    in which experiments are executed across cycles (experiment_order), optional gaps
     between configs and cycles for thermal stabilisation, and an explicit shuffle
     seed override (default: derived from study_design_hash for reproducibility).
 
     Pydantic defaults are conservative (1 cycle, sequential, no gaps). The CLI
-    will apply research-appropriate effective defaults (e.g. 3 cycles, interleaved).
+    will apply research-appropriate effective defaults (e.g. 3 cycles, shuffle).
     """
 
     model_config = {"extra": "forbid"}
@@ -455,13 +476,15 @@ class ExecutionConfig(BaseModel):
     n_cycles: int = Field(
         default=1, ge=1, description="Number of times to repeat the experiment list"
     )
-    cycle_order: Literal["sequential", "interleaved", "shuffled"] = Field(
-        default="sequential",
-        description=(
-            "Ordering strategy across cycles. "
-            "sequential: [A,A,A,B,B,B], interleaved: [A,B,A,B,A,B], "
-            "shuffled: random per-cycle order."
-        ),
+    experiment_order: Literal["sequential", "interleave", "shuffle", "reverse", "latin_square"] = (
+        Field(
+            default="sequential",
+            description=(
+                "Ordering strategy across cycles. "
+                "sequential: [A,A,A,B,B,B], interleave: [A,B,A,B,A,B], "
+                "shuffle: random per-cycle order."
+            ),
+        )
     )
     experiment_gap_seconds: float | None = Field(
         default=None,
@@ -481,7 +504,7 @@ class ExecutionConfig(BaseModel):
     shuffle_seed: int | None = Field(
         default=None,
         description=(
-            "Explicit seed for shuffled cycle_order. "
+            "Explicit seed for shuffle experiment_order. "
             "None = derived from study_design_hash (same study always shuffles identically)."
         ),
     )
@@ -512,7 +535,7 @@ class StudyConfig(BaseModel):
     study_name: str | None = Field(
         default=None, description="Study name (used in output directory naming)"
     )
-    execution: ExecutionConfig = Field(
+    study_execution: ExecutionConfig = Field(
         default_factory=ExecutionConfig,
         description="Cycle repetition and ordering controls",
     )

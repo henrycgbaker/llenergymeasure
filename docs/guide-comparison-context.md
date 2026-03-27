@@ -52,7 +52,7 @@ the default dataset used is the AI Energy Score prompt set. This means llenergym
 
 llenergymeasure is a *measurement tool* that produces the raw energy data; AI Energy Score is a *benchmark standard* that defines the tasks and comparison framework. They are complementary: you use llenergymeasure to generate measurements, and AI Energy Score to interpret and compare them.
 
-**Citing results:** If you run llenergymeasure with the default AI Energy Score dataset and want to compare or contribute to the AI Energy Score leaderboard, ensure you report the hardware configuration (GPU model and memory), the precision setting, and the exact llenergymeasure version — these all affect comparability.
+**Citing results:** If you run llenergymeasure with the default AI Energy Score dataset and want to compare or contribute to the AI Energy Score leaderboard, ensure you report the hardware configuration (GPU model and memory), the dtype setting, and the exact llenergymeasure version — these all affect comparability.
 
 ---
 
@@ -119,7 +119,7 @@ When Zeus is installed, llenergymeasure can use it instead of the default NVML p
 - llenergymeasure version (from `llem --version`)
 - Dataset (default: AI Energy Score prompts)
 
-**Comparing across studies:** Results are only comparable if the hardware, dataset, number of prompts, and precision setting are identical. Hardware differences are the largest source of non-comparability — an A100 and a consumer GPU will produce very different energy figures even for the same model.
+**Comparing across studies:** Results are only comparable if the hardware, dataset, number of prompts, and dtype setting are identical. Hardware differences are the largest source of non-comparability — an A100 and a consumer GPU will produce very different energy figures even for the same model.
 
 **Energy per token:** When comparing models of different sizes or with different output lengths, use the derived metric of joules per output token (`inference_energy_joules ÷ total_output_tokens`). This normalises for the amount of useful output produced.
 

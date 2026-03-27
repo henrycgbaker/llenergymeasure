@@ -222,10 +222,12 @@
   "effective_config": {
     "model": "gpt2",
     "backend": "pytorch",
-    "n": 5,
-    "dataset": "aienergyscore",
-    "dataset_order": "interleaved",
-    "precision": "bf16",
+    "dataset": {
+      "source": "aienergyscore",
+      "n_prompts": 5,
+      "order": "interleaved"
+    },
+    "dtype": "bfloat16",
     "random_seed": 42,
     "max_input_tokens": 512,
     "max_output_tokens": 128,

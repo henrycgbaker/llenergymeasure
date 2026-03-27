@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from rich.console import Console
 
 from llenergymeasure.config.grid import (
-    CycleOrder,
+    ExperimentOrder,
     SkippedConfig,
     apply_cycles,
     build_preflight_panel,
@@ -24,7 +24,12 @@ from llenergymeasure.config.grid import (
     expand_grid,
     format_preflight_summary,
 )
-from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import (
+    DatasetConfig,
+    ExecutionConfig,
+    ExperimentConfig,
+    StudyConfig,
+)
 from llenergymeasure.utils.exceptions import ConfigError
 
 # =============================================================================
@@ -36,7 +41,7 @@ class TestExecutionConfig:
     def test_default_values(self):
         ec = ExecutionConfig()
         assert ec.n_cycles == 1
-        assert ec.cycle_order == "sequential"
+        assert ec.experiment_order == "sequential"
         assert ec.experiment_gap_seconds is None
         assert ec.cycle_gap_seconds is None
         assert ec.shuffle_seed is None
@@ -54,13 +59,13 @@ class TestExecutionConfig:
             ExecutionConfig(unknown_field=42)
 
     def test_valid_cycle_orders(self):
-        for order in ("sequential", "interleaved", "shuffled"):
-            ec = ExecutionConfig(cycle_order=order)
-            assert ec.cycle_order == order
+        for order in ("sequential", "interleave", "shuffle", "reverse", "latin_square"):
+            ec = ExecutionConfig(experiment_order=order)
+            assert ec.experiment_order == order
 
     def test_invalid_cycle_order_raises(self):
         with pytest.raises(ValidationError):
-            ExecutionConfig(cycle_order="random")
+            ExecutionConfig(experiment_order="random")
 
     def test_gap_fields_non_negative(self):
         ec = ExecutionConfig(experiment_gap_seconds=0.0, cycle_gap_seconds=60.5)
@@ -87,12 +92,12 @@ class TestStudyConfig:
         sc = StudyConfig(
             experiments=[exp],
             study_name="my-study",
-            execution=ExecutionConfig(n_cycles=3),
+            study_execution=ExecutionConfig(n_cycles=3),
             study_design_hash="abc123def456abcd",
             skipped_configs=[{"raw_config": {}, "reason": "test"}],
         )
         assert sc.study_name == "my-study"
-        assert sc.execution.n_cycles == 3
+        assert sc.study_execution.n_cycles == 3
         assert sc.study_design_hash == "abc123def456abcd"
         assert len(sc.skipped_configs) == 1
 
@@ -103,7 +108,7 @@ class TestStudyConfig:
     def test_default_execution(self):
         exp = ExperimentConfig(model="gpt2")
         sc = StudyConfig(experiments=[exp])
-        assert sc.execution.n_cycles == 1
+        assert sc.study_execution.n_cycles == 1
         assert sc.study_design_hash is None
         assert sc.skipped_configs == []
 
@@ -120,21 +125,21 @@ class TestStudyConfig:
 
 class TestExpandGridSweep:
     def test_universal_sweep_cartesian_product(self):
-        """2 precisions x 2 n values = 4 configs."""
+        """2 dtypes x 2 n values = 4 configs."""
         raw = {
             "model": "gpt2",
             "backend": "pytorch",
             "sweep": {
-                "precision": ["fp16", "bf16"],
-                "n": [50, 100],
+                "dtype": ["float16", "bfloat16"],
+                "dataset.n_prompts": [50, 100],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 4
         assert len(skipped) == 0
-        precisions = {c.precision for c in valid}
-        ns = {c.n for c in valid}
-        assert precisions == {"fp16", "bf16"}
+        dtypes_set = {c.dtype for c in valid}
+        ns = {c.dataset.n_prompts for c in valid}
+        assert dtypes_set == {"float16", "bfloat16"}
         assert ns == {50, 100}
 
     def test_backend_scoped_sweep_routes_to_section(self):
@@ -158,14 +163,14 @@ class TestExpandGridSweep:
             "model": "gpt2",
             "backend": ["pytorch", "vllm"],
             "sweep": {
-                "precision": ["fp16", "bf16"],
+                "dtype": ["float16", "bfloat16"],
                 "pytorch.batch_size": [1, 8],
                 "vllm.engine.max_num_seqs": [64, 256],
             },
         }
         valid, skipped = expand_grid(raw)
-        # pytorch: 2 precisions x 2 batch_sizes = 4
-        # vllm: 2 precisions x 2 max_num_seqs = 4
+        # pytorch: 2 dtypes x 2 batch_sizes = 4
+        # vllm: 2 dtypes x 2 max_num_seqs = 4
         # total = 8
         assert len(valid) == 8
         assert len(skipped) == 0
@@ -212,7 +217,7 @@ class TestExpandGridCombined:
             "model": "gpt2",
             "backend": "pytorch",
             "sweep": {
-                "precision": ["fp16", "bf16"],
+                "dtype": ["float16", "bfloat16"],
             },
             "experiments": [
                 {"model": "gpt2-xl", "backend": "pytorch"},
@@ -224,7 +229,7 @@ class TestExpandGridCombined:
         # Sweep configs first
         sweep_configs = valid[:2]
         explicit_config = valid[2]
-        assert {c.precision for c in sweep_configs} == {"fp16", "bf16"}
+        assert {c.dtype for c in sweep_configs} == {"float16", "bfloat16"}
         assert explicit_config.model == "gpt2-xl"
 
 
@@ -238,7 +243,7 @@ class TestExpandGridBase:
         base_config = {
             "model": "gpt2",
             "backend": "pytorch",
-            "n": 50,
+            "dataset": {"n_prompts": 50},
         }
         base_file = tmp_path / "base_experiment.yaml"
         base_file.write_text(yaml.dump(base_config))
@@ -246,7 +251,7 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "precision": ["fp16", "bf16"],
+                "dtype": ["float16", "bfloat16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
@@ -254,7 +259,7 @@ class TestExpandGridBase:
         assert len(valid) == 2
         for c in valid:
             assert c.model == "gpt2"
-            assert c.n == 50
+            assert c.dataset.n_prompts == 50
 
     def test_base_strips_study_only_keys(self, tmp_path: Path):
         """Study-only keys in base file are stripped before merging."""
@@ -262,9 +267,9 @@ class TestExpandGridBase:
             "model": "gpt2",
             "backend": "pytorch",
             # These should be stripped
-            "sweep": {"precision": ["fp32"]},
+            "sweep": {"dtype": ["float32"]},
             "experiments": [{"model": "other"}],
-            "execution": {"n_cycles": 5},
+            "study_execution": {"n_cycles": 5},
             "base": "another.yaml",
             "study_name": "should-be-stripped",
         }
@@ -274,17 +279,17 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "precision": ["fp16"],
+                "dtype": ["float16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
         valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 1
-        assert valid[0].precision == "fp16"
+        assert valid[0].dtype == "float16"
         assert valid[0].model == "gpt2"
 
     def test_missing_base_file_raises(self, tmp_path: Path):
-        raw = {"base": "nonexistent.yaml", "sweep": {"precision": ["fp16"]}}
+        raw = {"base": "nonexistent.yaml", "sweep": {"dtype": ["float16"]}}
         study_yaml = tmp_path / "study.yaml"
         with pytest.raises(ConfigError, match="base"):
             expand_grid(raw, study_yaml_path=study_yaml)
@@ -301,10 +306,10 @@ class TestExpandGridInvalidHandling:
         raw = {
             "model": "gpt2",
             "sweep": {
-                # fp32 with tensorrt backend is valid, but precision fp32 is accepted
+                # fp32 with tensorrt backend is valid, but dtype float32 is accepted
                 # Use a truly invalid combo: backend=vllm but pytorch section provided via explicit
                 "backend": ["pytorch", "vllm"],
-                "precision": ["fp16"],
+                "dtype": ["float16"],
             },
             "experiments": [
                 # This will fail: vllm section + backend=pytorch
@@ -332,21 +337,21 @@ class TestExpandGridInvalidHandling:
 
     def test_skipped_config_short_label(self):
         sc = SkippedConfig(
-            raw_config={"backend": "pytorch", "precision": "fp32"},
+            raw_config={"backend": "pytorch", "dtype": "float32"},
             reason="some validation error",
         )
-        assert sc.short_label == "pytorch, fp32"
+        assert sc.short_label == "pytorch, float32"
 
     def test_skipped_config_to_dict(self):
         sc = SkippedConfig(
-            raw_config={"backend": "vllm", "precision": "fp16"},
+            raw_config={"backend": "vllm", "dtype": "float16"},
             reason="cross-validation error",
             errors=[{"loc": ["backend"], "msg": "test"}],
         )
         d = sc.to_dict()
-        assert d["raw_config"] == {"backend": "vllm", "precision": "fp16"}
+        assert d["raw_config"] == {"backend": "vllm", "dtype": "float16"}
         assert d["reason"] == "cross-validation error"
-        assert d["short_label"] == "vllm, fp16"
+        assert d["short_label"] == "vllm, float16"
         assert len(d["errors"]) == 1
 
     def test_no_experiments_raises_config_error(self):
@@ -365,7 +370,7 @@ class TestMultiBackendSectionStripping:
             "model": "gpt2",
             "tensorrt": {"max_input_len": 1024},
             "sweep": {
-                "precision": ["bf16"],
+                "dtype": ["bfloat16"],
                 "pytorch.batch_size": [1],
                 "tensorrt.max_batch_size": [4],
             },
@@ -435,13 +440,19 @@ class TestComputeStudyDesignHash:
         int(h, 16)  # must be valid hex
 
     def test_same_experiments_same_hash(self):
-        exps1 = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", n=50)]
-        exps2 = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", n=50)]
+        exps1 = [
+            ExperimentConfig(model="gpt2"),
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50)),
+        ]
+        exps2 = [
+            ExperimentConfig(model="gpt2"),
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50)),
+        ]
         assert compute_study_design_hash(exps1) == compute_study_design_hash(exps2)
 
     def test_different_experiments_different_hash(self):
         exps1 = [ExperimentConfig(model="gpt2")]
-        exps2 = [ExperimentConfig(model="gpt2", n=50)]
+        exps2 = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))]
         assert compute_study_design_hash(exps1) != compute_study_design_hash(exps2)
 
     def test_stable_across_calls(self):
@@ -452,8 +463,8 @@ class TestComputeStudyDesignHash:
 
     def test_hash_excludes_order_sensitivity(self):
         """Same experiments in same order produce same hash (order matters for reproducibility)."""
-        exps_a = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", precision="fp16")]
-        exps_b = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", precision="fp16")]
+        exps_a = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", dtype="float16")]
+        exps_b = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", dtype="float16")]
         assert compute_study_design_hash(exps_a) == compute_study_design_hash(exps_b)
 
 
@@ -466,7 +477,7 @@ class TestApplyCycles:
     @pytest.fixture
     def two_experiments(self):
         a = ExperimentConfig(model="gpt2")
-        b = ExperimentConfig(model="gpt2", n=50)
+        b = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
         return [a, b]
 
     @pytest.fixture
@@ -475,59 +486,134 @@ class TestApplyCycles:
 
     def test_sequential_ordering(self, two_experiments, study_hash):
         """sequential with 3 cycles and [A, B] -> [A, A, A, B, B, B]."""
-        result = apply_cycles(two_experiments, 3, CycleOrder.SEQUENTIAL, study_hash)
+        result = apply_cycles(two_experiments, 3, ExperimentOrder.SEQUENTIAL, study_hash)
         assert len(result) == 6
-        # First 3 should be A (gpt2, n=100)
-        assert all(r.n == 100 for r in result[:3])
-        # Last 3 should be B (gpt2, n=50)
-        assert all(r.n == 50 for r in result[3:])
+        # First 3 should be A (gpt2, n_prompts=100)
+        assert all(r.dataset.n_prompts == 100 for r in result[:3])
+        # Last 3 should be B (gpt2, n_prompts=50)
+        assert all(r.dataset.n_prompts == 50 for r in result[3:])
 
     def test_interleaved_ordering(self, two_experiments, study_hash):
-        """interleaved with 3 cycles and [A, B] -> [A, B, A, B, A, B]."""
-        result = apply_cycles(two_experiments, 3, CycleOrder.INTERLEAVED, study_hash)
+        """interleave with 3 cycles and [A, B] -> [A, B, A, B, A, B]."""
+        result = apply_cycles(two_experiments, 3, ExperimentOrder.INTERLEAVE, study_hash)
         assert len(result) == 6
         # Alternating: A, B, A, B, A, B
         for i in range(0, 6, 2):
-            assert result[i].n == 100  # A
+            assert result[i].dataset.n_prompts == 100  # A
         for i in range(1, 6, 2):
-            assert result[i].n == 50  # B
+            assert result[i].dataset.n_prompts == 50  # B
 
     def test_shuffled_with_explicit_seed_deterministic(self, two_experiments, study_hash):
-        """Shuffled with explicit seed produces deterministic reproducible order."""
-        result1 = apply_cycles(two_experiments, 3, CycleOrder.SHUFFLED, study_hash, shuffle_seed=42)
-        result2 = apply_cycles(two_experiments, 3, CycleOrder.SHUFFLED, study_hash, shuffle_seed=42)
-        assert [r.n for r in result1] == [r.n for r in result2]
+        """Shuffle with explicit seed produces deterministic reproducible order."""
+        result1 = apply_cycles(
+            two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=42
+        )
+        result2 = apply_cycles(
+            two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=42
+        )
+        assert [r.dataset.n_prompts for r in result1] == [r.dataset.n_prompts for r in result2]
 
     def test_shuffled_with_same_hash_same_order(self, two_experiments, study_hash):
         """Same study_design_hash without explicit seed = same shuffle."""
-        result1 = apply_cycles(two_experiments, 3, CycleOrder.SHUFFLED, study_hash)
-        result2 = apply_cycles(two_experiments, 3, CycleOrder.SHUFFLED, study_hash)
-        assert [r.n for r in result1] == [r.n for r in result2]
+        result1 = apply_cycles(two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash)
+        result2 = apply_cycles(two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash)
+        assert [r.dataset.n_prompts for r in result1] == [r.dataset.n_prompts for r in result2]
 
     def test_shuffled_different_seeds_different_orders(self, study_hash):
         """Seeds 1 and 999 produce different orderings (verified deterministic)."""
-        exps = [ExperimentConfig(model="gpt2", n=i) for i in range(1, 6)]
-        result1 = apply_cycles(exps, 2, CycleOrder.SHUFFLED, study_hash, shuffle_seed=1)
-        result2 = apply_cycles(exps, 2, CycleOrder.SHUFFLED, study_hash, shuffle_seed=999)
+        exps = [
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in range(1, 6)
+        ]
+        result1 = apply_cycles(exps, 2, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=1)
+        result2 = apply_cycles(exps, 2, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=999)
         # Seeds 1 and 999 confirmed to produce distinct orderings for 5 experiments x 2 cycles
         # (seed 1 → [3,4,5,1,2,1,3,2,5,4], seed 999 → [3,5,2,4,1,2,4,5,1,3])
-        assert [r.n for r in result1] != [r.n for r in result2]
+        assert [r.dataset.n_prompts for r in result1] != [r.dataset.n_prompts for r in result2]
 
     def test_n_cycles_one_unchanged(self, two_experiments, study_hash):
         """n_cycles=1 returns the original list unchanged."""
-        result = apply_cycles(two_experiments, 1, CycleOrder.SEQUENTIAL, study_hash)
+        result = apply_cycles(two_experiments, 1, ExperimentOrder.SEQUENTIAL, study_hash)
         assert len(result) == 2
-        assert result[0].n == two_experiments[0].n
-        assert result[1].n == two_experiments[1].n
+        assert result[0].dataset.n_prompts == two_experiments[0].dataset.n_prompts
+        assert result[1].dataset.n_prompts == two_experiments[1].dataset.n_prompts
 
     def test_shuffled_contains_all_experiments_each_cycle(self, two_experiments, study_hash):
-        """Each cycle in shuffled mode contains all experiments exactly once."""
-        result = apply_cycles(two_experiments, 3, CycleOrder.SHUFFLED, study_hash)
+        """Each cycle in shuffle mode contains all experiments exactly once."""
+        result = apply_cycles(two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash)
         assert len(result) == 6
         # Check that each pair of 2 contains both experiments
         for i in range(0, 6, 2):
-            pair_ns = {result[i].n, result[i + 1].n}
+            pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
             assert pair_ns == {100, 50}
+
+    # -- reverse mode --
+
+    def test_reverse_ordering(self, two_experiments, study_hash):
+        """reverse with 4 cycles and [A, B] -> [A, B, B, A, A, B, B, A]."""
+        result = apply_cycles(two_experiments, 4, ExperimentOrder.REVERSE, study_hash)
+        assert len(result) == 8
+        ns = [r.dataset.n_prompts for r in result]
+        assert ns == [100, 50, 50, 100, 100, 50, 50, 100]
+
+    def test_reverse_single_cycle(self, two_experiments, study_hash):
+        """reverse with 1 cycle = forward order (same as sequential for one cycle)."""
+        result = apply_cycles(two_experiments, 1, ExperimentOrder.REVERSE, study_hash)
+        assert [r.dataset.n_prompts for r in result] == [100, 50]
+
+    def test_reverse_contains_all_experiments_each_cycle(self, two_experiments, study_hash):
+        """Each cycle in reverse mode contains all experiments exactly once."""
+        result = apply_cycles(two_experiments, 3, ExperimentOrder.REVERSE, study_hash)
+        assert len(result) == 6
+        for i in range(0, 6, 2):
+            pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
+            assert pair_ns == {100, 50}
+
+    # -- latin_square mode --
+
+    def test_latin_square_ordering(self, study_hash):
+        """latin_square with 3 experiments x 3 cycles produces balanced rows."""
+        exps = [
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2, 3]
+        ]
+        result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
+        assert len(result) == 9
+        # Each cycle (row) contains all 3 experiments exactly once
+        for i in range(0, 9, 3):
+            row_ns = [r.dataset.n_prompts for r in result[i : i + 3]]
+            assert sorted(row_ns) == [1, 2, 3]
+
+    def test_latin_square_each_position_balanced(self, study_hash):
+        """Each experiment appears in each position exactly once across k cycles."""
+        exps = [
+            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2, 3]
+        ]
+        result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
+        # Column j should contain each experiment exactly once
+        for col in range(3):
+            col_ns = [result[row * 3 + col].dataset.n_prompts for row in range(3)]
+            assert sorted(col_ns) == [1, 2, 3]
+
+    def test_latin_square_cycles_exceed_k(self, study_hash):
+        """When n_cycles > k, rows wrap around the square."""
+        exps = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2]]
+        result = apply_cycles(exps, 4, ExperimentOrder.LATIN_SQUARE, study_hash)
+        assert len(result) == 8
+        # Cycle 3 (idx 2) should equal cycle 1 (idx 0), cycle 4 = cycle 2
+        row0 = [r.dataset.n_prompts for r in result[0:2]]
+        row2 = [r.dataset.n_prompts for r in result[4:6]]
+        assert row0 == row2
+
+    def test_latin_square_single_experiment(self, study_hash):
+        """latin_square with 1 experiment x 3 cycles = [A, A, A]."""
+        exps = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=1))]
+        result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
+        assert len(result) == 3
+        assert all(r.dataset.n_prompts == 1 for r in result)
+
+    def test_latin_square_empty(self, study_hash):
+        """latin_square with 0 experiments returns empty list."""
+        result = apply_cycles([], 3, ExperimentOrder.LATIN_SQUARE, study_hash)
+        assert result == []
 
 
 # =============================================================================
@@ -538,15 +624,18 @@ class TestApplyCycles:
 def _make_study_config(
     n_configs: int = 4,
     n_cycles: int = 3,
-    cycle_order: str = "interleaved",
+    experiment_order: str = "interleave",
     study_hash: str = "abc123def456abcd",
     skipped_configs: list | None = None,
 ) -> StudyConfig:
     """Helper: build a StudyConfig with the given parameters."""
-    experiments = [ExperimentConfig(model="gpt2", n=i + 1) for i in range(n_configs * n_cycles)]
+    experiments = [
+        ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i + 1))
+        for i in range(n_configs * n_cycles)
+    ]
     return StudyConfig(
         experiments=experiments,
-        execution=ExecutionConfig(n_cycles=n_cycles, cycle_order=cycle_order),
+        study_execution=ExecutionConfig(n_cycles=n_cycles, experiment_order=experiment_order),
         study_design_hash=study_hash,
         skipped_configs=skipped_configs or [],
     )
@@ -555,10 +644,10 @@ def _make_study_config(
 class TestFormatPreflightSummary:
     def test_basic_format(self):
         """Pre-flight string shows config count, cycle count, total runs, order."""
-        sc = _make_study_config(n_configs=4, n_cycles=3, cycle_order="interleaved")
+        sc = _make_study_config(n_configs=4, n_cycles=3, experiment_order="interleave")
         summary = format_preflight_summary(sc)
         assert "4 configs x 3 cycles = 12 runs" in summary
-        assert "Order: interleaved" in summary
+        assert "Order: interleave" in summary
 
     def test_hash_displayed(self):
         """study_design_hash appears in the summary line."""
@@ -577,16 +666,16 @@ class TestFormatPreflightSummary:
         """When skipped_configs populated, Skipping line with reasons appears."""
         skipped = [
             {
-                "raw_config": {"backend": "pytorch", "precision": "fp32"},
+                "raw_config": {"backend": "pytorch", "dtype": "float32"},
                 "reason": "cross-validation failed",
-                "short_label": "pytorch, fp32",
+                "short_label": "pytorch, float32",
                 "errors": [],
             }
         ]
         sc = _make_study_config(n_configs=3, n_cycles=1, skipped_configs=skipped)
         summary = format_preflight_summary(sc)
         assert "Skipping 1/" in summary
-        assert "pytorch, fp32" in summary
+        assert "pytorch, float32" in summary
         assert "cross-validation failed" in summary
 
     def test_high_skip_rate_warning(self):
@@ -594,15 +683,15 @@ class TestFormatPreflightSummary:
         # 1 valid config, 2 skipped → 67% skip rate
         skipped = [
             {
-                "raw_config": {"backend": "vllm", "precision": "fp16"},
+                "raw_config": {"backend": "vllm", "dtype": "float16"},
                 "reason": "error A",
-                "short_label": "vllm, fp16",
+                "short_label": "vllm, float16",
                 "errors": [],
             },
             {
-                "raw_config": {"backend": "vllm", "precision": "bf16"},
+                "raw_config": {"backend": "vllm", "dtype": "bfloat16"},
                 "reason": "error B",
-                "short_label": "vllm, bf16",
+                "short_label": "vllm, bfloat16",
                 "errors": [],
             },
         ]
@@ -616,9 +705,9 @@ class TestFormatPreflightSummary:
         # 4 valid, 1 skipped → 20% skip rate
         skipped = [
             {
-                "raw_config": {"backend": "pytorch", "precision": "fp32"},
+                "raw_config": {"backend": "pytorch", "dtype": "float32"},
                 "reason": "validation error",
-                "short_label": "pytorch, fp32",
+                "short_label": "pytorch, float32",
                 "errors": [],
             }
         ]
@@ -630,7 +719,7 @@ class TestFormatPreflightSummary:
     def test_skipped_list_argument_takes_precedence(self):
         """If skipped list of SkippedConfig passed, uses it instead of skipped_configs."""
         skipped_obj = SkippedConfig(
-            raw_config={"backend": "pytorch", "precision": "fp16"},
+            raw_config={"backend": "pytorch", "dtype": "float16"},
             reason="via argument",
         )
         # StudyConfig has empty skipped_configs
@@ -640,7 +729,7 @@ class TestFormatPreflightSummary:
 
     def test_single_cycle_format(self):
         """1 config x 1 cycle = 1 run shown correctly."""
-        sc = _make_study_config(n_configs=1, n_cycles=1, cycle_order="sequential")
+        sc = _make_study_config(n_configs=1, n_cycles=1, experiment_order="sequential")
         summary = format_preflight_summary(sc)
         assert "1 configs x 1 cycles = 1 runs" in summary
         assert "Order: sequential" in summary
@@ -663,9 +752,9 @@ def _render_panel(study_config: StudyConfig, width: int = 100) -> str:
 def _make_panel_study_config(
     models: list[str] | None = None,
     backends: list[str] | None = None,
-    precisions: list[str] | None = None,
+    dtypes: list[str] | None = None,
     n_cycles: int = 1,
-    cycle_order: str = "sequential",
+    experiment_order: str = "sequential",
     study_name: str = "test-study",
     study_hash: str = "abc123def456abcd",
     runners: dict | None = None,
@@ -673,23 +762,21 @@ def _make_panel_study_config(
     """Build a StudyConfig for panel tests with varying fields per experiment."""
     models = models or ["gpt2"]
     backends = backends or ["pytorch"]
-    precisions = precisions or ["bf16"]
+    dtypes = dtypes or ["bfloat16"]
 
     # Build one experiment per combination (then replicate for cycles)
     experiments = []
     for model in models:
         for backend in backends:
-            for precision in precisions:
-                experiments.append(
-                    ExperimentConfig(model=model, backend=backend, precision=precision)
-                )
+            for dt in dtypes:
+                experiments.append(ExperimentConfig(model=model, backend=backend, dtype=dt))
 
     # Replicate for cycles
     all_exps = experiments * n_cycles
     return StudyConfig(
         experiments=all_exps,
         study_name=study_name,
-        execution=ExecutionConfig(n_cycles=n_cycles, cycle_order=cycle_order),
+        study_execution=ExecutionConfig(n_cycles=n_cycles, experiment_order=experiment_order),
         study_design_hash=study_hash,
         runners=runners,
     )
@@ -705,14 +792,14 @@ class TestBuildPreflightPanel:
     def test_panel_metadata_experiments_plural(self):
         """Panel shows n configs x n cycles = n runs (plural form)."""
         sc = _make_panel_study_config(
-            models=["gpt2", "gpt2-xl"], n_cycles=3, cycle_order="interleaved"
+            models=["gpt2", "gpt2-xl"], n_cycles=3, experiment_order="interleave"
         )
         output = _render_panel(sc)
         assert "2 configs x 3 cycles = 6 runs" in output
 
     def test_panel_metadata_experiments_singular(self):
         """Panel shows 1 config x 1 cycle = 1 run (singular form)."""
-        sc = _make_panel_study_config(models=["gpt2"], n_cycles=1, cycle_order="sequential")
+        sc = _make_panel_study_config(models=["gpt2"], n_cycles=1, experiment_order="sequential")
         output = _render_panel(sc)
         assert "1 config x 1 cycle = 1 run" in output
 
@@ -725,16 +812,16 @@ class TestBuildPreflightPanel:
     def test_panel_pluralisation_plural(self):
         """2 configs x 3 cycles = 6 runs (all plural)."""
         sc = _make_panel_study_config(
-            models=["gpt2", "gpt2-xl"], n_cycles=3, cycle_order="sequential"
+            models=["gpt2", "gpt2-xl"], n_cycles=3, experiment_order="sequential"
         )
         output = _render_panel(sc)
         assert "2 configs x 3 cycles = 6 runs" in output
 
     def test_panel_metadata_order(self):
         """Panel shows cycle order in Order row."""
-        sc = _make_panel_study_config(n_cycles=2, cycle_order="interleaved")
+        sc = _make_panel_study_config(n_cycles=2, experiment_order="interleave")
         output = _render_panel(sc)
-        assert "interleaved" in output
+        assert "interleave" in output
 
     def test_panel_metadata_backends_with_runners(self):
         """Panel shows backend with runner mode in Runners section."""
@@ -789,7 +876,7 @@ class TestBuildPreflightPanel:
         sc = StudyConfig(
             experiments=[exp1, exp2],
             study_name="decoder-test",
-            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+            study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
             study_design_hash="deadbeef01234567",
         )
         output = _render_panel(sc)
@@ -808,7 +895,7 @@ class TestBuildPreflightPanel:
         exps = [ExperimentConfig(model="gpt2")]
         sc = StudyConfig(
             experiments=exps,
-            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+            study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
         )
         output = _render_panel(sc)
         assert "Study: unnamed" in output
@@ -821,7 +908,7 @@ class TestBuildPreflightPanel:
         ]
         sc = StudyConfig(
             experiments=exps,
-            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+            study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
         )
         output = _render_panel(sc)
         # Both backends appear

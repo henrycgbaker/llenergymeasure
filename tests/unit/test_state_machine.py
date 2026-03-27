@@ -194,7 +194,7 @@ def test_state_manager_save_returns_path(tmp_path):
 
 def test_compute_config_hash_deterministic():
     """Same dict always produces the same hash."""
-    config = {"model": "gpt2", "backend": "pytorch", "precision": "bf16"}
+    config = {"model": "gpt2", "backend": "pytorch", "dtype": "bfloat16"}
     h1 = compute_config_hash(config)
     h2 = compute_config_hash(config)
     assert h1 == h2

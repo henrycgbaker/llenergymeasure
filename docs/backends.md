@@ -38,7 +38,7 @@ backend: pytorch
 model: gpt2
 backend: pytorch
 n: 100
-precision: bf16
+dtype: bfloat16
 pytorch:
   batch_size: 4
   attn_implementation: sdpa
@@ -62,6 +62,10 @@ Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `attn_implementation` | `sdpa` \| `flash_attention_2` \| `flash_attention_3` \| `eager` | `sdpa` | Attention kernel |
+
+Note: `flash_attention_3` requires Hopper (SM90+, e.g. H100). On A100 (SM80 Ampere) it raises
+a CUDA-level error at runtime even if the package is installed — the import succeeds but the
+kernel will not run. Use `flash_attention_2` (Ampere+) or `sdpa` on A100.
 
 **Compilation:**
 
@@ -299,7 +303,7 @@ runners:
 model: meta-llama/Llama-2-7b-hf
 backend: tensorrt
 n: 50
-precision: bf16
+dtype: bfloat16
 runners:
   tensorrt: docker
 tensorrt:
@@ -480,7 +484,7 @@ parameters stay the same.
 model: gpt2
 backend: pytorch
 n: 100
-precision: bf16
+dtype: bfloat16
 ```
 
 ```yaml
@@ -488,7 +492,7 @@ precision: bf16
 model: gpt2
 backend: vllm
 n: 100
-precision: bf16
+dtype: bfloat16
 runners:
   vllm: docker
 ```
@@ -498,14 +502,14 @@ runners:
 model: gpt2
 backend: tensorrt
 n: 100
-precision: bf16
+dtype: bfloat16
 runners:
   tensorrt: docker
 ```
 
 Changing `backend:` switches the inference engine. Backend-specific sections (`pytorch:`,
 `vllm:`, `tensorrt:`) are ignored when not running that backend. Universal parameters (`n`,
-`precision`, `decoder:`, etc.) apply to all backends.
+`dtype`, `decoder:`, etc.) apply to all backends.
 
 ---
 
@@ -565,12 +569,12 @@ These parameters live in `ExperimentConfig` and are shared across all backends:
 |-----------|---------|------|--------------|-------|
 | `model` | Yes | Yes | Yes | HuggingFace model ID or local path |
 | `backend` | Yes | Yes | Yes | Selects the inference engine |
-| `n` | Yes | Yes | Yes | Number of prompts |
-| `precision` | Yes | Yes | Yes | `fp32`, `fp16`, `bf16` |
-| `dataset` | Yes | Yes | Yes | Dataset name or synthetic config |
+| `dataset.n_prompts` | Yes | Yes | Yes | Number of prompts |
+| `dtype` | Yes | Yes | Yes | `fp32`, `fp16`, `bf16` |
+| `dataset.source` | Yes | Yes | Yes | Dataset source (built-in alias or .jsonl path) |
 | `max_input_tokens` | Yes | Yes | Yes | Input sequence length cap |
 | `max_output_tokens` | Yes | Yes | Yes | Output token budget |
-| `random_seed` | Yes | Yes | Yes | Reproducibility seed |
+| `random_seed` | Yes | Yes | Yes | Per-experiment seed: inference RNG, dataset ordering |
 | `decoder.temperature` | Yes | Yes | Yes | Sampling temperature |
 | `decoder.top_p` | Yes | Yes | Yes | Nucleus sampling threshold |
 | `decoder.top_k` | Yes | Yes | Yes | Top-k sampling (0 = disabled) |

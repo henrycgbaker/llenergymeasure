@@ -57,12 +57,14 @@ def _make_mock_config() -> MagicMock:
     config = MagicMock(spec=ExperimentConfig)
     config.model = "gpt2"
     config.backend = "pytorch"
-    config.precision = "bf16"
-    config.n = 100
-    config.dataset = "aienergyscore"
+    config.dtype = "bfloat16"
+    config.dataset = MagicMock()
+    config.dataset.source = "aienergyscore"
+    config.dataset.n_prompts = 100
+    config.dataset.order = "interleaved"
     config.output_dir = None
-    config.max_input_tokens = 512
-    config.max_output_tokens = 128
+    config.max_input_tokens = 256
+    config.max_output_tokens = 256
     config.pytorch = None
     config.baseline = MagicMock()
     config.baseline.enabled = False
@@ -81,8 +83,8 @@ def test_build_header_strips_hf_org_prefix():
     config = _make_mock_config()
     config.model = "meta-llama/Llama-3.2-1B-Instruct"
     config.backend = "vllm"
-    config.precision = "bf16"
-    config.n = 100
+    config.dtype = "bfloat16"
+    config.dataset.n_prompts = 100
 
     header = _build_header(config, runner_tag="docker")
     assert "Llama-3.2-1B-Instruct" in header
@@ -90,34 +92,34 @@ def test_build_header_strips_hf_org_prefix():
     assert "[docker]" in header
 
 
-def test_build_header_default_precision_omitted():
-    """_build_header omits precision when it is the default 'bf16'."""
+def test_build_header_default_dtype_omitted():
+    """_build_header omits dtype when it is the default 'bfloat16'."""
     from llenergymeasure.cli.run import _build_header
 
     config = _make_mock_config()
     config.model = "gpt2"
     config.backend = "pytorch"
-    config.precision = "bf16"  # default — should not appear
-    config.n = 100
+    config.dtype = "bfloat16"  # default — should not appear
+    config.dataset.n_prompts = 100
 
     header = _build_header(config, runner_tag="local")
-    assert "bf16" not in header
+    assert "bfloat16" not in header
     assert header == "gpt2 | pytorch [local]"
 
 
 def test_build_header_nondefault_fields_shown():
-    """_build_header includes precision and n when non-default."""
+    """_build_header includes dtype and n when non-default."""
     from llenergymeasure.cli.run import _build_header
 
     config = _make_mock_config()
     config.model = "gpt2"
     config.backend = "pytorch"
-    config.precision = "fp16"
-    config.n = 50
+    config.dtype = "float16"
+    config.dataset.n_prompts = 50
 
     header = _build_header(config, runner_tag="local")
-    assert "fp16" in header
-    assert "n=50" in header
+    assert "float16" in header
+    assert "n_prompts=50" in header
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +326,7 @@ def test_study_detection_with_sweep_key(tmp_path):
 name: test
 model: test/model
 sweep:
-  precision: [fp32, fp16]
+  dtype: [float32, float16]
 """)
     import yaml
 
@@ -368,7 +370,7 @@ def test_print_study_summary_basic():
     # Use model_construct to bypass Pydantic validation for the container —
     # experiments list contains a MagicMock, which is not a valid ExperimentResult.
     exp = MagicMock()
-    exp.effective_config = {"model": "test/model", "precision": "fp16"}
+    exp.effective_config = {"model": "test/model", "dtype": "float16"}
     exp.backend = "pytorch"
     exp.duration_sec = 45.2
     exp.total_energy_j = 123.4
@@ -426,7 +428,7 @@ def test_run_study_routing_sweep_yaml(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  precision: [fp32, fp16]\n"
+        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
 
@@ -492,12 +494,12 @@ def test_run_saves_to_output_dir(tmp_path):
 
 
 def test_run_study_cli_defaults_applied(tmp_path):
-    """Study YAML without execution block receives CLI effective defaults: n_cycles=3, cycle_order=shuffled."""
+    """Study YAML without execution block receives CLI effective defaults: n_cycles=3, experiment_order=shuffle."""
     from tests.conftest import make_study_result
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  precision: [fp32, fp16]\n"
+        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
 
@@ -521,8 +523,8 @@ def test_run_study_cli_defaults_applied(tmp_path):
     assert len(captured_overrides) == 1
     overrides = captured_overrides[0]
     assert overrides is not None
-    assert overrides["execution"]["n_cycles"] == 3
-    assert overrides["execution"]["cycle_order"] == "shuffled"
+    assert overrides["study_execution"]["n_cycles"] == 3
+    assert overrides["study_execution"]["experiment_order"] == "shuffle"
 
 
 def test_run_no_model_no_config_error_message():

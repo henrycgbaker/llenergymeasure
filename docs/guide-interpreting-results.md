@@ -41,7 +41,7 @@ This is a unique identifier for this specific measurement. It encodes:
 
 - `gpt2` — the model measured
 - `pytorch` — the inference engine used
-- `bf16` — the numerical precision setting
+- `bfloat16` — the model dtype
 - `20240305-143022` — the date and time the experiment ran
 
 The experiment ID helps you trace results back to the exact configuration that produced them.
@@ -129,7 +129,7 @@ The full result is saved as a JSON file in the `results/` directory. Key fields:
 | `inference_memory_mb` | Peak GPU memory used during inference, in megabytes |
 | `total_prompts` | Number of prompts processed (excluding warmup) |
 | `total_output_tokens` | Total output tokens generated across all prompts |
-| `effective_config` | The exact configuration used (model, precision, backend, etc.) |
+| `effective_config` | The exact configuration used (model, dtype, backend, etc.) |
 
 The `effective_config` section is particularly important for reproducibility — it records every setting that influenced the measurement, including defaults that were not explicitly specified.
 
@@ -145,7 +145,7 @@ Raw numbers only make sense in context. Here is how to compare results fairly:
 
 **Note the hardware.** A result from an A100 GPU is not directly comparable to a result from a consumer GPU. The result file records the GPU model in `effective_config`.
 
-**Check the precision setting.** Running at `fp16` (16-bit precision) typically uses less energy than `fp32` (32-bit precision). Results should use the same precision to be comparable.
+**Check the dtype setting.** Running at `float16` (16-bit) typically uses less energy than `float32` (32-bit). Results should use the same dtype to be comparable.
 
 ---
 

@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from llenergymeasure.config.models import ExperimentConfig
 
-# Bytes per parameter for each precision mode.
+# Bytes per parameter for each dtype.
 DTYPE_BYTES: dict[str, float] = {
-    "fp32": 4,
-    "fp16": 2,
-    "bf16": 2,
+    "float32": 4,
+    "float16": 2,
+    "bfloat16": 2,
     "int8": 1,
     "int4": 0.5,
 }
@@ -87,7 +87,7 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
         return None
 
     # Weights memory
-    bytes_per_param = DTYPE_BYTES.get(config.precision, 2)
+    bytes_per_param = DTYPE_BYTES.get(config.dtype, 2)
     weights_gb = (param_count * bytes_per_param) / 1e9
 
     # KV cache estimation (sequence length 1 = single inference pass)

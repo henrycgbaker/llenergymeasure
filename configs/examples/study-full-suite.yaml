@@ -6,83 +6,57 @@
 # Backend-specific sweep axes use dotted paths (e.g. pytorch.batch_size) so
 # each backend's parameters are crossed only with each other and with
 # universal params - never with another backend's params.
-#
-# Note: FP8 quantisation requires SM >= 8.9 (Ada Lovelace / Hopper).
-#       A100 users should use INT8, W4A16_AWQ, or W8A16. TODO look into this 
-#
-# Sweep experiments:
-#   PyTorch:   2 precision x 4 batch_size x 3 attn_implementation   =  24
-#   vLLM:      2 precision x 3 gpu_mem x 2 eager x 3 seqs x 2 prefill = 72
-#   TensorRT:  2 precision x 3 max_batch_size x 2 max_seq_len        =  12
-#   Total sweep:                                                       = 108
-# Explicit experiments:
-#   PyTorch:   10 active + 2 commented (LoRA, synthetic)
-#   vLLM:       8 active + 2 commented (speculative, LoRA)
-#   TensorRT:  11 active + 2 commented (FP8, TRT sampling)
-#   Total explicit:                                                    =  29
-# Grand total: 137 unique experiments x 3 cycles = 411 runs
 
 study_name: full-suite-all-backends
 
 # =====================================================================
 # Runner configuration
 # =====================================================================
-# Determines how each backend executes: locally or via Docker.
-# Values: 'local', 'docker', or 'docker:<custom-image-tag>'
-# Local mode runs directly on the host (requires all dependencies installed).
-# Docker mode runs each experiment in a fresh container from the specified image. 
-# If no custom image is provided, a default image with pre-installed dependencies will be used. 
-# TODO: this default is defined in ????
-
 runners:
-  pytorch: local                 # local | docker | Custom image override example: vllm: "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"
+  pytorch: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
   vllm: docker
   tensorrt: docker
 
 # =====================================================================
-# Execution controls 
+# Execution controls (study-level)
 # =====================================================================
-# Study-level metadata and scheduling parameters.  
-# These apply globally to all.
-# Non-sweepable (TODO: confirm this)
+# Study-level metadata and scheduling parameters.
+# Apply globally to all experiments. 
+# Non-sweepable.
 
-random_seed: 42 # TODO: make sure this is sources by all consumers of stocahsticity; make this the single source of truth for seeding across the entire study (including sweep shuffling, dataset shuffling, synthetic data generation, etc.)
-
-execution: # TODO rename this field study_execution
+study_execution:
   n_cycles: 3
-  cycle_order: shuffled       # sequential | interleaved | shuffled 
-  # TODO:  add intra-cycle interleaving option (e.g. sequential cycles, but interleaved experiments within each cycle) (I think currently is fully shuffled across all cycles - need to confirm this)
-  experiment_gap_seconds: 30.0   # Gap for thermal stabilisation between experiments TODO CHANGE BACK TO 60  
-  cycle_gap_seconds: 30.0       # 5-minute gap between full cycles TODO CHANGE BACK TO 300
-  shuffle_seed: null           # Explicit seed for shuffled order (null = derived from study hash) #TODO:how does this relate to random_seed above? Do we need both? what happens if not provided?
+  experiment_order: shuffle       # sequential | interleave | shuffle | reverse | latin_square
+  shuffle_seed: null           # Explicit override for experiment shuffle order (null = derived from study_design_hash)
+  experiment_gap_seconds: 60.0   # Gap for thermal stabilisation 
+  cycle_gap_seconds: 300.0       
   skip_preflight: false        # Skip Docker pre-flight checks (not recommended)
 
 # =====================================================================
-# Shared fields 
+# Shared fields (experiment-level)
 # =====================================================================
-# Applied to every experiment unless overridden by sweep or explicit experiments.  
-# Defacto treated as constant defaults for primary purpose of this tool (to measure energy efficiecny of different implementations configurations for a given computational workload)
-# Neverheless, all fields are sweepable
-# Add to sweep if you want to compare across different values of these fields (e.g. prompt counts, input lengths, energy backends, etc.)
+# Experimental-level shared parameters.
+# Apply globally to all experiment, unless overridden by sweep or explicit experiments.
+# Defacto treated as constant defaults, but all fields are sweepable.
+# Add to sweep if you want to compare across different values of these fields 
+# (e.g. random_seed for  sampling variability, or max_tokens to test throughput scaling, or max_tokens to test throughput scaling).
+# When omitted from a sweep, these values serve as the control variables for the experiment.
 
-model: Qwen/Qwen2.5-0.5B        
+random_seed: 42 # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset.order: shuffled)
 
-# --- Input Dataset ---
-#TODO: place these all under input using dot notation (e.g. input.dataset, input.n_prompts, input.order, input.max_input_tokensm, etc.) to make it more extensible and better organized. Then can add synthetic dataset params here as well (e.g. dataset.synthetic.input_len, etc.)
-dataset: aienergyscore           # Sweepable - built-in dataset (see synthetic alternative below)
-n: 50                            # TODO change to n_prompts
-dataset_order: interleaved       # interleaved | grouped | shuffled
+model: Qwen/Qwen2.5-0.5B
+
+# --- Dataset ---
+dataset:
+  source: aienergyscore          # Built-in alias or .jsonl file path
+  n_prompts: 100                 # Number of prompts to load or generate
+  order: interleaved             # interleaved | grouped | shuffled
+
+# Token limits - control FLOPs/computational workload isolation between experiments.
+# Setting these keeps computation workload constant so that only implementation
+# null = no limit (prompts keep natural length / model generates to EOS; FLOP counts not controlled between experiments).
 max_input_tokens: 256            # Sweepable - add to sweep: to compare input lengths
 max_output_tokens: 256           # Sweepable - add to sweep: to compare output lengths
-
-# Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
-#TODO: place this under input.synthetic and use dot notation for better organization (e.g. input.synthetic.n, input.synthetic.max_input_tokens, etc.)
-#TODO: validate that this works, or just remove it entirely????
-# dataset:
-#   n: 50                        # Number of synthetic prompts to generate TODO: change to n_prompts
-#   input_len: 512               # Fixed input token length per prompt TODO RENAME TO max_input_tokens for consistency with max_output_tokens above
-#   output_len: 128              # Fixed output token length per prompt TODO RENAME TO max_output_tokens for consistency with max_input_tokens above
-#   seed: 42                     # Reproducible prompt generation TODO: REMOVE THIS -> use random_seed
 
 # --- Energy measurement ---
 energy: #TODO: change theis to energy_measurement.sampler 
@@ -140,10 +114,10 @@ output_dir: null               # Per-experiment output directory override - TODO
 # shared params - never with another backend's params.
 sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- Universal (applies to all three backends) ---
-  precision:
-    - fp32
-    - fp16
-    - bf16
+  dtype:
+    - float32
+    - float16
+    - bfloat16
 # =====================================================================
 # Backend sweep axes (Cartesian product, per-backend)
 # =====================================================================
@@ -189,7 +163,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     #TODO add others - e.g. attention backend, speculative decoding, quantisation, parallelisation, etc.
 
   # --- TensorRT parameter space ---
-  # Produces: 2 precision x 3 max_batch_size x 2 max_seq_len = 12 experiments
+  # Produces: 2 dtype x 3 max_batch_size x 2 max_seq_len = 12 experiments
   tensorrt.max_batch_size:
     - 1
     - 4
@@ -199,7 +173,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   tensorrt.max_seq_len: # how is this different from max_input_len? does this include output tokens as well? need to clarify and validate this - if it includes output tokens, then this is effectively the max total sequence length (input + output) - need to clarify this in the docs and validate that it's working as intended
     - 1536
     - 2048
-  tensorrt.quant.quant_algo: # TODO: is this not tensorrt.precision??
+  tensorrt.quant.quant_algo: # TODO: is this not tensorrt.dtype??
     - int8
     - w4a16_awq
     - w8a16
@@ -236,8 +210,9 @@ experiments:
   # OR have validate that these only work when torch_compile: true and automatically filter out invalid configs if torch_compile: false - this would allow us to keep the torch_compile_mode sweep separate from the torch_compile: true/false axis, which would be cleaner and more modular - need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?)
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       torch_compile: true
@@ -248,8 +223,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       torch_compile: true
@@ -260,8 +236,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       torch_compile: true
@@ -277,8 +254,9 @@ experiments:
   # TODO: why are these not in sweep logic, and just have being filtered out when incompatible with load_in_8bit or load_in_4bit? If this works as intended, we could move these into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: fp16
-    n: 50
+    dtype: float16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       load_in_8bit: true
@@ -287,8 +265,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: fp16
-    n: 50
+    dtype: float16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       load_in_4bit: true
@@ -299,8 +278,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: fp16
-    n: 50
+    dtype: float16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       load_in_4bit: true
@@ -316,8 +296,9 @@ experiments:
   # TODO: as above: move this into sweep logic and validate that incompatible params are automatically filtered out (e.g. if beam search params are swept together with sampling params, does it automatically disable the sampling params when beam search is enabled, or does it produce invalid configs that need to be filtered out?) - if this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     decoder:
       temperature: 0.0
       do_sample: false
@@ -336,8 +317,9 @@ experiments:
   # TODO: again as above: why is this not in sweep logic, and just have being filtered out when incompatible with do_sample: false? If this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 1
       prompt_lookup_num_tokens: 3
@@ -350,8 +332,9 @@ experiments:
   # TODO: again, as above: move this into sweep logic.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       use_cache: true
@@ -364,26 +347,11 @@ experiments:
   # PyTorch LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: pytorch
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   lora:
   #     adapter_id: my-org/my-lora-adapter
   #     merge_weights: false
-  #   pytorch:
-  #     batch_size: 4
-  #     device_map: auto
-  #     trust_remote_code: true
-
-  # PyTorch synthetic dataset (commented out)
-  # - model: Qwen/Qwen2.5-0.5B
-  #   backend: pytorch
-  #   precision: bf16
-  #   n: 50
-  #   dataset:
-  #     n: 50
-  #     input_len: 256
-  #     output_len: 64
-  #     seed: 42
   #   pytorch:
   #     batch_size: 4
   #     device_map: auto
@@ -398,8 +366,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     decoder:
       temperature: 0.0
       do_sample: false
@@ -414,8 +383,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     decoder:
       temperature: 0.8
       do_sample: true
@@ -429,8 +399,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         enable_prefix_caching: true
@@ -438,8 +409,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         enable_prefix_caching: false
@@ -450,8 +422,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         block_size: 8
@@ -459,8 +432,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         block_size: 32
@@ -471,8 +445,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         kv_cache_dtype: fp8
@@ -483,8 +458,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         tensor_parallel_size: 2
@@ -493,7 +469,7 @@ experiments:
   # vLLM speculative decoding (commented out - requires a real draft model)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: vllm
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   vllm:
   #     engine:
@@ -504,7 +480,7 @@ experiments:
   # vLLM LoRA adapter (commented out - requires a real adapter)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: vllm
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   lora:
   #     adapter_id: my-org/my-lora-adapter
@@ -519,8 +495,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -532,8 +509,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -545,8 +523,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -559,8 +538,9 @@ experiments:
   # INT8 + KV cache quantisation (combined)
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -574,7 +554,7 @@ experiments:
   # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: tensorrt
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   tensorrt:
   #     max_batch_size: 8
@@ -590,8 +570,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -603,8 +584,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -619,8 +601,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -633,8 +616,9 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -649,8 +633,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -664,8 +649,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: fp16
-    n: 50
+    dtype: float16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -679,8 +665,9 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
-    n: 50
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -697,7 +684,7 @@ experiments:
   # TRT-LLM sampling extensions (commented out)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: tensorrt
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   tensorrt:
   #     max_batch_size: 8

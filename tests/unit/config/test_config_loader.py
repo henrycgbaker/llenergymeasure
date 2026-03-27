@@ -42,11 +42,11 @@ def test_load_valid_yaml(tmp_path):
     assert config.backend == "pytorch"
 
 
-def test_load_yaml_with_precision(tmp_path):
+def test_load_yaml_with_dtype(tmp_path):
     """YAML with optional fields loads correctly."""
-    path = _write_yaml(tmp_path, "model: gpt2\nbackend: pytorch\nprecision: fp16\n")
+    path = _write_yaml(tmp_path, "model: gpt2\nbackend: pytorch\ndtype: float16\n")
     config = load_experiment_config(path)
-    assert config.precision == "fp16"
+    assert config.dtype == "float16"
 
 
 def test_load_yaml_with_pytorch_section(tmp_path):
@@ -100,9 +100,9 @@ def test_load_nonexistent_file_raises_config_error(tmp_path):
 def test_pydantic_validation_error_passes_through(tmp_path):
     """YAML with valid keys but invalid values raises ValidationError (not ConfigError).
 
-    n=-1 is a valid field name but has an invalid value (ge=1 constraint).
+    dataset.n_prompts=-1 is a valid field path but has an invalid value (ge=1 constraint).
     """
-    path = _write_yaml(tmp_path, "model: gpt2\nn: -1\n")
+    path = _write_yaml(tmp_path, "model: gpt2\ndataset:\n  n_prompts: -1\n")
     with pytest.raises(ValidationError):
         load_experiment_config(path)
 
@@ -130,7 +130,7 @@ def test_cli_overrides_merged(tmp_path):
 def test_cli_overrides_none_values_ignored(tmp_path):
     """None values in cli_overrides are ignored (unset CLI flags)."""
     path = _write_yaml(tmp_path, "model: gpt2\nbackend: pytorch\n")
-    config = load_experiment_config(path, cli_overrides={"model": None, "precision": None})
+    config = load_experiment_config(path, cli_overrides={"model": None, "dtype": None})
     assert config.model == "gpt2"  # file value retained
 
 
@@ -225,23 +225,23 @@ def test_load_study_config_grid_sweep(tmp_path):
                 "model": "gpt2",
                 "backend": "pytorch",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
-                    "n": [50, 100],
+                    "dtype": ["float16", "bfloat16"],
+                    "dataset.n_prompts": [50, 100],
                 },
             }
         )
     )
     sc = load_study_config(study_yaml)
     assert isinstance(sc, StudyConfig)
-    # 2 precisions x 2 n values = 4 configs, default 1 cycle
+    # 2 dtypes x 2 n values = 4 configs, default 1 cycle
     assert len(sc.experiments) == 4
     assert sc.study_design_hash is not None
     assert len(sc.study_design_hash) == 16
     # 16-char hex
     int(sc.study_design_hash, 16)
     # execution defaults applied
-    assert sc.execution.n_cycles == 1
-    assert sc.execution.cycle_order == "sequential"
+    assert sc.study_execution.n_cycles == 1
+    assert sc.study_execution.experiment_order == "sequential"
 
 
 def test_load_study_config_explicit_experiments(tmp_path):
@@ -252,8 +252,8 @@ def test_load_study_config_explicit_experiments(tmp_path):
             {
                 "experiments": [
                     {"model": "gpt2", "backend": "pytorch"},
-                    {"model": "gpt2", "backend": "pytorch", "precision": "fp16"},
-                    {"model": "gpt2", "backend": "pytorch", "precision": "bf16"},
+                    {"model": "gpt2", "backend": "pytorch", "dtype": "float16"},
+                    {"model": "gpt2", "backend": "pytorch", "dtype": "bfloat16"},
                 ],
             }
         )
@@ -271,7 +271,7 @@ def test_load_study_config_combined_mode(tmp_path):
                 "model": "gpt2",
                 "backend": "pytorch",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
+                    "dtype": ["float16", "bfloat16"],
                 },
                 "experiments": [
                     {"model": "gpt2-xl", "backend": "pytorch"},
@@ -285,7 +285,7 @@ def test_load_study_config_combined_mode(tmp_path):
 
 
 def test_load_study_config_with_execution_block(tmp_path):
-    """load_study_config() with execution block applies n_cycles and cycle_order."""
+    """load_study_config() with execution block applies n_cycles and experiment_order."""
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
         yaml.dump(
@@ -293,18 +293,18 @@ def test_load_study_config_with_execution_block(tmp_path):
                 "model": "gpt2",
                 "backend": "pytorch",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
+                    "dtype": ["float16", "bfloat16"],
                 },
-                "execution": {
+                "study_execution": {
                     "n_cycles": 3,
-                    "cycle_order": "interleaved",
+                    "experiment_order": "interleave",
                 },
             }
         )
     )
     sc = load_study_config(study_yaml)
-    assert sc.execution.n_cycles == 3
-    assert sc.execution.cycle_order == "interleaved"
+    assert sc.study_execution.n_cycles == 3
+    assert sc.study_execution.experiment_order == "interleave"
     # 2 base configs x 3 cycles = 6 runs
     assert len(sc.experiments) == 6
 
@@ -317,13 +317,13 @@ def test_load_study_config_cli_overrides(tmp_path):
             {
                 "model": "gpt2",
                 "backend": "pytorch",
-                "sweep": {"precision": ["fp16", "bf16"]},
-                "execution": {"n_cycles": 1},
+                "sweep": {"dtype": ["float16", "bfloat16"]},
+                "study_execution": {"n_cycles": 1},
             }
         )
     )
-    sc = load_study_config(study_yaml, cli_overrides={"execution": {"n_cycles": 5}})
-    assert sc.execution.n_cycles == 5
+    sc = load_study_config(study_yaml, cli_overrides={"study_execution": {"n_cycles": 5}})
+    assert sc.study_execution.n_cycles == 5
     # 2 configs x 5 cycles = 10
     assert len(sc.experiments) == 10
 
@@ -336,7 +336,7 @@ def test_load_study_config_with_base(tmp_path):
             {
                 "model": "gpt2",
                 "backend": "pytorch",
-                "n": 75,
+                "dataset": {"n_prompts": 75},
             }
         )
     )
@@ -346,17 +346,17 @@ def test_load_study_config_with_base(tmp_path):
             {
                 "base": "experiment.yaml",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
+                    "dtype": ["float16", "bfloat16"],
                 },
             }
         )
     )
     sc = load_study_config(study_yaml)
     assert len(sc.experiments) == 2
-    # All experiments should inherit n=75 from base
+    # All experiments should inherit n_prompts=75 from base
     for exp in sc.experiments:
         assert exp.model == "gpt2"
-        assert exp.n == 75
+        assert exp.dataset.n_prompts == 75
 
 
 def test_load_study_config_empty_study_raises(tmp_path):
@@ -366,7 +366,7 @@ def test_load_study_config_empty_study_raises(tmp_path):
         yaml.dump(
             {
                 "study_name": "empty-study",
-                "execution": {"n_cycles": 1},
+                "study_execution": {"n_cycles": 1},
             }
         )
     )
@@ -407,10 +407,10 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     sweep_content = {
         "model": "gpt2",
         "backend": "pytorch",
-        "sweep": {"precision": ["fp16", "bf16"]},
+        "sweep": {"dtype": ["float16", "bfloat16"]},
     }
-    study_yaml_a.write_text(yaml.dump({**sweep_content, "execution": {"n_cycles": 1}}))
-    study_yaml_b.write_text(yaml.dump({**sweep_content, "execution": {"n_cycles": 5}}))
+    study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))
+    study_yaml_b.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 5}}))
 
     sc_a = load_study_config(study_yaml_a)
     sc_b = load_study_config(study_yaml_b)

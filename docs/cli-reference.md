@@ -31,7 +31,7 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 | `--dataset` | `-d` | str | — | Dataset name |
 | `-n` | | int | — | Number of prompts to run |
 | `--batch-size` | | int | — | Batch size (PyTorch backend only) |
-| `--precision` | `-p` | str | — | Floating point precision (`fp32`, `fp16`, `bf16`) |
+| `--dtype` | `-p` | str | — | Model dtype (`float32`, `float16`, `bfloat16`) |
 | `--output` | `-o` | str | — | Output directory for results |
 | `--dry-run` | | flag | false | Validate config and estimate VRAM without running |
 | `--quiet` | `-q` | flag | false | Suppress progress bars |

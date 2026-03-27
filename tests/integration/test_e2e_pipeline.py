@@ -110,7 +110,7 @@ class TestPipelineSingleExperiment:
 
         # Write minimal experiment YAML
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -120,7 +120,7 @@ class TestPipelineSingleExperiment:
         experiment_config = load_experiment_config(path=yaml_path)
         assert experiment_config.model == "gpt2"
         assert experiment_config.backend == "pytorch"
-        assert experiment_config.n == 5
+        assert experiment_config.dataset.n_prompts == 5
 
         # Full run_experiment call
         result = run_experiment(experiment_config, skip_preflight=True)
@@ -137,7 +137,7 @@ class TestPipelineSingleExperiment:
         from llenergymeasure.domain.experiment import ExperimentResult
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nn: 3\n")
+        yaml_path.write_text("model: gpt2\ndataset:\n  n_prompts: 3\n")
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -152,7 +152,7 @@ class TestPipelineMultiExperimentSweep:
     """Test 2: Study YAML with sweep -> StudyConfig -> N experiment configs."""
 
     def test_study_yaml_sweep_produces_correct_experiment_count(self, tmp_path: Path) -> None:
-        """YAML with precision sweep -> StudyConfig with 2 experiments (fp16, bf16).
+        """YAML with dtype sweep -> StudyConfig with 2 experiments (fp16, bf16).
 
         Tests real YAML parsing + config validation. Does not exercise the runner
         (StudyRunner uses multiprocessing spawn; subprocess patching is not feasible
@@ -163,10 +163,10 @@ class TestPipelineMultiExperimentSweep:
         yaml_content = """\
 model: gpt2
 sweep:
-  precision: [fp16, bf16]
-execution:
+  dtype: [float16, bfloat16]
+study_execution:
   n_cycles: 1
-  cycle_order: sequential
+  experiment_order: sequential
   experiment_gap_seconds: 0
 warmup:
   enabled: false
@@ -178,10 +178,10 @@ baseline:
 
         study_config = load_study_config(yaml_path)
 
-        # Sweep over 2 precisions, n_cycles=1 → 2 experiments total
+        # Sweep over 2 dtypes, n_cycles=1 → 2 experiments total
         assert len(study_config.experiments) == 2
-        precisions = {exp.precision for exp in study_config.experiments}
-        assert precisions == {"fp16", "bf16"}
+        dtypes_set = {exp.dtype for exp in study_config.experiments}
+        assert dtypes_set == {"float16", "bfloat16"}
 
     def test_study_yaml_model_sweep(self, tmp_path: Path) -> None:
         """YAML with model sweep produces correct number of experiment configs."""
@@ -191,9 +191,9 @@ baseline:
 sweep:
   model: [gpt2, distilgpt2]
   backend: [pytorch]
-execution:
+study_execution:
   n_cycles: 1
-  cycle_order: sequential
+  experiment_order: sequential
 """
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
@@ -208,7 +208,9 @@ execution:
         """StudyConfig.study_design_hash is populated after loading."""
         from llenergymeasure.config.loader import load_study_config
 
-        yaml_content = "model: gpt2\nexecution:\n  n_cycles: 1\n  cycle_order: sequential\n"
+        yaml_content = (
+            "model: gpt2\nstudy_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
+        )
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
 
@@ -278,7 +280,7 @@ class TestPipelineDryRun:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         backend_call_count = []
 
@@ -325,7 +327,7 @@ class TestCLIE2ESingleExperiment:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result(experiment_id="cli-e2e-001")
 
@@ -372,8 +374,8 @@ class TestCLIE2EStudy:
 
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(
-            "model: gpt2\nsweep:\n  precision: [fp16, bf16]\n"
-            "execution:\n  n_cycles: 1\n  cycle_order: sequential\n"
+            "model: gpt2\nsweep:\n  dtype: [float16, bfloat16]\n"
+            "study_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         )
 
         mock_study_result = make_study_result()
@@ -430,7 +432,7 @@ class TestCLIE2EErrorExitCodes:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         error_cls = getattr(llenergymeasure.utils.exceptions, error_class)
         exc_instance = error_cls(f"test {error_class}")
