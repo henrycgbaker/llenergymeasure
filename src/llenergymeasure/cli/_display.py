@@ -109,7 +109,7 @@ def print_dry_run(
     # Determine non-default fields for annotations
     defaults = {
         "backend": "pytorch",
-        "precision": "bf16",
+        "dtype": "bfloat16",
         "n": 100,
         "dataset": "aienergyscore",
         "output_dir": None,
@@ -121,13 +121,13 @@ def print_dry_run(
             return ""
         default = defaults.get(field)
         if value == default:
-            return f" ({field} default)" if field not in ("backend", "precision") else " (default)"
+            return f" ({field} default)" if field not in ("backend", "dtype") else " (default)"
         return ""
 
     print("Config (resolved)")
     print(f"  Model          {config.model}")
     print(f"  Backend        {config.backend}{_annotate('backend', config.backend)}")
-    print(f"  Precision      {config.precision}{_annotate('precision', config.precision)}")
+    print(f"  Precision      {config.dtype}{_annotate('precision', config.dtype)}")
 
     # Batch size — from pytorch section if present
     batch_size: int | None = None
@@ -150,7 +150,7 @@ def print_dry_run(
     if vram is None:
         print("  (unavailable)")
     else:
-        weights_line = f"  Weights        {_sig3(vram['weights_gb'])} GB ({config.precision})"
+        weights_line = f"  Weights        {_sig3(vram['weights_gb'])} GB ({config.dtype})"
         print(weights_line)
         print(f"  KV cache       {_sig3(vram['kv_cache_gb'])} GB")
         print(f"  Overhead       {_sig3(vram['overhead_gb'])} GB")
@@ -207,7 +207,7 @@ def format_validation_error(e: ValidationError) -> str:
 
     # Build a set of valid values for did-you-mean suggestions
     valid_backends = list(PRECISION_SUPPORT.keys())
-    valid_precisions = list({p for precs in PRECISION_SUPPORT.values() for p in precs})
+    valid_dtypes = list({p for precs in PRECISION_SUPPORT.values() for p in precs})
 
     for err in errors:
         loc_parts = [str(part) for part in err.get("loc", [])]
@@ -224,10 +224,10 @@ def format_validation_error(e: ValidationError) -> str:
                 last_loc = loc_parts[-1] if loc_parts else ""
                 if last_loc == "backend":
                     pool = valid_backends
-                elif last_loc == "precision":
-                    pool = valid_precisions
+                elif last_loc == "dtype":
+                    pool = valid_dtypes
                 else:
-                    pool = valid_backends + valid_precisions
+                    pool = valid_backends + valid_dtypes
 
                 suggestions = difflib.get_close_matches(bad_value, pool, n=3, cutoff=0.6)
                 if suggestions:
@@ -296,7 +296,7 @@ def print_study_dry_run(
 
     print("VRAM estimate (peak)")
     if peak_vram is not None and peak_config is not None:
-        print(f"  Weights        {_sig3(peak_vram['weights_gb'])} GB ({peak_config.precision})")
+        print(f"  Weights        {_sig3(peak_vram['weights_gb'])} GB ({peak_config.dtype})")
         print(f"  KV cache       {_sig3(peak_vram['kv_cache_gb'])} GB")
         print(f"  Overhead       {_sig3(peak_vram['overhead_gb'])} GB")
         total_line = f"  Total          ~{_sig3(peak_vram['total_gb'])} GB"
@@ -355,10 +355,10 @@ def print_study_summary(result: StudyResult) -> None:
         if len(model_short) > 20:
             model_short = "..." + model_short[-17:]
         backend = exp.backend
-        precision = (
-            exp.effective_config.get("precision", "?") if hasattr(exp, "effective_config") else "?"
+        dtype_val = (
+            exp.effective_config.get("dtype", "?") if hasattr(exp, "effective_config") else "?"
         )
-        config_str = f"{model_short} / {backend} / {precision}"
+        config_str = f"{model_short} / {backend} / {dtype_val}"
         if len(config_str) > 40:
             config_str = config_str[:37] + "..."
 

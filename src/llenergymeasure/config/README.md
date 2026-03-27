@@ -50,7 +50,7 @@ These define the experiment configuration that affects measurements:
 |--------------|------------------|
 | `batching.batch_size` | Inference batch size |
 | `batching.strategy` | static/dynamic/sorted_static/sorted_dynamic |
-| `fp_precision` | float32/float16/bfloat16 |
+| `dtype` | float32/float16/bfloat16 |
 | `num_processes` | Distributed workers |
 | `gpus` | GPU allocation |
 | `decoder.temperature` | Sampling temperature |
@@ -64,7 +64,7 @@ These CLI flags **still work** but emit deprecation warnings:
 
 ```
 --batch-size, -b    → Use batching.batch_size in YAML
---precision         → Use fp_precision in YAML
+--dtype             → Use dtype in YAML
 --num-processes     → Use num_processes in YAML
 --gpu-list          → Use gpus in YAML
 --temperature       → Use decoder.temperature in YAML
@@ -275,7 +275,7 @@ The validator (`validate_config()`) checks for problematic configurations and re
 |----------|-----------|----------|---------|
 | Distributed | `num_processes > 1` with single GPU | info | Multiple processes with single GPU may not provide parallelism benefits |
 | Tokens | `max_output_tokens > 2048` | warning | Very high max_output_tokens may cause memory issues |
-| Quantization | `quantization=True` with `fp_precision=float32` | warning | Quantization typically uses float16 compute, not float32 |
+| Quantization | `quantization=True` with `dtype=float32` | warning | Quantization typically uses float16 compute, not float32 |
 | Quantization | `quantization=True` without 4bit/8bit specified | error | Must specify load_in_4bit or load_in_8bit |
 | Batching | Dynamic strategy without `max_tokens_per_batch` | info | Will use max_input_tokens as token budget |
 | Batching | Dynamic strategy with non-default `batch_size` | warning | batch_size is ignored for dynamic strategies |
@@ -325,7 +325,7 @@ warnings = validate_config(config)
 ```yaml
 # base.yaml
 max_input_tokens: 512
-fp_precision: float16
+dtype: float16
 
 # experiment.yaml
 _extends: base.yaml
@@ -365,7 +365,7 @@ lem config new --preset benchmark
 | `max_input_tokens` | - | int | 512 | Max input tokens |
 | `max_output_tokens` | `--max-tokens` | int | 128 | Max generated tokens |
 | `min_output_tokens` | - | int | 0 | Min generated tokens |
-| `fp_precision` | `--precision` | str | float16 | float32/float16/bfloat16 |
+| `dtype` | `--dtype` | str | bfloat16 | float32/float16/bfloat16 |
 | `num_processes` | `--num-processes` | int | 1 | Worker processes |
 | `gpus` | `--gpu-list` | list[int] | [0] | GPU indices |
 | `random_seed` | `--seed` | int\|None | None | Random seed |
@@ -402,7 +402,7 @@ lem config new --preset benchmark
 ### Precision Settings
 | Field | Default | Options |
 |-------|---------|---------|
-| `fp_precision` | float16 | float32, float16, bfloat16 |
+| `dtype` | bfloat16 | float32, float16, bfloat16 |
 | `backend` | pytorch | pytorch, tensorrt, vllm |
 
 ### Reproducibility
@@ -617,11 +617,11 @@ Generate configs for parameter sweeps using Cartesian product:
 ```bash
 lem config generate-grid base.yaml \
     --vary batch_size=1,2,4,8 \
-    --vary fp_precision=float16,float32 \
+    --vary dtype=float16,float32 \
     --output-dir ./grid/
 ```
 
-This creates 8 configs (4 batch sizes × 2 precisions) in `./grid/`.
+This creates 8 configs (4 batch sizes × 2 dtypes) in `./grid/`.
 
 ### ⚠️ Grid Validation Flags
 
@@ -703,7 +703,7 @@ Results include `effective_config` and `cli_overrides` fields for full reproduci
   "effective_config": {
     "model_name": "meta-llama/Llama-2-7b-hf",
     "batch_size": 8,
-    "fp_precision": "float16"
+    "dtype": "float16"
   },
   "cli_overrides": {
     "batching.batch_size": {"new": 8, "original": 1}

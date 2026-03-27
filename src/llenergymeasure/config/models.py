@@ -5,7 +5,7 @@ across all backends. Backend-specific parameters live in backend_configs.py.
 
 v2.0 field renames from v1.x:
     model_name         -> model
-    fp_precision       -> precision
+    fp_precision       -> dtype
     num_input_prompts  -> n
     extra_metadata     -> passthrough_kwargs
 
@@ -289,7 +289,7 @@ class ExperimentConfig(BaseModel):
 
     Field renames from v1.x:
         model_name -> model
-        fp_precision -> precision
+        fp_precision -> dtype
         num_input_prompts -> dataset.n_prompts
         dataset (str) -> dataset.source
         dataset_order -> dataset.order
@@ -315,8 +315,8 @@ class ExperimentConfig(BaseModel):
     )
 
     # Hardware
-    precision: Literal["fp32", "fp16", "bf16"] = Field(
-        default="bf16", description="Floating point precision"
+    dtype: Literal["float32", "float16", "bfloat16"] = Field(
+        default="bfloat16", description="Model dtype for inference"
     )
     random_seed: int = Field(
         default=42,
@@ -327,7 +327,7 @@ class ExperimentConfig(BaseModel):
 
     # Token limits — control FLOPs isolation between experiments.
     # Setting these keeps computation workload constant so that only implementation
-    # parameters (backend, precision, quantisation) vary between experiments.
+    # parameters (backend, dtype, quantisation) vary between experiments.
     # None = no limit (prompts keep natural length / model generates to EOS).
     max_input_tokens: int | None = Field(
         default=256,

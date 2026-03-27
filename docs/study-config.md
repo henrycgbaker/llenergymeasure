@@ -19,7 +19,7 @@ A fuller example with sub-configs:
 ```yaml
 model: gpt2
 backend: pytorch
-precision: bf16
+dtype: bfloat16
 max_input_tokens: 256
 max_output_tokens: 256
 
@@ -95,8 +95,8 @@ The study YAML also accepts a `base:` key pointing to a base experiment config f
 ### Single dimension sweep
 
 ```yaml
-# 2 configs: precision=fp16 and precision=bf16
-name: precision-sweep
+# 2 configs: dtype=float16 and dtype=bfloat16
+name: dtype-sweep
 model: gpt2
 backend: pytorch
 
@@ -104,14 +104,14 @@ dataset:
   n_prompts: 100
 
 sweep:
-  precision: [fp16, bf16]
+  dtype: [float16, bfloat16]
 
 study_execution:
   n_cycles: 3
   experiment_order: shuffle
 ```
 
-Run with `llem run precision-sweep.yaml`. Produces 2 configs × 3 cycles = 6 runs.
+Run with `llem run dtype-sweep.yaml`. Produces 2 configs × 3 cycles = 6 runs.
 
 ---
 
@@ -119,12 +119,12 @@ Run with `llem run precision-sweep.yaml`. Produces 2 configs × 3 cycles = 6 run
 
 ```yaml
 # 4 configs: fp16+50, fp16+100, bf16+50, bf16+100
-name: precision-n-sweep
+name: dtype-n-sweep
 model: gpt2
 backend: pytorch
 
 sweep:
-  precision: [fp16, bf16]
+  dtype: [float16, bfloat16]
   dataset.n_prompts: [50, 100]
 
 study_execution:
@@ -224,7 +224,7 @@ dataset:
 experiments:
   - model: gpt2
     backend: pytorch
-    precision: bf16
+    dtype: bfloat16
   - model: gpt2
     backend: vllm
     runners:
@@ -245,11 +245,11 @@ Use `base:` to load a base experiment config file and sweep on top of it:
 
 ```yaml
 # base-experiment.yaml is a normal experiment YAML
-name: precision-sweep
+name: dtype-sweep
 base: base-experiment.yaml
 
 sweep:
-  precision: [fp32, fp16, bf16]
+  dtype: [float32, float16, bfloat16]
 
 study_execution:
   n_cycles: 3
@@ -273,12 +273,12 @@ name: mixed-study
 model: gpt2
 
 sweep:
-  precision: [fp16, bf16]
+  dtype: [float16, bfloat16]
 
 experiments:
   - model: gpt2
     backend: pytorch
-    precision: fp32
+    dtype: float32
     pytorch:
       load_in_4bit: true
 
@@ -393,7 +393,7 @@ All fields except `model` are optional and have sensible defaults.
 | `model` | string | *(required)* | HuggingFace model ID or local path |
 | `backend` | 'pytorch' | 'vllm' | 'tensorrt' | `pytorch` | Inference backend |
 | `dataset` | DatasetConfig | *(see below)* | Dataset configuration (nested sub-object) |
-| `precision` | 'fp32' | 'fp16' | 'bf16' | `bf16` | Floating point precision |
+| `dtype` | 'float32' | 'float16' | 'bfloat16' | `bfloat16` | Model dtype for inference |
 | `random_seed` | integer | `42` | Per-experiment seed: inference RNG and dataset ordering |
 | `max_input_tokens` | integer | None | `256` | Max input token length for truncation. Keeps computation workload constant across experiments for fair comparison. `null` disables truncation. |
 | `max_output_tokens` | integer | None | `256` | Max output tokens to generate. Keeps computation workload constant across experiments for fair comparison. `null` disables generation cap. |

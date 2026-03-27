@@ -33,7 +33,7 @@ llem run --model gpt2 --backend pytorch
 
 This runs GPT-2 (124M parameters). On first run, the model downloads from HuggingFace (~500 MB). Subsequent runs use the cache.
 
-Default settings: 100 prompts, `aienergyscore` dataset, `bf16` precision.
+Default settings: 100 prompts, `aienergyscore` dataset, `bfloat16` dtype.
 
 You will see a progress indicator on stderr, then results printed to stdout:
 

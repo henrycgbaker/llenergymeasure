@@ -53,7 +53,7 @@ FlopsResult(
     value=1.5e12,
     method="calflops",  # calflops | architecture | parameter_estimate
     confidence="high",   # high | medium | low
-    precision="fp16",
+    dtype="float16",
 )
 ```
 

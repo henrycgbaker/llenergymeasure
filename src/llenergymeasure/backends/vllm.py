@@ -291,7 +291,7 @@ class VLLMBackend:
         """Build kwargs dict for vllm.LLM() constructor."""
         kwargs: dict[str, Any] = {
             "model": config.model,
-            "dtype": self._map_precision(config.precision),
+            "dtype": config.dtype,
             "trust_remote_code": True,
             "seed": config.random_seed,
         }
@@ -360,11 +360,6 @@ class VLLMBackend:
                 kwargs.update(engine.model_extra)
 
         return kwargs
-
-    @staticmethod
-    def _map_precision(precision: str) -> str:
-        """Map precision string to vLLM dtype string."""
-        return {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}.get(precision, "auto")
 
     @staticmethod
     def _build_sampling_params(config: ExperimentConfig, sampling_params_cls: Any) -> Any:

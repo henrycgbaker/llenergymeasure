@@ -152,7 +152,7 @@ class TestPipelineMultiExperimentSweep:
     """Test 2: Study YAML with sweep -> StudyConfig -> N experiment configs."""
 
     def test_study_yaml_sweep_produces_correct_experiment_count(self, tmp_path: Path) -> None:
-        """YAML with precision sweep -> StudyConfig with 2 experiments (fp16, bf16).
+        """YAML with dtype sweep -> StudyConfig with 2 experiments (fp16, bf16).
 
         Tests real YAML parsing + config validation. Does not exercise the runner
         (StudyRunner uses multiprocessing spawn; subprocess patching is not feasible
@@ -163,7 +163,7 @@ class TestPipelineMultiExperimentSweep:
         yaml_content = """\
 model: gpt2
 sweep:
-  precision: [fp16, bf16]
+  dtype: [float16, bfloat16]
 study_execution:
   n_cycles: 1
   experiment_order: sequential
@@ -178,10 +178,10 @@ baseline:
 
         study_config = load_study_config(yaml_path)
 
-        # Sweep over 2 precisions, n_cycles=1 → 2 experiments total
+        # Sweep over 2 dtypes, n_cycles=1 → 2 experiments total
         assert len(study_config.experiments) == 2
-        precisions = {exp.precision for exp in study_config.experiments}
-        assert precisions == {"fp16", "bf16"}
+        dtypes_set = {exp.dtype for exp in study_config.experiments}
+        assert dtypes_set == {"float16", "bfloat16"}
 
     def test_study_yaml_model_sweep(self, tmp_path: Path) -> None:
         """YAML with model sweep produces correct number of experiment configs."""
@@ -374,7 +374,7 @@ class TestCLIE2EStudy:
 
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(
-            "model: gpt2\nsweep:\n  precision: [fp16, bf16]\n"
+            "model: gpt2\nsweep:\n  dtype: [float16, bfloat16]\n"
             "study_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         )
 

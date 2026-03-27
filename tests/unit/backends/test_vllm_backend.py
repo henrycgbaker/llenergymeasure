@@ -118,32 +118,7 @@ class TestProtocolCompliance:
 
 
 # =============================================================================
-# Test Group 2: Precision mapping
-# =============================================================================
-
-
-class TestPrecisionMapping:
-    def test_precision_fp32_maps_to_float32(self):
-        """'fp32' maps to 'float32' — the vLLM dtype string."""
-        assert VLLMBackend._map_precision("fp32") == "float32"
-
-    def test_precision_fp16_maps_to_float16(self):
-        """'fp16' maps to 'float16' — the vLLM dtype string."""
-        assert VLLMBackend._map_precision("fp16") == "float16"
-
-    def test_precision_bf16_maps_to_bfloat16(self):
-        """'bf16' maps to 'bfloat16' — the vLLM dtype string."""
-        assert VLLMBackend._map_precision("bf16") == "bfloat16"
-
-    def test_precision_unknown_returns_auto(self):
-        """Unknown precision strings fall back to 'auto' (vLLM's own detection)."""
-        assert VLLMBackend._map_precision("unknown") == "auto"
-        assert VLLMBackend._map_precision("") == "auto"
-        assert VLLMBackend._map_precision("int8") == "auto"
-
-
-# =============================================================================
-# Test Group 3: _build_llm_kwargs
+# Test Group 2: _build_llm_kwargs
 # =============================================================================
 
 
@@ -159,8 +134,8 @@ class TestBuildLlmKwargs:
         assert kwargs["seed"] == 42
         assert "dtype" in kwargs
 
-    def test_minimal_config_dtype_reflects_precision(self):
-        """Default precision (bf16) maps to bfloat16 in kwargs."""
+    def test_minimal_config_dtype_passthrough(self):
+        """Default dtype (bfloat16) passes through in kwargs."""
         config = make_config(**_VLLM_DEFAULTS)
         backend = VLLMBackend()
         kwargs = backend._build_llm_kwargs(config)
@@ -208,21 +183,21 @@ class TestBuildLlmKwargs:
 
         assert set(kwargs.keys()) == {"model", "dtype", "trust_remote_code", "seed"}
 
-    def test_precision_fp32_in_kwargs(self):
-        """fp32 precision maps to float32 in the dtype kwarg."""
-        config = make_config(**_VLLM_DEFAULTS, precision="fp32")
+    def test_dtype_float32_in_kwargs(self):
+        """dtype='float32' passes through to vLLM."""
+        config = make_config(**_VLLM_DEFAULTS, dtype="float32")
         kwargs = VLLMBackend()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "float32"
 
-    def test_precision_fp16_in_kwargs(self):
-        """fp16 precision maps to float16 in the dtype kwarg."""
-        config = make_config(**_VLLM_DEFAULTS, precision="fp16")
+    def test_dtype_float16_in_kwargs(self):
+        """dtype='float16' passes through to vLLM."""
+        config = make_config(**_VLLM_DEFAULTS, dtype="float16")
         kwargs = VLLMBackend()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "float16"
 
-    def test_precision_bf16_in_kwargs(self):
-        """bf16 precision maps to bfloat16 in the dtype kwarg."""
-        config = make_config(**_VLLM_DEFAULTS, precision="bf16")
+    def test_dtype_bfloat16_in_kwargs(self):
+        """dtype='bfloat16' passes through to vLLM."""
+        config = make_config(**_VLLM_DEFAULTS, dtype="bfloat16")
         kwargs = VLLMBackend()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "bfloat16"
 

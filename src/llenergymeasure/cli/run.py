@@ -62,11 +62,9 @@ def run(
         int | None,
         typer.Option("--batch-size", help="Batch size (PyTorch backend)"),
     ] = None,
-    precision: Annotated[
+    dtype: Annotated[
         str | None,
-        typer.Option(
-            "--precision", "-p", help="Floating point precision (fp32, fp16, bf16, int8, int4)"
-        ),
+        typer.Option("--dtype", "-p", help="Model dtype (float32, float16, bfloat16)"),
     ] = None,
     output: Annotated[
         str | None,
@@ -128,7 +126,7 @@ def run(
             dataset=dataset,
             n_prompts=n_prompts,
             batch_size=batch_size,
-            precision=precision,
+            dtype=dtype,
             output=output,
             dry_run=dry_run,
             quiet=quiet,
@@ -164,7 +162,7 @@ def _run_impl(
     dataset: str | None,
     n_prompts: int | None,
     batch_size: int | None,
-    precision: str | None,
+    dtype: str | None,
     output: str | None,
     dry_run: bool,
     quiet: bool,
@@ -188,8 +186,8 @@ def _run_impl(
     if batch_size is not None:
         # Dotted key for _unflatten() in loader — maps to pytorch.batch_size
         cli_overrides["pytorch.batch_size"] = batch_size
-    if precision is not None:
-        cli_overrides["precision"] = precision
+    if dtype is not None:
+        cli_overrides["dtype"] = dtype
     if output is not None:
         cli_overrides["output_dir"] = output
 
@@ -325,14 +323,14 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     """Build compact experiment header: model | backend [runner] + deviation fields.
 
     Args:
-        config: ExperimentConfig with model, backend, precision, dataset fields.
+        config: ExperimentConfig with model, backend, dtype, dataset fields.
         runner_tag: Runner tag string ("local" or "docker").
     """
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     _fields = ExperimentConfig.model_fields
     _ds_fields = DatasetConfig.model_fields
-    default_precision = _fields["precision"].default
+    default_dtype = _fields["dtype"].default
     default_n = _ds_fields["n_prompts"].default
     default_source = _ds_fields["source"].default
 
@@ -340,8 +338,8 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     model = config.model.split("/")[-1] if "/" in config.model else config.model
     parts = [f"{model} | {config.backend}"]
     # Deviation fields (only when non-default)
-    if config.precision != default_precision:
-        parts.append(config.precision)
+    if config.dtype != default_dtype:
+        parts.append(config.dtype)
     if config.dataset.n_prompts != default_n:
         parts.append(f"n_prompts={config.dataset.n_prompts}")
     if config.dataset.source != default_source:
