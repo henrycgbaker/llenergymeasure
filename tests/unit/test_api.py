@@ -460,12 +460,12 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     )
 
     config = ExperimentConfig(model="gpt2")
-    study = StudyConfig(experiments=[config], name="my-study")
+    study = StudyConfig(experiments=[config], study_name="my-study")
 
     study_result = api_module._run(study)
 
     assert isinstance(study_result, StudyResult)
-    assert study_result.name == "my-study"
+    assert study_result.study_name == "my-study"
     assert len(study_result.experiments) == 1
     assert study_result.experiments[0].experiment_id == "wired-001"
 

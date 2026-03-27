@@ -509,7 +509,7 @@ class StudyConfig(BaseModel):
     experiments: list[ExperimentConfig] = Field(
         ..., min_length=1, description="Resolved list of experiments to run"
     )
-    name: str | None = Field(
+    study_name: str | None = Field(
         default=None, description="Study name (used in output directory naming)"
     )
     execution: ExecutionConfig = Field(

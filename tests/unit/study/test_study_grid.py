@@ -86,12 +86,12 @@ class TestStudyConfig:
         exp = ExperimentConfig(model="gpt2")
         sc = StudyConfig(
             experiments=[exp],
-            name="my-study",
+            study_name="my-study",
             execution=ExecutionConfig(n_cycles=3),
             study_design_hash="abc123def456abcd",
             skipped_configs=[{"raw_config": {}, "reason": "test"}],
         )
-        assert sc.name == "my-study"
+        assert sc.study_name == "my-study"
         assert sc.execution.n_cycles == 3
         assert sc.study_design_hash == "abc123def456abcd"
         assert len(sc.skipped_configs) == 1
@@ -266,7 +266,7 @@ class TestExpandGridBase:
             "experiments": [{"model": "other"}],
             "execution": {"n_cycles": 5},
             "base": "another.yaml",
-            "name": "should-be-stripped",
+            "study_name": "should-be-stripped",
         }
         base_file = tmp_path / "base_experiment.yaml"
         base_file.write_text(yaml.dump(base_config))
@@ -351,7 +351,7 @@ class TestExpandGridInvalidHandling:
 
     def test_no_experiments_raises_config_error(self):
         """A sweep with no model and no experiments raises ConfigError."""
-        raw = {"name": "empty-study"}
+        raw = {"study_name": "empty-study"}
         with pytest.raises(ConfigError):
             expand_grid(raw)
 
@@ -688,7 +688,7 @@ def _make_panel_study_config(
     all_exps = experiments * n_cycles
     return StudyConfig(
         experiments=all_exps,
-        name=study_name,
+        study_name=study_name,
         execution=ExecutionConfig(n_cycles=n_cycles, cycle_order=cycle_order),
         study_design_hash=study_hash,
         runners=runners,
@@ -788,7 +788,7 @@ class TestBuildPreflightPanel:
         )
         sc = StudyConfig(
             experiments=[exp1, exp2],
-            name="decoder-test",
+            study_name="decoder-test",
             execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
             study_design_hash="deadbeef01234567",
         )

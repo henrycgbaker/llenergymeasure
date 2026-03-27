@@ -245,7 +245,7 @@ def _run(
         )
 
     # Always create study dir + manifest
-    study_dir = create_study_dir(study.name, Path("results"))
+    study_dir = create_study_dir(study.study_name, Path("results"))
     manifest = ManifestWriter(study, study_dir)
 
     wall_start = time.monotonic()
@@ -323,7 +323,7 @@ def _run(
 
     return StudyResult(
         experiments=[r for r in experiment_results if r is not None],
-        name=study.name,
+        study_name=study.study_name,
         study_design_hash=study.study_design_hash,
         measurement_protocol=measurement_protocol,
         result_files=result_files,

@@ -73,7 +73,7 @@ def make_study_result(**overrides) -> StudyResult:
     """
     one_result = make_result()
     defaults: dict = {
-        "name": "test-study",
+        "study_name": "test-study",
         "experiments": [one_result],
         "summary": StudySummary(
             total_experiments=1,

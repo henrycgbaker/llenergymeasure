@@ -427,7 +427,7 @@ def _run_study_impl(
     except Exception:
         runner_specs = None  # graceful: Docker unavailable, show YAML runners
 
-    prefix = study_config.name or "study"
+    prefix = study_config.study_name or "study"
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
     study_dir_preview = Path("results") / f"{prefix}_{ts}"
 
@@ -452,7 +452,7 @@ def _run_study_impl(
 
         n_exp = len(study_config.experiments)
         n_cycles = study_config.execution.n_cycles
-        name = study_config.name or "unnamed"
+        name = study_config.study_name or "unnamed"
 
         _stderr_console = RichConsole(stderr=True)
         panel = build_preflight_panel(

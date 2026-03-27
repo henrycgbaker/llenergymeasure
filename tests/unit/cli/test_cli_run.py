@@ -384,7 +384,7 @@ def test_print_study_summary_basic():
     )
     result = StudyResult.model_construct(
         experiments=[exp],
-        name="test-study",
+        study_name="test-study",
         study_design_hash="abcd1234",
         summary=summary,
         result_files=["results/exp1/result.json"],

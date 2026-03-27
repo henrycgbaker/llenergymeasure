@@ -320,7 +320,7 @@ class StudyResult(BaseModel):
     experiments: list[ExperimentResult] = Field(
         default_factory=list, description="Results for each experiment in the study"
     )
-    name: str | None = Field(default=None, description="Study name")
+    study_name: str | None = Field(default=None, description="Study name")
     study_design_hash: str | None = Field(
         default=None, description="16-char SHA-256 hex of experiment list"
     )

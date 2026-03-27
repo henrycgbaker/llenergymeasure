@@ -337,7 +337,7 @@ def print_study_summary(result: StudyResult) -> None:
         result: Completed StudyResult.
     """
     print()
-    print(f"Study: {result.name or 'unnamed'}")
+    print(f"Study: {result.study_name or 'unnamed'}")
     if result.study_design_hash:
         print(f"Hash:  {result.study_design_hash}")
     print()

@@ -152,7 +152,7 @@ def load_study_config(
     raw.pop("version", None)
 
     # Extract study-level metadata
-    name = raw.get("name")
+    name = raw.get("study_name")
     # runners: per-backend runner config (e.g. {"pytorch": "local", "vllm": "docker"})
     # None if not specified in YAML — caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
@@ -194,7 +194,7 @@ def load_study_config(
 
     return StudyConfig(
         experiments=ordered,
-        name=name,
+        study_name=name,
         execution=execution,
         runners=runners,
         study_design_hash=study_hash,
