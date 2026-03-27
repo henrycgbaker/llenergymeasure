@@ -53,14 +53,15 @@ manifest.mark_study_completed()
 
 ## Cycle ordering
 
-`ExecutionConfig.cycle_order` controls how N cycles of K experiments are ordered:
+`ExecutionConfig.experiment_order` controls how N cycles of K experiments are ordered:
 
 | Order | Behaviour |
 |-------|-----------|
-| `interleaved` | Cycle 1 of all experiments, then cycle 2, ... (default — reduces thermal autocorrelation) |
-| `grouped` | All cycles of experiment 1, then all cycles of experiment 2, ... |
-
-A shuffle seed can be set to randomise experiment order within each cycle.
+| `sequential` | All cycles of experiment 1, then all cycles of experiment 2, ... |
+| `interleave` | Cycle 1 of all experiments, then cycle 2, ... (reduces thermal autocorrelation) |
+| `shuffle` | Random per-cycle order, seeded from study_design_hash by default |
+| `reverse` | Alternating forward/backward per cycle (counterbalanced) |
+| `latin_square` | Williams balanced latin square (balances first-order carryover effects) |
 
 ## GPU memory residual check
 

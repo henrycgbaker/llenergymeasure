@@ -41,14 +41,16 @@ logger = logging.getLogger(__name__)
 # These are stripped from base: files and excluded from the fixed dict.
 # "runners" is study-level metadata (per-backend runner config) — not an experiment field.
 _STUDY_ONLY_KEYS = frozenset(
-    {"sweep", "experiments", "execution", "base", "study_name", "version", "runners"}
+    {"sweep", "experiments", "study_execution", "base", "study_name", "version", "runners"}
 )
 
 
-class CycleOrder(StrEnum):
+class ExperimentOrder(StrEnum):
     SEQUENTIAL = "sequential"
-    INTERLEAVED = "interleaved"
-    SHUFFLED = "shuffled"
+    INTERLEAVE = "interleave"
+    SHUFFLE = "shuffle"
+    REVERSE = "reverse"
+    LATIN_SQUARE = "latin_square"
 
 
 @dataclass
@@ -89,7 +91,7 @@ def expand_grid(
 
     Resolution order:
     1. Load base: file (optional DRY inheritance)
-    2. Build fixed dict from non-sweep/non-experiments/non-execution/non-base/non-study_name keys
+    2. Build fixed dict from non-sweep/non-experiments/non-study_execution/non-base/non-study_name keys
     3. Expand sweep: block into raw config dicts
     4. Append explicit experiments: list entries
     5. Pydantic-validate each raw dict, collecting valid + skipped
@@ -182,30 +184,77 @@ def compute_study_design_hash(experiments: list[ExperimentConfig]) -> str:
 def apply_cycles(
     experiments: list[ExperimentConfig],
     n_cycles: int,
-    cycle_order: CycleOrder,
+    experiment_order: ExperimentOrder,
     study_design_hash: str,
     shuffle_seed: int | None = None,
 ) -> list[ExperimentConfig]:
     """Return the ordered execution sequence for n_cycles repetitions.
 
-    sequential:   [A, A, A, B, B, B]  — all cycles of each experiment together
-    interleaved:  [A, B, A, B, A, B]  — one cycle of each experiment, repeated
-    shuffled:     random per-cycle order, seeded from study_design_hash by default
+    sequential:    [A, A, A, B, B, B]  — all cycles of each experiment together
+    interleave:    [A, B, A, B, A, B]  — one cycle of each experiment, repeated
+    shuffle:       random per-cycle order, seeded from study_design_hash by default
+    reverse:       alternating forward/backward per cycle — [A, B, B, A, A, B]
+    latin_square:  Williams balanced latin square (counterbalances carryover effects)
     """
-    if cycle_order == CycleOrder.SEQUENTIAL:
+    if experiment_order == ExperimentOrder.SEQUENTIAL:
         return [exp for exp in experiments for _ in range(n_cycles)]
 
-    if cycle_order == CycleOrder.INTERLEAVED:
+    if experiment_order == ExperimentOrder.INTERLEAVE:
         return experiments * n_cycles
 
-    # shuffled
+    if experiment_order == ExperimentOrder.REVERSE:
+        result: list[ExperimentConfig] = []
+        for i in range(n_cycles):
+            cycle = list(experiments) if i % 2 == 0 else list(reversed(experiments))
+            result.extend(cycle)
+        return result
+
+    if experiment_order == ExperimentOrder.LATIN_SQUARE:
+        return _williams_latin_square(experiments, n_cycles)
+
+    # shuffle
     seed = shuffle_seed if shuffle_seed is not None else int(study_design_hash, 16) & 0xFFFFFFFF
     rng = random.Random(seed)
-    result: list[ExperimentConfig] = []
+    result = []
     for _ in range(n_cycles):
         cycle = list(experiments)
         rng.shuffle(cycle)
         result.extend(cycle)
+    return result
+
+
+def _williams_latin_square(
+    experiments: list[ExperimentConfig],
+    n_cycles: int,
+) -> list[ExperimentConfig]:
+    """Generate a Williams balanced latin square ordering.
+
+    A Williams design is a latin square where each condition follows every other
+    condition exactly once across rows, balancing first-order carryover effects.
+    When n_cycles > k (number of experiments), cycles repeat the square rows.
+    When n_cycles < k, the first n_cycles rows are used.
+    """
+    k = len(experiments)
+    if k == 0:
+        return []
+
+    # Build Williams square rows (works for both even and odd k)
+    rows: list[list[int]] = []
+    for i in range(k):
+        row: list[int] = [0] * k
+        for j in range(k):
+            if j == 0:
+                row[j] = i
+            elif j % 2 == 1:
+                row[j] = (i + (j + 1) // 2) % k
+            else:
+                row[j] = (i - j // 2) % k
+        rows.append(row)
+
+    result: list[ExperimentConfig] = []
+    for cycle_idx in range(n_cycles):
+        row = rows[cycle_idx % k]
+        result.extend(experiments[idx] for idx in row)
     return result
 
 
@@ -217,7 +266,7 @@ def format_preflight_summary(
 
     Format (CONTEXT.md locked):
         Study [abc123de]: 4 configs x 3 cycles = 12 runs
-        Order: interleaved
+        Order: interleave
         Skipping 2/6: (per-skip log line with reason)
           - pytorch, fp32: [Pydantic message]
         WARNING: 67% of sweep configs are invalid — check your sweep dimensions.
@@ -230,7 +279,7 @@ def format_preflight_summary(
     Returns:
         Multi-line string for terminal display.
     """
-    n_cycles = study_config.execution.n_cycles
+    n_cycles = study_config.study_execution.n_cycles
     n_runs = len(study_config.experiments)
     # n_configs is the unique config count (before cycle multiplication)
     n_configs = n_runs // n_cycles if n_cycles > 0 else n_runs
@@ -238,7 +287,7 @@ def format_preflight_summary(
 
     lines = [
         f"Study [{hash_display}]: {n_configs} configs x {n_cycles} cycles = {n_runs} runs",
-        f"Order: {study_config.execution.cycle_order}",
+        f"Order: {study_config.study_execution.experiment_order}",
     ]
 
     # Handle skipped configs display
@@ -285,7 +334,7 @@ def build_preflight_panel(
     When ``study_dir`` is provided, the expected results path is shown below
     the hash. Skipped configs are NOT included; callers display them separately.
     """
-    exec_cfg = study_config.execution
+    exec_cfg = study_config.study_execution
     n_cycles = exec_cfg.n_cycles
     n_runs = len(study_config.experiments)
     n_configs = n_runs // n_cycles if n_cycles > 0 else n_runs
@@ -353,7 +402,7 @@ def build_preflight_panel(
     # -- Execution Controls --
     _section(body, "Execution Controls")
     _line(body, "Experiments", experiments_line)
-    _line(body, "Cycle order", str(exec_cfg.cycle_order))
+    _line(body, "Cycle order", str(exec_cfg.experiment_order))
     exp_gap = (
         f"{exec_cfg.experiment_gap_seconds}s"
         if exec_cfg.experiment_gap_seconds is not None

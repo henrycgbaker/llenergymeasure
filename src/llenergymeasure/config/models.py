@@ -442,12 +442,12 @@ class ExecutionConfig(BaseModel):
     """Execution controls for a study (cycle repetition, ordering, gaps).
 
     Controls how many times the experiment list is repeated (n_cycles), the order
-    in which experiments are executed across cycles (cycle_order), optional gaps
+    in which experiments are executed across cycles (experiment_order), optional gaps
     between configs and cycles for thermal stabilisation, and an explicit shuffle
     seed override (default: derived from study_design_hash for reproducibility).
 
     Pydantic defaults are conservative (1 cycle, sequential, no gaps). The CLI
-    will apply research-appropriate effective defaults (e.g. 3 cycles, interleaved).
+    will apply research-appropriate effective defaults (e.g. 3 cycles, shuffle).
     """
 
     model_config = {"extra": "forbid"}
@@ -455,13 +455,15 @@ class ExecutionConfig(BaseModel):
     n_cycles: int = Field(
         default=1, ge=1, description="Number of times to repeat the experiment list"
     )
-    cycle_order: Literal["sequential", "interleaved", "shuffled"] = Field(
-        default="sequential",
-        description=(
-            "Ordering strategy across cycles. "
-            "sequential: [A,A,A,B,B,B], interleaved: [A,B,A,B,A,B], "
-            "shuffled: random per-cycle order."
-        ),
+    experiment_order: Literal["sequential", "interleave", "shuffle", "reverse", "latin_square"] = (
+        Field(
+            default="sequential",
+            description=(
+                "Ordering strategy across cycles. "
+                "sequential: [A,A,A,B,B,B], interleave: [A,B,A,B,A,B], "
+                "shuffle: random per-cycle order."
+            ),
+        )
     )
     experiment_gap_seconds: float | None = Field(
         default=None,
@@ -481,7 +483,7 @@ class ExecutionConfig(BaseModel):
     shuffle_seed: int | None = Field(
         default=None,
         description=(
-            "Explicit seed for shuffled cycle_order. "
+            "Explicit seed for shuffle experiment_order. "
             "None = derived from study_design_hash (same study always shuffles identically)."
         ),
     )
@@ -512,7 +514,7 @@ class StudyConfig(BaseModel):
     study_name: str | None = Field(
         default=None, description="Study name (used in output directory naming)"
     )
-    execution: ExecutionConfig = Field(
+    study_execution: ExecutionConfig = Field(
         default_factory=ExecutionConfig,
         description="Cycle repetition and ordering controls",
     )

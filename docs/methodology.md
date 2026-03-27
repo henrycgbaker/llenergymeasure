@@ -99,17 +99,17 @@ For publication-quality results, always include baseline in your reported energy
 caching effects. Repeating experiments across multiple cycles produces a distribution
 of measurements that supports statistical analysis and confidence intervals.
 
-Configure via the `execution:` section in a study YAML:
+Configure via the `study_execution:` section in a study YAML:
 
 ```yaml
-execution:
-  n_cycles: 3            # default (CLI): 3
-  cycle_order: shuffled  # default (CLI): shuffled
+study_execution:
+  n_cycles: 3               # default (CLI): 3
+  experiment_order: shuffle  # default (CLI): shuffle
 ```
 
 **CLI effective defaults** for `llem run study.yaml` (if not set in the YAML):
 - `n_cycles = 3`
-- `cycle_order = shuffled`
+- `experiment_order = shuffle`
 
 ### Why n_cycles >= 3?
 
@@ -176,16 +176,45 @@ experiment's result, and the throttle duration and trigger reason are recorded.
 
 ## Reproducibility
 
+### Seeding model
+
+llenergymeasure uses two independent seeds that control reproducibility at different
+scopes:
+
+**`random_seed`** (ExperimentConfig) — per-experiment stochasticity:
+
+- Backend inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
+- Dataset prompt ordering (when `dataset_order: shuffled`)
+- Synthetic prompt generation
+
+**`shuffle_seed`** (ExecutionConfig) — study-level scheduling:
+
+- Cycle shuffle order (which experiment runs when)
+- Default: derived from `study_design_hash` (same YAML always produces the same order)
+
+These are orthogonal by design. Changing `random_seed` does not affect experiment
+scheduling, and changing `shuffle_seed` does not affect inference outputs. This lets you
+test sampling variance (vary `random_seed`) independently from ordering effects (vary
+`shuffle_seed`).
+
+### Reproducibility checklist
+
 To maximise reproducibility across runs and machines:
 
-1. **Fix the random seed.** The default `random_seed: 42` controls dataset ordering and
-   sampling. Explicit is better:
+1. **Fix the random seed.** The default `random_seed: 42` controls all per-experiment
+   stochasticity — inference RNG, dataset ordering, and synthetic prompt generation:
    ```yaml
    random_seed: 42
    ```
 
 2. **Use shuffled cycle ordering with n_cycles >= 3.** Shuffled ordering is seeded from
    the study design hash — identical study YAML always produces identical shuffle order.
+   To override the shuffle seed explicitly:
+   ```yaml
+   study_execution:
+     experiment_order: shuffle
+     shuffle_seed: 123  # null = derived from study_design_hash
+   ```
 
 3. **Enable warmup and baseline.** Both are enabled by default. Disabling either reduces
    reproducibility by introducing thermal and background-power variance.

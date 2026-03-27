@@ -492,7 +492,7 @@ def test_run_saves_to_output_dir(tmp_path):
 
 
 def test_run_study_cli_defaults_applied(tmp_path):
-    """Study YAML without execution block receives CLI effective defaults: n_cycles=3, cycle_order=shuffled."""
+    """Study YAML without execution block receives CLI effective defaults: n_cycles=3, experiment_order=shuffle."""
     from tests.conftest import make_study_result
 
     study_yaml = tmp_path / "study.yaml"
@@ -521,8 +521,8 @@ def test_run_study_cli_defaults_applied(tmp_path):
     assert len(captured_overrides) == 1
     overrides = captured_overrides[0]
     assert overrides is not None
-    assert overrides["execution"]["n_cycles"] == 3
-    assert overrides["execution"]["cycle_order"] == "shuffled"
+    assert overrides["study_execution"]["n_cycles"] == 3
+    assert overrides["study_execution"]["experiment_order"] == "shuffle"
 
 
 def test_run_no_model_no_config_error_message():

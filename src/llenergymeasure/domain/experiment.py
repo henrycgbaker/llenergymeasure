@@ -327,7 +327,7 @@ class StudyResult(BaseModel):
     measurement_protocol: dict[str, Any] = Field(
         default_factory=dict,
         description=(
-            "Flat dict from ExecutionConfig: n_cycles, cycle_order, experiment_gap_seconds, "
+            "Flat dict from ExecutionConfig: n_cycles, experiment_order, experiment_gap_seconds, "
             "cycle_gap_seconds, shuffle_seed, experiment_timeout_seconds"
         ),
     )

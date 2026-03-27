@@ -414,7 +414,7 @@ def _make_study(backends: list[str]) -> StudyConfig:
     experiments = [ExperimentConfig(model=f"model-{b}", backend=b) for b in backends]
     return StudyConfig(
         experiments=experiments,
-        execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+        study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
     )
 
 
