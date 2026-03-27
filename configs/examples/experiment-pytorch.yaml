@@ -18,14 +18,14 @@ dataset_order: interleaved   # interleaved | grouped | shuffled
 #   n: 100                   # Number of synthetic prompts to generate
 #   input_len: 512           # Fixed input token length per prompt
 #   output_len: 128          # Fixed output token length per prompt
-#   # seed: null              # null = uses random_seed (override to decouple)
+#   seed: 42                 # Reproducible prompt generation
 
 # --- Hardware ---
 precision: bf16              # fp32 | fp16 | bf16
 random_seed: 42
 
 # --- Token limits ---
-max_input_tokens: 512
+max_input_tokens: 256
 max_output_tokens: 256
 
 # --- Energy measurement ---
