@@ -9,8 +9,13 @@ from __future__ import annotations
 import difflib
 import sys
 import traceback
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
@@ -238,8 +243,8 @@ def format_validation_error(e: ValidationError) -> str:
 def print_study_dry_run(
     study_config: object,
     verbose: bool = False,
-    runner_specs: object = None,
-    study_dir: object = None,
+    runner_specs: dict[str, RunnerSpec] | None = None,
+    study_dir: Path | None = None,
 ) -> None:
     """Print dry-run output for a study to stdout.
 
