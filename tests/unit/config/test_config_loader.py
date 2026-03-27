@@ -42,11 +42,11 @@ def test_load_valid_yaml(tmp_path):
     assert config.backend == "pytorch"
 
 
-def test_load_yaml_with_precision(tmp_path):
+def test_load_yaml_with_dtype(tmp_path):
     """YAML with optional fields loads correctly."""
-    path = _write_yaml(tmp_path, "model: gpt2\nbackend: pytorch\nprecision: fp16\n")
+    path = _write_yaml(tmp_path, "model: gpt2\nbackend: pytorch\ndtype: float16\n")
     config = load_experiment_config(path)
-    assert config.precision == "fp16"
+    assert config.dtype == "float16"
 
 
 def test_load_yaml_with_pytorch_section(tmp_path):
@@ -130,7 +130,7 @@ def test_cli_overrides_merged(tmp_path):
 def test_cli_overrides_none_values_ignored(tmp_path):
     """None values in cli_overrides are ignored (unset CLI flags)."""
     path = _write_yaml(tmp_path, "model: gpt2\nbackend: pytorch\n")
-    config = load_experiment_config(path, cli_overrides={"model": None, "precision": None})
+    config = load_experiment_config(path, cli_overrides={"model": None, "dtype": None})
     assert config.model == "gpt2"  # file value retained
 
 
@@ -225,7 +225,7 @@ def test_load_study_config_grid_sweep(tmp_path):
                 "model": "gpt2",
                 "backend": "pytorch",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
+                    "dtype": ["float16", "bfloat16"],
                     "dataset.n_prompts": [50, 100],
                 },
             }
@@ -233,7 +233,7 @@ def test_load_study_config_grid_sweep(tmp_path):
     )
     sc = load_study_config(study_yaml)
     assert isinstance(sc, StudyConfig)
-    # 2 precisions x 2 n values = 4 configs, default 1 cycle
+    # 2 dtypes x 2 n values = 4 configs, default 1 cycle
     assert len(sc.experiments) == 4
     assert sc.study_design_hash is not None
     assert len(sc.study_design_hash) == 16
@@ -252,8 +252,8 @@ def test_load_study_config_explicit_experiments(tmp_path):
             {
                 "experiments": [
                     {"model": "gpt2", "backend": "pytorch"},
-                    {"model": "gpt2", "backend": "pytorch", "precision": "fp16"},
-                    {"model": "gpt2", "backend": "pytorch", "precision": "bf16"},
+                    {"model": "gpt2", "backend": "pytorch", "dtype": "float16"},
+                    {"model": "gpt2", "backend": "pytorch", "dtype": "bfloat16"},
                 ],
             }
         )
@@ -271,7 +271,7 @@ def test_load_study_config_combined_mode(tmp_path):
                 "model": "gpt2",
                 "backend": "pytorch",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
+                    "dtype": ["float16", "bfloat16"],
                 },
                 "experiments": [
                     {"model": "gpt2-xl", "backend": "pytorch"},
@@ -293,7 +293,7 @@ def test_load_study_config_with_execution_block(tmp_path):
                 "model": "gpt2",
                 "backend": "pytorch",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
+                    "dtype": ["float16", "bfloat16"],
                 },
                 "study_execution": {
                     "n_cycles": 3,
@@ -317,7 +317,7 @@ def test_load_study_config_cli_overrides(tmp_path):
             {
                 "model": "gpt2",
                 "backend": "pytorch",
-                "sweep": {"precision": ["fp16", "bf16"]},
+                "sweep": {"dtype": ["float16", "bfloat16"]},
                 "study_execution": {"n_cycles": 1},
             }
         )
@@ -346,7 +346,7 @@ def test_load_study_config_with_base(tmp_path):
             {
                 "base": "experiment.yaml",
                 "sweep": {
-                    "precision": ["fp16", "bf16"],
+                    "dtype": ["float16", "bfloat16"],
                 },
             }
         )
@@ -407,7 +407,7 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     sweep_content = {
         "model": "gpt2",
         "backend": "pytorch",
-        "sweep": {"precision": ["fp16", "bf16"]},
+        "sweep": {"dtype": ["float16", "bfloat16"]},
     }
     study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))
     study_yaml_b.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 5}}))

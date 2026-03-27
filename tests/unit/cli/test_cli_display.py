@@ -93,17 +93,17 @@ def test_format_duration_exact_hour():
 
 
 def test_vram_dtype_bytes():
-    """DTYPE_BYTES contains expected precision entries."""
-    assert DTYPE_BYTES["fp32"] == 4
-    assert DTYPE_BYTES["fp16"] == 2
-    assert DTYPE_BYTES["bf16"] == 2
+    """DTYPE_BYTES contains expected dtype entries."""
+    assert DTYPE_BYTES["float32"] == 4
+    assert DTYPE_BYTES["float16"] == 2
+    assert DTYPE_BYTES["bfloat16"] == 2
     assert DTYPE_BYTES["int8"] == 1
     assert DTYPE_BYTES["int4"] == 0.5
 
 
 def test_vram_dtype_bytes_keys():
     """DTYPE_BYTES has all expected keys."""
-    expected_keys = {"fp32", "fp16", "bf16", "int8", "int4"}
+    expected_keys = {"float32", "float16", "bfloat16", "int8", "int4"}
     assert set(DTYPE_BYTES.keys()) == expected_keys
 
 
@@ -140,7 +140,7 @@ def test_format_validation_error_did_you_mean():
     "bad_kwargs, expected_str",
     [
         ({"backend": "bad"}, "1 error)"),
-        ({"backend": "bad", "precision": "bad"}, "2 errors)"),
+        ({"backend": "bad", "dtype": "bad"}, "2 errors)"),
     ],
 )
 def test_format_validation_error_singular_plural(bad_kwargs, expected_str):
@@ -359,7 +359,7 @@ def test_print_dry_run_with_vram(capsys):
     """Dry run with VRAM dict shows weights, KV cache, overhead, total."""
     from tests.conftest import make_config
 
-    config = make_config(model="meta-llama/Llama-2-7b-hf", precision="fp16")
+    config = make_config(model="meta-llama/Llama-2-7b-hf", dtype="float16")
     vram = {"weights_gb": 13.48, "kv_cache_gb": 0.32, "overhead_gb": 2.02, "total_gb": 15.82}
     print_dry_run(config, vram, gpu_vram_gb=None)
     out = capsys.readouterr().out
@@ -377,7 +377,7 @@ def test_print_dry_run_without_vram(capsys):
     """Dry run with vram=None shows '(unavailable)'."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", precision="fp16")
+    config = make_config(model="gpt2", dtype="float16")
     print_dry_run(config, vram=None, gpu_vram_gb=None)
     out = capsys.readouterr().out
 
@@ -388,7 +388,7 @@ def test_print_dry_run_fits_gpu(capsys):
     """When total_gb <= gpu_vram_gb, output shows 'OK'."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", precision="fp16")
+    config = make_config(model="gpt2", dtype="float16")
     vram = {"weights_gb": 5.0, "kv_cache_gb": 0.1, "overhead_gb": 0.75, "total_gb": 5.85}
     print_dry_run(config, vram, gpu_vram_gb=80.0)
     out = capsys.readouterr().out
@@ -400,7 +400,7 @@ def test_print_dry_run_does_not_fit_gpu(capsys):
     """When total_gb > gpu_vram_gb, output shows 'WARNING'."""
     from tests.conftest import make_config
 
-    config = make_config(model="meta-llama/Llama-70b-hf", precision="fp32")
+    config = make_config(model="meta-llama/Llama-70b-hf", dtype="float32")
     vram = {"weights_gb": 140.0, "kv_cache_gb": 1.0, "overhead_gb": 21.0, "total_gb": 162.0}
     print_dry_run(config, vram, gpu_vram_gb=80.0)
     out = capsys.readouterr().out
@@ -412,12 +412,12 @@ def test_print_dry_run_verbose_annotations(capsys):
     """With verbose=True, default values show annotation like '(default)'."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", backend="pytorch", precision="bf16")
+    config = make_config(model="gpt2", backend="pytorch", dtype="bfloat16")
     vram = {"weights_gb": 0.5, "kv_cache_gb": 0.01, "overhead_gb": 0.075, "total_gb": 0.585}
     print_dry_run(config, vram, gpu_vram_gb=None, verbose=True)
     out = capsys.readouterr().out
 
-    # verbose mode adds "(default)" annotation for default backend/precision
+    # verbose mode adds "(default)" annotation for default backend/dtype
     assert "(default)" in out
 
 
@@ -444,8 +444,8 @@ def test_print_study_dry_run_shows_configs(capsys, monkeypatch):
     from tests.conftest import make_config
 
     configs = [
-        make_config(model="gpt2", precision="fp16"),
-        make_config(model="gpt2", precision="bf16"),
+        make_config(model="gpt2", dtype="float16"),
+        make_config(model="gpt2", dtype="bfloat16"),
     ]
     study = StudyConfig(experiments=configs, study_name="test-sweep")
 
@@ -458,8 +458,8 @@ def test_print_study_dry_run_shows_configs(capsys, monkeypatch):
 
     assert "2 configs" in out
     assert "gpt2" in out
-    assert "fp16" in out
-    assert "bf16" in out
+    assert "float16" in out
+    assert "bfloat16" in out
     assert "Config valid" in out
 
 
@@ -470,8 +470,8 @@ def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
     from tests.conftest import make_config
 
     configs = [
-        make_config(model="gpt2", precision="fp16"),
-        make_config(model="gpt2", precision="bf16"),
+        make_config(model="gpt2", dtype="float16"),
+        make_config(model="gpt2", dtype="bfloat16"),
     ]
     study = StudyConfig(experiments=configs, study_name="vram-test")
 
@@ -507,14 +507,14 @@ def test_print_experiment_header_defaults(capsys):
     """Header with default config shows model and backend (defaults omitted)."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", backend="pytorch", precision="bf16")
+    config = make_config(model="gpt2", backend="pytorch", dtype="bfloat16")
     print_experiment_header(config)
     err = capsys.readouterr().err
 
     assert "gpt2" in err
     assert "pytorch" in err
-    # Default precision bf16 is omitted from the header
-    assert "bf16" not in err
+    # Default dtype bfloat16 is omitted from the header
+    assert "bfloat16" not in err
 
 
 def test_print_experiment_header_non_default_n(capsys):
@@ -552,7 +552,7 @@ def test_print_study_summary_table_structure(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "precision": "fp16"}
+    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
     exp.backend = "pytorch"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
@@ -591,7 +591,7 @@ def test_print_study_summary_failed_experiments(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "precision": "fp16"}
+    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
@@ -625,7 +625,7 @@ def test_print_study_summary_no_summary(capsys):
     from llenergymeasure.domain.experiment import StudyResult
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "precision": "fp16"}
+    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
@@ -653,7 +653,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
 
     long_model = "organization/very-long-model-name-that-exceeds-twenty-chars"
     exp = MagicMock()
-    exp.effective_config = {"model": long_model, "precision": "fp16"}
+    exp.effective_config = {"model": long_model, "dtype": "float16"}
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
@@ -687,7 +687,7 @@ def test_print_study_summary_with_result_files(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "precision": "fp16"}
+    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0

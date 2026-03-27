@@ -37,7 +37,7 @@ from llenergymeasure.study.manifest import (
 def _make_experiment(
     model: str = "meta-llama/Llama-3.1-8B", backend: str = "pytorch"
 ) -> ExperimentConfig:
-    return ExperimentConfig(model=model, backend=backend, precision="bf16")
+    return ExperimentConfig(model=model, backend=backend, dtype="bfloat16")
 
 
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
@@ -337,7 +337,7 @@ def test_experiment_result_filename() -> None:
     result = experiment_result_filename(
         model="meta-llama/Llama-3.1-8B",
         backend="pytorch",
-        precision="bf16",
+        dtype="bfloat16",
         config_hash="abcdef1234567890",
     )
     assert result == "Llama-3.1-8B-pytorch_abcdef12.json"
@@ -347,7 +347,7 @@ def test_experiment_result_filename_parquet() -> None:
     result = experiment_result_filename(
         model="meta-llama/Llama-3.1-8B",
         backend="pytorch",
-        precision="bf16",
+        dtype="bfloat16",
         config_hash="abcdef1234567890",
         extension=".parquet",
     )
@@ -360,7 +360,7 @@ def test_experiment_result_filename_parquet() -> None:
 
 
 def test_config_summary_from_experiment() -> None:
-    config = ExperimentConfig(model="meta-llama/Llama-3.1-8B", backend="pytorch", precision="bf16")
+    config = ExperimentConfig(model="meta-llama/Llama-3.1-8B", backend="pytorch", dtype="bfloat16")
     summary = build_config_summary(config)
     # Uses format_experiment_header: "Llama-3.1-8B / pytorch"
     assert "Llama-3.1-8B" in summary

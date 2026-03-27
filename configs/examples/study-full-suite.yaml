@@ -114,10 +114,10 @@ output_dir: null               # Per-experiment output directory override - TODO
 # shared params - never with another backend's params.
 sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- Universal (applies to all three backends) ---
-  precision:
-    - fp32
-    - fp16
-    - bf16
+  dtype:
+    - float32
+    - float16
+    - bfloat16
 # =====================================================================
 # Backend sweep axes (Cartesian product, per-backend)
 # =====================================================================
@@ -163,7 +163,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     #TODO add others - e.g. attention backend, speculative decoding, quantisation, parallelisation, etc.
 
   # --- TensorRT parameter space ---
-  # Produces: 2 precision x 3 max_batch_size x 2 max_seq_len = 12 experiments
+  # Produces: 2 dtype x 3 max_batch_size x 2 max_seq_len = 12 experiments
   tensorrt.max_batch_size:
     - 1
     - 4
@@ -173,7 +173,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   tensorrt.max_seq_len: # how is this different from max_input_len? does this include output tokens as well? need to clarify and validate this - if it includes output tokens, then this is effectively the max total sequence length (input + output) - need to clarify this in the docs and validate that it's working as intended
     - 1536
     - 2048
-  tensorrt.quant.quant_algo: # TODO: is this not tensorrt.precision??
+  tensorrt.quant.quant_algo: # TODO: is this not tensorrt.dtype??
     - int8
     - w4a16_awq
     - w8a16
@@ -210,7 +210,7 @@ experiments:
   # OR have validate that these only work when torch_compile: true and automatically filter out invalid configs if torch_compile: false - this would allow us to keep the torch_compile_mode sweep separate from the torch_compile: true/false axis, which would be cleaner and more modular - need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?)
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     pytorch:
@@ -223,7 +223,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     pytorch:
@@ -236,7 +236,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     pytorch:
@@ -254,7 +254,7 @@ experiments:
   # TODO: why are these not in sweep logic, and just have being filtered out when incompatible with load_in_8bit or load_in_4bit? If this works as intended, we could move these into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: fp16
+    dtype: float16
     dataset:
       n_prompts: 50
     pytorch:
@@ -265,7 +265,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: fp16
+    dtype: float16
     dataset:
       n_prompts: 50
     pytorch:
@@ -278,7 +278,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: fp16
+    dtype: float16
     dataset:
       n_prompts: 50
     pytorch:
@@ -296,7 +296,7 @@ experiments:
   # TODO: as above: move this into sweep logic and validate that incompatible params are automatically filtered out (e.g. if beam search params are swept together with sampling params, does it automatically disable the sampling params when beam search is enabled, or does it produce invalid configs that need to be filtered out?) - if this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     decoder:
@@ -317,7 +317,7 @@ experiments:
   # TODO: again as above: why is this not in sweep logic, and just have being filtered out when incompatible with do_sample: false? If this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     pytorch:
@@ -332,7 +332,7 @@ experiments:
   # TODO: again, as above: move this into sweep logic.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     pytorch:
@@ -347,7 +347,7 @@ experiments:
   # PyTorch LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: pytorch
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   lora:
   #     adapter_id: my-org/my-lora-adapter
@@ -366,7 +366,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     decoder:
@@ -383,7 +383,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     decoder:
@@ -399,7 +399,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
@@ -409,7 +409,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
@@ -422,7 +422,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
@@ -432,7 +432,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
@@ -445,7 +445,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
@@ -458,7 +458,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
@@ -469,7 +469,7 @@ experiments:
   # vLLM speculative decoding (commented out - requires a real draft model)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: vllm
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   vllm:
   #     engine:
@@ -480,7 +480,7 @@ experiments:
   # vLLM LoRA adapter (commented out - requires a real adapter)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: vllm
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   lora:
   #     adapter_id: my-org/my-lora-adapter
@@ -495,7 +495,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -509,7 +509,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -523,7 +523,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -538,7 +538,7 @@ experiments:
   # INT8 + KV cache quantisation (combined)
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -554,7 +554,7 @@ experiments:
   # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: tensorrt
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   tensorrt:
   #     max_batch_size: 8
@@ -570,7 +570,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -584,7 +584,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -601,7 +601,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -616,7 +616,7 @@ experiments:
 
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -633,7 +633,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -649,7 +649,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: fp16
+    dtype: float16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -665,7 +665,7 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
-    precision: bf16
+    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
@@ -684,7 +684,7 @@ experiments:
   # TRT-LLM sampling extensions (commented out)
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: tensorrt
-  #   precision: bf16
+  #   dtype: bfloat16
   #   n: 50
   #   tensorrt:
   #     max_batch_size: 8

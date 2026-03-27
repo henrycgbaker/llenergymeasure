@@ -277,7 +277,7 @@ API names.
 
 | Universal field | PyTorch native | vLLM native | TensorRT native | Notes |
 |---|---|---|---|---|
-| `precision` | `torch_dtype` (torch.float16, etc.) | `dtype` ("float16", etc.) | `dtype` | String-to-enum mapping in PyTorch |
+| `dtype` | `torch_dtype` (torch.float16, etc.) | `dtype` (passthrough) | `dtype` (passthrough) | Direct mapping in PyTorch; passthrough for vLLM/TRT |
 | `random_seed` | `torch.manual_seed()` | `seed=` in LLM() | `random_seed=` in SamplingParams | Different API surfaces |
 | `max_input_tokens` | `max_length` in tokeniser | (pre-truncated by harness) | `max_input_len` (compile-time) | PyTorch truncates at tokenisation; TRT-LLM uses it as a compile-time engine constraint |
 | `max_output_tokens` | `max_new_tokens` | `max_tokens` | `max_new_tokens` | **vLLM uses `max_tokens`**; PyTorch/TRT-LLM use `max_new_tokens` |

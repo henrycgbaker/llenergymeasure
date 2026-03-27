@@ -95,7 +95,7 @@ _HEADER_MAX_LEN = 70
 # ExperimentConfig defaults for non-default param detection.
 # Keep in sync with config/models.py ExperimentConfig field defaults.
 _EXPERIMENT_DEFAULTS: dict[str, object] = {
-    "precision": "bf16",
+    "dtype": "bfloat16",
     "max_input_tokens": 256,
     "max_output_tokens": 256,
 }

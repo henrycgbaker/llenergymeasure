@@ -1,6 +1,6 @@
 """Single source of truth for backend capability constants.
 
-These dicts define which precision modes and decoding strategies each backend
+These dicts define which dtype modes and decoding strategies each backend
 supports. They are consumed by:
 - ExperimentConfig cross-validators (structural validation)
 - config/introspection.py (backend capability metadata)
@@ -42,13 +42,13 @@ RunnerMode = Literal["local", "docker"]
 # ---------------------------------------------------------------------------
 
 # Precision modes supported by each backend.
-# "fp32" = full precision, "fp16" = half, "bf16" = bfloat16.
+# "float32" = full precision, "float16" = half, "bfloat16" = brain float16.
 # Note: fp16/bf16 require GPU. The cpu backend (future) would be fp32-only.
-# GPU detection and cpu-precision cross-validation is handled at pre-flight.
+# GPU detection and cpu-dtype cross-validation is handled at pre-flight.
 PRECISION_SUPPORT: dict[str, list[str]] = {
-    BACKEND_PYTORCH: ["fp32", "fp16", "bf16"],
-    BACKEND_VLLM: ["fp16", "bf16"],  # vLLM does not support fp32 inference
-    BACKEND_TENSORRT: ["fp16", "bf16"],  # TRT-LLM does not support fp32 inference
+    BACKEND_PYTORCH: ["float32", "float16", "bfloat16"],
+    BACKEND_VLLM: ["float16", "bfloat16"],  # vLLM does not support fp32 inference
+    BACKEND_TENSORRT: ["float16", "bfloat16"],  # TRT-LLM does not support fp32 inference
 }
 
 # Decoding strategies supported by each backend.

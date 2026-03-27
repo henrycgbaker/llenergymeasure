@@ -76,21 +76,21 @@ def test_get_backend_params_unknown_backend_raises():
 def test_get_shared_params_returns_model_field():
     """get_shared_params() contains 'model' — wait, 'model' is not in shared.
 
-    Actually shared params are precision, n, max_input_tokens, max_output_tokens
+    Actually shared params are dtype, n, max_input_tokens, max_output_tokens
     plus decoder.* params. 'model' is a top-level required field in ExperimentConfig,
     not in the shared section of introspection.
     """
     params = get_shared_params()
     assert isinstance(params, dict)
     # Precision is a confirmed shared param
-    assert "precision" in params
+    assert "dtype" in params
 
 
-def test_get_shared_params_contains_precision():
-    """get_shared_params() contains 'precision'."""
+def test_get_shared_params_contains_dtype():
+    """get_shared_params() contains 'dtype'."""
     params = get_shared_params()
-    assert "precision" in params
-    assert params["precision"]["options"] == ["fp32", "fp16", "bf16"]
+    assert "dtype" in params
+    assert params["dtype"]["options"] == ["float32", "float16", "bfloat16"]
 
 
 def test_get_shared_params_contains_n():
@@ -152,10 +152,10 @@ def test_get_param_test_values_pytorch_batch_size_returns_list():
     assert 1 in values
 
 
-def test_get_param_test_values_precision_returns_all_options():
-    """get_param_test_values('precision') returns all 3 precision options."""
-    values = get_param_test_values("precision")
-    assert set(values) == {"fp32", "fp16", "bf16"}
+def test_get_param_test_values_dtype_returns_all_options():
+    """get_param_test_values('dtype') returns all 3 dtype options."""
+    values = get_param_test_values("dtype")
+    assert set(values) == {"float32", "float16", "bfloat16"}
 
 
 def test_get_param_test_values_decoder_temperature_returns_floats():
@@ -206,7 +206,7 @@ def test_list_all_param_paths_contains_expected_paths():
     paths = list_all_param_paths()
     assert isinstance(paths, list)
     assert "pytorch.batch_size" in paths
-    assert "precision" in paths
+    assert "dtype" in paths
 
 
 def test_list_all_param_paths_contains_known_paths():
@@ -214,7 +214,7 @@ def test_list_all_param_paths_contains_known_paths():
     paths = list_all_param_paths()
     assert "pytorch.batch_size" in paths
     assert "decoder.temperature" in paths
-    assert "precision" in paths
+    assert "dtype" in paths
 
 
 def test_list_all_param_paths_filtered_by_backend():
@@ -234,18 +234,18 @@ def test_list_all_param_paths_unknown_backend_raises():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("precision", PRECISION_SUPPORT["pytorch"])
-def test_all_pytorch_precision_values_produce_valid_config(precision):
+@pytest.mark.parametrize("dt", PRECISION_SUPPORT["pytorch"])
+def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Schema-driven: each SSOT PRECISION_SUPPORT['pytorch'] value creates a valid config."""
-    config = make_config(precision=precision)
-    assert config.precision == precision
+    config = make_config(dtype=dt)
+    assert config.dtype == dt
 
 
-def test_ssot_precision_values_match_param_test_values():
-    """PRECISION_SUPPORT['pytorch'] values match get_param_test_values('precision')."""
+def test_ssot_dtype_values_match_param_test_values():
+    """PRECISION_SUPPORT['pytorch'] values match get_param_test_values('dtype')."""
     from_ssot = set(PRECISION_SUPPORT["pytorch"])
-    from_introspection = set(get_param_test_values("precision"))
-    # The test values from introspection should cover all SSOT precision values
+    from_introspection = set(get_param_test_values("dtype"))
+    # The test values from introspection should cover all SSOT dtype values
     assert from_ssot == from_introspection
 
 
