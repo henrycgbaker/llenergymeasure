@@ -7,9 +7,6 @@
 # each backend's parameters are crossed only with each other and with
 # universal params - never with another backend's params.
 #
-# Note: FP8 quantisation requires SM >= 8.9 (Ada Lovelace / Hopper).
-#       A100 users should use INT8, W4A16_AWQ, or W8A16. TODO look into this 
-#
 # Sweep experiments:
 #   PyTorch:   2 precision x 4 batch_size x 3 attn_implementation   =  24
 #   vLLM:      2 precision x 3 gpu_mem x 2 eager x 3 seqs x 2 prefill = 72
@@ -22,7 +19,7 @@
 #   Total explicit:                                                    =  29
 # Grand total: 137 unique experiments x 3 cycles = 411 runs
 
-name: full-suite-all-backends #TODO rename this field study_name
+study_name: full-suite-all-backends
 
 # =====================================================================
 # Runner configuration
