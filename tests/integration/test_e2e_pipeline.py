@@ -110,7 +110,7 @@ class TestPipelineSingleExperiment:
 
         # Write minimal experiment YAML
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -120,7 +120,7 @@ class TestPipelineSingleExperiment:
         experiment_config = load_experiment_config(path=yaml_path)
         assert experiment_config.model == "gpt2"
         assert experiment_config.backend == "pytorch"
-        assert experiment_config.n == 5
+        assert experiment_config.dataset.n_prompts == 5
 
         # Full run_experiment call
         result = run_experiment(experiment_config, skip_preflight=True)
@@ -137,7 +137,7 @@ class TestPipelineSingleExperiment:
         from llenergymeasure.domain.experiment import ExperimentResult
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nn: 3\n")
+        yaml_path.write_text("model: gpt2\ndataset:\n  n_prompts: 3\n")
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -280,7 +280,7 @@ class TestPipelineDryRun:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         backend_call_count = []
 
@@ -327,7 +327,7 @@ class TestCLIE2ESingleExperiment:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result(experiment_id="cli-e2e-001")
 
@@ -432,7 +432,7 @@ class TestCLIE2EErrorExitCodes:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\nn: 5\n")
+        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
 
         error_cls = getattr(llenergymeasure.utils.exceptions, error_class)
         exc_instance = error_cls(f"test {error_class}")

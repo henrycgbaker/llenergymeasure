@@ -138,7 +138,7 @@ class PyTorchBackend:
             )
 
         # Use first prompt from the standard prompt list for warmup
-        words_per_prompt = max(1, config.max_input_tokens // 4)
+        words_per_prompt = max(1, (config.max_input_tokens or 512) // 4)
         warmup_prompt = ("Hello, " * words_per_prompt).strip()
 
         logger.debug(
@@ -202,10 +202,10 @@ class PyTorchBackend:
         batch_times: list[float] = []
 
         logger.info(
-            "Starting measurement: %d prompts, batch_size=%d, max_new_tokens=%d",
+            "Starting measurement: %d prompts, batch_size=%d, max_new_tokens=%s",
             len(prompts),
             batch_size,
-            config.max_output_tokens,
+            config.max_output_tokens or "unlimited",
         )
 
         for batch_start in range(0, len(prompts), batch_size):
@@ -433,23 +433,24 @@ class PyTorchBackend:
 
         import torch
 
-        inputs = tokenizer(
-            batch,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=config.max_input_tokens,
-        )
+        tokenizer_kwargs: dict[str, Any] = {
+            "return_tensors": "pt",
+            "padding": True,
+        }
+        if config.max_input_tokens is not None:
+            tokenizer_kwargs["truncation"] = True
+            tokenizer_kwargs["max_length"] = config.max_input_tokens
+
+        inputs = tokenizer(batch, **tokenizer_kwargs)
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
         input_token_count = int(inputs["attention_mask"].sum().item())
 
         t0 = time.perf_counter()
         with torch.inference_mode():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=config.max_output_tokens,
-                **generate_kwargs,
-            )
+            gen_kwargs = {**generate_kwargs}
+            if config.max_output_tokens is not None:
+                gen_kwargs["max_new_tokens"] = config.max_output_tokens
+            outputs = model.generate(**inputs, **gen_kwargs)
         elapsed = time.perf_counter() - t0
 
         # Count only the newly generated tokens per sequence (handles padding correctly)

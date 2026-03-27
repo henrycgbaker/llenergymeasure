@@ -286,7 +286,11 @@ class MeasurementHarness:
 
         # 4b. Load prompts — BEFORE measurement window (methodology fix)
         if _p:
-            _p.on_step_start("prompts", "Loading", f"prompts ({config.n} {config.dataset})")
+            _p.on_step_start(
+                "prompts",
+                "Loading",
+                f"prompts ({config.dataset.n_prompts} {config.dataset.source})",
+            )
             t0_prompts = time.perf_counter()
         prompts = load_prompts(config)
         logger.debug("Loaded %d prompts via dataset loader", len(prompts))
@@ -353,7 +357,9 @@ class MeasurementHarness:
             _substep("measure", "CUDA sync (pre)")
 
             if _p:
-                _p.on_step_start("measure", "Measuring", f"inference ({config.n} prompts)")
+                _p.on_step_start(
+                    "measure", "Measuring", f"inference ({config.dataset.n_prompts} prompts)"
+                )
             _substep("measure", "energy tracker started")
 
             t_inference_start = time.perf_counter()

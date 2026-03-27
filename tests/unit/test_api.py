@@ -158,7 +158,7 @@ def test_run_experiment_yaml_path_form(tmp_path, monkeypatch):
 
 
 def test_run_experiment_kwargs_form(monkeypatch):
-    """run_experiment kwargs form passes model and n to ExperimentConfig."""
+    """run_experiment kwargs form passes model and dataset to ExperimentConfig."""
     import llenergymeasure.api._impl as api_module
 
     captured_study = {}
@@ -169,11 +169,11 @@ def test_run_experiment_kwargs_form(monkeypatch):
 
     monkeypatch.setattr(api_module, "_run", mock_run)
 
-    result = run_experiment(model="gpt2", n=50)
+    result = run_experiment(model="gpt2", n_prompts=50)
 
     assert isinstance(result, ExperimentResult)
     assert captured_study["value"].experiments[0].model == "gpt2"
-    assert captured_study["value"].experiments[0].n == 50
+    assert captured_study["value"].experiments[0].dataset.n_prompts == 50
 
 
 # =============================================================================

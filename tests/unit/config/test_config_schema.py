@@ -66,9 +66,11 @@ def test_field_name_precision():
 
 
 def test_field_name_n():
-    """v2.0 'n' field (not 'num_input_prompts') is accepted."""
-    config = ExperimentConfig(model="gpt2", n=50)
-    assert config.n == 50
+    """v2.0 dataset.n_prompts field (not 'num_input_prompts') is accepted."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    config = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
+    assert config.dataset.n_prompts == 50
 
 
 def test_v1x_field_model_name_rejected():

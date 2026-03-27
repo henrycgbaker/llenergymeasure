@@ -33,11 +33,12 @@ class TestM1ExitCriteria:
         Validates STU-05: single experiment runs in-process (no subprocess).
         """
         from llenergymeasure import ExperimentConfig, ExperimentResult, run_experiment
+        from llenergymeasure.config.models import DatasetConfig
 
         config = ExperimentConfig(
             model="gpt2",
             backend="pytorch",
-            n=5,  # small for speed
+            dataset=DatasetConfig(n_prompts=5),  # small for speed
             output_dir=str(tmp_path),
         )
         result = run_experiment(config)
@@ -66,11 +67,12 @@ class TestM1ExitCriteria:
     def test_environment_snapshot_populated(self, tmp_path):
         """Environment snapshot contains GPU, Python, CUDA info."""
         from llenergymeasure import ExperimentConfig, run_experiment
+        from llenergymeasure.config.models import DatasetConfig
 
         config = ExperimentConfig(
             model="gpt2",
             backend="pytorch",
-            n=5,
+            dataset=DatasetConfig(n_prompts=5),
             output_dir=str(tmp_path),
         )
         result = run_experiment(config)
@@ -84,11 +86,12 @@ class TestM1ExitCriteria:
     def test_output_files_written(self, tmp_path):
         """Timeseries parquet file written to output_dir."""
         from llenergymeasure import ExperimentConfig, run_experiment
+        from llenergymeasure.config.models import DatasetConfig
 
         config = ExperimentConfig(
             model="gpt2",
             backend="pytorch",
-            n=5,
+            dataset=DatasetConfig(n_prompts=5),
             output_dir=str(tmp_path),
         )
         _result = run_experiment(config)

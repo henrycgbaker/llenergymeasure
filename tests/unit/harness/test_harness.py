@@ -78,12 +78,12 @@ class FakeBackend:
 @pytest.fixture
 def minimal_config():
     """Minimal ExperimentConfig with all measurement infrastructure disabled."""
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     return ExperimentConfig(
         model="fake/model",
         backend="pytorch",
-        n=1,
+        dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
     )
@@ -312,12 +312,12 @@ def test_harness_passes_gpu_indices_to_thermal_sampler(minimal_config):
 
 def test_harness_passes_gpu_indices_to_baseline(minimal_config):
     """harness.run(gpu_indices=[0, 1]) passes gpu_indices to measure_baseline_power when enabled."""
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     config_with_baseline = ExperimentConfig(
         model="fake/model",
         backend="pytorch",
-        n=1,
+        dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
         baseline={"enabled": True, "duration_seconds": 5.0},

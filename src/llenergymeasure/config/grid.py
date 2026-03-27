@@ -367,8 +367,8 @@ def build_preflight_panel(
     for exp in study_config.experiments:
         _backends.add(exp.backend)
         _models.add(exp.model)
-        _ns.add(exp.n)
-        _datasets.add(str(exp.dataset))
+        _ns.add(exp.dataset.n_prompts)
+        _datasets.add(exp.dataset.source)
         _max_ins.add(exp.max_input_tokens)
         _max_outs.add(exp.max_output_tokens)
         _energy.add(str(exp.energy.backend))
@@ -556,17 +556,24 @@ def _collect_sweep_dimensions(
         "model",
         "backend",
         "precision",
-        "n",
         "max_input_tokens",
         "max_output_tokens",
     )
-    SCALAR_FIELDS = (*KEY_SCALAR_FIELDS, "dataset", "random_seed")
+    SCALAR_FIELDS = (*KEY_SCALAR_FIELDS, "random_seed")
 
     for field_name in SCALAR_FIELDS:
         values = [getattr(exp, field_name) for exp in experiments]
         unique_vals = set(str(v) for v in values)
         if len(unique_vals) > 1:
             result.append((field_name, ", ".join(sorted(unique_vals)), 0))
+
+    # --- Dataset sub-config fields ---
+    DATASET_FIELDS = ("source", "n_prompts", "order")
+    for field_name in DATASET_FIELDS:
+        values = [getattr(exp.dataset, field_name) for exp in experiments]
+        unique_vals = set(str(v) for v in values)
+        if len(unique_vals) > 1:
+            result.append((f"dataset.{field_name}", ", ".join(sorted(unique_vals)), 0))
 
     # --- Sub-config fields (recursive) ---
     SUB_CONFIGS_MANDATORY = ("decoder", "warmup", "baseline", "energy")
@@ -731,8 +738,13 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
         if not isinstance(values, list):
             values = [values]
         if "." in key:
-            backend_name, param = key.split(".", 1)
-            scoped_dims.setdefault(backend_name, {})[param] = values
+            prefix, _param = key.split(".", 1)
+            if prefix in _BACKEND_SECTION_KEYS:
+                # Backend-scoped parameter: pytorch.batch_size, vllm.engine.block_size
+                scoped_dims.setdefault(prefix, {})[_param] = values
+            else:
+                # Nested experiment config field: dataset.n_prompts, dataset.order
+                universal_dims[key] = values
         else:
             universal_dims[key] = values
 
@@ -773,8 +785,12 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
                     backend_dict = config_dict.get(backend, {})
                     nested_update = _unflatten({dim_key: value})
                     config_dict[backend] = deep_merge(backend_dict, nested_update)
+                elif "." in dim_key:
+                    # Nested universal parameter: dataset.n_prompts -> {"dataset": {"n_prompts": value}}
+                    nested_update = _unflatten({dim_key: value})
+                    config_dict = deep_merge(config_dict, nested_update)
                 else:
-                    # Universal parameter: goes at top level
+                    # Simple universal parameter: goes at top level
                     config_dict[dim_key] = value
 
             results.append(config_dict)

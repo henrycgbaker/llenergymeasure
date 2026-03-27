@@ -253,9 +253,9 @@ class TensorRTBackend:
         reset_cuda_peak_memory()
 
         logger.info(
-            "Starting TRT-LLM offline batch inference: %d prompts, max_tokens=%d",
+            "Starting TRT-LLM offline batch inference: %d prompts, max_tokens=%s",
             len(prompts),
-            config.max_output_tokens,
+            config.max_output_tokens or "unlimited",
         )
 
         try:
@@ -538,9 +538,10 @@ class TensorRTBackend:
 
         decoder = config.decoder
         kwargs: dict[str, Any] = {
-            "max_new_tokens": config.max_output_tokens,
             "random_seed": config.random_seed,
         }
+        if config.max_output_tokens is not None:
+            kwargs["max_new_tokens"] = config.max_output_tokens
 
         # Universal decoder params
         if decoder.temperature != 0.0:
@@ -551,6 +552,13 @@ class TensorRTBackend:
             kwargs["top_k"] = decoder.top_k
         if decoder.repetition_penalty is not None:
             kwargs["repetition_penalty"] = decoder.repetition_penalty
+        if decoder.min_p is not None:
+            kwargs["min_p"] = decoder.min_p
+        # Map universal decoder.min_new_tokens to TRT-LLM's min_tokens.
+        # Placed before trt.sampling overrides so tensorrt.sampling.min_tokens
+        # can override the universal mapping if both are set.
+        if decoder.min_new_tokens is not None:
+            kwargs["min_tokens"] = decoder.min_new_tokens
 
         # TRT-LLM-specific sampling overrides
         trt = config.tensorrt

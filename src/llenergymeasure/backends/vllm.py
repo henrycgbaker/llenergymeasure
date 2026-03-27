@@ -166,9 +166,9 @@ class VLLMBackend:
         reset_cuda_peak_memory()
 
         logger.info(
-            "Starting vLLM offline batch inference: %d prompts, max_tokens=%d",
+            "Starting vLLM offline batch inference: %d prompts, max_tokens=%s",
             len(prompts),
-            config.max_output_tokens,
+            config.max_output_tokens or "unlimited",
         )
 
         try:
@@ -379,7 +379,6 @@ class VLLMBackend:
         if is_greedy:
             kwargs: dict[str, Any] = {
                 "temperature": 0.0,
-                "max_tokens": config.max_output_tokens,
             }
         else:
             top_k = decoder.top_k if decoder.top_k != 0 else -1
@@ -388,10 +387,11 @@ class VLLMBackend:
                 "top_p": decoder.top_p,
                 "top_k": top_k,
                 "repetition_penalty": decoder.repetition_penalty,
-                "max_tokens": config.max_output_tokens,
             }
-            if decoder.min_p is not None:
-                kwargs["min_p"] = decoder.min_p
+        if config.max_output_tokens is not None:
+            kwargs["max_tokens"] = config.max_output_tokens
+        if decoder.min_p is not None:
+            kwargs["min_p"] = decoder.min_p
 
         # Map universal decoder.min_new_tokens to vLLM's min_tokens.
         # This is placed before vllm_cfg overrides so that vllm.sampling.min_tokens
@@ -439,7 +439,9 @@ class VLLMBackend:
             kwargs["length_penalty"] = beam_cfg.length_penalty
         if beam_cfg.early_stopping is not None:
             kwargs["early_stopping"] = beam_cfg.early_stopping
-        kwargs["max_tokens"] = beam_cfg.max_tokens or config.max_output_tokens
+        max_tokens = beam_cfg.max_tokens or config.max_output_tokens
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         if config.decoder.min_p is not None:
             kwargs["min_p"] = config.decoder.min_p
         if beam_cfg.model_extra:
