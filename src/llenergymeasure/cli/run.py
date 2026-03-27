@@ -328,13 +328,12 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
         config: ExperimentConfig with model, backend, precision, dataset fields.
         runner_tag: Runner tag string ("local" or "docker").
     """
-    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
+    from llenergymeasure.config.models import ExperimentConfig
 
     _fields = ExperimentConfig.model_fields
-    _ds_fields = DatasetConfig.model_fields
     default_precision = _fields["precision"].default
-    default_n = _ds_fields["n_prompts"].default
-    default_source = _ds_fields["source"].default
+    default_n = _fields["n"].default
+    default_dataset = _fields["dataset"].default
 
     # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
     model = config.model.split("/")[-1] if "/" in config.model else config.model
@@ -342,10 +341,11 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     # Deviation fields (only when non-default)
     if config.precision != default_precision:
         parts.append(config.precision)
-    if config.dataset.n_prompts != default_n:
-        parts.append(f"n_prompts={config.dataset.n_prompts}")
-    if config.dataset.source != default_source:
-        parts.append(config.dataset.source)
+    if config.n != default_n:
+        parts.append(f"n={config.n}")
+    if config.dataset != default_dataset:
+        dataset_label = config.dataset if isinstance(config.dataset, str) else "synthetic"
+        parts.append(dataset_label)
     return f"{' | '.join(parts)} [{runner_tag}]"
 
 
