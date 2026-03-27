@@ -575,7 +575,11 @@ class StudyStepDisplay:
         """Mark experiment as successfully completed."""
         from llenergymeasure.utils.formatting import compute_mj_per_tok
 
-        mj_tok = compute_mj_per_tok(energy_j or 0, throughput_tok_s or 0, elapsed)
+        mj_tok = (
+            compute_mj_per_tok(energy_j, throughput_tok_s, elapsed)
+            if energy_j is not None and throughput_tok_s is not None
+            else None
+        )
 
         with self._lock:
             self._inner_active = None

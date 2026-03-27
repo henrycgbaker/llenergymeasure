@@ -373,6 +373,7 @@ def test_print_study_summary_basic():
     exp.duration_sec = 45.2
     exp.total_energy_j = 123.4
     exp.avg_tokens_per_second = 42.5
+    exp.total_inference_time_sec = 40.0
 
     summary = StudySummary(
         total_experiments=1,

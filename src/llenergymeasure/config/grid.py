@@ -19,6 +19,7 @@ from rich.text import Text
 
 from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.ssot import SOURCE_MULTI_BACKEND_ELEVATION
 from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
@@ -344,7 +345,7 @@ def build_preflight_panel(
     )
 
     # --- Sweep dimensions ---
-    sweep_dimensions = _collect_sweep_dimensions(list(study_config.experiments))
+    sweep_dimensions = _collect_sweep_dimensions(study_config.experiments)
 
     # --- Assemble body ---
     body = Text()
@@ -363,7 +364,7 @@ def build_preflight_panel(
     _line(body, "Cycle gap", cyc_gap)
     shuffle_val = str(exec_cfg.shuffle_seed) if exec_cfg.shuffle_seed is not None else "auto"
     _line(body, "Shuffle seed", shuffle_val)
-    skip_val = "yes" if getattr(exec_cfg, "skip_preflight", False) else "no"
+    skip_val = "yes" if exec_cfg.skip_preflight else "no"
     _line(body, "Skip preflight", skip_val)
 
     # -- Runners --
@@ -373,7 +374,7 @@ def build_preflight_panel(
         if runner_specs and b in runner_specs:
             spec = runner_specs[b]
             body.append(f"    {b:<18}{spec.mode}")
-            if getattr(spec, "source", None) == "multi_backend_elevation":
+            if getattr(spec, "source", None) == SOURCE_MULTI_BACKEND_ELEVATION:
                 body.append(" (auto-elevated)", style="yellow")
             body.append("\n")
         else:
@@ -400,15 +401,14 @@ def build_preflight_panel(
             _line(body, label, value)
 
     # -- Split sweep dimensions into shared (universal) and backend-scoped --
-    _BACKEND_NAMES = {"pytorch", "vllm", "tensorrt"}
     shared_dims: list[tuple[str, str, int]] = []
     backend_dims: list[tuple[str, str, int]] = []
 
     in_backend_section = False
     for label, value, depth in sweep_dimensions:
-        if depth == 0 and not value and label in _BACKEND_NAMES:
+        if depth == 0 and not value and label in _BACKEND_SECTION_KEYS:
             in_backend_section = True
-        elif depth == 0 and label not in _BACKEND_NAMES:
+        elif depth == 0 and label not in _BACKEND_SECTION_KEYS:
             in_backend_section = False
 
         if in_backend_section:
