@@ -54,9 +54,9 @@ def run(
         str | None,
         typer.Option("--dataset", "-d", help="Dataset name"),
     ] = None,
-    n: Annotated[
+    n_prompts: Annotated[
         int | None,
-        typer.Option("-n", help="Number of prompts to run"),
+        typer.Option("--n-prompts", "-n", help="Number of prompts to run"),
     ] = None,
     batch_size: Annotated[
         int | None,
@@ -91,7 +91,8 @@ def run(
     order: Annotated[
         str | None,
         typer.Option(
-            "--order", help="Cycle ordering: sequential, interleave, shuffle (study mode)"
+            "--order",
+            help="Experiment ordering: sequential, interleave, shuffle, reverse, latin_square (study mode)",
         ),
     ] = None,
     no_gaps: Annotated[
@@ -125,7 +126,7 @@ def run(
             model=model,
             backend=backend,
             dataset=dataset,
-            n=n,
+            n_prompts=n_prompts,
             batch_size=batch_size,
             precision=precision,
             output=output,
@@ -161,7 +162,7 @@ def _run_impl(
     model: str | None,
     backend: str | None,
     dataset: str | None,
-    n: int | None,
+    n_prompts: int | None,
     batch_size: int | None,
     precision: str | None,
     output: str | None,
@@ -181,9 +182,9 @@ def _run_impl(
     if backend is not None:
         cli_overrides["backend"] = backend
     if dataset is not None:
-        cli_overrides["dataset"] = dataset
-    if n is not None:
-        cli_overrides["n"] = n
+        cli_overrides["dataset.source"] = dataset
+    if n_prompts is not None:
+        cli_overrides["dataset.n_prompts"] = n_prompts
     if batch_size is not None:
         # Dotted key for _unflatten() in loader — maps to pytorch.batch_size
         cli_overrides["pytorch.batch_size"] = batch_size
@@ -324,15 +325,16 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     """Build compact experiment header: model | backend [runner] + deviation fields.
 
     Args:
-        config: ExperimentConfig with model, backend, precision, n, dataset fields.
+        config: ExperimentConfig with model, backend, precision, dataset fields.
         runner_tag: Runner tag string ("local" or "docker").
     """
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     _fields = ExperimentConfig.model_fields
+    _ds_fields = DatasetConfig.model_fields
     default_precision = _fields["precision"].default
-    default_n = _fields["n"].default
-    default_dataset = _fields["dataset"].default
+    default_n = _ds_fields["n_prompts"].default
+    default_source = _ds_fields["source"].default
 
     # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
     model = config.model.split("/")[-1] if "/" in config.model else config.model
@@ -340,10 +342,10 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     # Deviation fields (only when non-default)
     if config.precision != default_precision:
         parts.append(config.precision)
-    if config.n != default_n:
-        parts.append(f"n={config.n}")
-    if getattr(config, "dataset", default_dataset) != default_dataset:
-        parts.append(config.dataset)
+    if config.dataset.n_prompts != default_n:
+        parts.append(f"n_prompts={config.dataset.n_prompts}")
+    if config.dataset.source != default_source:
+        parts.append(config.dataset.source)
     return f"{' | '.join(parts)} [{runner_tag}]"
 
 

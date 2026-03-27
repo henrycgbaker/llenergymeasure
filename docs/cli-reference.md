@@ -28,8 +28,8 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 |------|-------|------|---------|-------------|
 | `--model` | `-m` | str | — | Model name or HuggingFace path |
 | `--backend` | `-b` | str | — | Inference backend (`pytorch`, `vllm`, `tensorrt`) |
-| `--dataset` | `-d` | str | — | Dataset name |
-| `-n` | | int | — | Number of prompts to run |
+| `--dataset` | `-d` | str | — | Dataset source (`aienergyscore` or `.jsonl` file path) |
+| `-n` | | int | — | Number of prompts to run (`dataset.n_prompts`) |
 | `--batch-size` | | int | — | Batch size (PyTorch backend only) |
 | `--precision` | `-p` | str | — | Floating point precision (`fp32`, `fp16`, `bf16`) |
 | `--output` | `-o` | str | — | Output directory for results |
@@ -41,12 +41,12 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 | `--no-gaps` | | flag | false | Disable thermal gaps between experiments (study mode) |
 | `--skip-preflight` | | flag | false | Skip Docker pre-flight checks (GPU visibility, CUDA/driver compatibility) |
 
-**CLI effective defaults for study mode** (applied when neither the YAML `execution:` block nor a CLI flag specifies the value):
+**CLI effective defaults for study mode** (applied when neither the YAML `study_execution:` block nor a CLI flag specifies the value):
 
 - `--cycles` defaults to `3` (Pydantic model default is `1`)
-- `--order` defaults to `shuffled` (Pydantic model default is `sequential`)
+- `--order` defaults to `shuffle` (Pydantic model default is `sequential`)
 
-These defaults are applied at the CLI layer to give better statistical coverage out of the box. To use the conservative model defaults, set them explicitly in the YAML `execution:` block.
+These defaults are applied at the CLI layer to give better statistical coverage out of the box. To use the conservative model defaults, set them explicitly in the YAML `study_execution:` block.
 
 **Exit codes:** `0` success, `1` experiment/backend/preflight error, `2` config validation error, `130` interrupted (Ctrl-C).
 
@@ -121,8 +121,8 @@ llem run experiment.yaml --dry-run
 ### Study with cycle override
 
 ```bash
-# Run 5 cycles in interleaved order instead of the CLI default (3 shuffled)
-llem run study.yaml --cycles 5 --order interleaved
+# Run 5 cycles in interleave order instead of the CLI default (3 shuffle)
+llem run study.yaml --cycles 5 --order interleave
 ```
 
 ### Suppress thermal gaps (testing only)

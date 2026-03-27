@@ -119,7 +119,7 @@ true energy cost from transient effects (thermal spike, background process, cach
 
 For publication, use `n_cycles >= 5` to support confidence interval estimation.
 
-### Cycle Ordering
+### Experiment Ordering
 
 For experiments A and B with 3 cycles:
 
@@ -128,25 +128,40 @@ For experiments A and B with 3 cycles:
 All cycles of each experiment run together. Minimises model-load overhead (model stays
 loaded across cycles). May introduce temporal bias if system state changes over time.
 
-**`interleaved`** → `A, B, A, B, A, B`
+**`interleave`** → `A, B, A, B, A, B`
 
 One cycle of each experiment per round, repeated. Balances temporal effects across
 configurations — both A and B experience similar system conditions per round.
 Good for comparisons where temporal fairness matters.
 
-**`shuffled`** → random per-cycle order, seeded from study design hash
+**`shuffle`** → random per-cycle order, seeded from study design hash
 
 The execution order is randomised independently for each cycle. The seed is derived from
 the study design hash (SHA-256 of the resolved experiment list), so the same study YAML
 always produces the same shuffle sequence — reruns are reproducible.
 
-`shuffled` is the CLI default. It eliminates systematic ordering bias while maintaining
+`shuffle` is the CLI default. It eliminates systematic ordering bias while maintaining
 reproducibility.
 
-Override the cycle order from the CLI:
+**`reverse`** → `A, B, B, A, A, B`
+
+Alternates forward and backward experiment order each cycle. Even-numbered cycles run
+experiments in the original order; odd-numbered cycles run them in reverse. Counterbalances
+temporal drift (e.g. thermal ramp) without introducing randomness.
+
+**`latin_square`** → Williams balanced design
+
+Uses a Williams balanced latin square where each experiment follows every other experiment
+exactly once across rows, cancelling first-order carryover effects (e.g. thermal residue
+from the previous model). When `n_cycles > k` (number of experiments), the square rows
+repeat; when `n_cycles < k`, the first `n_cycles` rows are used.
+
+Best for studies where carryover effects between experiments are a concern.
+
+Override the experiment order from the CLI:
 
 ```bash
-llem run study.yaml --cycles 5 --order interleaved
+llem run study.yaml --cycles 5 --order interleave
 ```
 
 ---
@@ -184,8 +199,7 @@ scopes:
 **`random_seed`** (ExperimentConfig) — per-experiment stochasticity:
 
 - Backend inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
-- Dataset prompt ordering (when `dataset_order: shuffled`)
-- Synthetic prompt generation
+- Dataset prompt ordering (when `dataset.order: shuffled`)
 
 **`shuffle_seed`** (ExecutionConfig) — study-level scheduling:
 
@@ -202,12 +216,12 @@ test sampling variance (vary `random_seed`) independently from ordering effects 
 To maximise reproducibility across runs and machines:
 
 1. **Fix the random seed.** The default `random_seed: 42` controls all per-experiment
-   stochasticity — inference RNG, dataset ordering, and synthetic prompt generation:
+   stochasticity — inference RNG and dataset ordering:
    ```yaml
    random_seed: 42
    ```
 
-2. **Use shuffled cycle ordering with n_cycles >= 3.** Shuffled ordering is seeded from
+2. **Use shuffle experiment ordering with n_cycles >= 3.** Shuffle ordering is seeded from
    the study design hash — identical study YAML always produces identical shuffle order.
    To override the shuffle seed explicitly:
    ```yaml
@@ -242,3 +256,45 @@ Each experiment result JSON includes:
 - `baseline_power_watts` — measured idle power for this session
 - `thermal_throttle_detected` — whether throttling occurred during measurement
 - Per-prompt timeseries data (power samples, latency) for detailed analysis
+
+---
+
+## Universal-to-Backend Parameter Mapping
+
+llenergymeasure uses backend-native field names wherever possible. Each backend library
+(HuggingFace Transformers, vLLM, TensorRT-LLM) has its own naming conventions. A thin
+mapping layer translates the handful of universal `ExperimentConfig` and `DecoderConfig`
+fields to each backend's native API parameters.
+
+### Design principle
+
+Backend-specific configuration sections (`pytorch:`, `vllm:`, `tensorrt:`) always use the
+backend library's native names directly - no translation. The mapping layer only applies to
+shared (universal) fields that have identical semantics across all backends but different
+API names.
+
+### Complete mapping table
+
+| Universal field | PyTorch native | vLLM native | TensorRT native | Notes |
+|---|---|---|---|---|
+| `precision` | `torch_dtype` (torch.float16, etc.) | `dtype` ("float16", etc.) | `dtype` | String-to-enum mapping in PyTorch |
+| `random_seed` | `torch.manual_seed()` | `seed=` in LLM() | `random_seed=` in SamplingParams | Different API surfaces |
+| `max_input_tokens` | `max_length` in tokeniser | (pre-truncated by harness) | `max_input_len` (compile-time) | PyTorch truncates at tokenisation; TRT-LLM uses it as a compile-time engine constraint |
+| `max_output_tokens` | `max_new_tokens` | `max_tokens` | `max_new_tokens` | **vLLM uses `max_tokens`**; PyTorch/TRT-LLM use `max_new_tokens` |
+| `decoder.temperature` | `temperature` | `temperature` | `temperature` | No rename; conditional stripping in greedy mode |
+| `decoder.do_sample` | `do_sample` | (implicit from temperature) | (implicit from temperature) | Only PyTorch has an explicit flag |
+| `decoder.top_k` | `top_k` (0=disabled) | `top_k` (**0 → -1**) | `top_k` (0=skipped) | vLLM uses -1 to mean disabled |
+| `decoder.top_p` | `top_p` | `top_p` | `top_p` | No rename |
+| `decoder.repetition_penalty` | `repetition_penalty` | `repetition_penalty` | `repetition_penalty` | No rename |
+| `decoder.min_p` | `min_p` | `min_p` | `min_p` | No rename |
+| `decoder.min_new_tokens` | `min_new_tokens` | `min_tokens` | `min_tokens` | **vLLM/TRT-LLM use `min_tokens`** |
+
+### Non-mapped fields
+
+Everything else passes through without translation:
+
+- **Backend-specific configs** (`pytorch.batch_size`, `vllm.engine.max_num_seqs`,
+  `tensorrt.max_batch_size`, etc.) use native names - no mapping.
+- **Sub-configs** (`warmup`, `baseline`, `energy`) are consumed by the measurement harness,
+  not by backends.
+- **`lora`** is defined in config but not yet implemented in any backend.
