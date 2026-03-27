@@ -19,7 +19,7 @@ def test_study_result_has_full_schema():
         study_design_hash="abcdef0123456789",
         measurement_protocol={
             "n_cycles": 3,
-            "cycle_order": "interleaved",
+            "experiment_order": "interleave",
             "experiment_gap_seconds": 30,
             "cycle_gap_seconds": 60,
         },

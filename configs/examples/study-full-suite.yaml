@@ -23,43 +23,29 @@ runners:
 # Study-level metadata and scheduling parameters.
 # These apply globally to all experiments. Non-sweepable.
 
-execution: # TODO rename this field study_execution
+study_execution:
   n_cycles: 3
-  cycle_order: shuffled       # sequential | interleaved | shuffled
-  # TODO:  add intra-cycle interleaving option (e.g. sequential cycles, but interleaved experiments within each cycle) (I think currently is fully shuffled across all cycles - need to confirm this)
-  experiment_gap_seconds: 30.0   # Gap for thermal stabilisation between experiments TODO CHANGE BACK TO 60
-  cycle_gap_seconds: 30.0       # 5-minute gap between full cycles TODO CHANGE BACK TO 300
-  shuffle_seed: null           # Explicit override for cycle shuffle order (null = derived from study_design_hash)
+  experiment_order: shuffle       # sequential | interleave | shuffle | reverse | latin_square
+  shuffle_seed: null           # Explicit override for experiment shuffle order (null = derived from study_design_hash)
+  experiment_gap_seconds: 60.0   # Gap for thermal stabilisation 
+  cycle_gap_seconds: 300.0       
   skip_preflight: false        # Skip Docker pre-flight checks (not recommended)
 
 # =====================================================================
 # Shared fields (experiment-level)
 # =====================================================================
 # Applied to every experiment unless overridden by sweep or explicit experiments.
-# Defacto treated as constant defaults for primary purpose of this tool (to measure energy efficiecny of different implementations configurations for a given computational workload)
-# Neverheless, all fields are sweepable
+# Defacto treated as constant defaults, but all fields are sweepable
 # Add to sweep if you want to compare across different values of these fields (e.g. prompt counts, input lengths, energy backends, etc.)
-#
-# --- Seeding model ---
-# Two independent seeds control reproducibility at different scopes:
-#
-#   random_seed (below) - 
-#
-#   shuffle_seed (execution section above) - study-level scheduling:
-#     - Cycle shuffle order (which experiment runs when)
-#     - Default: derived from study_design_hash (same YAML = same order)
-#
-# These are orthogonal by design: changing random_seed does not affect
-# experiment scheduling, and changing shuffle_seed does not affect
-# inference outputs.
+
+random_seed: 42 # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset_order: shuffled), (iii) synthetic prompt generation (when using synthetic dataset)
 
 model: Qwen/Qwen2.5-0.5B
-random_seed: 42 # per-experiment stochasticity: (i) inference RNG, (ii) prompt ordering (when dataset_order: shuffled), (iii) synthetic prompt generation (when using synthetic dataset)
 
 # --- Input Dataset ---
 #TODO: place these all under input using dot notation (e.g. input.dataset, input.n_prompts, input.order, input.max_input_tokensm, etc.) to make it more extensible and better organized. Then can add synthetic dataset params here as well (e.g. dataset.synthetic.input_len, etc.)
 dataset: aienergyscore           # Sweepable - built-in dataset (see synthetic alternative below)
-n: 50                            # TODO change to n_prompts
+n: 100                            # TODO change to n_prompts
 dataset_order: interleaved       # interleaved | grouped | shuffled
 max_input_tokens: 256            # Sweepable - add to sweep: to compare input lengths
 max_output_tokens: 256           # Sweepable - add to sweep: to compare output lengths

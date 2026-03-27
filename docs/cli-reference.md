@@ -37,7 +37,7 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 | `--quiet` | `-q` | flag | false | Suppress progress bars |
 | `--verbose` | `-v` | flag | false | Show detailed output and tracebacks |
 | `--cycles` | | int | — | Number of measurement cycles (study mode) |
-| `--order` | | str | — | Cycle ordering: `sequential`, `interleaved`, `shuffled` (study mode) |
+| `--order` | | str | — | Cycle ordering: `sequential`, `interleave`, `shuffle` (study mode) |
 | `--no-gaps` | | flag | false | Disable thermal gaps between experiments (study mode) |
 | `--skip-preflight` | | flag | false | Skip Docker pre-flight checks (GPU visibility, CUDA/driver compatibility) |
 

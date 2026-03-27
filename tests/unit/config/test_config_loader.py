@@ -240,8 +240,8 @@ def test_load_study_config_grid_sweep(tmp_path):
     # 16-char hex
     int(sc.study_design_hash, 16)
     # execution defaults applied
-    assert sc.execution.n_cycles == 1
-    assert sc.execution.cycle_order == "sequential"
+    assert sc.study_execution.n_cycles == 1
+    assert sc.study_execution.experiment_order == "sequential"
 
 
 def test_load_study_config_explicit_experiments(tmp_path):
@@ -285,7 +285,7 @@ def test_load_study_config_combined_mode(tmp_path):
 
 
 def test_load_study_config_with_execution_block(tmp_path):
-    """load_study_config() with execution block applies n_cycles and cycle_order."""
+    """load_study_config() with execution block applies n_cycles and experiment_order."""
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
         yaml.dump(
@@ -295,16 +295,16 @@ def test_load_study_config_with_execution_block(tmp_path):
                 "sweep": {
                     "precision": ["fp16", "bf16"],
                 },
-                "execution": {
+                "study_execution": {
                     "n_cycles": 3,
-                    "cycle_order": "interleaved",
+                    "experiment_order": "interleave",
                 },
             }
         )
     )
     sc = load_study_config(study_yaml)
-    assert sc.execution.n_cycles == 3
-    assert sc.execution.cycle_order == "interleaved"
+    assert sc.study_execution.n_cycles == 3
+    assert sc.study_execution.experiment_order == "interleave"
     # 2 base configs x 3 cycles = 6 runs
     assert len(sc.experiments) == 6
 
@@ -318,12 +318,12 @@ def test_load_study_config_cli_overrides(tmp_path):
                 "model": "gpt2",
                 "backend": "pytorch",
                 "sweep": {"precision": ["fp16", "bf16"]},
-                "execution": {"n_cycles": 1},
+                "study_execution": {"n_cycles": 1},
             }
         )
     )
-    sc = load_study_config(study_yaml, cli_overrides={"execution": {"n_cycles": 5}})
-    assert sc.execution.n_cycles == 5
+    sc = load_study_config(study_yaml, cli_overrides={"study_execution": {"n_cycles": 5}})
+    assert sc.study_execution.n_cycles == 5
     # 2 configs x 5 cycles = 10
     assert len(sc.experiments) == 10
 
@@ -366,7 +366,7 @@ def test_load_study_config_empty_study_raises(tmp_path):
         yaml.dump(
             {
                 "study_name": "empty-study",
-                "execution": {"n_cycles": 1},
+                "study_execution": {"n_cycles": 1},
             }
         )
     )
@@ -409,8 +409,8 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
         "backend": "pytorch",
         "sweep": {"precision": ["fp16", "bf16"]},
     }
-    study_yaml_a.write_text(yaml.dump({**sweep_content, "execution": {"n_cycles": 1}}))
-    study_yaml_b.write_text(yaml.dump({**sweep_content, "execution": {"n_cycles": 5}}))
+    study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))
+    study_yaml_b.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 5}}))
 
     sc_a = load_study_config(study_yaml_a)
     sc_b = load_study_config(study_yaml_b)

@@ -15,6 +15,6 @@ experiments:
     baseline:
       enabled: false
 
-execution:
+study_execution:
   n_cycles: 3
-  cycle_order: sequential
+  experiment_order: sequential

@@ -99,17 +99,17 @@ For publication-quality results, always include baseline in your reported energy
 caching effects. Repeating experiments across multiple cycles produces a distribution
 of measurements that supports statistical analysis and confidence intervals.
 
-Configure via the `execution:` section in a study YAML:
+Configure via the `study_execution:` section in a study YAML:
 
 ```yaml
-execution:
-  n_cycles: 3            # default (CLI): 3
-  cycle_order: shuffled  # default (CLI): shuffled
+study_execution:
+  n_cycles: 3               # default (CLI): 3
+  experiment_order: shuffle  # default (CLI): shuffle
 ```
 
 **CLI effective defaults** for `llem run study.yaml` (if not set in the YAML):
 - `n_cycles = 3`
-- `cycle_order = shuffled`
+- `experiment_order = shuffle`
 
 ### Why n_cycles >= 3?
 
@@ -211,8 +211,8 @@ To maximise reproducibility across runs and machines:
    the study design hash — identical study YAML always produces identical shuffle order.
    To override the shuffle seed explicitly:
    ```yaml
-   execution:
-     cycle_order: shuffled
+   study_execution:
+     experiment_order: shuffle
      shuffle_seed: 123  # null = derived from study_design_hash
    ```
 
