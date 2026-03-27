@@ -406,9 +406,39 @@ def _run_study_impl(
         cli_overrides=study_cli_overrides if study_cli_overrides else None,
     )
 
+    # ---------------------------------------------------------------
+    # Resolve runners and compute study dir preview — shared by both
+    # dry-run and actual-run so both show the same preflight panel.
+    # ---------------------------------------------------------------
+    from datetime import datetime, timezone
+
+    from llenergymeasure.api import probe_energy_sampler, run_study_preflight
+    from llenergymeasure.config.user_config import load_user_config
+
+    user_config = load_user_config()
+    try:
+        runner_specs = run_study_preflight(
+            study_config,
+            # Dry-run: skip Docker binary checks (just resolve runner modes).
+            skip_preflight=skip_preflight or dry_run,
+            yaml_runners=study_config.runners,
+            user_config=user_config.runners,
+        )
+    except Exception:
+        runner_specs = None  # graceful: Docker unavailable, show YAML runners
+
+    prefix = study_config.name or "study"
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    study_dir_preview = Path("results") / f"{prefix}_{ts}"
+
     # --- Dry-run branch ---
     if dry_run:
-        print_study_dry_run(study_config, verbose=verbose)
+        print_study_dry_run(
+            study_config,
+            verbose=verbose,
+            runner_specs=runner_specs,
+            study_dir=study_dir_preview,
+        )
         return
 
     effective_mode = _resolve_progress_mode(quiet, verbose)
@@ -424,9 +454,13 @@ def _run_study_impl(
         n_cycles = study_config.execution.n_cycles
         name = study_config.name or "unnamed"
 
-        # Print Rich Panel with study metadata (static, before live display starts)
         _stderr_console = RichConsole(stderr=True)
-        panel = build_preflight_panel(study_config)
+        panel = build_preflight_panel(
+            study_config,
+            runner_specs=runner_specs,
+            study_dir=study_dir_preview,
+            probed_energy_sampler=probe_energy_sampler(),
+        )
         _stderr_console.print(panel)
 
         if study_config.skipped_configs:
@@ -451,11 +485,12 @@ def _run_study_impl(
 
     _study_start = _time.monotonic()
 
-    # Run the study with live progress display
+    # Run the study with live progress display.
+    # skip_preflight=True because we already ran preflight above.
     from llenergymeasure import run_study
 
     try:
-        result = run_study(study_config, skip_preflight=skip_preflight, progress=study_display)
+        result = run_study(study_config, skip_preflight=True, progress=study_display)
     finally:
         # Safety stop — ensures Rich Live is torn down even on exceptions
         if study_display is not None:

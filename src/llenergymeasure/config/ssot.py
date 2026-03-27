@@ -29,6 +29,11 @@ BackendName = Literal["pytorch", "vllm", "tensorrt"]
 
 RUNNER_LOCAL: Final = "local"
 RUNNER_DOCKER: Final = "docker"
+CONTAINER_EXCHANGE_DIR: Final = "/run/llem"
+"""Mount point inside Docker containers for config/result exchange."""
+
+SOURCE_MULTI_BACKEND_ELEVATION: Final = "multi_backend_elevation"
+"""RunnerSpec source tag when a backend is auto-elevated to Docker for multi-backend isolation."""
 
 RunnerMode = Literal["local", "docker"]
 

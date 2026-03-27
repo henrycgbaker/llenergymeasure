@@ -101,16 +101,13 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         - StudyStepDisplay (cli/_step_display.py)
     """
 
-    def begin_experiment(
-        self, index: int, model: str, backend: str, precision: str, steps: list[str]
-    ) -> None:
+    def begin_experiment(self, index: int, header: str, steps: list[str]) -> None:
         """Signal that a new experiment is starting within the study.
 
         Args:
             index: 1-based experiment position in the study.
-            model: Model name (e.g. "gpt2").
-            backend: Backend name (e.g. "pytorch").
-            precision: Precision string (e.g. "bf16").
+            header: Pre-built display string (e.g. "Qwen2.5-0.5B / pytorch / bf16 batch=4").
+                    Built by ``format_experiment_header()`` in ``utils/formatting.py``.
             steps: Ordered step names for this experiment's [x/y] counter.
         """
         ...
@@ -121,6 +118,7 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         elapsed: float,
         energy_j: float | None = None,
         throughput_tok_s: float | None = None,
+        inference_time_sec: float | None = None,
     ) -> None:
         """Signal that an experiment completed successfully.
 
@@ -129,6 +127,7 @@ class StudyProgressCallback(ProgressCallback, Protocol):
             elapsed: Total wall-clock time in seconds.
             energy_j: Total energy in joules (None if unavailable).
             throughput_tok_s: Throughput in tokens/second (None if unavailable).
+            inference_time_sec: Measurement window duration (None if unavailable).
         """
         ...
 
@@ -139,6 +138,18 @@ class StudyProgressCallback(ProgressCallback, Protocol):
             index: 1-based experiment position.
             elapsed: Wall-clock time until failure in seconds.
             error: Human-readable error message.
+        """
+        ...
+
+    def on_experiment_saved(
+        self, index: int, host_path: str, container_path: str | None = None
+    ) -> None:
+        """Signal that experiment results were saved to disk.
+
+        Args:
+            index: 1-based experiment position.
+            host_path: Absolute path on the host filesystem.
+            container_path: Path inside the Docker container (None for local runs).
         """
         ...
 

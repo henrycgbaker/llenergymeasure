@@ -9,13 +9,20 @@ from __future__ import annotations
 import difflib
 import sys
 import traceback
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.utils.exceptions import DockerError, LLEMError
+from llenergymeasure.utils.formatting import compute_mj_per_tok as _compute_mj_per_tok
 from llenergymeasure.utils.formatting import format_elapsed as _format_duration
+from llenergymeasure.utils.formatting import model_short_name
 from llenergymeasure.utils.formatting import sig3 as _sig3
 
 
@@ -37,6 +44,12 @@ def print_result_summary(result: ExperimentResult) -> None:
         print(f"  Baseline       {_sig3(result.baseline_power_w)} W")
     if result.energy_adjusted_j is not None:
         print(f"  Adjusted       {_sig3(result.energy_adjusted_j)} J")
+    # Per-token energy (mJ/tok)
+    mj_tok = _compute_mj_per_tok(
+        result.total_energy_j, result.avg_tokens_per_second, result.duration_sec
+    )
+    if mj_tok is not None:
+        print(f"  Per token      {_sig3(mj_tok)} mJ/tok")
     print()
 
     # --- Performance ---
@@ -230,6 +243,8 @@ def format_validation_error(e: ValidationError) -> str:
 def print_study_dry_run(
     study_config: object,
     verbose: bool = False,
+    runner_specs: dict[str, RunnerSpec] | None = None,
+    study_dir: Path | None = None,
 ) -> None:
     """Print dry-run output for a study to stdout.
 
@@ -238,15 +253,22 @@ def print_study_dry_run(
     """
     from rich.console import Console as RichConsole
 
+    from llenergymeasure.api import probe_energy_sampler
     from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
     from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.models import StudyConfig
+    from llenergymeasure.utils.formatting import format_experiment_header
 
     assert isinstance(study_config, StudyConfig)
 
-    # Pre-flight panel (metadata, sweep dims, hash) goes to stdout for dry-run
+    # Pre-flight panel — same args as actual run so both show identical output
     _stdout_console = RichConsole()
-    panel = build_preflight_panel(study_config)
+    panel = build_preflight_panel(
+        study_config,
+        runner_specs=runner_specs,
+        study_dir=study_dir,
+        probed_energy_sampler=probe_energy_sampler(),
+    )
     _stdout_console.print(panel)
 
     if study_config.skipped_configs:
@@ -258,15 +280,11 @@ def print_study_dry_run(
         _stdout_console.print("\n".join(skip_lines))
         _stdout_console.print()
 
-    # Per-experiment config table
-    header = f"{'#':>3}  {'Model':<25}  {'Backend':<10}  {'Precision':<10}  {'n':>5}"
-    print(header)
-    print("-" * len(header))
+    # Per-experiment list using the same header format as the live run
+    n = len(study_config.experiments)
+    width = len(str(n))
     for i, exp in enumerate(study_config.experiments, 1):
-        model_str = exp.model
-        if len(model_str) > 25:
-            model_str = "..." + model_str[-22:]
-        print(f"{i:>3}  {model_str:<25}  {exp.backend:<10}  {exp.precision:<10}  {exp.n:>5}")
+        print(f"  {i:>{width}}  {format_experiment_header(exp)}")
     print()
 
     # VRAM estimate for the peak model (largest weight estimate)
@@ -300,28 +318,12 @@ def print_study_dry_run(
 def print_experiment_header(config: ExperimentConfig) -> None:
     """Print one-line experiment header to stderr (progress area).
 
-    Shows model + backend always, plus non-default parameters worth noting.
+    Uses ``format_experiment_header()`` for consistent formatting across
+    single-experiment and study modes.
     """
-    parts = [config.model, config.backend]
+    from llenergymeasure.utils.formatting import format_experiment_header
 
-    # Always show precision (key for reproducibility)
-    parts.append(config.precision)
-
-    # Show n if non-default
-    if config.n != 100:
-        parts.append(f"n={config.n}")
-
-    # Show max_output_tokens if non-default
-    if config.max_output_tokens != 128:
-        parts.append(f"max_out={config.max_output_tokens}")
-
-    # Show batch_size if configured
-    if config.pytorch is not None and hasattr(config.pytorch, "batch_size"):
-        bs = config.pytorch.batch_size
-        if bs is not None and bs != 1:
-            parts.append(f"batch={bs}")
-
-    print(f"Experiment: {' | '.join(parts)}", file=sys.stderr)
+    print(f"Experiment: {format_experiment_header(config)}", file=sys.stderr)
 
 
 def print_study_summary(result: StudyResult) -> None:
@@ -341,29 +343,49 @@ def print_study_summary(result: StudyResult) -> None:
     print()
 
     # Table header
-    header = f"{'#':>3}  {'Config':<40}  {'Status':<8}  {'Time':>8}  {'Energy':>10}  {'tok/s':>8}"
+    header = (
+        f"{'#':>3}  {'':>2}  {'Config':<40}  {'Total':>8}  {'Infer':>8}"
+        f"  {'Energy':>10}  {'tok/s':>8}  {'mJ/tok':>8}"
+    )
     print(header)
     print("-" * len(header))
 
     # Table rows
     for i, exp in enumerate(result.experiments, 1):
-        model_short = exp.effective_config.get("model", "unknown")
+        # Build compact config string: model_short / backend / non-default params
+        model_raw = exp.effective_config.get("model", "unknown")
+        model_short = model_short_name(model_raw)
         if len(model_short) > 20:
             model_short = "..." + model_short[-17:]
         backend = exp.backend
-        precision = getattr(exp, "precision", "?")
-        if hasattr(exp, "effective_config"):
-            precision = exp.effective_config.get("precision", precision)
+        precision = (
+            exp.effective_config.get("precision", "?") if hasattr(exp, "effective_config") else "?"
+        )
         config_str = f"{model_short} / {backend} / {precision}"
         if len(config_str) > 40:
             config_str = config_str[:37] + "..."
 
-        time_str = _format_duration(exp.duration_sec)
-        energy_str = f"{_sig3(exp.total_energy_j)} J"
-        toks_str = _sig3(exp.avg_tokens_per_second)
+        # Status icon
+        is_ok = exp.total_energy_j is not None and exp.total_energy_j > 0
+        status_icon = "\u2713" if is_ok else "\u2717"
+
+        total_str = _format_duration(exp.duration_sec)
+        infer_str = (
+            _format_duration(exp.total_inference_time_sec)
+            if exp.total_inference_time_sec > 0
+            else "-"
+        )
+        energy_str = f"{_sig3(exp.total_energy_j)} J" if exp.total_energy_j else "-"
+        toks_str = _sig3(exp.avg_tokens_per_second) if exp.avg_tokens_per_second else "-"
+
+        mj_tok = _compute_mj_per_tok(
+            exp.total_energy_j, exp.avg_tokens_per_second, exp.duration_sec
+        )
+        mj_str = _sig3(mj_tok) if mj_tok is not None else "-"
 
         print(
-            f"{i:>3}  {config_str:<40}  {'OK':<8}  {time_str:>8}  {energy_str:>10}  {toks_str:>8}"
+            f"{i:>3}  {status_icon:>2}  {config_str:<40}  {total_str:>8}  {infer_str:>8}"
+            f"  {energy_str:>10}  {toks_str:>8}  {mj_str:>8}"
         )
 
     print("-" * len(header))

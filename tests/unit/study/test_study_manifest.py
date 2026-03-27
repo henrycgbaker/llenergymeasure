@@ -340,7 +340,7 @@ def test_experiment_result_filename() -> None:
         precision="bf16",
         config_hash="abcdef1234567890",
     )
-    assert result == "meta-llama-llama-3.1-8b_pytorch_bf16_abcdef12.json"
+    assert result == "Llama-3.1-8B-pytorch_abcdef12.json"
 
 
 def test_experiment_result_filename_parquet() -> None:
@@ -351,7 +351,7 @@ def test_experiment_result_filename_parquet() -> None:
         config_hash="abcdef1234567890",
         extension=".parquet",
     )
-    assert result == "meta-llama-llama-3.1-8b_pytorch_bf16_abcdef12.parquet"
+    assert result == "Llama-3.1-8B-pytorch_abcdef12.parquet"
 
 
 # ---------------------------------------------------------------------------
@@ -362,11 +362,9 @@ def test_experiment_result_filename_parquet() -> None:
 def test_config_summary_from_experiment() -> None:
     config = ExperimentConfig(model="meta-llama/Llama-3.1-8B", backend="pytorch", precision="bf16")
     summary = build_config_summary(config)
-    # Should be "pytorch / <model-slug> / bf16"
-    assert summary.startswith("pytorch /")
-    assert "bf16" in summary
-    # Model slug: lowered, slashes to hyphens
-    assert "llama" in summary.lower()
+    # Uses format_experiment_header: "Llama-3.1-8B / pytorch"
+    assert "Llama-3.1-8B" in summary
+    assert "pytorch" in summary
 
 
 # ---------------------------------------------------------------------------

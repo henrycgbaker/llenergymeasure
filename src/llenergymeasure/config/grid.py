@@ -19,10 +19,12 @@ from rich.text import Text
 
 from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.ssot import SOURCE_MULTI_BACKEND_ELEVATION
 from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
+    from llenergymeasure.infra.runner_resolution import RunnerSpec
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -263,23 +265,30 @@ def format_preflight_summary(
 
 def build_preflight_panel(
     study_config: StudyConfig,
-    skipped: list[SkippedConfig] | None = None,
+    runner_specs: dict[str, RunnerSpec] | None = None,
+    study_dir: Path | None = None,
+    probed_energy_sampler: str | None = None,
 ) -> Panel:
     """Return a Rich Panel with study metadata, sweep dimensions, and design hash.
 
     The panel shows:
     - Border title: "Study: <name>"
-    - Metadata section: Experiments (pluralised), Order, Backends (with runner mode),
-      Dataset, Energy
-    - Sweep dimensions section: varying fields with nested sub-config grouping
+    - Execution Controls: experiments, cycle order, gaps, shuffle seed, skip preflight
+    - Runners: per-backend runner mode with auto-elevation annotation
+    - Study-wide constants: model, n, dataset, energy sampler (when not swept)
+    - Sweep dimensions: varying fields with nested sub-config grouping
     - Dimmed design hash at the bottom
 
-    Skipped configs are NOT included in the panel; callers display them separately.
+    When ``runner_specs`` is provided (resolved by pre-flight), the panel shows
+    effective runner modes. Otherwise falls back to YAML-declared runners.
+
+    When ``study_dir`` is provided, the expected results path is shown below
+    the hash. Skipped configs are NOT included; callers display them separately.
     """
-    n_cycles = study_config.execution.n_cycles
+    exec_cfg = study_config.execution
+    n_cycles = exec_cfg.n_cycles
     n_runs = len(study_config.experiments)
     n_configs = n_runs // n_cycles if n_cycles > 0 else n_runs
-    cycle_order = study_config.execution.cycle_order
     hash_display = study_config.study_design_hash or "unknown"
 
     # --- Pluralisation helper ---
@@ -288,69 +297,193 @@ def build_preflight_panel(
             return f"{n} {singular}"
         return f"{n} {plural or singular + 's'}"
 
-    # --- Metadata values ---
-    unique_backends = sorted(set(exp.backend for exp in study_config.experiments))
-    runners = study_config.runners or {}
-    backend_strs = []
-    for b in unique_backends:
-        mode = runners.get(b, "local")
-        backend_strs.append(f"{b} ({mode})")
-    backends_display = ", ".join(backend_strs)
+    # --- Helpers ---
+    def _section(body: Text, title: str) -> None:
+        body.append("\n  ")
+        body.append(title, style="bold")
+        body.append("\n")
 
-    unique_datasets = sorted(set(str(exp.dataset) for exp in study_config.experiments))
-    dataset_display = ", ".join(unique_datasets)
+    def _line(body: Text, label: str, value: str, indent: int = 4) -> None:
+        body.append(f"{' ' * indent}{label:<18}")
+        body.append(f"{value}\n")
 
-    unique_energy = sorted(set(str(exp.energy.backend) for exp in study_config.experiments))
-    energy_display = ", ".join(unique_energy)
+    # --- Unique values across experiments (single pass) ---
+    _backends: set[str] = set()
+    _models: set[str] = set()
+    _ns: set[int] = set()
+    _datasets: set[str] = set()
+    _max_ins: set[int] = set()
+    _max_outs: set[int] = set()
+    _energy: set[str] = set()
+    for exp in study_config.experiments:
+        _backends.add(exp.backend)
+        _models.add(exp.model)
+        _ns.add(exp.n)
+        _datasets.add(str(exp.dataset))
+        _max_ins.add(exp.max_input_tokens)
+        _max_outs.add(exp.max_output_tokens)
+        _energy.add(str(exp.energy.backend))
+    unique_backends = sorted(_backends)
+    unique_models = sorted(_models)
+    unique_n = sorted(_ns)
+    unique_datasets = sorted(_datasets)
+    unique_max_in = sorted(_max_ins)
+    unique_max_out = sorted(_max_outs)
+    unique_energy = sorted(_energy)
 
     experiments_line = (
         f"{_pl(n_configs, 'config')} x {_pl(n_cycles, 'cycle')} = {_pl(n_runs, 'run')}"
     )
 
-    # --- Metadata lines ---
-    meta_lines = [
-        ("Experiments", experiments_line),
-        ("Order", str(cycle_order)),
-        ("Backends", backends_display),
-        ("Dataset", dataset_display),
-        ("Energy", energy_display),
-    ]
+    # --- Resolve energy sampler display ---
+    # Skip host probe when all runners are Docker (container has different samplers).
+    all_docker = runner_specs is not None and all(
+        spec.mode == "docker" for spec in runner_specs.values()
+    )
+    energy_display = _resolve_energy_display(
+        unique_energy, probed_sampler=probed_energy_sampler, skip_probe=all_docker
+    )
 
     # --- Sweep dimensions ---
-    sweep_dimensions = _collect_sweep_dimensions(list(study_config.experiments))
+    sweep_dimensions = _collect_sweep_dimensions(study_config.experiments)
 
     # --- Assemble body ---
     body = Text()
-    body.append("\n")
 
-    for label, value in meta_lines:
-        body.append(f"  {label:<14}{value}\n")
+    # -- Execution Controls --
+    _section(body, "Execution Controls")
+    _line(body, "Experiments", experiments_line)
+    _line(body, "Cycle order", str(exec_cfg.cycle_order))
+    exp_gap = (
+        f"{exec_cfg.experiment_gap_seconds}s"
+        if exec_cfg.experiment_gap_seconds is not None
+        else "0s"
+    )
+    cyc_gap = f"{exec_cfg.cycle_gap_seconds}s" if exec_cfg.cycle_gap_seconds is not None else "0s"
+    _line(body, "Experiment gap", exp_gap)
+    _line(body, "Cycle gap", cyc_gap)
+    shuffle_val = str(exec_cfg.shuffle_seed) if exec_cfg.shuffle_seed is not None else "auto"
+    _line(body, "Shuffle seed", shuffle_val)
+    skip_val = "yes" if exec_cfg.skip_preflight else "no"
+    _line(body, "Skip preflight", skip_val)
 
-    if sweep_dimensions:
-        body.append("\n")
-        body.append("  Sweep dimensions\n")
-        for label, value, depth in sweep_dimensions:
+    # -- Runners --
+    _section(body, "Runners")
+    yaml_runners = study_config.runners or {}
+    for b in unique_backends:
+        if runner_specs and b in runner_specs:
+            spec = runner_specs[b]
+            body.append(f"    {b:<18}{spec.mode}")
+            if getattr(spec, "source", None) == SOURCE_MULTI_BACKEND_ELEVATION:
+                body.append(" (auto-elevated)", style="yellow")
+            body.append("\n")
+        else:
+            mode_str = str(yaml_runners.get(b, "local"))
+            _line(body, b, mode_str)
+
+    # -- Study-wide constants (shown when NOT varying across experiments) --
+    constants: list[tuple[str, str]] = []
+    if len(unique_models) == 1:
+        constants.append(("Model", unique_models[0]))
+    if len(unique_n) == 1:
+        constants.append(("n", str(unique_n[0])))
+    if len(unique_max_in) == 1:
+        constants.append(("max_input_tokens", str(unique_max_in[0])))
+    if len(unique_max_out) == 1:
+        constants.append(("max_output_tokens", str(unique_max_out[0])))
+    if len(unique_datasets) == 1:
+        constants.append(("Dataset", unique_datasets[0]))
+    constants.append(("Energy sampler", energy_display))
+
+    if constants:
+        _section(body, "Constants")
+        for label, value in constants:
+            _line(body, label, value)
+
+    # -- Split sweep dimensions into shared (universal) and backend-scoped --
+    shared_dims: list[tuple[str, str, int]] = []
+    backend_dims: list[tuple[str, str, int]] = []
+
+    in_backend_section = False
+    for label, value, depth in sweep_dimensions:
+        if depth == 0 and not value and label in _BACKEND_SECTION_KEYS:
+            in_backend_section = True
+        elif depth == 0 and label not in _BACKEND_SECTION_KEYS:
+            in_backend_section = False
+
+        if in_backend_section:
+            backend_dims.append((label, value, depth))
+        else:
+            shared_dims.append((label, value, depth))
+
+    def _render_dims(body: Text, dims: list[tuple[str, str, int]]) -> None:
+        for label, value, depth in dims:
             indent = "    " + "  " * depth
             if value:
-                body.append(f"{indent}{label:<18}{value}\n")
+                body.append(f"{indent}{label:<18}")
+                body.append(f"{value}\n", style="dim")
             else:
-                # Header (sub-config or nested sub-config)
-                body.append(f"{indent}{label}\n")
+                # Sub-config header (e.g. "pytorch", "decoder")
+                body.append(f"{indent}")
+                body.append(f"{label}\n", style="bold dim")
+
+    if shared_dims:
+        _section(body, "Sweep Dimensions")
+        _render_dims(body, shared_dims)
+
+    if backend_dims:
+        _section(body, "Backend Sweep Dimensions")
+        _render_dims(body, backend_dims)
 
     body.append("\n")
-    # Hash line with dim styling
-    hash_line = f"  {hash_display}"
-    hash_start = len(body.plain)
-    body.append(hash_line)
-    body.stylize("dim", hash_start, hash_start + len(hash_line))
-    body.append("\n")
+    # Hash (dimmed)
+    body.append("Study design hasH:\n ", style="dim")
+    body.append(f"  {hash_display}\n", style="dim")
+    # Results path (bold cyan)
+    if study_dir is not None:
+        body.append("\n")
+        body.append("Study results path:\n", style="bold cyan")
+        body.append(f"  {study_dir}/\n", style="bold cyan")
 
     return Panel(
         body,
-        title=f"Study: {study_config.name or 'unnamed'}",
+        title=f"[bold cyan]Study: {study_config.name or 'unnamed'}[/]",
         title_align="left",
         padding=(0, 1),
     )
+
+
+_ENERGY_SAMPLER_NAMES: dict[str, str] = {
+    "nvml": "NVMLSampler",
+    "zeus": "ZeusSampler",
+    "codecarbon": "CodeCarbonSampler",
+}
+
+
+def _resolve_energy_display(
+    unique_energy: list[str],
+    *,
+    probed_sampler: str | None = None,
+    skip_probe: bool = False,
+) -> str:
+    """Build the energy sampler display string, resolving 'auto' when possible.
+
+    When ``skip_probe`` is True (all runners are Docker), the host probe is
+    skipped because the container may have different energy samplers available.
+    When ``probed_sampler`` is provided it is used to annotate 'auto' entries.
+    """
+    parts: list[str] = []
+    for e in unique_energy:
+        if e == "auto":
+            if skip_probe or probed_sampler is None:
+                parts.append("auto")
+            else:
+                parts.append(f"{probed_sampler} (auto)")
+        elif e in _ENERGY_SAMPLER_NAMES:
+            parts.append(_ENERGY_SAMPLER_NAMES[e])
+        else:
+            parts.append(e)
+    return ", ".join(parts)
 
 
 def _collect_sweep_dimensions(
@@ -383,8 +516,7 @@ def _collect_sweep_dimensions(
     for field_name in SCALAR_FIELDS:
         values = [getattr(exp, field_name) for exp in experiments]
         unique_vals = set(str(v) for v in values)
-        always_show = field_name in KEY_SCALAR_FIELDS
-        if len(unique_vals) > 1 or always_show:
+        if len(unique_vals) > 1:
             result.append((field_name, ", ".join(sorted(unique_vals)), 0))
 
     # --- Sub-config fields (recursive) ---
@@ -443,10 +575,10 @@ def _collect_sweep_dimensions(
                 continue
 
             unique_vals = set(str(v) for v in vals)
-            default_val = defaults.get(field_name)
-            all_default = all(v == default_val for v in vals)
 
-            if len(unique_vals) > 1 or not all_default:
+            # Only show fields that actually vary across experiments.
+            # Constant non-default values belong in the panel metadata, not sweep dims.
+            if len(unique_vals) > 1:
                 entries.append((field_name, ", ".join(sorted(unique_vals)), field_depth))
 
         return entries

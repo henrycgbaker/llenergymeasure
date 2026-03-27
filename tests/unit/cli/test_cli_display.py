@@ -504,7 +504,7 @@ def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
 
 
 def test_print_experiment_header_defaults(capsys):
-    """Header with default config shows model, backend, precision."""
+    """Header with default config shows model and backend (defaults omitted)."""
     from tests.conftest import make_config
 
     config = make_config(model="gpt2", backend="pytorch", precision="bf16")
@@ -513,7 +513,8 @@ def test_print_experiment_header_defaults(capsys):
 
     assert "gpt2" in err
     assert "pytorch" in err
-    assert "bf16" in err
+    # Default precision bf16 is omitted from the header
+    assert "bf16" not in err
 
 
 def test_print_experiment_header_non_default_n(capsys):
@@ -531,11 +532,11 @@ def test_print_experiment_header_non_default_max_output_tokens(capsys):
     """Non-default max_output_tokens is included in header."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", max_output_tokens=256)
+    config = make_config(model="gpt2", max_output_tokens=512)
     print_experiment_header(config)
     err = capsys.readouterr().err
 
-    assert "max_out=256" in err
+    assert "max_output_tokens=512" in err
 
 
 # =============================================================================
@@ -555,6 +556,7 @@ def test_print_study_summary_table_structure(capsys):
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0
+    exp.total_inference_time_sec = 8.0
 
     summary = StudySummary(
         total_experiments=1,
@@ -593,6 +595,7 @@ def test_print_study_summary_failed_experiments(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     summary = StudySummary(
         total_experiments=2,
@@ -626,6 +629,7 @@ def test_print_study_summary_no_summary(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     result = StudyResult.model_construct(
         experiments=[exp],
@@ -653,6 +657,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     summary = StudySummary(
         total_experiments=1,
@@ -686,6 +691,7 @@ def test_print_study_summary_with_result_files(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     summary = StudySummary(
         total_experiments=1,
