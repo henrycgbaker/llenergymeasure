@@ -197,10 +197,12 @@ decoder:
 
 ### Seed Handling for Reproducibility
 
-Seeds are applied per-batch for varied but reproducible outputs:
-- Batch 0 uses `random_seed`
-- Batch 1 uses `random_seed + 1`
-- etc.
+`random_seed` is the single seed source for all per-experiment stochasticity:
+- Backend inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
+- Dataset prompt ordering (when `dataset_order: shuffled`)
+- Synthetic prompt generation
+
+Study-level cycle shuffling uses a separate `shuffle_seed` (defaults to `study_design_hash`).
 
 ```yaml
 random_seed: 42

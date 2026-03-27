@@ -570,7 +570,7 @@ These parameters live in `ExperimentConfig` and are shared across all backends:
 | `dataset` | Yes | Yes | Yes | Dataset name or synthetic config |
 | `max_input_tokens` | Yes | Yes | Yes | Input sequence length cap |
 | `max_output_tokens` | Yes | Yes | Yes | Output token budget |
-| `random_seed` | Yes | Yes | Yes | Reproducibility seed |
+| `random_seed` | Yes | Yes | Yes | Per-experiment seed: inference RNG, dataset ordering, synthetic prompts |
 | `decoder.temperature` | Yes | Yes | Yes | Sampling temperature |
 | `decoder.top_p` | Yes | Yes | Yes | Nucleus sampling threshold |
 | `decoder.top_k` | Yes | Yes | Yes | Top-k sampling (0 = disabled) |
