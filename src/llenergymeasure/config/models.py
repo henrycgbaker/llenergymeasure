@@ -228,7 +228,13 @@ class SyntheticDatasetConfig(BaseModel):
     n: int = Field(ge=1, description="Number of synthetic prompts to generate")
     input_len: int = Field(default=512, ge=1, description="Synthetic input token length")
     output_len: int = Field(default=128, ge=1, description="Synthetic output token length")
-    seed: int = Field(default=42, description="Random seed for synthetic data generation")
+    seed: int | None = Field(
+        default=None,
+        description=(
+            "Random seed for synthetic data generation. "
+            "None = use ExperimentConfig.random_seed (single seed source)."
+        ),
+    )
 
 
 # =============================================================================

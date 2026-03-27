@@ -539,6 +539,7 @@ class TensorRTBackend:
         decoder = config.decoder
         kwargs: dict[str, Any] = {
             "max_new_tokens": config.max_output_tokens,
+            "random_seed": config.random_seed,
         }
 
         # Universal decoder params
