@@ -361,8 +361,8 @@ def build_preflight_panel(
     _models: set[str] = set()
     _ns: set[int] = set()
     _datasets: set[str] = set()
-    _max_ins: set[int] = set()
-    _max_outs: set[int] = set()
+    _max_ins: set[int | None] = set()
+    _max_outs: set[int | None] = set()
     _energy: set[str] = set()
     for exp in study_config.experiments:
         _backends.add(exp.backend)
@@ -376,8 +376,8 @@ def build_preflight_panel(
     unique_models = sorted(_models)
     unique_n = sorted(_ns)
     unique_datasets = sorted(_datasets)
-    unique_max_in = sorted(_max_ins)
-    unique_max_out = sorted(_max_outs)
+    unique_max_in = sorted(v for v in _max_ins if v is not None)
+    unique_max_out = sorted(v for v in _max_outs if v is not None)
     unique_energy = sorted(_energy)
 
     experiments_line = (

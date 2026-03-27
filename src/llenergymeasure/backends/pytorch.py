@@ -147,9 +147,8 @@ class PyTorchBackend:
             config.warmup.convergence_detection,
         )
 
-        inference_fn = create_warmup_inference_fn(
-            hf_model, tokenizer, warmup_prompt, config.max_output_tokens
-        )
+        max_tokens = config.max_output_tokens if config.max_output_tokens is not None else 32
+        inference_fn = create_warmup_inference_fn(hf_model, tokenizer, warmup_prompt, max_tokens)
         result = warmup_until_converged(inference_fn, config.warmup, show_progress=False)
         logger.debug("Warmup complete: %d iterations", result.iterations_completed)
         return result
