@@ -12,7 +12,6 @@ The minimal experiment YAML requires only `model:`:
 ```yaml
 model: gpt2
 backend: pytorch
-n: 100
 ```
 
 A fuller example with sub-configs:
@@ -20,10 +19,14 @@ A fuller example with sub-configs:
 ```yaml
 model: gpt2
 backend: pytorch
-n: 100
 precision: bf16
-max_input_tokens: 512
-max_output_tokens: 128
+max_input_tokens: 256
+max_output_tokens: 256
+
+dataset:
+  source: aienergyscore
+  n_prompts: 100
+  order: interleaved
 
 decoder:
   preset: deterministic   # greedy decoding
@@ -49,7 +52,10 @@ A vLLM experiment (requires Docker runner):
 ```yaml
 model: gpt2
 backend: vllm
-n: 100
+
+dataset:
+  source: aienergyscore
+  n_prompts: 100
 
 runners:
   vllm: docker
@@ -93,7 +99,9 @@ The study YAML also accepts a `base:` key pointing to a base experiment config f
 name: precision-sweep
 model: gpt2
 backend: pytorch
-n: 100
+
+dataset:
+  n_prompts: 100
 
 sweep:
   precision: [fp16, bf16]
@@ -117,7 +125,7 @@ backend: pytorch
 
 sweep:
   precision: [fp16, bf16]
-  n: [50, 100]
+  dataset.n_prompts: [50, 100]
 
 study_execution:
   n_cycles: 3
@@ -177,6 +185,31 @@ Produces 6 configs × 3 cycles = 18 runs. The path `vllm.engine.block_size` expa
 
 ---
 
+### Nested config sweep (dotted path)
+
+Use dotted paths for nested config fields like `dataset.n_prompts` or `dataset.source`:
+
+```yaml
+name: dataset-size-sweep
+model: gpt2
+backend: pytorch
+
+sweep:
+  dataset.n_prompts: [50, 100, 200]
+
+study_execution:
+  n_cycles: 3
+```
+
+Produces 3 configs × 3 cycles = 9 runs. The dotted path `dataset.n_prompts` expands to
+`dataset: { n_prompts: N }` in each generated experiment config.
+
+> **Note:** Dotted paths starting with a backend name (e.g. `pytorch.batch_size`,
+> `vllm.engine.max_num_seqs`) are treated as backend-scoped parameters. All other dotted
+> paths (e.g. `dataset.n_prompts`, `dataset.order`) are treated as nested config fields.
+
+---
+
 ### Explicit experiments list
 
 Use `experiments:` when the configurations are not a regular grid:
@@ -184,7 +217,9 @@ Use `experiments:` when the configurations are not a regular grid:
 ```yaml
 # 2 explicit configs
 name: compare-backends
-n: 50
+
+dataset:
+  n_prompts: 50
 
 experiments:
   - model: gpt2
@@ -200,7 +235,7 @@ study_execution:
   experiment_order: interleave
 ```
 
-Each entry is merged with any top-level shared fields (`n: 50` here).
+Each entry is merged with any top-level shared fields (`dataset.n_prompts: 50` here).
 
 ---
 
@@ -339,6 +374,7 @@ All fields except `model` are optional and have sensible defaults.
 
 **Sections:**
 - [Top-Level Fields](#top-level-fields)
+- [Dataset (`dataset:`)](#dataset-dataset)
 - [Decoder / Sampling (`decoder:`)](#decoder-sampling-decoder)
 - [Warmup (`warmup:`)](#warmup-warmup)
 - [Baseline (`baseline:`)](#baseline-baseline)
@@ -356,13 +392,11 @@ All fields except `model` are optional and have sensible defaults.
 |-------|------|---------|-------------|
 | `model` | string | *(required)* | HuggingFace model ID or local path |
 | `backend` | 'pytorch' | 'vllm' | 'tensorrt' | `pytorch` | Inference backend |
-| `n` | integer | `100` | Number of prompts from dataset |
-| `dataset` | SyntheticDatasetConfig | `aienergyscore` | Dataset name (built-in alias) or synthetic dataset config |
-| `dataset_order` | 'interleaved' | 'grouped' | 'shuffled' | `interleaved` | Prompt ordering: interleaved (round-robin by source, file order), grouped (sorted by source), shuffled (seed-based random) |
+| `dataset` | DatasetConfig | *(see below)* | Dataset configuration (nested sub-object) |
 | `precision` | 'fp32' | 'fp16' | 'bf16' | `bf16` | Floating point precision |
-| `random_seed` | integer | `42` | Per-experiment seed: inference RNG, dataset ordering, synthetic prompt generation |
-| `max_input_tokens` | integer | `512` | Max input tokens |
-| `max_output_tokens` | integer | `128` | Max output tokens |
+| `random_seed` | integer | `42` | Per-experiment seed: inference RNG and dataset ordering |
+| `max_input_tokens` | integer | None | `256` | Max input token length for truncation. Keeps computation workload constant across experiments for fair comparison. `null` disables truncation. |
+| `max_output_tokens` | integer | None | `256` | Max output tokens to generate. Keeps computation workload constant across experiments for fair comparison. `null` disables generation cap. |
 | `decoder` | DecoderConfig | *(see section)* | Universal decoder/generation configuration |
 | `warmup` | WarmupConfig | *(see section)* | Warmup phase configuration |
 | `baseline` | BaselineConfig | *(see section)* | Baseline power measurement configuration |
@@ -373,6 +407,31 @@ All fields except `model` are optional and have sensible defaults.
 | `lora` | LoRAConfig | None | `null` | LoRA adapter configuration |
 | `passthrough_kwargs` | dict | None | `null` | Extra kwargs passed through to backend at execution time. Keys must not collide with ExperimentConfig top-level fields. |
 | `output_dir` | string | None | `null` | Per-experiment output directory override |
+
+### Dataset (`dataset:`)
+
+The `dataset:` section configures which prompts to use and how they are loaded.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `source` | string | `aienergyscore` | Dataset source: built-in alias (e.g. `aienergyscore`) or `.jsonl` file path |
+| `n_prompts` | integer | `100` | Number of prompts to load |
+| `order` | 'interleaved' | 'grouped' | 'shuffled' | `interleaved` | Prompt ordering: interleaved (file order), grouped (sorted by source field), shuffled (seeded random) |
+
+**Examples:**
+
+```yaml
+# Built-in dataset (default)
+dataset:
+  source: aienergyscore
+  n_prompts: 100
+
+# Custom JSONL file
+dataset:
+  source: ./my-prompts.jsonl
+  n_prompts: 500
+  order: shuffled
+```
 
 ### Decoder / Sampling (`decoder:`)
 
