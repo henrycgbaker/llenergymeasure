@@ -126,14 +126,11 @@ config = ExperimentConfig(
 ```
 
 **Sub-configurations:**
-- `BatchingConfig` - batch_size, strategy, max_tokens_per_batch
-- `ShardingConfig` - tensor_parallel, pipeline_parallel
-- `TrafficSimulation` - MLPerf-style Poisson/constant arrival simulation
+- `DatasetConfig` - source, n_prompts, order (nested sub-object)
 - `DecoderConfig` - temperature, sampling presets, repetition control
-- `QuantizationConfig` - 4-bit/8-bit BitsAndBytes
-- `PromptSourceConfig` - File or HuggingFace dataset prompts
-- `VLLMConfig` - vLLM backend options (see `backend_configs.py`)
-- `PyTorchConfig` - PyTorch backend options (see `backend_configs.py`)
+- `PyTorchConfig` - PyTorch backend options
+- `VLLMConfig` - vLLM backend options
+- `TensorRTConfig` - TensorRT-LLM backend options
 
 ## Decoder Sampling Configuration
 
@@ -197,10 +194,11 @@ decoder:
 
 ### Seed Handling for Reproducibility
 
-Seeds are applied per-batch for varied but reproducible outputs:
-- Batch 0 uses `random_seed`
-- Batch 1 uses `random_seed + 1`
-- etc.
+`random_seed` is the single seed source for all per-experiment stochasticity:
+- Backend inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
+- Dataset prompt ordering (when `dataset.order: shuffled`)
+
+Study-level cycle shuffling uses a separate `shuffle_seed` (defaults to `study_design_hash`).
 
 ```yaml
 random_seed: 42

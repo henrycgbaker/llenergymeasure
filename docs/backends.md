@@ -63,6 +63,10 @@ Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
 |-----------|------|---------|-------------|
 | `attn_implementation` | `sdpa` \| `flash_attention_2` \| `flash_attention_3` \| `eager` | `sdpa` | Attention kernel |
 
+Note: `flash_attention_3` requires Hopper (SM90+, e.g. H100). On A100 (SM80 Ampere) it raises
+a CUDA-level error at runtime even if the package is installed — the import succeeds but the
+kernel will not run. Use `flash_attention_2` (Ampere+) or `sdpa` on A100.
+
 **Compilation:**
 
 | Parameter | Type | Default | Description |
@@ -565,12 +569,12 @@ These parameters live in `ExperimentConfig` and are shared across all backends:
 |-----------|---------|------|--------------|-------|
 | `model` | Yes | Yes | Yes | HuggingFace model ID or local path |
 | `backend` | Yes | Yes | Yes | Selects the inference engine |
-| `n` | Yes | Yes | Yes | Number of prompts |
+| `dataset.n_prompts` | Yes | Yes | Yes | Number of prompts |
 | `precision` | Yes | Yes | Yes | `fp32`, `fp16`, `bf16` |
-| `dataset` | Yes | Yes | Yes | Dataset name or synthetic config |
+| `dataset.source` | Yes | Yes | Yes | Dataset source (built-in alias or .jsonl path) |
 | `max_input_tokens` | Yes | Yes | Yes | Input sequence length cap |
 | `max_output_tokens` | Yes | Yes | Yes | Output token budget |
-| `random_seed` | Yes | Yes | Yes | Reproducibility seed |
+| `random_seed` | Yes | Yes | Yes | Per-experiment seed: inference RNG, dataset ordering |
 | `decoder.temperature` | Yes | Yes | Yes | Sampling temperature |
 | `decoder.top_p` | Yes | Yes | Yes | Nucleus sampling threshold |
 | `decoder.top_k` | Yes | Yes | Yes | Top-k sampling (0 = disabled) |

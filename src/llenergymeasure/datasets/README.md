@@ -20,7 +20,7 @@ Provides bundled prompt workloads and dataset loading utilities. Backends use `l
 from llenergymeasure.datasets import load_prompts, BUILTIN_DATASETS, aienergyscore
 
 # Load prompts for an experiment
-prompts = load_prompts(config)  # returns list[str] of exactly config.n prompts
+prompts = load_prompts(config)  # returns list[str] of exactly config.dataset.n_prompts prompts
 
 # Access bundled dataset path
 path = aienergyscore  # pathlib.Path to the bundled JSONL file
@@ -37,39 +37,34 @@ print(BUILTIN_DATASETS)  # {"aienergyscore": Path(...)}
 
 ## Dataset formats
 
+All dataset types are configured via the `dataset:` section of `ExperimentConfig`:
+
 ### Built-in alias (default)
 
 ```yaml
-dataset: aienergyscore   # default when no dataset specified
-n: 100
+dataset:
+  source: aienergyscore    # default when no dataset specified
+  n_prompts: 100
 ```
 
 ### Custom JSONL file
 
 ```yaml
-dataset: ./my-prompts.jsonl
-n: 500
+dataset:
+  source: ./my-prompts.jsonl
+  n_prompts: 500
+  order: shuffled
 ```
 
 JSONL records must contain a prompt field. Auto-detected column names (in order): `prompt`, `text`, `instruction`, `input`, `question`.
 
-### Synthetic prompts (for testing)
-
-```yaml
-dataset:
-  type: synthetic
-  input_len: 256    # approximate token count per prompt
-  seed: 42
-n: 50
-```
-
 ## Dataset ordering
 
-Control how prompts are selected and ordered via `dataset_order`:
+Control how prompts are selected and ordered via `dataset.order`:
 
 | Value | Behaviour |
 |-------|-----------|
-| `interleaved` | File order (default) — stops reading after config.n records |
+| `interleaved` | File order (default) — stops reading after `n_prompts` records |
 | `grouped` | Sort by `source` field (preserves intra-group order) |
 | `shuffled` | Random shuffle using `random_seed` |
 
@@ -80,4 +75,4 @@ Control how prompts are selected and ordered via `dataset_order`:
 
 ## Related
 
-- See `../config/README.md` for `PromptSourceConfig` and `SyntheticDatasetConfig`
+- See `../config/README.md` for `DatasetConfig` and `ExperimentConfig`
