@@ -21,7 +21,8 @@ runners:
 # Execution controls (study-level)
 # =====================================================================
 # Study-level metadata and scheduling parameters.
-# These apply globally to all experiments. Non-sweepable.
+# Apply globally to all experiments. 
+# Non-sweepable.
 
 study_execution:
   n_cycles: 3
@@ -34,30 +35,28 @@ study_execution:
 # =====================================================================
 # Shared fields (experiment-level)
 # =====================================================================
-# Applied to every experiment unless overridden by sweep or explicit experiments.
-# Defacto treated as constant defaults, but all fields are sweepable
-# Add to sweep if you want to compare across different values of these fields (e.g. prompt counts, input lengths, energy backends, etc.)
+# Experimental-level shared parameters.
+# Apply globally to all experiment, unless overridden by sweep or explicit experiments.
+# Defacto treated as constant defaults, but all fields are sweepable.
+# Add to sweep if you want to compare across different values of these fields 
+# (e.g. random_seed for  sampling variability, or max_tokens to test throughput scaling, or max_tokens to test throughput scaling).
+# When omitted from a sweep, these values serve as the control variables for the experiment.
 
-random_seed: 42 # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset_order: shuffled), (iii) synthetic prompt generation (when using synthetic dataset)
+random_seed: 42 # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset.order: shuffled)
 
 model: Qwen/Qwen2.5-0.5B
 
-# --- Input Dataset ---
-#TODO: place these all under input using dot notation (e.g. input.dataset, input.n_prompts, input.order, input.max_input_tokensm, etc.) to make it more extensible and better organized. Then can add synthetic dataset params here as well (e.g. dataset.synthetic.input_len, etc.)
-dataset: aienergyscore           # Sweepable - built-in dataset (see synthetic alternative below)
-n: 100                            # TODO change to n_prompts
-dataset_order: interleaved       # interleaved | grouped | shuffled
+# --- Dataset ---
+dataset:
+  source: aienergyscore          # Built-in alias or .jsonl file path
+  n_prompts: 100                 # Number of prompts to load or generate
+  order: interleaved             # interleaved | grouped | shuffled
+
+# Token limits - control FLOPs/computational workload isolation between experiments.
+# Setting these keeps computation workload constant so that only implementation
+# null = no limit (prompts keep natural length / model generates to EOS; FLOP counts not controlled between experiments).
 max_input_tokens: 256            # Sweepable - add to sweep: to compare input lengths
 max_output_tokens: 256           # Sweepable - add to sweep: to compare output lengths
-
-# Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
-#TODO: place this under input.synthetic and use dot notation for better organization (e.g. input.synthetic.n, input.synthetic.max_input_tokens, etc.)
-#TODO: validate that this works, or just remove it entirely????
-# dataset:
-#   n: 50                        # Number of synthetic prompts to generate TODO: change to n_prompts
-#   input_len: 512               # Fixed input token length per prompt TODO RENAME TO max_input_tokens for consistency with max_output_tokens above
-#   output_len: 128              # Fixed output token length per prompt TODO RENAME TO max_output_tokens for consistency with max_input_tokens above
-# Note: synthetic prompts are seeded by random_seed above (single seed source)
 
 # --- Energy measurement ---
 energy: #TODO: change theis to energy_measurement.sampler 
@@ -212,7 +211,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       torch_compile: true
@@ -224,7 +224,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       torch_compile: true
@@ -236,7 +237,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       torch_compile: true
@@ -253,7 +255,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: fp16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       load_in_8bit: true
@@ -263,7 +266,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: fp16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       load_in_4bit: true
@@ -275,7 +279,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: fp16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       load_in_4bit: true
@@ -292,7 +297,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     decoder:
       temperature: 0.0
       do_sample: false
@@ -312,7 +318,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 1
       prompt_lookup_num_tokens: 3
@@ -326,7 +333,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     pytorch:
       batch_size: 4
       use_cache: true
@@ -349,20 +357,6 @@ experiments:
   #     device_map: auto
   #     trust_remote_code: true
 
-  # PyTorch synthetic dataset (commented out)
-  # - model: Qwen/Qwen2.5-0.5B
-  #   backend: pytorch
-  #   precision: bf16
-  #   n: 50
-  #   dataset:
-  #     n: 50
-  #     input_len: 256
-  #     output_len: 64
-  #   pytorch:
-  #     batch_size: 4
-  #     device_map: auto
-  #     trust_remote_code: true
-
   # =================================================================
   # VLLM explicit experiments
   # =================================================================
@@ -373,7 +367,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     decoder:
       temperature: 0.0
       do_sample: false
@@ -389,7 +384,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     decoder:
       temperature: 0.8
       do_sample: true
@@ -404,7 +400,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         enable_prefix_caching: true
@@ -413,7 +410,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         enable_prefix_caching: false
@@ -425,7 +423,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         block_size: 8
@@ -434,7 +433,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         block_size: 32
@@ -446,7 +446,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         kv_cache_dtype: fp8
@@ -458,7 +459,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: vllm
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     vllm:
       engine:
         tensor_parallel_size: 2
@@ -494,7 +496,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -507,7 +510,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -520,7 +524,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -534,7 +539,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -565,7 +571,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -578,7 +585,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -594,7 +602,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -608,7 +617,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -624,7 +634,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -639,7 +650,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: fp16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
@@ -654,7 +666,8 @@ experiments:
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
     precision: bf16
-    n: 50
+    dataset:
+      n_prompts: 50
     tensorrt:
       max_batch_size: 8
       max_input_len: 1024
