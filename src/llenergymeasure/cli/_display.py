@@ -361,10 +361,9 @@ def print_study_summary(result: StudyResult) -> None:
         status_icon = "\u2713" if is_ok else "\u2717"
 
         total_str = _format_duration(exp.duration_sec)
-        infer_val = getattr(exp, "total_inference_time_sec", None)
         infer_str = (
-            _format_duration(infer_val)
-            if isinstance(infer_val, (int, float)) and infer_val > 0
+            _format_duration(exp.total_inference_time_sec)
+            if exp.total_inference_time_sec > 0
             else "-"
         )
         energy_str = f"{_sig3(exp.total_energy_j)} J" if exp.total_energy_j else "-"

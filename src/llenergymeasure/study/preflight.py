@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from llenergymeasure.config.models import StudyConfig
-from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.config.ssot import RUNNER_DOCKER, SOURCE_MULTI_BACKEND_ELEVATION
 from llenergymeasure.utils.exceptions import PreFlightError
 
 if TYPE_CHECKING:
@@ -93,12 +93,12 @@ def run_study_preflight(
                     spec.mode,
                 )
                 runner_specs[backend] = RunnerSpec(
-                    mode=RUNNER_DOCKER, image=spec.image, source="multi_backend_elevation"
+                    mode=RUNNER_DOCKER, image=spec.image, source=SOURCE_MULTI_BACKEND_ELEVATION
                 )
 
     # Docker pre-flight: run once if any backend resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
-    effective_skip = skip_preflight or getattr(study.execution, "skip_preflight", False)
+    effective_skip = skip_preflight or study.execution.skip_preflight
     if any(spec.mode == RUNNER_DOCKER for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 

@@ -425,7 +425,6 @@ def _run_study_impl(
         yaml_runners=study_config.runners,
         user_config=user_config.runners,
     )
-    probed_energy = probe_energy_sampler()
 
     effective_mode = _resolve_progress_mode(quiet, verbose)
 
@@ -452,7 +451,7 @@ def _run_study_impl(
             study_config,
             runner_specs=runner_specs,
             study_dir=expected_dir,
-            probed_energy_sampler=probed_energy,
+            probed_energy_sampler=probe_energy_sampler(),
         )
         _stderr_console.print(panel)
 
