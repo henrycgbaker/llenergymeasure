@@ -129,8 +129,8 @@ RUNTIME_LIMITATIONS: list[tuple[str, str, str, str]] = [
     (
         "pytorch",
         "pytorch.attn_implementation=flash_attention_3",
-        "FA3 requires Hopper (SM90+, H100). A100 (SM80 Ampere) raises a CUDA error at runtime even with the package installed — import succeeds but the kernel does not run",
-        "Use flash_attention_2 (Ampere+) or sdpa",
+        "FA3 requires the flash_attn_3 package (built from flash-attn hopper/ directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built",
+        "Install flash_attn_3 from source, or use the Docker runner",
     ),
     (
         "vllm",

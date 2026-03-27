@@ -197,7 +197,7 @@ model, or package requirements.
 | Backend | Parameter | Limitation | Resolution |
 |---------|-----------|------------|------------|
 | pytorch | `pytorch.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
-| pytorch | `pytorch.attn_implementation: flash_attention_3` | FA3 requires Hopper (SM90+, H100). On A100 (SM80 Ampere) you get a CUDA-level error at runtime even if the package is installed — the package check passes but the kernel does not run | Use `attn_implementation: flash_attention_2` (Ampere+) or `sdpa` |
+| pytorch | `pytorch.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built | Install `flash_attn_3` from source, or use the Docker runner |
 | vllm | `vllm.engine.kv_cache_dtype: fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use `kv_cache_dtype: auto` for automatic selection |
 | vllm | `vllm.engine.attention.backend: FLASHINFER` | FlashInfer requires JIT compilation on first use | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.attention.backend: TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use `attention.backend: auto` or `FLASH_ATTN` |
