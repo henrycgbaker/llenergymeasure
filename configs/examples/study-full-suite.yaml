@@ -28,8 +28,7 @@ study_name: full-suite-all-backends
 # Values: 'local', 'docker', or 'docker:<custom-image-tag>'
 # Local mode runs directly on the host (requires all dependencies installed).
 # Docker mode runs each experiment in a fresh container from the specified image. 
-# If no custom image is provided, a default image with pre-installed dependencies will be used. 
-# TODO: this default is defined in ????
+# If no custom image is provided, a default image with pre-installed dependencies will be used.
 
 runners:
   pytorch: local                 # local | docker | Custom image override example: vllm: "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"
