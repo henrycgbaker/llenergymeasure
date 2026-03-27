@@ -18,7 +18,7 @@ from llenergymeasure.config.introspection import (
     get_validation_rules,
     list_all_param_paths,
 )
-from llenergymeasure.config.ssot import PRECISION_SUPPORT
+from llenergymeasure.config.ssot import DTYPE_SUPPORT
 from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
@@ -234,16 +234,16 @@ def test_list_all_param_paths_unknown_backend_raises():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("dt", PRECISION_SUPPORT["pytorch"])
+@pytest.mark.parametrize("dt", DTYPE_SUPPORT["pytorch"])
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
-    """Schema-driven: each SSOT PRECISION_SUPPORT['pytorch'] value creates a valid config."""
+    """Schema-driven: each SSOT DTYPE_SUPPORT['pytorch'] value creates a valid config."""
     config = make_config(dtype=dt)
     assert config.dtype == dt
 
 
 def test_ssot_dtype_values_match_param_test_values():
-    """PRECISION_SUPPORT['pytorch'] values match get_param_test_values('dtype')."""
-    from_ssot = set(PRECISION_SUPPORT["pytorch"])
+    """DTYPE_SUPPORT['pytorch'] values match get_param_test_values('dtype')."""
+    from_ssot = set(DTYPE_SUPPORT["pytorch"])
     from_introspection = set(get_param_test_values("dtype"))
     # The test values from introspection should cover all SSOT dtype values
     assert from_ssot == from_introspection

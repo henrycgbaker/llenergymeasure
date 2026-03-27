@@ -45,7 +45,7 @@ RunnerMode = Literal["local", "docker"]
 # "float32" = full precision, "float16" = half, "bfloat16" = brain float16.
 # Note: fp16/bf16 require GPU. The cpu backend (future) would be fp32-only.
 # GPU detection and cpu-dtype cross-validation is handled at pre-flight.
-PRECISION_SUPPORT: dict[str, list[str]] = {
+DTYPE_SUPPORT: dict[str, list[str]] = {
     BACKEND_PYTORCH: ["float32", "float16", "bfloat16"],
     BACKEND_VLLM: ["float16", "bfloat16"],  # vLLM does not support fp32 inference
     BACKEND_TENSORRT: ["float16", "bfloat16"],  # TRT-LLM does not support fp32 inference
@@ -96,7 +96,7 @@ __all__ = [
     "BACKEND_VLLM",
     "DECODER_PARAM_SUPPORT",
     "DECODING_SUPPORT",
-    "PRECISION_SUPPORT",
+    "DTYPE_SUPPORT",
     "RUNNER_DOCKER",
     "RUNNER_LOCAL",
     "BackendName",

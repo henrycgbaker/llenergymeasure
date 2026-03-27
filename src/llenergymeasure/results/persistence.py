@@ -34,7 +34,11 @@ def _experiment_dir_name(result: ExperimentResult, *, experiment_index: int | No
         ``001_Qwen2.5-0.5B-pytorch-n50-batch4_2026-03-26T14-30``
         ``Qwen2.5-0.5B-vllm_2026-03-26T14-30``  (single experiment, no index)
     """
-    from llenergymeasure.utils.formatting import _EXPERIMENT_DEFAULTS, model_short_name
+    from llenergymeasure.utils.formatting import (
+        _DATASET_DEFAULTS,
+        _EXPERIMENT_DEFAULTS,
+        model_short_name,
+    )
 
     raw_model = result.effective_config.get("model", "unknown")
     model_short = model_short_name(raw_model)
@@ -46,6 +50,14 @@ def _experiment_dir_name(result: ExperimentResult, *, experiment_index: int | No
         actual = result.effective_config.get(field_name)
         if actual is not None and actual != default_val:
             params.append(f"{field_name}={actual}")
+
+    # Check nested dataset params
+    dataset_cfg = result.effective_config.get("dataset", {})
+    if isinstance(dataset_cfg, dict):
+        for field_name, default_val in _DATASET_DEFAULTS.items():
+            actual = dataset_cfg.get(field_name)
+            if actual is not None and actual != default_val:
+                params.append(f"{field_name}={actual}")
 
     # Build slug: model-backend[-params]_timestamp
     parts = [model_short, backend]
