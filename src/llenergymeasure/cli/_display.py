@@ -238,6 +238,8 @@ def format_validation_error(e: ValidationError) -> str:
 def print_study_dry_run(
     study_config: object,
     verbose: bool = False,
+    runner_specs: object = None,
+    study_dir: object = None,
 ) -> None:
     """Print dry-run output for a study to stdout.
 
@@ -250,12 +252,18 @@ def print_study_dry_run(
     from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
     from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.models import StudyConfig
+    from llenergymeasure.utils.formatting import format_experiment_header
 
     assert isinstance(study_config, StudyConfig)
 
-    # Pre-flight panel (metadata, sweep dims, hash) goes to stdout for dry-run
+    # Pre-flight panel — same args as actual run so both show identical output
     _stdout_console = RichConsole()
-    panel = build_preflight_panel(study_config, probed_energy_sampler=probe_energy_sampler())
+    panel = build_preflight_panel(
+        study_config,
+        runner_specs=runner_specs,
+        study_dir=study_dir,
+        probed_energy_sampler=probe_energy_sampler(),
+    )
     _stdout_console.print(panel)
 
     if study_config.skipped_configs:
@@ -267,15 +275,11 @@ def print_study_dry_run(
         _stdout_console.print("\n".join(skip_lines))
         _stdout_console.print()
 
-    # Per-experiment config table
-    header = f"{'#':>3}  {'Model':<25}  {'Backend':<10}  {'Precision':<10}  {'n':>5}"
-    print(header)
-    print("-" * len(header))
+    # Per-experiment list using the same header format as the live run
+    n = len(study_config.experiments)
+    width = len(str(n))
     for i, exp in enumerate(study_config.experiments, 1):
-        model_str = exp.model
-        if len(model_str) > 25:
-            model_str = "..." + model_str[-22:]
-        print(f"{i:>3}  {model_str:<25}  {exp.backend:<10}  {exp.precision:<10}  {exp.n:>5}")
+        print(f"  {i:>{width}}  {format_experiment_header(exp)}")
     print()
 
     # VRAM estimate for the peak model (largest weight estimate)
