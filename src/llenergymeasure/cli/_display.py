@@ -246,6 +246,7 @@ def print_study_dry_run(
     """
     from rich.console import Console as RichConsole
 
+    from llenergymeasure.api import probe_energy_sampler
     from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
     from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.models import StudyConfig
@@ -254,7 +255,7 @@ def print_study_dry_run(
 
     # Pre-flight panel (metadata, sweep dims, hash) goes to stdout for dry-run
     _stdout_console = RichConsole()
-    panel = build_preflight_panel(study_config)
+    panel = build_preflight_panel(study_config, probed_energy_sampler=probe_energy_sampler())
     _stdout_console.print(panel)
 
     if study_config.skipped_configs:

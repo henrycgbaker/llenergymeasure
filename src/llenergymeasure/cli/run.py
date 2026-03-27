@@ -415,8 +415,8 @@ def _run_study_impl(
     # Resolve runners BEFORE building the panel so we display effective
     # configs (bug fix: previously showed YAML-declared runners).
     # ---------------------------------------------------------------
+    from llenergymeasure.api import probe_energy_sampler, run_study_preflight
     from llenergymeasure.config.user_config import load_user_config
-    from llenergymeasure.study.preflight import run_study_preflight
 
     user_config = load_user_config()
     runner_specs = run_study_preflight(
@@ -425,6 +425,7 @@ def _run_study_impl(
         yaml_runners=study_config.runners,
         user_config=user_config.runners,
     )
+    probed_energy = probe_energy_sampler()
 
     effective_mode = _resolve_progress_mode(quiet, verbose)
 
@@ -448,7 +449,10 @@ def _run_study_impl(
 
         _stderr_console = RichConsole(stderr=True)
         panel = build_preflight_panel(
-            study_config, runner_specs=runner_specs, study_dir=expected_dir
+            study_config,
+            runner_specs=runner_specs,
+            study_dir=expected_dir,
+            probed_energy_sampler=probed_energy,
         )
         _stderr_console.print(panel)
 

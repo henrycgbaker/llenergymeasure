@@ -266,6 +266,7 @@ def build_preflight_panel(
     study_config: StudyConfig,
     runner_specs: dict[str, RunnerSpec] | None = None,
     study_dir: Path | None = None,
+    probed_energy_sampler: str | None = None,
 ) -> Panel:
     """Return a Rich Panel with study metadata, sweep dimensions, and design hash.
 
@@ -336,7 +337,9 @@ def build_preflight_panel(
     # --- Resolve energy sampler display ---
     # Skip host probe when all runners are Docker (container has different samplers).
     all_docker = bool(runner_specs) and all(spec.mode == "docker" for spec in runner_specs.values())
-    energy_display = _resolve_energy_display(unique_energy, skip_probe=all_docker)
+    energy_display = _resolve_energy_display(
+        unique_energy, probed_sampler=probed_energy_sampler, skip_probe=all_docker
+    )
 
     # --- Sweep dimensions ---
     sweep_dimensions = _collect_sweep_dimensions(list(study_config.experiments))
@@ -455,40 +458,30 @@ _ENERGY_SAMPLER_NAMES: dict[str, str] = {
 }
 
 
-def _resolve_energy_display(unique_energy: list[str], *, skip_probe: bool = False) -> str:
+def _resolve_energy_display(
+    unique_energy: list[str],
+    *,
+    probed_sampler: str | None = None,
+    skip_probe: bool = False,
+) -> str:
     """Build the energy sampler display string, resolving 'auto' when possible.
 
     When ``skip_probe`` is True (all runners are Docker), the host probe is
     skipped because the container may have different energy samplers available.
+    When ``probed_sampler`` is provided it is used to annotate 'auto' entries.
     """
     parts: list[str] = []
     for e in unique_energy:
         if e == "auto":
-            if skip_probe:
+            if skip_probe or probed_sampler is None:
                 parts.append("auto")
-                continue
-            # Attempt lightweight probe on host
-            resolved = _probe_energy_sampler()
-            if resolved:
-                parts.append(f"{resolved} (auto)")
             else:
-                parts.append("auto")
+                parts.append(f"{probed_sampler} (auto)")
         elif e in _ENERGY_SAMPLER_NAMES:
             parts.append(_ENERGY_SAMPLER_NAMES[e])
         else:
             parts.append(e)
     return ", ".join(parts)
-
-
-def _probe_energy_sampler() -> str | None:
-    """Best-effort probe for the auto-selected energy sampler on this host."""
-    try:
-        from llenergymeasure.energy import select_energy_sampler
-
-        sampler = select_energy_sampler("auto")
-        return type(sampler).__name__ if sampler else None
-    except Exception:
-        return None
 
 
 def _collect_sweep_dimensions(
