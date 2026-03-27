@@ -94,9 +94,9 @@ def test_get_shared_params_contains_precision():
 
 
 def test_get_shared_params_contains_n():
-    """get_shared_params() contains 'n' (prompt count)."""
+    """get_shared_params() contains 'dataset.n_prompts' (prompt count)."""
     params = get_shared_params()
-    assert "n" in params
+    assert "dataset.n_prompts" in params
 
 
 def test_get_shared_params_contains_decoder_temperature():

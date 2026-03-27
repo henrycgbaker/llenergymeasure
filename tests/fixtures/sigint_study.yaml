@@ -8,7 +8,8 @@ name: sigint-test
 experiments:
   - model: gpt2
     backend: pytorch
-    n: 10
+    dataset:
+      n_prompts: 10
     max_output_tokens: 32
     warmup:
       enabled: false

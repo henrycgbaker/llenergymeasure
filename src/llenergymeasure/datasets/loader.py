@@ -1,8 +1,7 @@
 """Dataset loading utilities for LLM efficiency measurement.
 
-Provides JSONL loading for bundled datasets, file-path datasets, and synthetic
-prompt generation. Used by inference backends to load the prompt workload for
-each experiment.
+Provides JSONL loading for bundled datasets and file-path datasets. Used by
+inference backends to load the prompt workload for each experiment.
 """
 
 from __future__ import annotations
@@ -38,62 +37,52 @@ AUTO_DETECT_COLUMNS: list[str] = ["prompt", "text", "instruction", "input", "que
 def load_prompts(config: ExperimentConfig) -> list[str]:
     """Load prompts according to the experiment configuration.
 
-    Dispatches based on config.dataset type:
-    - SyntheticDatasetConfig -> generate deterministic synthetic prompts
-    - str matching a built-in alias -> load from bundled JSONL file
-    - str path to an existing .jsonl file -> load from that file
-    - anything else -> raise ValueError with valid options
+    Dispatches based on config.dataset.source:
+    - Built-in alias (e.g. "aienergyscore") -> load from bundled JSONL file
+    - Path to an existing .jsonl file -> load from that file
+    - Anything else -> raise ValueError with valid options
 
     Args:
-        config: Experiment configuration. Uses config.dataset, config.n,
-            config.dataset_order, and config.random_seed.
+        config: Experiment configuration. Uses config.dataset (DatasetConfig)
+            and config.random_seed.
 
     Returns:
-        List of exactly config.n prompt strings.
+        List of exactly config.dataset.n_prompts prompt strings.
 
     Raises:
-        ValueError: If dataset name is unknown or file not found.
-        ValueError: If the dataset has fewer prompts than config.n requests.
+        ValueError: If dataset source is unknown or file not found.
+        ValueError: If the dataset has fewer prompts than requested.
     """
-    # Lazy import to avoid circular dependency (config.models imports nothing
-    # from datasets, but keeping the import lazy is belt-and-suspenders).
-    from llenergymeasure.config.models import SyntheticDatasetConfig
+    ds = config.dataset
+    source = ds.source
 
-    if isinstance(config.dataset, SyntheticDatasetConfig):
-        return _load_synthetic(config.dataset, config.n, fallback_seed=config.random_seed)
-
-    if isinstance(config.dataset, str):
-        # Built-in alias
-        if config.dataset in BUILTIN_DATASETS:
-            path = BUILTIN_DATASETS[config.dataset]
-            return _load_jsonl(
-                path,
-                n=config.n,
-                name=config.dataset,
-                order=config.dataset_order,
-                seed=config.random_seed,
-            )
-
-        # User-supplied file path
-        path = Path(config.dataset)
-        if path.suffix == ".jsonl" and path.exists():
-            return _load_jsonl(
-                path,
-                n=config.n,
-                name=str(path),
-                order=config.dataset_order,
-                seed=config.random_seed,
-            )
-
-        valid = ", ".join(f'"{k}"' for k in sorted(BUILTIN_DATASETS))
-        raise ValueError(
-            f"Unknown dataset {config.dataset!r}. "
-            f"Valid built-in aliases: {valid}. "
-            "To use a custom dataset, provide a path to an existing .jsonl file."
+    # Built-in alias
+    if source in BUILTIN_DATASETS:
+        path = BUILTIN_DATASETS[source]
+        return _load_jsonl(
+            path,
+            n=ds.n_prompts,
+            name=source,
+            order=ds.order,
+            seed=config.random_seed,
         )
 
+    # User-supplied file path
+    path = Path(source)
+    if path.suffix == ".jsonl" and path.exists():
+        return _load_jsonl(
+            path,
+            n=ds.n_prompts,
+            name=str(path),
+            order=ds.order,
+            seed=config.random_seed,
+        )
+
+    valid = ", ".join(f'"{k}"' for k in sorted(BUILTIN_DATASETS))
     raise ValueError(
-        f"config.dataset must be a str or SyntheticDatasetConfig, got {type(config.dataset)!r}"
+        f"Unknown dataset source {source!r}. "
+        f"Valid built-in aliases: {valid}. "
+        "To use a custom dataset, provide a path to an existing .jsonl file."
     )
 
 
@@ -166,7 +155,7 @@ def _load_jsonl(
         random.Random(seed).shuffle(ordered)
     else:
         raise ValueError(
-            f"Unknown dataset_order {order!r}. Expected: interleaved, grouped, shuffled."
+            f"Unknown dataset.order {order!r}. Expected: interleaved, grouped, shuffled."
         )
 
     selected = ordered[:n]
@@ -184,37 +173,5 @@ def _load_jsonl(
             f"Could not extract {n} prompts from {name!r}. "
             f"Only {len(prompts)} records had a recognisable prompt field."
         )
-
-    return prompts
-
-
-def _load_synthetic(config: object, n: int, *, fallback_seed: int) -> list[str]:
-    """Generate deterministic synthetic prompts.
-
-    Uses the same word-repetition approach as the M1 placeholder but with
-    seeded randomness for reproducibility.
-
-    Args:
-        config: SyntheticDatasetConfig instance (duck-typed to avoid circular import).
-        n: Number of prompts to generate.
-        fallback_seed: Seed to use when config.seed is None (typically
-            ExperimentConfig.random_seed).
-
-    Returns:
-        List of n synthetic prompt strings.
-    """
-    input_len: int = getattr(config, "input_len", 512)
-    explicit_seed: int | None = getattr(config, "seed", None)
-    seed: int = explicit_seed if explicit_seed is not None else fallback_seed
-
-    # Approximate: ~4 chars per token
-    words_per_prompt = max(1, input_len // 4)
-    rng = random.Random(seed)
-    words = ["Hello", "world", "the", "a", "is", "it", "this", "that", "with", "for"]
-
-    prompts: list[str] = []
-    for _i in range(n):
-        selected = [rng.choice(words) for _ in range(words_per_prompt)]
-        prompts.append(" ".join(selected))
 
     return prompts

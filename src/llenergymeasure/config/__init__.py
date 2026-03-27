@@ -13,10 +13,10 @@ from llenergymeasure.config.loader import (
 )
 from llenergymeasure.config.models import (
     BaselineConfig,
+    DatasetConfig,
     DecoderConfig,
     ExperimentConfig,
     LoRAConfig,
-    SyntheticDatasetConfig,
     WarmupConfig,
 )
 from llenergymeasure.config.user_config import (
@@ -27,10 +27,10 @@ from llenergymeasure.config.user_config import (
 
 __all__ = [
     "BaselineConfig",
+    "DatasetConfig",
     "DecoderConfig",
     "ExperimentConfig",
     "LoRAConfig",
-    "SyntheticDatasetConfig",
     "UserConfig",
     "WarmupConfig",
     "deep_merge",

@@ -301,40 +301,70 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "optional": False,
         "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
-    shared["n"] = {
-        "path": "n",
-        "name": "n",
+    shared["dataset.source"] = {
+        "path": "dataset.source",
+        "name": "source",
+        "type_str": "str",
+        "default": "aienergyscore",
+        "description": "Dataset source: built-in alias or .jsonl file path",
+        "options": None,
+        "test_values": ["aienergyscore"],
+        "constraints": {"min_length": 1},
+        "optional": False,
+        "backend_support": ["pytorch", "vllm", "tensorrt"],
+    }
+    shared["dataset.n_prompts"] = {
+        "path": "dataset.n_prompts",
+        "name": "n_prompts",
         "type_str": "int",
         "default": 100,
-        "description": "Number of prompts from dataset",
+        "description": "Number of prompts to load",
         "options": None,
         "test_values": [10, 100, 500],
         "constraints": {"ge": 1},
         "optional": False,
         "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
+    shared["dataset.order"] = {
+        "path": "dataset.order",
+        "name": "order",
+        "type_str": "str",
+        "default": "interleaved",
+        "description": "Prompt ordering: interleaved, grouped, or shuffled",
+        "options": ["interleaved", "grouped", "shuffled"],
+        "test_values": ["interleaved", "grouped", "shuffled"],
+        "constraints": {},
+        "optional": False,
+        "backend_support": ["pytorch", "vllm", "tensorrt"],
+    }
     shared["max_input_tokens"] = {
         "path": "max_input_tokens",
         "name": "max_input_tokens",
-        "type_str": "int",
-        "default": 512,
-        "description": "Maximum input token length",
+        "type_str": "int | None",
+        "default": 256,
+        "description": (
+            "Max input token length for truncation. Keeps computation workload "
+            "constant across experiments for fair comparison. None = no truncation."
+        ),
         "options": None,
-        "test_values": [64, 128, 256],
+        "test_values": [64, 128, 256, None],
         "constraints": {"ge": 1},
-        "optional": False,
+        "optional": True,
         "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["max_output_tokens"] = {
         "path": "max_output_tokens",
         "name": "max_output_tokens",
-        "type_str": "int",
-        "default": 128,
-        "description": "Maximum output token length",
+        "type_str": "int | None",
+        "default": 256,
+        "description": (
+            "Max output tokens (max_new_tokens for generation). "
+            "None = generate until EOS or model context limit."
+        ),
         "options": None,
-        "test_values": [32, 128, 256],
+        "test_values": [32, 128, 256, None],
         "constraints": {"ge": 1},
-        "optional": False,
+        "optional": True,
         "backend_support": ["pytorch", "vllm", "tensorrt"],
     }
 

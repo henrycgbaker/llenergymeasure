@@ -62,7 +62,7 @@ def _calculate_timeout(config: ExperimentConfig) -> int:
 
     No model-size scaling — keep it simple.
     """
-    return max(config.n * 2, 600)
+    return max(config.dataset.n_prompts * 2, 600)
 
 
 def _save_and_record(

@@ -2,7 +2,7 @@
 
 Tests cover:
 - aienergyscore JSONL file existence and structure
-- load_prompts dispatching (built-in, synthetic, unknown)
+- load_prompts dispatching (built-in, unknown)
 - dataset_order config field validation and ordering behaviour
 - core.dataset_loader importability (broken import fix)
 """
@@ -60,10 +60,10 @@ def test_provenance_header_present() -> None:
 
 
 def test_load_prompts_builtin() -> None:
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
     from llenergymeasure.datasets import load_prompts
 
-    config = ExperimentConfig(model="x", dataset="aienergyscore", n=5)
+    config = ExperimentConfig(model="x", dataset=DatasetConfig(source="aienergyscore", n_prompts=5))
     prompts = load_prompts(config)
 
     assert len(prompts) == 5, f"Expected 5 prompts, got {len(prompts)}"
@@ -76,94 +76,17 @@ def test_load_prompts_builtin() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 5: load_prompts with synthetic dataset
-# ---------------------------------------------------------------------------
-
-
-def test_load_prompts_synthetic() -> None:
-    from llenergymeasure.config.models import ExperimentConfig, SyntheticDatasetConfig
-    from llenergymeasure.datasets import load_prompts
-
-    config = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=10, input_len=64),
-        n=10,
-    )
-    prompts = load_prompts(config)
-
-    assert len(prompts) == 10, f"Expected 10 prompts, got {len(prompts)}"
-    assert all(isinstance(p, str) and p.strip() for p in prompts), (
-        "All prompts should be non-empty strings"
-    )
-
-
-def test_synthetic_seed_derives_from_random_seed() -> None:
-    """When SyntheticDatasetConfig.seed is None, prompts use random_seed."""
-    from llenergymeasure.config.models import ExperimentConfig, SyntheticDatasetConfig
-    from llenergymeasure.datasets import load_prompts
-
-    config_a = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=5, input_len=64),
-        n=5,
-        random_seed=42,
-    )
-    config_b = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=5, input_len=64),
-        n=5,
-        random_seed=99,
-    )
-    # Same random_seed -> same prompts (seed=None derives from random_seed)
-    config_a2 = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=5, input_len=64),
-        n=5,
-        random_seed=42,
-    )
-
-    prompts_a = load_prompts(config_a)
-    prompts_b = load_prompts(config_b)
-    prompts_a2 = load_prompts(config_a2)
-
-    assert prompts_a == prompts_a2, "Same random_seed should produce identical prompts"
-    assert prompts_a != prompts_b, "Different random_seed should produce different prompts"
-
-
-def test_synthetic_explicit_seed_overrides_random_seed() -> None:
-    """Explicit SyntheticDatasetConfig.seed takes precedence over random_seed."""
-    from llenergymeasure.config.models import ExperimentConfig, SyntheticDatasetConfig
-    from llenergymeasure.datasets import load_prompts
-
-    # Explicit seed=7 should produce the same prompts regardless of random_seed
-    config_a = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=5, input_len=64, seed=7),
-        n=5,
-        random_seed=42,
-    )
-    config_b = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=5, input_len=64, seed=7),
-        n=5,
-        random_seed=99,
-    )
-
-    assert load_prompts(config_a) == load_prompts(config_b), (
-        "Explicit seed should override random_seed"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Test 6: load_prompts with unknown dataset raises ValueError
+# Test 5: load_prompts with unknown dataset raises ValueError
 # ---------------------------------------------------------------------------
 
 
 def test_load_prompts_unknown_raises() -> None:
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
     from llenergymeasure.datasets import load_prompts
 
-    config = ExperimentConfig(model="x", dataset="nonexistent_dataset_xyz", n=5)
+    config = ExperimentConfig(
+        model="x", dataset=DatasetConfig(source="nonexistent_dataset_xyz", n_prompts=5)
+    )
     with pytest.raises(ValueError, match="Unknown dataset"):
         load_prompts(config)
 
@@ -174,22 +97,22 @@ def test_load_prompts_unknown_raises() -> None:
 
 
 def test_dataset_order_config_field() -> None:
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     # Default
     config = ExperimentConfig(model="x")
-    assert config.dataset_order == "interleaved"
+    assert config.dataset.order == "interleaved"
 
     # Accepted values
-    config_grouped = ExperimentConfig(model="x", dataset_order="grouped")
-    assert config_grouped.dataset_order == "grouped"
+    config_grouped = ExperimentConfig(model="x", dataset=DatasetConfig(order="grouped"))
+    assert config_grouped.dataset.order == "grouped"
 
-    config_shuffled = ExperimentConfig(model="x", dataset_order="shuffled")
-    assert config_shuffled.dataset_order == "shuffled"
+    config_shuffled = ExperimentConfig(model="x", dataset=DatasetConfig(order="shuffled"))
+    assert config_shuffled.dataset.order == "shuffled"
 
     # Invalid value should raise ValidationError
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="x", dataset_order="invalid")
+        ExperimentConfig(model="x", dataset=DatasetConfig(order="invalid"))
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +121,7 @@ def test_dataset_order_config_field() -> None:
 
 
 def test_load_prompts_grouped_ordering() -> None:
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
     from llenergymeasure.datasets import aienergyscore, load_prompts
 
     # Check if dataset has source field
@@ -210,14 +133,16 @@ def test_load_prompts_grouped_ordering() -> None:
         # Dataset has no source column; grouped == interleaved (file order)
         # Just verify it doesn't raise an error
         config = ExperimentConfig(
-            model="x", dataset="aienergyscore", n=100, dataset_order="grouped"
+            model="x", dataset=DatasetConfig(source="aienergyscore", n_prompts=100, order="grouped")
         )
         prompts = load_prompts(config)
         assert len(prompts) == 100
         return
 
     # Dataset has source column — verify grouped ordering
-    config = ExperimentConfig(model="x", dataset="aienergyscore", n=100, dataset_order="grouped")
+    config = ExperimentConfig(
+        model="x", dataset=DatasetConfig(source="aienergyscore", n_prompts=100, order="grouped")
+    )
     prompts = load_prompts(config)
     assert len(prompts) == 100
 
@@ -241,14 +166,12 @@ def test_load_prompts_grouped_ordering() -> None:
 
 
 def test_load_prompts_shuffled_deterministic() -> None:
-    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
     from llenergymeasure.datasets import load_prompts
 
     config = ExperimentConfig(
         model="x",
-        dataset="aienergyscore",
-        n=50,
-        dataset_order="shuffled",
+        dataset=DatasetConfig(source="aienergyscore", n_prompts=50, order="shuffled"),
         random_seed=42,
     )
 
@@ -258,14 +181,12 @@ def test_load_prompts_shuffled_deterministic() -> None:
     assert prompts_1 == prompts_2, "Shuffled prompts should be deterministic with same seed"
     assert len(prompts_1) == 50
 
-    # Different seed produces different order (seeds 42 and 99 verified to differ for n=50)
+    # Different seed produces different order (seeds 42 and 99 verified to differ for n_prompts=50)
     config_diff_seed = ExperimentConfig(
         model="x",
-        dataset="aienergyscore",
-        n=50,
-        dataset_order="shuffled",
+        dataset=DatasetConfig(source="aienergyscore", n_prompts=50, order="shuffled"),
         random_seed=99,
     )
     prompts_diff = load_prompts(config_diff_seed)
-    # Seeds 42 and 99 confirmed to produce distinct orderings for n=50 from aienergyscore
+    # Seeds 42 and 99 confirmed to produce distinct orderings for n_prompts=50 from aienergyscore
     assert prompts_1 != prompts_diff, "Different seeds should produce different orderings"
