@@ -675,7 +675,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
 
     study = StudyConfig(
         experiments=[ExperimentConfig(model="gpt2")],
-        execution={"n_cycles": 1, "cycle_order": "sequential"},
+        study_execution={"n_cycles": 1, "experiment_order": "sequential"},
     )
     api_module._run(study)
 
@@ -901,7 +901,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     ]
     study = StudyConfig(
         experiments=expanded_experiments,
-        execution={"n_cycles": 3, "cycle_order": "sequential"},
+        study_execution={"n_cycles": 3, "experiment_order": "sequential"},
     )
     # Verify our study fixture has exactly 6 experiments
     assert len(study.experiments) == 6

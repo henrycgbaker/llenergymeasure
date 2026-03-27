@@ -91,7 +91,7 @@ def run(
     order: Annotated[
         str | None,
         typer.Option(
-            "--order", help="Cycle ordering: sequential, interleaved, shuffled (study mode)"
+            "--order", help="Cycle ordering: sequential, interleave, shuffle (study mode)"
         ),
     ] = None,
     no_gaps: Annotated[
@@ -372,12 +372,12 @@ def _run_study_impl(
 
     # Check what the YAML execution block specifies (to apply CLI effective defaults)
     raw = yaml.safe_load(config.read_text()) or {}
-    yaml_execution = raw.get("execution", {}) or {}
+    yaml_execution = raw.get("study_execution", {}) or {}
 
     # Build execution overrides from CLI flags
     exec_overrides: dict[str, Any] = {}
 
-    # CLI effective defaults: n_cycles=3, cycle_order="shuffled" when neither YAML nor CLI specifies
+    # CLI effective defaults: n_cycles=3, experiment_order="shuffle" when neither YAML nor CLI specifies
     # These are applied at CLI layer; Pydantic defaults are conservative (n_cycles=1)
     if cycles is not None:
         exec_overrides["n_cycles"] = cycles
@@ -385,9 +385,9 @@ def _run_study_impl(
         exec_overrides["n_cycles"] = 3  # CLI effective default
 
     if order is not None:
-        exec_overrides["cycle_order"] = order
-    elif "cycle_order" not in yaml_execution:
-        exec_overrides["cycle_order"] = "shuffled"  # CLI effective default
+        exec_overrides["experiment_order"] = order
+    elif "experiment_order" not in yaml_execution:
+        exec_overrides["experiment_order"] = "shuffle"  # CLI effective default
 
     if no_gaps:
         exec_overrides["experiment_gap_seconds"] = 0
@@ -398,7 +398,7 @@ def _run_study_impl(
     if cli_overrides:
         study_cli_overrides.update(cli_overrides)
     if exec_overrides:
-        study_cli_overrides["execution"] = exec_overrides
+        study_cli_overrides["study_execution"] = exec_overrides
 
     # Load study config with overrides
     study_config = load_study_config(
@@ -451,7 +451,7 @@ def _run_study_impl(
         from llenergymeasure.cli._step_display import StudyStepDisplay
 
         n_exp = len(study_config.experiments)
-        n_cycles = study_config.execution.n_cycles
+        n_cycles = study_config.study_execution.n_cycles
         name = study_config.study_name or "unnamed"
 
         _stderr_console = RichConsole(stderr=True)

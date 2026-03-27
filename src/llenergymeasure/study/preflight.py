@@ -38,7 +38,7 @@ def run_study_preflight(
     Args:
         study: Resolved StudyConfig.
         skip_preflight: Skip Docker pre-flight checks. The effective skip value
-            is ``skip_preflight OR study.execution.skip_preflight`` — CLI flag
+            is ``skip_preflight OR study.study_execution.skip_preflight`` — CLI flag
             takes priority, then YAML config.
         yaml_runners: Runner config from the study YAML ``runners:`` section.
             Forwarded to ``resolve_study_runners()`` so pre-flight uses the same
@@ -98,7 +98,7 @@ def run_study_preflight(
 
     # Docker pre-flight: run once if any backend resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
-    effective_skip = skip_preflight or study.execution.skip_preflight
+    effective_skip = skip_preflight or study.study_execution.skip_preflight
     if any(spec.mode == RUNNER_DOCKER for spec in runner_specs.values()):
         from llenergymeasure.infra.docker_preflight import run_docker_preflight
 

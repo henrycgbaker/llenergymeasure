@@ -164,9 +164,9 @@ class TestPipelineMultiExperimentSweep:
 model: gpt2
 sweep:
   precision: [fp16, bf16]
-execution:
+study_execution:
   n_cycles: 1
-  cycle_order: sequential
+  experiment_order: sequential
   experiment_gap_seconds: 0
 warmup:
   enabled: false
@@ -191,9 +191,9 @@ baseline:
 sweep:
   model: [gpt2, distilgpt2]
   backend: [pytorch]
-execution:
+study_execution:
   n_cycles: 1
-  cycle_order: sequential
+  experiment_order: sequential
 """
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
@@ -208,7 +208,9 @@ execution:
         """StudyConfig.study_design_hash is populated after loading."""
         from llenergymeasure.config.loader import load_study_config
 
-        yaml_content = "model: gpt2\nexecution:\n  n_cycles: 1\n  cycle_order: sequential\n"
+        yaml_content = (
+            "model: gpt2\nstudy_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
+        )
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
 
@@ -373,7 +375,7 @@ class TestCLIE2EStudy:
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(
             "model: gpt2\nsweep:\n  precision: [fp16, bf16]\n"
-            "execution:\n  n_cycles: 1\n  cycle_order: sequential\n"
+            "study_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         )
 
         mock_study_result = make_study_result()

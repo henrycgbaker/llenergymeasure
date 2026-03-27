@@ -81,8 +81,8 @@ the experiment set:
 
 Both can be combined: sweep configs are produced first, then explicit entries are appended.
 
-The study YAML also accepts a `base:` key pointing to a base experiment config file, and an
-`execution:` block controlling how many cycles to run and in what order.
+The study YAML also accepts a `base:` key pointing to a base experiment config file, and a
+`study_execution:` block controlling how many cycles to run and in what order.
 
 ## Sweep Grammar
 
@@ -98,9 +98,9 @@ n: 100
 sweep:
   precision: [fp16, bf16]
 
-execution:
+study_execution:
   n_cycles: 3
-  cycle_order: shuffled
+  experiment_order: shuffle
 ```
 
 Run with `llem run precision-sweep.yaml`. Produces 2 configs × 3 cycles = 6 runs.
@@ -119,9 +119,9 @@ sweep:
   precision: [fp16, bf16]
   n: [50, 100]
 
-execution:
+study_execution:
   n_cycles: 3
-  cycle_order: shuffled
+  experiment_order: shuffle
 ```
 
 Produces 4 configs × 3 cycles = 12 runs.
@@ -141,9 +141,9 @@ backend: pytorch
 sweep:
   pytorch.batch_size: [1, 2, 4, 8]
 
-execution:
+study_execution:
   n_cycles: 3
-  cycle_order: shuffled
+  experiment_order: shuffle
 ```
 
 Produces 4 configs × 3 cycles = 12 runs. The `pytorch.batch_size` path expands to a
@@ -168,7 +168,7 @@ sweep:
 runners:
   vllm: docker
 
-execution:
+study_execution:
   n_cycles: 3
 ```
 
@@ -195,9 +195,9 @@ experiments:
     runners:
       vllm: docker
 
-execution:
+study_execution:
   n_cycles: 3
-  cycle_order: interleaved
+  experiment_order: interleave
 ```
 
 Each entry is merged with any top-level shared fields (`n: 50` here).
@@ -216,11 +216,11 @@ base: base-experiment.yaml
 sweep:
   precision: [fp32, fp16, bf16]
 
-execution:
+study_execution:
   n_cycles: 3
 ```
 
-The base file is loaded, study-only keys (`sweep`, `experiments`, `execution`, `base`, `name`,
+The base file is loaded, study-only keys (`sweep`, `experiments`, `study_execution`, `base`, `name`,
 `runners`) are stripped, and the remaining fields become the starting point for all generated
 configs. Inline fields in the study YAML override base fields. Path is resolved relative to
 the study YAML file's directory.
@@ -247,41 +247,43 @@ experiments:
     pytorch:
       load_in_4bit: true
 
-execution:
+study_execution:
   n_cycles: 3
-  cycle_order: shuffled
+  experiment_order: shuffle
 ```
 
 ---
 
 ## Execution Configuration
 
-The `execution:` section controls cycle repetition and ordering:
+The `study_execution:` section controls cycle repetition and ordering:
 
 ```yaml
-execution:
+study_execution:
   n_cycles: 3
-  cycle_order: shuffled   # sequential | interleaved | shuffled
+  experiment_order: shuffle   # sequential | interleave | shuffle | reverse | latin_square
 ```
 
 **`n_cycles`** — how many times the full experiment list is repeated. Repeated execution
 reduces measurement variance.
 
-**`cycle_order`** — controls execution order across cycles. For experiments A and B with 3
+**`experiment_order`** — controls execution order across cycles. For experiments A and B with 3
 cycles each:
 
 | Order | Sequence | When to use |
 |-------|----------|-------------|
 | `sequential` | A, A, A, B, B, B | Thermal isolation between experiments |
-| `interleaved` | A, B, A, B, A, B | Reduces temporal bias; fair comparison |
-| `shuffled` | random per-cycle, seeded | Publication-quality; eliminates ordering bias |
+| `interleave` | A, B, A, B, A, B | Reduces temporal bias; fair comparison |
+| `shuffle` | random per-cycle, seeded | Publication-quality; eliminates ordering bias |
+| `reverse` | A, B, B, A, A, B | Detects ordering effects via counterbalancing |
+| `latin_square` | Williams design rows | Balances first-order carryover effects |
 
-`shuffled` order is seeded from the study design hash, so the same study always shuffles
+`shuffle` order is seeded from the study design hash, so the same study always shuffles
 identically — reruns are reproducible. Override with an explicit `shuffle_seed`:
 
 ```yaml
-execution:
-  cycle_order: shuffled
+study_execution:
+  experiment_order: shuffle
   shuffle_seed: 123  # null = derived from study_design_hash
 ```
 
@@ -292,9 +294,9 @@ execution:
 **CLI effective defaults** when running `llem run study.yaml` (if not set in YAML):
 
 - `n_cycles = 3`
-- `cycle_order = shuffled`
+- `experiment_order = shuffle`
 
-Override with `llem run study.yaml --cycles 5 --order interleaved`.
+Override with `llem run study.yaml --cycles 5 --order interleave`.
 
 ---
 

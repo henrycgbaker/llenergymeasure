@@ -498,7 +498,7 @@ class StudyRunner:
 
                 # Config gap: between every consecutive experiment pair
                 if i > 0:
-                    gap_secs = float(self.study.execution.experiment_gap_seconds or 0)
+                    gap_secs = float(self.study.study_execution.experiment_gap_seconds or 0)
                     if gap_secs > 0:
                         self._run_gap(gap_secs, "Experiment gap")
                         if self._interrupt_event.is_set():
@@ -506,7 +506,7 @@ class StudyRunner:
 
                 # Cycle gap: after every complete round of N unique configs
                 if n_unique > 0 and i > 0 and i % n_unique == 0:
-                    cycle_gap_secs = float(self.study.execution.cycle_gap_seconds or 0)
+                    cycle_gap_secs = float(self.study.study_execution.cycle_gap_seconds or 0)
                     if cycle_gap_secs > 0:
                         self._run_gap(cycle_gap_secs, "Cycle gap")
                         if self._interrupt_event.is_set():

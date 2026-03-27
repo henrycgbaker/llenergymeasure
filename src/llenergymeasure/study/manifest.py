@@ -275,7 +275,7 @@ class ManifestWriter:
                 seen[h] = exp
 
         entries: list[ExperimentManifestEntry] = []
-        n_cycles = study.execution.n_cycles
+        n_cycles = study.study_execution.n_cycles
         for config_hash, exp in seen.items():
             summary = build_config_summary(exp)
             for cycle in range(1, n_cycles + 1):

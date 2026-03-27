@@ -164,9 +164,9 @@ class TestDockerRunnerIntegration:
         )
         study = StudyConfig(
             experiments=[config],
-            execution=ExecutionConfig(
+            study_execution=ExecutionConfig(
                 n_cycles=1,
-                cycle_order="sequential",
+                experiment_order="sequential",
                 experiment_gap_seconds=0,
             ),
         )
