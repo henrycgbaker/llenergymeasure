@@ -277,7 +277,17 @@ cycles each:
 | `shuffled` | random per-cycle, seeded | Publication-quality; eliminates ordering bias |
 
 `shuffled` order is seeded from the study design hash, so the same study always shuffles
-identically — reruns are reproducible.
+identically — reruns are reproducible. Override with an explicit `shuffle_seed`:
+
+```yaml
+execution:
+  cycle_order: shuffled
+  shuffle_seed: 123  # null = derived from study_design_hash
+```
+
+> **Note:** `shuffle_seed` (study-level scheduling) and `random_seed` (per-experiment
+> inference/dataset RNG) are independent by design. Changing one does not affect the
+> other. See [Methodology — Seeding model](methodology.md#seeding-model) for details.
 
 **CLI effective defaults** when running `llem run study.yaml` (if not set in YAML):
 
@@ -348,7 +358,7 @@ All fields except `model` are optional and have sensible defaults.
 | `dataset` | SyntheticDatasetConfig | `aienergyscore` | Dataset name (built-in alias) or synthetic dataset config |
 | `dataset_order` | 'interleaved' | 'grouped' | 'shuffled' | `interleaved` | Prompt ordering: interleaved (round-robin by source, file order), grouped (sorted by source), shuffled (seed-based random) |
 | `precision` | 'fp32' | 'fp16' | 'bf16' | `bf16` | Floating point precision |
-| `random_seed` | integer | `42` | Random seed for reproducibility |
+| `random_seed` | integer | `42` | Per-experiment seed: inference RNG, dataset ordering, synthetic prompt generation |
 | `max_input_tokens` | integer | `512` | Max input tokens |
 | `max_output_tokens` | integer | `128` | Max output tokens |
 | `decoder` | DecoderConfig | *(see section)* | Universal decoder/generation configuration |

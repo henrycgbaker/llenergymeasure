@@ -97,8 +97,8 @@ def test_load_prompts_synthetic() -> None:
     )
 
 
-def test_synthetic_seed_derives_from_random_seed() -> None:
-    """When SyntheticDatasetConfig.seed is None, prompts use random_seed."""
+def test_synthetic_prompts_seeded_by_random_seed() -> None:
+    """Synthetic prompts are deterministically seeded by ExperimentConfig.random_seed."""
     from llenergymeasure.config.models import ExperimentConfig, SyntheticDatasetConfig
     from llenergymeasure.datasets import load_prompts
 
@@ -114,7 +114,6 @@ def test_synthetic_seed_derives_from_random_seed() -> None:
         n=5,
         random_seed=99,
     )
-    # Same random_seed -> same prompts (seed=None derives from random_seed)
     config_a2 = ExperimentConfig(
         model="x",
         dataset=SyntheticDatasetConfig(n=5, input_len=64),
@@ -128,30 +127,6 @@ def test_synthetic_seed_derives_from_random_seed() -> None:
 
     assert prompts_a == prompts_a2, "Same random_seed should produce identical prompts"
     assert prompts_a != prompts_b, "Different random_seed should produce different prompts"
-
-
-def test_synthetic_explicit_seed_overrides_random_seed() -> None:
-    """Explicit SyntheticDatasetConfig.seed takes precedence over random_seed."""
-    from llenergymeasure.config.models import ExperimentConfig, SyntheticDatasetConfig
-    from llenergymeasure.datasets import load_prompts
-
-    # Explicit seed=7 should produce the same prompts regardless of random_seed
-    config_a = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=5, input_len=64, seed=7),
-        n=5,
-        random_seed=42,
-    )
-    config_b = ExperimentConfig(
-        model="x",
-        dataset=SyntheticDatasetConfig(n=5, input_len=64, seed=7),
-        n=5,
-        random_seed=99,
-    )
-
-    assert load_prompts(config_a) == load_prompts(config_b), (
-        "Explicit seed should override random_seed"
-    )
 
 
 # ---------------------------------------------------------------------------

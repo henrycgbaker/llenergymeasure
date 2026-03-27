@@ -6,62 +6,55 @@
 # Backend-specific sweep axes use dotted paths (e.g. pytorch.batch_size) so
 # each backend's parameters are crossed only with each other and with
 # universal params - never with another backend's params.
-#
-# Sweep experiments:
-#   PyTorch:   2 precision x 4 batch_size x 3 attn_implementation   =  24
-#   vLLM:      2 precision x 3 gpu_mem x 2 eager x 3 seqs x 2 prefill = 72
-#   TensorRT:  2 precision x 3 max_batch_size x 2 max_seq_len        =  12
-#   Total sweep:                                                       = 108
-# Explicit experiments:
-#   PyTorch:   10 active + 2 commented (LoRA, synthetic)
-#   vLLM:       8 active + 2 commented (speculative, LoRA)
-#   TensorRT:  11 active + 2 commented (FP8, TRT sampling)
-#   Total explicit:                                                    =  29
-# Grand total: 137 unique experiments x 3 cycles = 411 runs
 
 study_name: full-suite-all-backends
 
 # =====================================================================
 # Runner configuration
 # =====================================================================
-# Determines how each backend executes: locally or via Docker.
-# Values: 'local', 'docker', or 'docker:<custom-image-tag>'
-# Local mode runs directly on the host (requires all dependencies installed).
-# Docker mode runs each experiment in a fresh container from the specified image. 
-# If no custom image is provided, a default image with pre-installed dependencies will be used.
-
 runners:
-  pytorch: local                 # local | docker | Custom image override example: vllm: "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"
+  pytorch: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
   vllm: docker
   tensorrt: docker
 
 # =====================================================================
-# Execution controls 
+# Execution controls (study-level)
 # =====================================================================
-# Study-level metadata and scheduling parameters.  
-# These apply globally to all.
-# Non-sweepable (TODO: confirm this)
-
-random_seed: 42 # TODO: make sure this is sources by all consumers of stocahsticity; make this the single source of truth for seeding across the entire study (including sweep shuffling, dataset shuffling, synthetic data generation, etc.)
+# Study-level metadata and scheduling parameters.
+# These apply globally to all experiments. Non-sweepable.
 
 execution: # TODO rename this field study_execution
   n_cycles: 3
-  cycle_order: shuffled       # sequential | interleaved | shuffled 
+  cycle_order: shuffled       # sequential | interleaved | shuffled
   # TODO:  add intra-cycle interleaving option (e.g. sequential cycles, but interleaved experiments within each cycle) (I think currently is fully shuffled across all cycles - need to confirm this)
-  experiment_gap_seconds: 30.0   # Gap for thermal stabilisation between experiments TODO CHANGE BACK TO 60  
+  experiment_gap_seconds: 30.0   # Gap for thermal stabilisation between experiments TODO CHANGE BACK TO 60
   cycle_gap_seconds: 30.0       # 5-minute gap between full cycles TODO CHANGE BACK TO 300
-  shuffle_seed: null           # Explicit seed for shuffled order (null = derived from study hash) #TODO:how does this relate to random_seed above? Do we need both? what happens if not provided?
+  shuffle_seed: null           # Explicit override for cycle shuffle order (null = derived from study_design_hash)
   skip_preflight: false        # Skip Docker pre-flight checks (not recommended)
 
 # =====================================================================
-# Shared fields 
+# Shared fields (experiment-level)
 # =====================================================================
-# Applied to every experiment unless overridden by sweep or explicit experiments.  
+# Applied to every experiment unless overridden by sweep or explicit experiments.
 # Defacto treated as constant defaults for primary purpose of this tool (to measure energy efficiecny of different implementations configurations for a given computational workload)
 # Neverheless, all fields are sweepable
 # Add to sweep if you want to compare across different values of these fields (e.g. prompt counts, input lengths, energy backends, etc.)
+#
+# --- Seeding model ---
+# Two independent seeds control reproducibility at different scopes:
+#
+#   random_seed (below) - 
+#
+#   shuffle_seed (execution section above) - study-level scheduling:
+#     - Cycle shuffle order (which experiment runs when)
+#     - Default: derived from study_design_hash (same YAML = same order)
+#
+# These are orthogonal by design: changing random_seed does not affect
+# experiment scheduling, and changing shuffle_seed does not affect
+# inference outputs.
 
-model: Qwen/Qwen2.5-0.5B        
+model: Qwen/Qwen2.5-0.5B
+random_seed: 42 # per-experiment stochasticity: (i) inference RNG, (ii) prompt ordering (when dataset_order: shuffled), (iii) synthetic prompt generation (when using synthetic dataset)
 
 # --- Input Dataset ---
 #TODO: place these all under input using dot notation (e.g. input.dataset, input.n_prompts, input.order, input.max_input_tokensm, etc.) to make it more extensible and better organized. Then can add synthetic dataset params here as well (e.g. dataset.synthetic.input_len, etc.)
@@ -78,7 +71,7 @@ max_output_tokens: 256           # Sweepable - add to sweep: to compare output l
 #   n: 50                        # Number of synthetic prompts to generate TODO: change to n_prompts
 #   input_len: 512               # Fixed input token length per prompt TODO RENAME TO max_input_tokens for consistency with max_output_tokens above
 #   output_len: 128              # Fixed output token length per prompt TODO RENAME TO max_output_tokens for consistency with max_input_tokens above
-#   seed: 42                     # Reproducible prompt generation TODO: REMOVE THIS -> use random_seed
+# Note: synthetic prompts are seeded by random_seed above (single seed source)
 
 # --- Energy measurement ---
 energy: #TODO: change theis to energy_measurement.sampler 
@@ -379,7 +372,6 @@ experiments:
   #     n: 50
   #     input_len: 256
   #     output_len: 64
-  #     seed: 42
   #   pytorch:
   #     batch_size: 4
   #     device_map: auto
