@@ -127,7 +127,7 @@ def print_dry_run(
     print("Config (resolved)")
     print(f"  Model          {config.model}")
     print(f"  Backend        {config.backend}{_annotate('backend', config.backend)}")
-    print(f"  Precision      {config.dtype}{_annotate('precision', config.dtype)}")
+    print(f"  Dtype          {config.dtype}{_annotate('dtype', config.dtype)}")
 
     # Batch size — from pytorch section if present
     batch_size: int | None = None
