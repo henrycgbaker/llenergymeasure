@@ -224,7 +224,7 @@ def test_study_display_experiment_lifecycle():
     assert "Study: my-sweep | 3 experiments | 2 cycles" in output_after_start
 
     # Experiment 1: success
-    display.begin_experiment(1, "gpt2", "pytorch", "bf16", ["preflight", "model", "measure"])
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", ["preflight", "model", "measure"])
     display.on_step_start("preflight", "Checking", "")
     display.on_step_done("preflight", 0.5)
     display.on_step_start("model", "Loading model", "gpt2")
@@ -234,7 +234,7 @@ def test_study_display_experiment_lifecycle():
     display.end_experiment_ok(1, elapsed=23.5, energy_j=150.0)
 
     # Experiment 2: fail
-    display.begin_experiment(2, "llama", "vllm", "bf16", ["preflight"])
+    display.begin_experiment(2, "llama / vllm / bf16", ["preflight"])
     display.on_step_start("preflight", "Checking", "")
     display.on_step_done("preflight", 0.3)
     display.end_experiment_fail(2, elapsed=0.3, error="BackendError: CUDA OOM")
@@ -242,8 +242,8 @@ def test_study_display_experiment_lifecycle():
     display.finish()
 
     output = buf.getvalue()
-    assert "OK" in output
-    assert "FAIL" in output
+    assert "\u2713" in output  # OK icon
+    assert "\u2717" in output  # FAIL icon
     assert "Study completed" in output
 
 
@@ -264,12 +264,14 @@ def test_study_display_table_output():
     output = buf.getvalue()
     # Table column headers
     assert "#" in output
-    assert "Status" in output
     assert "Config" in output
-    assert "Time" in output
+    assert "Total" in output
+    assert "Infer" in output
     assert "Energy" in output
     assert "tok/s" in output
-    # Row values
+    assert "mJ/tok" in output
+    # Row values (✓ icons, energy, throughput, mJ/tok)
+    assert "\u2713" in output
     assert "12.4 J" in output
     assert "38.7" in output
     assert "8.1 J" in output
@@ -282,7 +284,7 @@ def test_study_display_substep_in_active_experiment():
     """on_substep() records substeps attached to the active inner step."""
     console, _buf = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
-    display.begin_experiment(1, "gpt2", "pytorch", "bf16", ["measure"])
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", ["measure"])
     display.on_step_start("measure", "Measuring", "100 prompts")
     display.on_substep("measure", "CUDA sync (pre)", 0.0)
     display.on_substep("measure", "energy tracker started", 0.0)
@@ -312,7 +314,7 @@ def test_study_display_finish_prints_summary_table():
     output = buf.getvalue()
     assert "Study completed in 1m 15s" in output
     assert "10.0 J" in output
-    assert "Saved: ./results/finish-test/" in output
+    assert "Results: ./results/finish-test/" in output
 
 
 def test_study_display_finish_total_elapsed_parameter():
@@ -331,16 +333,16 @@ def test_study_display_non_tty_plain_rows():
     """Non-TTY mode prints plain text rows for each completed experiment."""
     console, buf = _make_console()
     display = StudyStepDisplay(total_experiments=2, console=console)
-    display.begin_experiment(1, "gpt2", "pytorch", "bf16", [])
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", [])
     display.end_experiment_ok(1, elapsed=30.0, energy_j=5.5, throughput_tok_s=25.0)
-    display.begin_experiment(2, "llama", "vllm", "bf16", [])
+    display.begin_experiment(2, "llama / vllm / bf16", [])
     display.end_experiment_fail(2, elapsed=2.0, error="OOM")
 
     output = buf.getvalue()
-    # Non-TTY rows contain the config and status
-    assert "OK" in output
+    # Non-TTY rows contain the config and status icons
+    assert "\u2713" in output
     assert "gpt2 / pytorch / bf16" in output
-    assert "FAIL" in output
+    assert "\u2717" in output
     assert "llama / vllm / bf16" in output
     assert "OOM" in output
 
@@ -367,7 +369,7 @@ def test_study_display_skipped_steps_render_dim():
     display.start()
 
     steps = ["preflight", "image_check", "pull", "container_start", "model", "measure"]
-    display.begin_experiment(1, "gpt2", "pytorch", "bf16", steps)
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", steps)
 
     # Skip preflight (Docker path)
     display.on_step_skip("preflight", "Docker path")

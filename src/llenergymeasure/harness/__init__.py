@@ -332,15 +332,15 @@ class MeasurementHarness:
             if _p and wait_s > 0:
                 _p.on_step_done("thermal_floor", wait_s)
 
-            # 7. Select energy backend
+            # 7. Select energy sampler
             if _p:
-                _p.on_step_start("energy_select", "Selecting", "energy backend")
+                _p.on_step_start("energy_select", "Selecting", "energy sampler")
                 t0_energy = time.perf_counter()
             energy_backend = select_energy_backend(config.energy.backend, gpu_indices=gpu_indices)
             energy_backend_name = type(energy_backend).__name__ if energy_backend else "none"
             _substep("energy_select", f"selected: {energy_backend_name}")
             if _p:
-                _p.on_step_update("energy_select", f"energy backend ({energy_backend_name})")
+                _p.on_step_update("energy_select", f"energy sampler ({energy_backend_name})")
                 _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
 
             # 8. Start energy tracking (after warmup + thermal floor)

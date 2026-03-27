@@ -74,13 +74,21 @@ class StudyManifest(BaseModel):
 def build_config_summary(experiment: ExperimentConfig) -> str:
     """Return a human-readable summary string for an experiment config.
 
-    Format: "{backend} / {model_slug} / {precision}"
-    model_slug: lowered, '/' replaced with '-', truncated to 30 chars.
+    Delegates to ``format_experiment_header()`` for consistent naming across
+    CLI display, manifest summaries, and directory names.
+
+    Format: "model_short / backend / non_default_params..."
     """
-    model_slug = experiment.model.replace("/", "-").lower()
-    if len(model_slug) > 30:
-        model_slug = model_slug[:30]
-    return f"{experiment.backend} / {model_slug} / {experiment.precision}"
+    from llenergymeasure.utils.formatting import format_experiment_header
+
+    return format_experiment_header(experiment)
+
+
+def study_dir_name(name: str | None) -> str:
+    """Return the study directory basename: ``{name}_{timestamp}``."""
+    prefix = name if name else "study"
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    return f"{prefix}_{timestamp}"
 
 
 def create_study_dir(name: str | None, output_dir: Path) -> Path:
@@ -96,9 +104,7 @@ def create_study_dir(name: str | None, output_dir: Path) -> Path:
     Raises:
         StudyError: If directory creation fails.
     """
-    prefix = name if name else "study"
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
-    study_dir = output_dir / f"{prefix}_{timestamp}"
+    study_dir = output_dir / study_dir_name(name)
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         study_dir.mkdir(parents=True, exist_ok=True)
@@ -116,11 +122,13 @@ def experiment_result_filename(
 ) -> str:
     """Return flat filename for an experiment result file.
 
-    Format: "{model_slug}_{backend}_{precision}_{hash[:8]}{extension}"
-    model_slug: lowered, '/' replaced with '-'.
+    Format: "{model_short}-{backend}_{hash[:8]}{extension}"
+    model_short: last component after '/' (preserves casing).
     """
-    model_slug = model.replace("/", "-").lower()
-    return f"{model_slug}_{backend}_{precision}_{config_hash[:8]}{extension}"
+    from llenergymeasure.utils.formatting import model_short_name
+
+    model_short = model_short_name(model)
+    return f"{model_short}-{backend}_{config_hash[:8]}{extension}"
 
 
 # ---------------------------------------------------------------------------

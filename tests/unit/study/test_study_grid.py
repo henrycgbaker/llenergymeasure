@@ -737,21 +737,25 @@ class TestBuildPreflightPanel:
         assert "interleaved" in output
 
     def test_panel_metadata_backends_with_runners(self):
-        """Panel shows backend with runner mode when runners dict is provided."""
+        """Panel shows backend with runner mode in Runners section."""
         sc = _make_panel_study_config(
             models=["gpt2", "gpt2"],
             backends=["pytorch", "vllm"],
             runners={"pytorch": "local", "vllm": "docker"},
         )
         output = _render_panel(sc)
-        assert "pytorch (local)" in output
-        assert "vllm (docker)" in output
+        assert "Runners" in output
+        assert "pytorch" in output
+        assert "local" in output
+        assert "vllm" in output
+        assert "docker" in output
 
     def test_panel_metadata_backends_default_local(self):
-        """Panel shows (local) for backends when runners is None."""
+        """Panel shows 'local' for backends when runners is None."""
         sc = _make_panel_study_config(backends=["pytorch"])
         output = _render_panel(sc)
-        assert "pytorch (local)" in output
+        assert "pytorch" in output
+        assert "local" in output
 
     def test_panel_metadata_dataset(self):
         """Panel shows dataset name in Dataset row."""
@@ -760,10 +764,10 @@ class TestBuildPreflightPanel:
         assert "aienergyscore" in output
 
     def test_panel_metadata_energy(self):
-        """Panel shows energy backend in Energy row."""
+        """Panel shows energy sampler in Energy sampler row."""
         sc = _make_panel_study_config()
         output = _render_panel(sc)
-        assert "auto" in output
+        assert "Energy sampler" in output
 
     def test_panel_sweep_dimensions_model(self):
         """Sweep dimensions section contains model names when multiple models used."""
@@ -773,14 +777,14 @@ class TestBuildPreflightPanel:
         assert "gpt2-xl" in output
 
     def test_panel_sweep_dimensions_nested_decoder(self):
-        """Non-default decoder config shows decoder header and sub-fields."""
+        """Varying decoder config shows decoder header and sub-fields in sweep dims."""
         from llenergymeasure.config.models import DecoderConfig
 
         exp1 = ExperimentConfig(
             model="gpt2", decoder=DecoderConfig(temperature=0.0, do_sample=False)
         )
         exp2 = ExperimentConfig(
-            model="gpt2", decoder=DecoderConfig(temperature=0.0, do_sample=False)
+            model="gpt2", decoder=DecoderConfig(temperature=0.8, do_sample=True)
         )
         sc = StudyConfig(
             experiments=[exp1, exp2],
@@ -789,9 +793,8 @@ class TestBuildPreflightPanel:
             study_design_hash="deadbeef01234567",
         )
         output = _render_panel(sc)
-        # decoder sub-config header should appear since temperature and do_sample differ from defaults
+        # decoder sub-config header should appear since temperature varies
         assert "decoder" in output
-        # temperature=0.0 is non-default (default is 1.0)
         assert "temperature" in output
 
     def test_panel_hash_displayed(self):
