@@ -20,6 +20,6 @@ experiments:
         enforce_eager: true
         gpu_memory_utilization: 0.3
 
-execution:
+study_execution:
   n_cycles: 1
-  cycle_order: sequential
+  experiment_order: sequential

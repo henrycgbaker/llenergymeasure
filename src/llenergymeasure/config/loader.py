@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.config._dict_utils import _unflatten, deep_merge
 from llenergymeasure.config.grid import (
-    CycleOrder,
+    ExperimentOrder,
     apply_cycles,
     compute_study_design_hash,
     expand_grid,
@@ -130,7 +130,7 @@ def load_study_config(
     Args:
         path: Path to study YAML file.
         cli_overrides: Optional dict of CLI flag overrides for execution block
-            (e.g. {"execution": {"n_cycles": 5}}). The CLI translates
+            (e.g. {"study_execution": {"n_cycles": 5}}). The CLI translates
             --cycles/--order/--no-gaps flags into this dict.
 
     Returns:
@@ -158,7 +158,7 @@ def load_study_config(
     runners: dict[str, str] | None = raw.get("runners") or None
 
     # Parse execution block — Pydantic validates it
-    execution = ExecutionConfig(**(raw.get("execution") or {}))
+    execution = ExecutionConfig(**(raw.get("study_execution") or {}))
 
     # Expand sweep → list[ExperimentConfig], collect skipped
     # This is CFG-12: sweep resolution at YAML parse time, before Pydantic
@@ -187,7 +187,7 @@ def load_study_config(
     ordered = apply_cycles(
         valid_experiments,
         n_cycles=execution.n_cycles,
-        cycle_order=CycleOrder(execution.cycle_order),
+        experiment_order=ExperimentOrder(execution.experiment_order),
         study_design_hash=study_hash,
         shuffle_seed=execution.shuffle_seed,
     )
@@ -195,7 +195,7 @@ def load_study_config(
     return StudyConfig(
         experiments=ordered,
         study_name=name,
-        execution=execution,
+        study_execution=execution,
         runners=runners,
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in skipped],

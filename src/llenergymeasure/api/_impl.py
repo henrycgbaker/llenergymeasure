@@ -249,7 +249,7 @@ def _run(
     manifest = ManifestWriter(study, study_dir)
 
     wall_start = time.monotonic()
-    is_single = len(study.experiments) == 1 and study.execution.n_cycles == 1
+    is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1
 
     if is_single:
         # For single-experiment studies with a StudyProgressCallback, emit
@@ -300,7 +300,7 @@ def _run(
     total_energy = sum(r.total_energy_j for r in experiment_results if r is not None)
 
     # study.experiments is already cycle-expanded by apply_cycles(), so len() is the true total
-    n_cycles = study.execution.n_cycles
+    n_cycles = study.study_execution.n_cycles
     unique_configs = len(study.experiments) // n_cycles if n_cycles > 0 else len(study.experiments)
 
     summary = StudySummary(
@@ -314,11 +314,11 @@ def _run(
     )
 
     measurement_protocol: dict[str, Any] = {
-        "n_cycles": study.execution.n_cycles,
-        "cycle_order": study.execution.cycle_order,
-        "experiment_gap_seconds": study.execution.experiment_gap_seconds,
-        "cycle_gap_seconds": study.execution.cycle_gap_seconds,
-        "shuffle_seed": study.execution.shuffle_seed,
+        "n_cycles": study.study_execution.n_cycles,
+        "experiment_order": study.study_execution.experiment_order,
+        "experiment_gap_seconds": study.study_execution.experiment_gap_seconds,
+        "cycle_gap_seconds": study.study_execution.cycle_gap_seconds,
+        "shuffle_seed": study.study_execution.shuffle_seed,
     }
 
     return StudyResult(

@@ -800,7 +800,7 @@ class TestWiring:
         experiments = [ExperimentConfig(model=f"model-{b}", backend=b) for b in backends]
         return StudyConfig(
             experiments=experiments,
-            execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
+            study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
         )
 
     def test_docker_preflight_called_when_docker_runner_resolved(self) -> None:
@@ -898,7 +898,7 @@ class TestWiring:
 
         study = StudyConfig(
             experiments=[ExperimentConfig(model="test-model", backend="pytorch")],
-            execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
+            study_execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
         )
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
@@ -932,7 +932,7 @@ class TestWiring:
 
         study = StudyConfig(
             experiments=[ExperimentConfig(model="test-model", backend="pytorch")],
-            execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
+            study_execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
         )
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
