@@ -556,6 +556,7 @@ def test_print_study_summary_table_structure(capsys):
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0
+    exp.total_inference_time_sec = 8.0
 
     summary = StudySummary(
         total_experiments=1,
@@ -594,6 +595,7 @@ def test_print_study_summary_failed_experiments(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     summary = StudySummary(
         total_experiments=2,
@@ -627,6 +629,7 @@ def test_print_study_summary_no_summary(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     result = StudyResult.model_construct(
         experiments=[exp],
@@ -654,6 +657,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     summary = StudySummary(
         total_experiments=1,
@@ -687,6 +691,7 @@ def test_print_study_summary_with_result_files(capsys):
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
+    exp.total_inference_time_sec = 4.0
 
     summary = StudySummary(
         total_experiments=1,
