@@ -17,17 +17,14 @@
 name: tensorrt-full-parameter-space
 
 # =====================================================================
-# Shared fields - applied to every experiment unless overridden by
-# sweep or explicit experiments.  All fields below are sweepable:
-# moving any of them into the sweep: block generates additional
-# experiment variants via Cartesian product.
+# Shared fields (applied to every experiment in the study)
 # =====================================================================
-model: Qwen/Qwen2.5-0.5B        # Sweepable - add to sweep: to compare models
+model: Qwen/Qwen2.5-0.5B
 backend: tensorrt
 
-# --- Data (sweepable) ---
-n: 50                            # Sweepable - add to sweep: to compare prompt counts
-dataset: aienergyscore           # Sweepable - built-in dataset (see synthetic alternative below)
+# --- Data ---
+n: 50
+dataset: aienergyscore           # Built-in dataset (see synthetic alternative below)
 dataset_order: interleaved       # interleaved | grouped | shuffled
 
 # Synthetic dataset alternative (replace 'dataset: aienergyscore' above):
@@ -35,15 +32,14 @@ dataset_order: interleaved       # interleaved | grouped | shuffled
 #   n: 50                        # Number of synthetic prompts to generate
 #   input_len: 512               # Fixed input token length per prompt
 #   output_len: 128              # Fixed output token length per prompt
-#   seed: 42                     # Reproducible prompt generation
+#   # seed: null                  # null = uses random_seed (override to decouple)
 
-# --- Hardware (sweepable) ---
-precision: bf16                  # Sweepable - swept below as a universal axis
+# --- Hardware ---
 random_seed: 42
 
-# --- Token limits (sweepable) ---
-max_input_tokens: 256            # Sweepable - add to sweep: to compare input lengths
-max_output_tokens: 256           # Sweepable - add to sweep: to compare output lengths
+# --- Token limits ---
+max_input_tokens: 512
+max_output_tokens: 256
 
 # --- Energy measurement ---
 energy:
