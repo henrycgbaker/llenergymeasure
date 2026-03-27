@@ -447,7 +447,7 @@ def test_print_study_dry_run_shows_configs(capsys, monkeypatch):
         make_config(model="gpt2", precision="fp16"),
         make_config(model="gpt2", precision="bf16"),
     ]
-    study = StudyConfig(experiments=configs, name="test-sweep")
+    study = StudyConfig(experiments=configs, study_name="test-sweep")
 
     # Mock VRAM functions to avoid GPU dependency
     monkeypatch.setattr("llenergymeasure.cli._vram.estimate_vram", lambda c: None)
@@ -473,7 +473,7 @@ def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
         make_config(model="gpt2", precision="fp16"),
         make_config(model="gpt2", precision="bf16"),
     ]
-    study = StudyConfig(experiments=configs, name="vram-test")
+    study = StudyConfig(experiments=configs, study_name="vram-test")
 
     vram_small = {"weights_gb": 0.2, "kv_cache_gb": 0.0, "overhead_gb": 0.03, "total_gb": 0.23}
     vram_large = {"weights_gb": 0.3, "kv_cache_gb": 0.0, "overhead_gb": 0.04, "total_gb": 0.34}
@@ -567,7 +567,7 @@ def test_print_study_summary_table_structure(capsys):
     )
     result = StudyResult.model_construct(
         experiments=[exp],
-        name="my-study",
+        study_name="my-study",
         study_design_hash="deadbeef",
         summary=summary,
         result_files=[],
@@ -606,7 +606,7 @@ def test_print_study_summary_failed_experiments(capsys):
     )
     result = StudyResult.model_construct(
         experiments=[exp],
-        name="failing-study",
+        study_name="failing-study",
         summary=summary,
         result_files=[],
         measurement_protocol={},
@@ -668,7 +668,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     )
     result = StudyResult.model_construct(
         experiments=[exp],
-        name="truncation-test",
+        study_name="truncation-test",
         summary=summary,
         result_files=[],
         measurement_protocol={},
@@ -702,7 +702,7 @@ def test_print_study_summary_with_result_files(capsys):
     )
     result = StudyResult.model_construct(
         experiments=[exp],
-        name="file-test",
+        study_name="file-test",
         summary=summary,
         result_files=["results/exp1/result.json", "results/exp2/result.json"],
         measurement_protocol={},

@@ -15,7 +15,7 @@ def test_study_result_has_full_schema():
     )
     result = StudyResult(
         experiments=[],
-        name="my-study",
+        study_name="my-study",
         study_design_hash="abcdef0123456789",
         measurement_protocol={
             "n_cycles": 3,
@@ -37,7 +37,7 @@ def test_study_result_has_full_schema():
 
 def test_study_result_backwards_compat():
     """StudyResult still works with M1-style minimal construction."""
-    result = StudyResult(experiments=[], name="test")
+    result = StudyResult(experiments=[], study_name="test")
     assert result.study_design_hash is None
     assert result.measurement_protocol == {}
     assert result.result_files == []

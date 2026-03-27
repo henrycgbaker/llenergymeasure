@@ -244,7 +244,7 @@ class ManifestWriter:
 
         entries = self._build_entries(study)
         return StudyManifest(
-            study_name=study.name or "unnamed-study",
+            study_name=study.study_name or "unnamed-study",
             study_design_hash=study.study_design_hash or "",
             llenergymeasure_version=__version__,
             started_at=datetime.now(timezone.utc),

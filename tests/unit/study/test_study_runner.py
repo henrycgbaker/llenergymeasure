@@ -51,7 +51,7 @@ def study_config(basic_config: ExperimentConfig) -> StudyConfig:
     """Single-experiment StudyConfig."""
     return StudyConfig(
         experiments=[basic_config],
-        name="test-study",
+        study_name="test-study",
         execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
         study_design_hash="deadbeef12345678",
     )
@@ -316,7 +316,7 @@ def _make_ordering_study(
     ordered = apply_cycles([exp_a, exp_b], n_cycles, CycleOrder(cycle_order), "aaaa0000bbbb1111")
     study = StudyConfig(
         experiments=ordered,
-        name="ordering-test",
+        study_name="ordering-test",
         execution=ExecutionConfig(n_cycles=n_cycles, cycle_order=cycle_order),
         study_design_hash="aaaa0000bbbb1111",
     )
@@ -424,7 +424,7 @@ def _make_sigint_study() -> StudyConfig:
     """Single-experiment study for SIGINT tests."""
     return StudyConfig(
         experiments=[ExperimentConfig(model="test/model", backend="pytorch", n=10)],
-        name="sigint-test",
+        study_name="sigint-test",
         execution=ExecutionConfig(n_cycles=1, cycle_order="sequential"),
         study_design_hash="deadbeef12345678",
     )
@@ -474,7 +474,7 @@ def test_sigint_during_gap_exits_immediately() -> None:
             ExperimentConfig(model="model-a", backend="pytorch", n=10),
             ExperimentConfig(model="model-b", backend="pytorch", n=10),
         ],
-        name="gap-interrupt-test",
+        study_name="gap-interrupt-test",
         execution=ExecutionConfig(
             n_cycles=1, cycle_order="sequential", experiment_gap_seconds=60.0
         ),
@@ -613,7 +613,7 @@ def test_multi_cycle_correct_experiment_count() -> None:
 
     study = StudyConfig(
         experiments=ordered,
-        name="count-test",
+        study_name="count-test",
         execution=ExecutionConfig(n_cycles=3, cycle_order="interleaved"),
         study_design_hash="aabb0011",
     )
@@ -669,7 +669,7 @@ def test_cycle_counter_increments_per_config_hash() -> None:
 
     study = StudyConfig(
         experiments=ordered,
-        name="cycle-test",
+        study_name="cycle-test",
         execution=ExecutionConfig(n_cycles=2, cycle_order="interleaved"),
         study_design_hash="aabb0011",
     )

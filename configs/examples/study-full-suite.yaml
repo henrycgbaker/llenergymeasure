@@ -22,7 +22,7 @@
 #   Total explicit:                                                    =  29
 # Grand total: 137 unique experiments x 3 cycles = 411 runs
 
-name: full-suite-all-backends #TODO rename this field study_name
+study_name: full-suite-all-backends
 
 # =====================================================================
 # Runner configuration

@@ -365,7 +365,7 @@ def test_load_study_config_empty_study_raises(tmp_path):
     study_yaml.write_text(
         yaml.dump(
             {
-                "name": "empty-study",
+                "study_name": "empty-study",
                 "execution": {"n_cycles": 1},
             }
         )

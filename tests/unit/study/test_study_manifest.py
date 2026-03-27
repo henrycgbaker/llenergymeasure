@@ -43,7 +43,7 @@ def _make_experiment(
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
     experiments = [_make_experiment(f"model-{i}") for i in range(n_experiments)]
     return StudyConfig(
-        name="test-study",
+        study_name="test-study",
         experiments=experiments,
         execution=ExecutionConfig(n_cycles=n_cycles),
         study_design_hash="deadbeef12345678",
@@ -416,7 +416,7 @@ def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
 
     study = StudyConfig(
         experiments=ordered,
-        name="dedup-test",
+        study_name="dedup-test",
         execution=ExecutionConfig(n_cycles=3, cycle_order="interleaved"),
         study_design_hash="aabb0011",
     )

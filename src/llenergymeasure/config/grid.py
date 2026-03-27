@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # These are stripped from base: files and excluded from the fixed dict.
 # "runners" is study-level metadata (per-backend runner config) — not an experiment field.
 _STUDY_ONLY_KEYS = frozenset(
-    {"sweep", "experiments", "execution", "base", "name", "version", "runners"}
+    {"sweep", "experiments", "execution", "base", "study_name", "version", "runners"}
 )
 
 
@@ -89,7 +89,7 @@ def expand_grid(
 
     Resolution order:
     1. Load base: file (optional DRY inheritance)
-    2. Build fixed dict from non-sweep/non-experiments/non-execution/non-base/non-name keys
+    2. Build fixed dict from non-sweep/non-experiments/non-execution/non-base/non-study_name keys
     3. Expand sweep: block into raw config dicts
     4. Append explicit experiments: list entries
     5. Pydantic-validate each raw dict, collecting valid + skipped
@@ -447,7 +447,7 @@ def build_preflight_panel(
 
     return Panel(
         body,
-        title=f"[bold cyan]Study: {study_config.name or 'unnamed'}[/]",
+        title=f"[bold cyan]Study: {study_config.study_name or 'unnamed'}[/]",
         title_align="left",
         padding=(0, 1),
     )
