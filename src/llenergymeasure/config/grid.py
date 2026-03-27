@@ -336,7 +336,9 @@ def build_preflight_panel(
 
     # --- Resolve energy sampler display ---
     # Skip host probe when all runners are Docker (container has different samplers).
-    all_docker = bool(runner_specs) and all(spec.mode == "docker" for spec in runner_specs.values())
+    all_docker = runner_specs is not None and all(
+        spec.mode == "docker" for spec in runner_specs.values()
+    )
     energy_display = _resolve_energy_display(
         unique_energy, probed_sampler=probed_energy_sampler, skip_probe=all_docker
     )
