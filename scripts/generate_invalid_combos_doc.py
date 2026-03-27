@@ -4,6 +4,9 @@
 This script programmatically documents all invalid parameter combinations
 by extracting validation rules from the codebase and test results.
 
+NB: This script is purely a documentation generator
+it writes markdown to docs/generated/invalid-combos.md and has no connection to config loading or the runtime.
+
 The script uses the introspection module for streaming constraints (SSOT),
 but maintains static lists for validation errors and runtime limitations
 that require more context than can be extracted programmatically.
@@ -120,8 +123,14 @@ RUNTIME_LIMITATIONS: list[tuple[str, str, str, str]] = [
     (
         "pytorch",
         "pytorch.attn_implementation=flash_attention_2",
-        "flash-attn package not installed in Docker image",
-        "Install flash-attn or use attn_implementation='sdpa'",
+        "flash-attn requires Ampere+ GPU (SM80+); fails on older architectures",
+        "Use attn_implementation='sdpa' on pre-Ampere GPUs",
+    ),
+    (
+        "pytorch",
+        "pytorch.attn_implementation=flash_attention_3",
+        "FA3 requires Hopper (SM90+, H100). A100 (SM80 Ampere) raises a CUDA error at runtime even with the package installed — import succeeds but the kernel does not run",
+        "Use flash_attention_2 (Ampere+) or sdpa",
     ),
     (
         "vllm",
@@ -155,9 +164,15 @@ RUNTIME_LIMITATIONS: list[tuple[str, str, str, str]] = [
     ),
     (
         "tensorrt",
+        "tensorrt.quant.quant_algo=FP8",
+        "FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError — no silent emulation or fallback",
+        "Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100",
+    ),
+    (
+        "tensorrt",
         "tensorrt.quantization.method=int8_sq",
         "INT8 SmoothQuant requires calibration dataset",
-        "Provide tensorrt.quantization.calibration config or use fp8",
+        "Provide tensorrt.quantization.calibration config or use a supported quantization method",
     ),
 ]
 
