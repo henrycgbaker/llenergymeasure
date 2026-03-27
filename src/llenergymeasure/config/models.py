@@ -219,8 +219,6 @@ class EnergyConfig(BaseModel):
 class DatasetConfig(BaseModel):
     """Dataset configuration for experiment prompts.
 
-    Dataset configuration for loading prompts.
-
     source is one of:
     - Built-in alias (e.g. "aienergyscore")
     - Path to a .jsonl file

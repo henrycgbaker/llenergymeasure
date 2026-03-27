@@ -116,7 +116,6 @@ def create_study_dir(name: str | None, output_dir: Path) -> Path:
 def experiment_result_filename(
     model: str,
     backend: str,
-    dtype: str,
     config_hash: str,
     extension: str = ".json",
 ) -> str:

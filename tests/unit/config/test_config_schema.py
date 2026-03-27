@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.ssot import PRECISION_SUPPORT
+from llenergymeasure.config.ssot import DTYPE_SUPPORT
 from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
@@ -218,9 +218,9 @@ def test_valid_dtype_bfloat16():
     assert config.dtype == "bfloat16"
 
 
-@pytest.mark.parametrize("dt", PRECISION_SUPPORT["pytorch"])
+@pytest.mark.parametrize("dt", DTYPE_SUPPORT["pytorch"])
 def test_all_pytorch_dtypes_valid(dt):
-    """Schema-driven: all SSOT PRECISION_SUPPORT['pytorch'] values are valid."""
+    """Schema-driven: all SSOT DTYPE_SUPPORT['pytorch'] values are valid."""
     config = make_config(dtype=dt)
     assert config.dtype == dt
 

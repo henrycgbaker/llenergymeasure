@@ -337,7 +337,6 @@ def test_experiment_result_filename() -> None:
     result = experiment_result_filename(
         model="meta-llama/Llama-3.1-8B",
         backend="pytorch",
-        dtype="bfloat16",
         config_hash="abcdef1234567890",
     )
     assert result == "Llama-3.1-8B-pytorch_abcdef12.json"
@@ -347,7 +346,6 @@ def test_experiment_result_filename_parquet() -> None:
     result = experiment_result_filename(
         model="meta-llama/Llama-3.1-8B",
         backend="pytorch",
-        dtype="bfloat16",
         config_hash="abcdef1234567890",
         extension=".parquet",
     )

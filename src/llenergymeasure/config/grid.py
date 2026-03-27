@@ -435,7 +435,7 @@ def build_preflight_panel(
     if len(unique_models) == 1:
         constants.append(("Model", unique_models[0]))
     if len(unique_n) == 1:
-        constants.append(("n", str(unique_n[0])))
+        constants.append(("n_prompts", str(unique_n[0])))
     if len(unique_max_in) == 1:
         constants.append(("max_input_tokens", str(unique_max_in[0])))
     if len(unique_max_out) == 1:
