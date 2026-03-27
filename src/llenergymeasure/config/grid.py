@@ -63,10 +63,10 @@ class SkippedConfig:
 
     @property
     def short_label(self) -> str:
-        """Short label for display: 'backend, precision'."""
+        """Short label for display: 'backend, dtype'."""
         backend = self.raw_config.get("backend", "unknown")
-        precision = self.raw_config.get("precision", "?")
-        return f"{backend}, {precision}"
+        dtype = self.raw_config.get("dtype", "?")
+        return f"{backend}, {dtype}"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise for StudyConfig.skipped_configs."""
@@ -555,7 +555,7 @@ def _collect_sweep_dimensions(
     KEY_SCALAR_FIELDS = (
         "model",
         "backend",
-        "precision",
+        "dtype",
         "max_input_tokens",
         "max_output_tokens",
     )

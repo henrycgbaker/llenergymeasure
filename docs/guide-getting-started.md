@@ -172,7 +172,7 @@ The `result.json` file contains all metrics, the exact configuration used, and m
 You have run your first energy measurement. From here:
 
 - **Compare models:** Change `--model gpt2` to a different model name (e.g., `--model facebook/opt-125m`) and compare the results. Larger models will use more energy.
-- **Compare precisions:** Add `--precision fp32` to run at full precision and compare energy use against the default `bf16`.
+- **Compare dtypes:** Add `--dtype float32` to run at full precision and compare energy use against the default `bfloat16`.
 - **Run a sweep:** Define a YAML configuration file to automatically run multiple configurations and compare them. See the [Researcher Getting Started Guide](getting-started.md) for the next step up.
 - **Understand the numbers:** Read [How to Read llenergymeasure Output](guide-interpreting-results.md) for a deeper explanation of each metric.
 - **See how this compares to other benchmarks:** Read [Comparison with Other Benchmarks](guide-comparison-context.md).

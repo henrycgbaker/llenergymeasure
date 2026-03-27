@@ -227,7 +227,7 @@
       "n_prompts": 5,
       "order": "interleaved"
     },
-    "precision": "bf16",
+    "dtype": "bfloat16",
     "random_seed": 42,
     "max_input_tokens": 512,
     "max_output_tokens": 128,

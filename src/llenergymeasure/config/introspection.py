@@ -271,7 +271,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     """Get shared/universal parameters from ExperimentConfig and DecoderConfig.
 
     Returns params that are universal across all backends:
-    - Top-level: precision, n, max_input_tokens, max_output_tokens, random_seed
+    - Top-level: dtype, n, max_input_tokens, max_output_tokens, random_seed
     - Decoder: temperature, do_sample, top_p, top_k, repetition_penalty, preset
 
     Each param includes ``backend_support: list[str]`` indicating which backends
@@ -289,14 +289,14 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     shared.update(decoder_params)
 
     # Top-level universal params — defined manually for explicit backend_support
-    shared["precision"] = {
-        "path": "precision",
-        "name": "precision",
+    shared["dtype"] = {
+        "path": "dtype",
+        "name": "dtype",
         "type_str": "literal",
-        "default": "bf16",
-        "description": "Floating point precision",
-        "options": ["fp32", "fp16", "bf16"],
-        "test_values": ["fp32", "fp16", "bf16"],
+        "default": "bfloat16",
+        "description": "Model dtype for inference",
+        "options": ["float32", "float16", "bfloat16"],
+        "test_values": ["float32", "float16", "bfloat16"],
         "constraints": {},
         "optional": False,
         "backend_support": ["pytorch", "vllm", "tensorrt"],
@@ -905,7 +905,7 @@ def get_capability_matrix_markdown() -> str:
     lines.append("")
     lines.append("**Notes:**")
     lines.append("- vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes")
-    lines.append("- TensorRT-LLM is optimised for FP16/BF16/INT8 precision, not FP32")
+    lines.append("- TensorRT-LLM is optimised for FP16/BF16/INT8, not FP32")
 
     return "\n".join(lines)
 
@@ -959,9 +959,9 @@ def get_validation_rules() -> list[dict[str, str]]:
         },
         {
             "backend": "tensorrt",
-            "combination": "precision=fp32",
-            "reason": "TensorRT-LLM is optimised for lower precision inference",
-            "resolution": "Use precision='fp16' or 'bf16'",
+            "combination": "dtype=float32",
+            "reason": "TensorRT-LLM is optimised for lower-precision inference",
+            "resolution": "Use dtype='float16' or 'bfloat16'",
         },
         {
             "backend": "vllm",

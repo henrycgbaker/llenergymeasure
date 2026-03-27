@@ -232,7 +232,7 @@ class PyTorchBackend:
                 raise_backend_error(
                     e,
                     "PyTorch",
-                    hint="reduce batch_size, use precision=fp16, or use a smaller model.",
+                    hint="reduce batch_size, use dtype=float16, or use a smaller model.",
                 )
 
         # Track peak GPU memory (inference window only — reset above)
@@ -295,7 +295,7 @@ class PyTorchBackend:
             Dict of kwargs ready for from_pretrained().
         """
         kwargs: dict[str, Any] = {
-            "torch_dtype": self._precision_to_dtype(config.precision),
+            "torch_dtype": self._resolve_torch_dtype(config.dtype),
         }
 
         pt = config.pytorch
@@ -405,15 +405,15 @@ class PyTorchBackend:
         return requested
 
     @staticmethod
-    def _precision_to_dtype(precision: str) -> Any:
-        """Map precision string to torch dtype."""
+    def _resolve_torch_dtype(dtype: str) -> Any:
+        """Map dtype string to torch dtype object."""
         import torch
 
         return {
-            "fp32": torch.float32,
-            "fp16": torch.float16,
-            "bf16": torch.bfloat16,
-        }[precision]
+            "float32": torch.float32,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+        }[dtype]
 
     # -------------------------------------------------------------------------
     # Private: inference helpers

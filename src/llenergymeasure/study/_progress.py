@@ -23,7 +23,7 @@ def print_study_progress(
 ) -> None:
     """Print a per-experiment progress line to stderr.
 
-    Format: [3/12] <icon> model backend precision -- elapsed (energy)
+    Format: [3/12] <icon> model backend dtype -- elapsed (energy)
     Icons: completed=OK, failed=FAIL, running=...
 
     Args:
@@ -37,7 +37,7 @@ def print_study_progress(
     icons = {"running": "...", "completed": "OK", "failed": "FAIL"}
     icon = icons.get(status, "?")
 
-    parts = [f"[{index}/{total}]", icon, config.model, config.backend, config.precision]
+    parts = [f"[{index}/{total}]", icon, config.model, config.backend, config.dtype]
 
     if elapsed is not None:
         parts.append("--")

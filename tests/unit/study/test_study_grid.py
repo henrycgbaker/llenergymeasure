@@ -125,21 +125,21 @@ class TestStudyConfig:
 
 class TestExpandGridSweep:
     def test_universal_sweep_cartesian_product(self):
-        """2 precisions x 2 n values = 4 configs."""
+        """2 dtypes x 2 n values = 4 configs."""
         raw = {
             "model": "gpt2",
             "backend": "pytorch",
             "sweep": {
-                "precision": ["fp16", "bf16"],
+                "dtype": ["float16", "bfloat16"],
                 "dataset.n_prompts": [50, 100],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 4
         assert len(skipped) == 0
-        precisions = {c.precision for c in valid}
+        dtypes_set = {c.dtype for c in valid}
         ns = {c.dataset.n_prompts for c in valid}
-        assert precisions == {"fp16", "bf16"}
+        assert dtypes_set == {"float16", "bfloat16"}
         assert ns == {50, 100}
 
     def test_backend_scoped_sweep_routes_to_section(self):
@@ -163,14 +163,14 @@ class TestExpandGridSweep:
             "model": "gpt2",
             "backend": ["pytorch", "vllm"],
             "sweep": {
-                "precision": ["fp16", "bf16"],
+                "dtype": ["float16", "bfloat16"],
                 "pytorch.batch_size": [1, 8],
                 "vllm.engine.max_num_seqs": [64, 256],
             },
         }
         valid, skipped = expand_grid(raw)
-        # pytorch: 2 precisions x 2 batch_sizes = 4
-        # vllm: 2 precisions x 2 max_num_seqs = 4
+        # pytorch: 2 dtypes x 2 batch_sizes = 4
+        # vllm: 2 dtypes x 2 max_num_seqs = 4
         # total = 8
         assert len(valid) == 8
         assert len(skipped) == 0
@@ -217,7 +217,7 @@ class TestExpandGridCombined:
             "model": "gpt2",
             "backend": "pytorch",
             "sweep": {
-                "precision": ["fp16", "bf16"],
+                "dtype": ["float16", "bfloat16"],
             },
             "experiments": [
                 {"model": "gpt2-xl", "backend": "pytorch"},
@@ -229,7 +229,7 @@ class TestExpandGridCombined:
         # Sweep configs first
         sweep_configs = valid[:2]
         explicit_config = valid[2]
-        assert {c.precision for c in sweep_configs} == {"fp16", "bf16"}
+        assert {c.dtype for c in sweep_configs} == {"float16", "bfloat16"}
         assert explicit_config.model == "gpt2-xl"
 
 
@@ -251,7 +251,7 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "precision": ["fp16", "bf16"],
+                "dtype": ["float16", "bfloat16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
@@ -267,7 +267,7 @@ class TestExpandGridBase:
             "model": "gpt2",
             "backend": "pytorch",
             # These should be stripped
-            "sweep": {"precision": ["fp32"]},
+            "sweep": {"dtype": ["float32"]},
             "experiments": [{"model": "other"}],
             "study_execution": {"n_cycles": 5},
             "base": "another.yaml",
@@ -279,17 +279,17 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "precision": ["fp16"],
+                "dtype": ["float16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
         valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 1
-        assert valid[0].precision == "fp16"
+        assert valid[0].dtype == "float16"
         assert valid[0].model == "gpt2"
 
     def test_missing_base_file_raises(self, tmp_path: Path):
-        raw = {"base": "nonexistent.yaml", "sweep": {"precision": ["fp16"]}}
+        raw = {"base": "nonexistent.yaml", "sweep": {"dtype": ["float16"]}}
         study_yaml = tmp_path / "study.yaml"
         with pytest.raises(ConfigError, match="base"):
             expand_grid(raw, study_yaml_path=study_yaml)
@@ -306,10 +306,10 @@ class TestExpandGridInvalidHandling:
         raw = {
             "model": "gpt2",
             "sweep": {
-                # fp32 with tensorrt backend is valid, but precision fp32 is accepted
+                # fp32 with tensorrt backend is valid, but dtype float32 is accepted
                 # Use a truly invalid combo: backend=vllm but pytorch section provided via explicit
                 "backend": ["pytorch", "vllm"],
-                "precision": ["fp16"],
+                "dtype": ["float16"],
             },
             "experiments": [
                 # This will fail: vllm section + backend=pytorch
@@ -337,21 +337,21 @@ class TestExpandGridInvalidHandling:
 
     def test_skipped_config_short_label(self):
         sc = SkippedConfig(
-            raw_config={"backend": "pytorch", "precision": "fp32"},
+            raw_config={"backend": "pytorch", "dtype": "float32"},
             reason="some validation error",
         )
-        assert sc.short_label == "pytorch, fp32"
+        assert sc.short_label == "pytorch, float32"
 
     def test_skipped_config_to_dict(self):
         sc = SkippedConfig(
-            raw_config={"backend": "vllm", "precision": "fp16"},
+            raw_config={"backend": "vllm", "dtype": "float16"},
             reason="cross-validation error",
             errors=[{"loc": ["backend"], "msg": "test"}],
         )
         d = sc.to_dict()
-        assert d["raw_config"] == {"backend": "vllm", "precision": "fp16"}
+        assert d["raw_config"] == {"backend": "vllm", "dtype": "float16"}
         assert d["reason"] == "cross-validation error"
-        assert d["short_label"] == "vllm, fp16"
+        assert d["short_label"] == "vllm, float16"
         assert len(d["errors"]) == 1
 
     def test_no_experiments_raises_config_error(self):
@@ -370,7 +370,7 @@ class TestMultiBackendSectionStripping:
             "model": "gpt2",
             "tensorrt": {"max_input_len": 1024},
             "sweep": {
-                "precision": ["bf16"],
+                "dtype": ["bfloat16"],
                 "pytorch.batch_size": [1],
                 "tensorrt.max_batch_size": [4],
             },
@@ -463,8 +463,8 @@ class TestComputeStudyDesignHash:
 
     def test_hash_excludes_order_sensitivity(self):
         """Same experiments in same order produce same hash (order matters for reproducibility)."""
-        exps_a = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", precision="fp16")]
-        exps_b = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", precision="fp16")]
+        exps_a = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", dtype="float16")]
+        exps_b = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", dtype="float16")]
         assert compute_study_design_hash(exps_a) == compute_study_design_hash(exps_b)
 
 
@@ -666,16 +666,16 @@ class TestFormatPreflightSummary:
         """When skipped_configs populated, Skipping line with reasons appears."""
         skipped = [
             {
-                "raw_config": {"backend": "pytorch", "precision": "fp32"},
+                "raw_config": {"backend": "pytorch", "dtype": "float32"},
                 "reason": "cross-validation failed",
-                "short_label": "pytorch, fp32",
+                "short_label": "pytorch, float32",
                 "errors": [],
             }
         ]
         sc = _make_study_config(n_configs=3, n_cycles=1, skipped_configs=skipped)
         summary = format_preflight_summary(sc)
         assert "Skipping 1/" in summary
-        assert "pytorch, fp32" in summary
+        assert "pytorch, float32" in summary
         assert "cross-validation failed" in summary
 
     def test_high_skip_rate_warning(self):
@@ -683,15 +683,15 @@ class TestFormatPreflightSummary:
         # 1 valid config, 2 skipped → 67% skip rate
         skipped = [
             {
-                "raw_config": {"backend": "vllm", "precision": "fp16"},
+                "raw_config": {"backend": "vllm", "dtype": "float16"},
                 "reason": "error A",
-                "short_label": "vllm, fp16",
+                "short_label": "vllm, float16",
                 "errors": [],
             },
             {
-                "raw_config": {"backend": "vllm", "precision": "bf16"},
+                "raw_config": {"backend": "vllm", "dtype": "bfloat16"},
                 "reason": "error B",
-                "short_label": "vllm, bf16",
+                "short_label": "vllm, bfloat16",
                 "errors": [],
             },
         ]
@@ -705,9 +705,9 @@ class TestFormatPreflightSummary:
         # 4 valid, 1 skipped → 20% skip rate
         skipped = [
             {
-                "raw_config": {"backend": "pytorch", "precision": "fp32"},
+                "raw_config": {"backend": "pytorch", "dtype": "float32"},
                 "reason": "validation error",
-                "short_label": "pytorch, fp32",
+                "short_label": "pytorch, float32",
                 "errors": [],
             }
         ]
@@ -719,7 +719,7 @@ class TestFormatPreflightSummary:
     def test_skipped_list_argument_takes_precedence(self):
         """If skipped list of SkippedConfig passed, uses it instead of skipped_configs."""
         skipped_obj = SkippedConfig(
-            raw_config={"backend": "pytorch", "precision": "fp16"},
+            raw_config={"backend": "pytorch", "dtype": "float16"},
             reason="via argument",
         )
         # StudyConfig has empty skipped_configs
@@ -752,7 +752,7 @@ def _render_panel(study_config: StudyConfig, width: int = 100) -> str:
 def _make_panel_study_config(
     models: list[str] | None = None,
     backends: list[str] | None = None,
-    precisions: list[str] | None = None,
+    dtypes: list[str] | None = None,
     n_cycles: int = 1,
     experiment_order: str = "sequential",
     study_name: str = "test-study",
@@ -762,16 +762,14 @@ def _make_panel_study_config(
     """Build a StudyConfig for panel tests with varying fields per experiment."""
     models = models or ["gpt2"]
     backends = backends or ["pytorch"]
-    precisions = precisions or ["bf16"]
+    dtypes = dtypes or ["bfloat16"]
 
     # Build one experiment per combination (then replicate for cycles)
     experiments = []
     for model in models:
         for backend in backends:
-            for precision in precisions:
-                experiments.append(
-                    ExperimentConfig(model=model, backend=backend, precision=precision)
-                )
+            for dt in dtypes:
+                experiments.append(ExperimentConfig(model=model, backend=backend, dtype=dt))
 
     # Replicate for cycles
     all_exps = experiments * n_cycles

@@ -80,7 +80,7 @@ llem run study.yaml --skip-preflight
 **Fix (try in order):**
 1. Use a smaller model.
 2. Reduce `pytorch.batch_size` (default is 1 — already minimal for PyTorch).
-3. Switch to lower precision: `precision: fp16` or `precision: bf16`.
+3. Switch to lower dtype: `dtype: float16` or `dtype: bfloat16`.
 4. Enable BitsAndBytes quantization: `pytorch: { load_in_4bit: true }`.
 5. For vLLM: reduce `vllm.engine.gpu_memory_utilization` (e.g. 0.7 instead of 0.9).
 6. For vLLM: reduce `vllm.engine.max_model_len` to cap KV cache allocation.
@@ -186,7 +186,7 @@ These combinations are rejected at config load time with a clear error message.
 | pytorch | `cache_implementation with use_cache=False` | Cannot specify a cache strategy when caching is explicitly disabled | Remove `use_cache: false` or remove `cache_implementation` |
 | all | `backend section mismatch` | Backend section must match the `backend:` field | Ensure `pytorch:` / `vllm:` / `tensorrt:` section matches `backend:` field |
 | all | `passthrough_kwargs key collision` | `passthrough_kwargs` keys must not collide with ExperimentConfig fields | Use named fields directly instead of `passthrough_kwargs` |
-| tensorrt | `precision: fp32` | TensorRT-LLM is optimised for lower precision inference | Use `precision: fp16` or `precision: bf16` |
+| tensorrt | `dtype: float32` | TensorRT-LLM is optimised for lower precision inference | Use `dtype: float16` or `dtype: bfloat16` |
 | vllm | `pytorch.load_in_4bit or pytorch.load_in_8bit` | vLLM does not support bitsandbytes quantization | Use `vllm.engine.quantization` (awq, gptq, fp8) for quantized inference |
 
 ### Runtime Limitations

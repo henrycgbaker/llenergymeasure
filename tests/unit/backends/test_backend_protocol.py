@@ -1,7 +1,7 @@
 """GPU-free tests for the BackendPlugin Protocol, factory, and detection.
 
 All tests run without a GPU. torch is imported only for dtype comparison in
-test_precision_to_dtype (no CUDA calls). Everything else is pure Python.
+test_resolve_torch_dtype (no CUDA calls). Everything else is pure Python.
 """
 
 import importlib.util
@@ -412,44 +412,44 @@ def test_model_load_kwargs_no_pytorch_section():
 
 
 # =============================================================================
-# _precision_to_dtype
+# _resolve_torch_dtype
 # =============================================================================
 
 
-def test_precision_to_dtype_fp32():
+def test_resolve_torch_dtype_fp32():
     """fp32 maps to torch.float32."""
     torch = pytest.importorskip("torch")
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
-    assert PyTorchBackend._precision_to_dtype("fp32") == torch.float32
+    assert PyTorchBackend._resolve_torch_dtype("float32") == torch.float32
 
 
-def test_precision_to_dtype_fp16():
+def test_resolve_torch_dtype_fp16():
     """fp16 maps to torch.float16."""
     torch = pytest.importorskip("torch")
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
-    assert PyTorchBackend._precision_to_dtype("fp16") == torch.float16
+    assert PyTorchBackend._resolve_torch_dtype("float16") == torch.float16
 
 
-def test_precision_to_dtype_bf16():
+def test_resolve_torch_dtype_bf16():
     """bf16 maps to torch.bfloat16."""
     torch = pytest.importorskip("torch")
 
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
-    assert PyTorchBackend._precision_to_dtype("bf16") == torch.bfloat16
+    assert PyTorchBackend._resolve_torch_dtype("bfloat16") == torch.bfloat16
 
 
-def test_precision_to_dtype_unknown_raises():
-    """Unknown precision string raises KeyError."""
+def test_resolve_torch_dtype_unknown_raises():
+    """Unknown dtype string raises KeyError."""
     pytest.importorskip("torch")
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
     with pytest.raises(KeyError):
-        PyTorchBackend._precision_to_dtype("int8")
+        PyTorchBackend._resolve_torch_dtype("int8")
 
 
 # =============================================================================
