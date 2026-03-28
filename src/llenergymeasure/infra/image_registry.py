@@ -1,26 +1,36 @@
-"""Built-in registry mapping backend names to default Docker images.
+"""Docker image resolution for backend containers.
 
-Images follow the naming convention::
+Two image sources
+-----------------
+**Local images** (``llenergymeasure:{backend}``) are produced by
+``docker compose build`` / ``make docker-build-all`` and always reflect the
+current source tree.  They are preferred for fast local iteration.
 
-    ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}
+**Registry images** (``ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}``)
+are published by CI on release tags.  Versioned and immutable, they are used
+in CI, by pip-install users, and whenever no local image is present.
 
-where:
-    {version} — current package version (e.g. "0.9.0")
+``get_default_image(backend)`` checks for a local image first, then falls back
+to the registry tag built from the current package version (or ``"latest"`` if
+version detection fails).
 
-Falls back to "latest" tag if version detection fails.
-
-Runner value parsing
+Overriding the image
 --------------------
-``parse_runner_value()`` converts the ``runners.{backend}`` YAML field into a
-``(runner_type, image_override)`` tuple::
+The ``runners:`` section in the study YAML accepts explicit image references::
 
-    "local"                → ("local", None)
-    "docker"               → ("docker", None)   # use built-in default image
-    "docker:custom/img:v1" → ("docker", "custom/img:v1")  # explicit override
+    runners:
+      pytorch: local                    # host execution (no Docker)
+      vllm: docker                      # default resolution (local → registry)
+      tensorrt: "docker:my/custom:tag"  # explicit image override
+
+``parse_runner_value()`` converts these into a ``(runner_type, image_override)``
+tuple consumed by the runner resolution chain.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
 from functools import lru_cache
 
@@ -33,11 +43,15 @@ from llenergymeasure.config.ssot import (
     RunnerMode,
 )
 
+logger = logging.getLogger(__name__)
+
 __all__ = [
     "DEFAULT_IMAGE_TEMPLATE",
     "get_cuda_major_version",
     "get_default_image",
     "parse_runner_value",
+    "resolve_image",
+    "show_image_resolution",
 ]
 
 # ---------------------------------------------------------------------------
@@ -46,6 +60,9 @@ __all__ = [
 
 # {version} is filled at runtime; matches tags pushed by docker-publish.yml.
 DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}"
+
+# Local image tag produced by `docker compose build` (no registry prefix).
+LOCAL_IMAGE_TEMPLATE = "llenergymeasure:{backend}"
 
 # Backends that have a Docker image in the registry.
 _SUPPORTED_BACKENDS = frozenset({BACKEND_PYTORCH, BACKEND_VLLM, BACKEND_TENSORRT})
@@ -128,25 +145,132 @@ def _parse_cuda_major_from_nvcc(output: str) -> str | None:
 def get_default_image(backend: str) -> str:
     """Resolve the default Docker image for *backend*.
 
-    Uses the current package version to build a tag matching what
-    ``docker-publish.yml`` pushes (``v{version}``).
-    Falls back to ``"latest"`` if version detection fails.
+    Resolution order:
+
+    1. **Local image** (``llenergymeasure:{backend}``): produced by
+       ``docker compose build`` / ``make docker-build-all``.  Always reflects
+       current source code.  Preferred for local development iteration.
+    2. **Registry image** (``ghcr.io/…/{backend}:v{version}``): published by
+       CI on release tags.  Versioned and immutable.  Used in CI, by pip-install
+       users, and whenever no local image exists.
+
+    To force a specific image, use ``runners: {backend}: "docker:<image:tag>"``
+    in the study YAML.
 
     Args:
         backend: Backend name, e.g. ``"vllm"``, ``"pytorch"``, ``"tensorrt"``.
 
     Returns:
-        Full image reference string, e.g.
-        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"``.
+        Image reference string, e.g. ``"llenergymeasure:vllm"`` (local) or
+        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"`` (registry).
     """
+    # Prefer local image from docker compose build
+    local_image = LOCAL_IMAGE_TEMPLATE.format(backend=backend)
+    if _image_exists_locally(local_image):
+        logger.info("Using local image %s (from docker compose build)", local_image)
+        return local_image
+
+    # Fall back to versioned GHCR tag
     from llenergymeasure._version import __version__
 
     version = __version__ if __version__ else "latest"
+    ghcr_image = DEFAULT_IMAGE_TEMPLATE.format(backend=backend, version=version)
+    logger.info("No local image found; using registry image %s", ghcr_image)
+    return ghcr_image
 
-    return DEFAULT_IMAGE_TEMPLATE.format(
-        backend=backend,
-        version=version,
-    )
+
+@lru_cache(maxsize=8)
+def _image_exists_locally(image: str) -> bool:
+    """Check whether a Docker image tag exists in the local cache."""
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
+def resolve_image(
+    backend: str,
+    *,
+    spec_image: str | None = None,
+    yaml_images: dict[str, str] | None = None,
+    user_config_images: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Resolve the Docker image for *backend* using the full precedence chain.
+
+    This is the **image axis** of the orthogonal runner/image resolution system.
+    The runner axis (local vs docker) is handled by ``resolve_runner()`` in
+    ``runner_resolution.py``.
+
+    Precedence (highest to lowest):
+
+    1. ``LLEM_IMAGE_{BACKEND}`` env var (from shell or ``.env`` file)
+    2. Study YAML ``images:`` section
+    3. Explicit image from runner spec (``docker:<image>`` shorthand)
+    4. User config ``images:`` section
+    5. Smart default: local image → registry fallback
+
+    Args:
+        backend:             Backend name (e.g. ``"vllm"``).
+        spec_image:          Image override from ``docker:<image>`` runner
+                             shorthand.  None when runner was bare ``"docker"``.
+        yaml_images:         ``images:`` dict from the study YAML (optional).
+        user_config_images:  ``images:`` dict from user config (optional).
+
+    Returns:
+        ``(image, image_source)`` tuple where *image_source* indicates provenance:
+        ``"env"``, ``"yaml"``, ``"runner_override"``, ``"user_config"``,
+        ``"local_build"``, or ``"registry"``.
+    """
+    # Load .env so LLEM_IMAGE_* vars are available
+    from llenergymeasure.infra.runner_resolution import _load_dotenv
+
+    _load_dotenv()
+
+    # 1. Env var (includes .env via python-dotenv)
+    env_key = f"LLEM_IMAGE_{backend.upper()}"
+    if env_val := os.environ.get(env_key):
+        logger.info("Image for %s resolved from env var %s: %s", backend, env_key, env_val)
+        return (env_val, "env")
+
+    # 2. Study YAML images: section
+    if yaml_images and backend in yaml_images:
+        img = yaml_images[backend]
+        logger.info("Image for %s resolved from study YAML images: %s", backend, img)
+        return (img, "yaml")
+
+    # 3. Explicit image from runner spec (docker:<image> shorthand)
+    if spec_image is not None:
+        logger.info("Image for %s resolved from runner override: %s", backend, spec_image)
+        return (spec_image, "runner_override")
+
+    # 4. User config images: section
+    if user_config_images and backend in user_config_images:
+        img = user_config_images[backend]
+        logger.info("Image for %s resolved from user config images: %s", backend, img)
+        return (img, "user_config")
+
+    # 5. Smart default: delegate to get_default_image() (local build → registry)
+    image = get_default_image(backend)
+    local_image = LOCAL_IMAGE_TEMPLATE.format(backend=backend)
+    source = "local_build" if image == local_image else "registry"
+    return (image, source)
+
+
+def show_image_resolution() -> None:
+    """Print which Docker image each backend will resolve to.
+
+    Shows local vs registry source for each backend.  Used by
+    ``make docker-images`` for quick diagnostics.
+    """
+    print("=== Image resolution ===")
+    for backend in sorted(_SUPPORTED_BACKENDS):
+        image, source = resolve_image(backend)
+        print(f"  {backend:10s} -> {image}  ({source})")
 
 
 def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:

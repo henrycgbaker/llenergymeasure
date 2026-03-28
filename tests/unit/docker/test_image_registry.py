@@ -63,17 +63,31 @@ class TestParseRunnerValue:
 
 
 class TestGetDefaultImage:
-    def test_returns_well_formed_image_string(self):
+    def test_prefers_local_image_when_available(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        image = get_default_image("vllm")
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            image = get_default_image("vllm")
+
+        assert image == "llenergymeasure:vllm"
+
+    def test_falls_back_to_ghcr_when_no_local_image(self):
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            image = get_default_image("vllm")
 
         assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:v")
 
     def test_fallback_to_latest_when_version_empty(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        with patch("llenergymeasure._version.__version__", ""):
+        with (
+            patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=False),
+            patch("llenergymeasure._version.__version__", ""),
+        ):
             image = get_default_image("pytorch")
 
         assert image.endswith(":vlatest")
@@ -85,13 +99,155 @@ class TestGetDefaultImage:
             image = get_default_image(backend)
             assert backend in image, f"Expected backend {backend!r} in image {image!r}"
 
-    def test_package_version_included_in_image(self):
+    def test_ghcr_image_includes_package_version(self):
         from llenergymeasure import __version__
         from llenergymeasure.infra.image_registry import get_default_image
 
-        image = get_default_image("vllm")
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            image = get_default_image("vllm")
 
         assert f"v{__version__}" in image
+
+
+# ---------------------------------------------------------------------------
+# show_image_resolution
+# ---------------------------------------------------------------------------
+
+
+class TestShowImageResolution:
+    def test_prints_all_backends(self, capsys):
+        from llenergymeasure.infra.image_registry import show_image_resolution
+
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            show_image_resolution()
+
+        output = capsys.readouterr().out
+        assert "pytorch" in output
+        assert "vllm" in output
+        assert "tensorrt" in output
+
+    def test_shows_local_source(self, capsys):
+        from llenergymeasure.infra.image_registry import show_image_resolution
+
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            show_image_resolution()
+
+        output = capsys.readouterr().out
+        assert "(local_build)" in output
+
+    def test_shows_registry_source(self, capsys):
+        from llenergymeasure.infra.image_registry import show_image_resolution
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            show_image_resolution()
+
+        output = capsys.readouterr().out
+        assert "(registry)" in output
+
+
+# ---------------------------------------------------------------------------
+# resolve_image
+# ---------------------------------------------------------------------------
+
+
+class TestResolveImage:
+    def test_env_var_takes_highest_precedence(self, monkeypatch):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        monkeypatch.setenv("LLEM_IMAGE_VLLM", "custom/env-image:v1")
+
+        image, source = resolve_image(
+            "vllm",
+            spec_image="spec-image:v1",
+            yaml_images={"vllm": "yaml-image:v1"},
+            user_config_images={"vllm": "uc-image:v1"},
+        )
+
+        assert image == "custom/env-image:v1"
+        assert source == "env"
+
+    def test_yaml_images_second_precedence(self):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        image, source = resolve_image(
+            "vllm",
+            spec_image="spec-image:v1",
+            yaml_images={"vllm": "yaml-image:v1"},
+            user_config_images={"vllm": "uc-image:v1"},
+        )
+
+        assert image == "yaml-image:v1"
+        assert source == "yaml"
+
+    def test_spec_image_third_precedence(self):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        image, source = resolve_image(
+            "vllm",
+            spec_image="spec-image:v1",
+            user_config_images={"vllm": "uc-image:v1"},
+        )
+
+        assert image == "spec-image:v1"
+        assert source == "runner_override"
+
+    def test_user_config_images_fourth_precedence(self):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            image, source = resolve_image(
+                "vllm",
+                user_config_images={"vllm": "uc-image:v1"},
+            )
+
+        assert image == "uc-image:v1"
+        assert source == "user_config"
+
+    def test_smart_default_local_build(self):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            image, source = resolve_image("vllm")
+
+        assert image == "llenergymeasure:vllm"
+        assert source == "local_build"
+
+    def test_smart_default_registry_fallback(self):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            image, source = resolve_image("vllm")
+
+        assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:v")
+        assert source == "registry"
+
+    def test_env_var_case_insensitive_backend(self, monkeypatch):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        monkeypatch.setenv("LLEM_IMAGE_PYTORCH", "my/pytorch:v1")
+        image, source = resolve_image("pytorch")
+        assert image == "my/pytorch:v1"
+        assert source == "env"
+
+    def test_yaml_images_ignores_other_backends(self):
+        from llenergymeasure.infra.image_registry import resolve_image
+
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            image, source = resolve_image(
+                "vllm",
+                yaml_images={"pytorch": "pytorch-image:v1"},
+            )
+
+        assert image == "llenergymeasure:vllm"
+        assert source == "local_build"
 
 
 # ---------------------------------------------------------------------------

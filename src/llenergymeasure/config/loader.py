@@ -161,6 +161,9 @@ def load_study_config(
     # runners: per-backend runner config (e.g. {"pytorch": "local", "vllm": "docker"})
     # None if not specified in YAML — caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
+    # images: per-backend Docker image overrides (orthogonal to runners)
+    # e.g. {"vllm": "ghcr.io/org/vllm:v1.0"}. None = smart default resolution.
+    images: dict[str, str] | None = raw.get("images") or None
 
     # Parse output block — Pydantic validates it
     output = OutputConfig(**(raw.get("output") or {}))
@@ -206,6 +209,7 @@ def load_study_config(
         output=output,
         study_execution=execution,
         runners=runners,
+        images=images,
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in skipped],
     )

@@ -112,20 +112,32 @@ ci: check test check-docs
 # Docker Commands (Production)
 # =============================================================================
 
+
+# Build all backends (pytorch, vllm, tensorrt) — local images
+docker-build-all:
+	docker compose build base pytorch vllm tensorrt
+	
 # Build PyTorch backend (default, recommended for most users)
 docker-build-pytorch:
 	docker compose build base pytorch
-
-# Build all backends (pytorch, vllm, tensorrt)
-docker-build-all:
-	docker compose build base pytorch vllm tensorrt
-
-# Build specific backends
+# Build specific backends — local images
 docker-build-vllm:
 	docker compose build base vllm
 
 docker-build-tensorrt:
 	docker compose build base tensorrt
+
+# Pull versioned registry images (ghcr.io) instead of building locally
+docker-pull:
+	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "latest"); \
+	for backend in pytorch vllm tensorrt; do \
+		echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/$$backend:v$$version"; \
+		docker pull "ghcr.io/henrycgbaker/llenergymeasure/$$backend:v$$version"; \
+	done
+
+# Show which images llem will use (local vs registry)
+docker-images:
+	@python3 -c "from llenergymeasure.infra.image_registry import show_image_resolution; show_image_resolution()"
 
 # Validate Docker setup
 docker-check:

@@ -623,8 +623,12 @@ class StudyRunner:
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
+            local_spec = self._runner_specs.get(config.backend) if self._runner_specs else None
             self._progress.begin_experiment(
-                index, format_experiment_header(config), list(STEPS_LOCAL)
+                index,
+                format_experiment_header(config),
+                list(STEPS_LOCAL),
+                runner_info=local_spec.to_runner_info() if local_spec else None,
             )
 
         exp_start = time.monotonic()
@@ -804,7 +808,9 @@ class StudyRunner:
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
         from llenergymeasure.utils.exceptions import DockerError
 
-        # Resolve image — use explicit image from spec or fall back to built-in default
+        # Image is pre-resolved during preflight (resolve_image precedence chain).
+        # Fall back to get_default_image() only for direct DockerRunner usage
+        # outside the study path.
         image = spec.image if spec.image is not None else get_default_image(config.backend)
 
         docker_runner = DockerRunner(
@@ -824,7 +830,10 @@ class StudyRunner:
             from llenergymeasure.utils.formatting import format_experiment_header
 
             self._progress.begin_experiment(
-                index, format_experiment_header(config), list(STEPS_DOCKER)
+                index,
+                format_experiment_header(config),
+                list(STEPS_DOCKER),
+                runner_info=spec.to_runner_info(),
             )
             # Host-side preflight doesn't run in Docker path — mark as skipped
             self._progress.on_step_skip("preflight", "Docker path")

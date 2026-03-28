@@ -25,6 +25,8 @@ def run_study_preflight(
     skip_preflight: bool = False,
     yaml_runners: dict[str, str] | None = None,
     user_config: UserRunnersConfig | None = None,
+    yaml_images: dict[str, str] | None = None,
+    user_config_images: dict[str, str] | None = None,
 ) -> dict[str, RunnerSpec]:
     """Pre-flight checks for a study configuration.
 
@@ -34,6 +36,10 @@ def run_study_preflight(
 
     When any experiment in the study will use a Docker runner, runs Docker
     pre-flight checks (GPU visibility, CUDA/driver compat) unless skipped.
+
+    After runner mode resolution, resolves Docker images for all Docker
+    backends using the orthogonal image precedence chain (env > YAML > user
+    config > local build > registry).
 
     Args:
         study: Resolved StudyConfig.
@@ -45,9 +51,13 @@ def run_study_preflight(
             runner resolution as the actual dispatch path.
         user_config: Loaded UserRunnersConfig. Forwarded to
             ``resolve_study_runners()`` to match actual dispatch precedence.
+        yaml_images: Image overrides from the study YAML ``images:`` section.
+        user_config_images: Image overrides from the user config ``images:``
+            section.
 
     Returns:
         Resolved runner specs dict (backend -> RunnerSpec) for reuse by caller.
+        Docker runner specs have ``image`` and ``image_source`` populated.
 
     Raises:
         PreFlightError: Multi-backend study and Docker is not available.
@@ -95,6 +105,25 @@ def run_study_preflight(
                 runner_specs[backend] = RunnerSpec(
                     mode=RUNNER_DOCKER, image=spec.image, source=SOURCE_MULTI_BACKEND_ELEVATION
                 )
+
+    # Resolve Docker images for all Docker backends (orthogonal to runner mode).
+    from llenergymeasure.infra.image_registry import resolve_image
+
+    for backend, spec in runner_specs.items():
+        if spec.mode == RUNNER_DOCKER:
+            image, image_source = resolve_image(
+                backend,
+                spec_image=spec.image,
+                yaml_images=yaml_images,
+                user_config_images=user_config_images,
+            )
+            runner_specs[backend] = RunnerSpec(
+                mode=spec.mode,
+                image=image,
+                source=spec.source,
+                image_source=image_source,
+                extra_mounts=spec.extra_mounts,
+            )
 
     # Docker pre-flight: run once if any backend resolves to a Docker runner.
     # Effective skip = CLI flag (skip_preflight param) OR YAML config value.
