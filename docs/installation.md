@@ -10,6 +10,7 @@
 | CUDA (host) | 12.x | For container image compatibility |
 | Docker + NVIDIA Container Toolkit | Latest | Required for vLLM and TensorRT-LLM |
 | Docker Compose | v2.32+ recommended | Required for build cache (see below). v2.11+ minimum |
+| Docker Buildx | v0.17+ recommended | Required for build cache. Bundled with Docker Engine 24+ |
 
 **macOS/Windows:** PyTorch backend only. Docker-based backends (vLLM, TensorRT-LLM) require Linux.
 
@@ -149,9 +150,8 @@ pull them. If you are behind a corporate proxy or encounter rate limits, logging
 [personal access token](https://github.com/settings/tokens) with `read:packages` scope)
 may help.
 
-**Requirements:** Docker Compose v2.32+ (`docker compose version` to check). If you have
-an older version, see the
-[Docker Compose install docs](https://docs.docker.com/compose/install/) or the upgrade
+**Requirements:** Docker Compose v2.32+ and Docker Buildx v0.17+ (`docker compose version`
+and `docker buildx version` to check). If you have older versions, see the upgrade
 instructions in the [Docker Setup Guide](docker-setup.md#step-1-install-docker).
 
 **Without COMPOSE_BAKE:** Builds work normally but don't use registry cache. The `cache_from`

@@ -47,18 +47,27 @@ sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
-**Verify Docker Compose version** (v2.32+ recommended for [build cache](installation.md#build-cache-recommended)):
+**Verify Docker Compose and Buildx versions** (v2.32+ and v0.17+ recommended for
+[build cache](installation.md#build-cache-recommended)):
 
 ```bash
-docker compose version
+docker compose version   # need v2.32+
+docker buildx version    # need v0.17+
 ```
 
-If your version is below v2.32, you can upgrade the plugin directly:
+If your versions are below these, you can upgrade the plugins directly:
 
 ```bash
+# Upgrade Docker Compose
 sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
   -o /usr/libexec/docker/cli-plugins/docker-compose
 sudo chmod 755 /usr/libexec/docker/cli-plugins/docker-compose
+
+# Upgrade Docker Buildx (find latest version at https://github.com/docker/buildx/releases)
+BUILDX_VERSION=v0.32.1
+sudo curl -L "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64" \
+  -o /usr/libexec/docker/cli-plugins/docker-buildx
+sudo chmod 755 /usr/libexec/docker/cli-plugins/docker-buildx
 ```
 
 **Post-install step:** Add your user to the `docker` group so you can run Docker without `sudo`:
