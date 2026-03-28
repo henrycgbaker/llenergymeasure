@@ -128,16 +128,9 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   pytorch.batch_size: [1, 4, 8, 16, 32]
   pytorch.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
 
-  #TODO add others - e.g. torch_compile, num_beams, quantisation, parallelisation, etc.
-
   # --- PyTorch: dependent groups ─────────────────────────────────
 
   # torch_compile_mode requires torch_compile: true
-  #TODO change this -> can we not add another dot hierarchy?
-  # depending on what the underlying pytorch field names are:
-  # pytorch.torch_compile: true/false? -> pytorch.torch_compile.mode (what is the name of the underlying field is it torch_compile_mode or just mode????? make sure to use native pytorch terminology)
-  # maybe e.g. pytorch.torch_compile.mode: default | reduce-overhead | max-autotune, and then have torch_compile: true/false as a separate axis? This way we could sweep torch_compile_mode with torch_compile: true, and also have torch_compile: false configs without needing to list them explicitly? Need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?) -> if this works as intended, we could remove the need for the explicit experiments below that test different torch_compile modes with torch_compile: true, and instead just have those as part of the sweep. The explicit experiments section would then only be needed for truly unique experiments that can't be easily captured in the sweep (e.g. specific quantisation configurations, beam search parameters, etc.) - need to validate this and potentially refactor to simplify the config and reduce the number of explicit experiments needed.
-  # OR have validate that these only work when torch_compile: true and automatically filter out invalid configs if torch_compile: false - this would allow us to keep the torch_compile_mode sweep separate from the torch_compile: true/false axis, which would be cleaner and more modular - need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?)
   pytorch.compilation:
     - pytorch.torch_compile: false
     - &compile_base
@@ -151,7 +144,6 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
 
   # load_in_4bit and load_in_8bit are mutually exclusive;
   # bnb_4bit_* sub-params require load_in_4bit: true
-  # TODO: why are these not in sweep logic, and just have being filtered out when incompatible with load_in_8bit or load_in_4bit? If this works as intended, we could move these into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   pytorch.quantization:
     - {}                                          # baseline: no quantisation
     - pytorch.load_in_8bit: true
@@ -171,7 +163,6 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
       pytorch.cache_implementation: [static, offloaded_static, sliding_window]
 
   # beam search requires decoder.do_sample: false (cross-section dependency)
-  # TODO: as above: move this into sweep logic and validate that incompatible params are automatically filtered out (e.g. if beam search params are swept together with sampling params, does it automatically disable the sampling params when beam search is enabled, or does it produce invalid configs that need to be filtered out?) - if this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed.
   pytorch.decoding:
     - {}                                          # baseline: use shared decoder settings
     - decoder.do_sample: false
@@ -182,10 +173,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
       pytorch.no_repeat_ngram_size: 3
 
   # --- vLLM parameter space ---
-
-# TODO: maybe backend_sweep ? -> separation of concerns, rather than all under sweep?
-
-# TODO: add vllm batch size?
+  # (vLLM uses continuous batching - no user-facing batch_size parameter)
   vllm.engine.gpu_memory_utilization: [0.7, 0.85, 0.95]
   vllm.engine.enforce_eager: [true, false]
   vllm.engine.max_num_seqs: [64, 128, 256]
@@ -198,8 +186,6 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   vllm.engine.max_num_batched_tokens: [2048, 4096, 8192]
   vllm.engine.max_model_len: [1024, 2048, 4096]
   vllm.attention.backend: [flash_attn, flashinfer]  # xformers legacy, deprecated
-
-    #TODO add others - e.g. attention backend, speculative decoding, quantisation, parallelisation, etc.
 
   # --- vLLM: dependent groups ─────────────────────────────────────
 
@@ -282,7 +268,6 @@ experiments:
   # PyTorch speculative decoding (prompt-lookup)
   # -----------------------------------------------------------------
   # Requires batch_size=1, overriding the sweep axis - must remain explicit.
-  # TODO: again as above: why is this not in sweep logic, and just have being filtered out when incompatible with do_sample: false? If this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     dtype: bfloat16
