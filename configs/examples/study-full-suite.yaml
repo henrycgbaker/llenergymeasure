@@ -44,7 +44,7 @@ model: Qwen/Qwen2.5-0.5B
 # --- Dataset ---
 dataset:
   source: aienergyscore          # Built-in alias or .jsonl file path
-  n_prompts: 100                 # Number of prompts to load or generate
+  n_prompts: 50                  # Number of prompts to load or generate
   order: interleaved             # interleaved | grouped | shuffled
 
 # Token limits - for FLOPs/computational workload control
