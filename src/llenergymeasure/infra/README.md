@@ -65,13 +65,35 @@ Precedence chain (highest wins):
 3. User config (`~/.config/llem/config.yaml`)
 4. Auto-detection (Docker + NVIDIA Container Toolkit available? → docker; else → local)
 
-## Docker image registry
+## Docker image resolution
+
+Two image sources exist for each backend:
+
+| Source | Tag pattern | Built by | Use case |
+|--------|------------|----------|----------|
+| **Local** | `llenergymeasure:{backend}` | `docker compose build` / `make docker-build-all` | Dev iteration — always reflects current source |
+| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}` | CI on release tags | Production, CI, pip-install users |
+
+`get_default_image(backend)` checks for a local image first, then falls back to the registry tag:
 
 ```python
-from llenergymeasure.infra.image_registry import get_default_image, parse_runner_value
+from llenergymeasure.infra.image_registry import get_default_image
 
-image = get_default_image("pytorch")  # "ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0"
+image = get_default_image("vllm")
+# → "llenergymeasure:vllm"  (if local image exists)
+# → "ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"  (otherwise)
+```
 
+Override in study YAML:
+
+```yaml
+runners:
+  pytorch: local                                         # host, no Docker
+  vllm: docker                                           # default (local → registry)
+  tensorrt: "docker:ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0"  # force registry
+```
+
+```python
 runner_type, image_override = parse_runner_value("docker:my/custom-image:v1")
 # runner_type = "docker", image_override = "my/custom-image:v1"
 ```

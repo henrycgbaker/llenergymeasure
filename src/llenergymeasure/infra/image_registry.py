@@ -1,28 +1,39 @@
-"""Built-in registry mapping backend names to default Docker images.
+"""Docker image resolution for backend containers.
 
-Images follow the naming convention::
+Two image sources
+-----------------
+**Local images** (``llenergymeasure:{backend}``) are produced by
+``docker compose build`` / ``make docker-build-all`` and always reflect the
+current source tree.  They are preferred for fast local iteration.
 
-    ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}
+**Registry images** (``ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}``)
+are published by CI on release tags.  Versioned and immutable, they are used
+in CI, by pip-install users, and whenever no local image is present.
 
-where:
-    {version} — current package version (e.g. "0.9.0")
+``get_default_image(backend)`` checks for a local image first, then falls back
+to the registry tag built from the current package version (or ``"latest"`` if
+version detection fails).
 
-Falls back to "latest" tag if version detection fails.
-
-Runner value parsing
+Overriding the image
 --------------------
-``parse_runner_value()`` converts the ``runners.{backend}`` YAML field into a
-``(runner_type, image_override)`` tuple::
+The ``runners:`` section in the study YAML accepts explicit image references::
 
-    "local"                → ("local", None)
-    "docker"               → ("docker", None)   # use built-in default image
-    "docker:custom/img:v1" → ("docker", "custom/img:v1")  # explicit override
+    runners:
+      pytorch: local                    # host execution (no Docker)
+      vllm: docker                      # default resolution (local → registry)
+      tensorrt: "docker:my/custom:tag"  # explicit image override
+
+``parse_runner_value()`` converts these into a ``(runner_type, image_override)``
+tuple consumed by the runner resolution chain.
 """
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from functools import lru_cache
+
+logger = logging.getLogger(__name__)
 
 from llenergymeasure.config.ssot import (
     BACKEND_PYTORCH,
@@ -131,9 +142,17 @@ def _parse_cuda_major_from_nvcc(output: str) -> str | None:
 def get_default_image(backend: str) -> str:
     """Resolve the default Docker image for *backend*.
 
-    Prefers a locally-built image (``llenergymeasure:{backend}``, produced by
-    ``docker compose build``) when one exists.  Falls back to the versioned
-    GHCR tag (``ghcr.io/…/{backend}:v{version}``) for CI and production.
+    Resolution order:
+
+    1. **Local image** (``llenergymeasure:{backend}``): produced by
+       ``docker compose build`` / ``make docker-build-all``.  Always reflects
+       current source code.  Preferred for local development iteration.
+    2. **Registry image** (``ghcr.io/…/{backend}:v{version}``): published by
+       CI on release tags.  Versioned and immutable.  Used in CI, by pip-install
+       users, and whenever no local image exists.
+
+    To force a specific image, use ``runners: {backend}: "docker:<image:tag>"``
+    in the study YAML.
 
     Args:
         backend: Backend name, e.g. ``"vllm"``, ``"pytorch"``, ``"tensorrt"``.
@@ -145,17 +164,16 @@ def get_default_image(backend: str) -> str:
     # Prefer local image from docker compose build
     local_image = LOCAL_IMAGE_TEMPLATE.format(backend=backend)
     if _image_exists_locally(local_image):
+        logger.info("Using local image %s (from docker compose build)", local_image)
         return local_image
 
     # Fall back to versioned GHCR tag
     from llenergymeasure._version import __version__
 
     version = __version__ if __version__ else "latest"
-
-    return DEFAULT_IMAGE_TEMPLATE.format(
-        backend=backend,
-        version=version,
-    )
+    ghcr_image = DEFAULT_IMAGE_TEMPLATE.format(backend=backend, version=version)
+    logger.info("No local image found; using registry image %s", ghcr_image)
+    return ghcr_image
 
 
 def _image_exists_locally(image: str) -> bool:
