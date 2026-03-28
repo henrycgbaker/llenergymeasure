@@ -116,16 +116,45 @@ ci: check test check-docs
 docker-build-pytorch:
 	docker compose build base pytorch
 
-# Build all backends (pytorch, vllm, tensorrt)
+# Build all backends (pytorch, vllm, tensorrt) — local images
 docker-build-all:
 	docker compose build base pytorch vllm tensorrt
 
-# Build specific backends
+# Build specific backends — local images
 docker-build-vllm:
 	docker compose build base vllm
 
 docker-build-tensorrt:
 	docker compose build base tensorrt
+
+# Pull versioned registry images (ghcr.io) instead of building locally
+docker-pull:
+	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "latest"); \
+	for backend in pytorch vllm tensorrt; do \
+		echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/$$backend:v$$version"; \
+		docker pull "ghcr.io/henrycgbaker/llenergymeasure/$$backend:v$$version"; \
+	done
+
+# Show which images llem will use (local vs registry)
+define _DOCKER_IMAGES_PY
+from llenergymeasure.infra.image_registry import (
+    get_default_image, _image_exists_locally,
+    LOCAL_IMAGE_TEMPLATE, DEFAULT_IMAGE_TEMPLATE,
+)
+from llenergymeasure._version import __version__
+for b in ("pytorch", "vllm", "tensorrt"):
+    local = LOCAL_IMAGE_TEMPLATE.format(backend=b)
+    ghcr = DEFAULT_IMAGE_TEMPLATE.format(backend=b, version=__version__)
+    has_local = _image_exists_locally(local)
+    resolved = get_default_image(b)
+    source = "local" if has_local else "registry"
+    print(f"  {b:10s} -> {resolved}  ({source})")
+endef
+export _DOCKER_IMAGES_PY
+
+docker-images:
+	@echo "=== Image resolution ==="
+	@python3 -c "$$_DOCKER_IMAGES_PY"
 
 # Validate Docker setup
 docker-check:
