@@ -36,6 +36,7 @@ from llenergymeasure.config.ssot import BACKEND_TENSORRT
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerTimeoutError,
+    capture_stderr_snippet,
     translate_docker_error,
 )
 
@@ -242,7 +243,20 @@ class DockerRunner:
                 except Exception as write_exc:
                     logger.warning("Failed to write container.log: %s", write_exc)
 
-                error = translate_docker_error(returncode, stderr_text, self.image)
+                # Prefer structured error JSON written by the container entrypoint
+                # over Docker's stderr, which can contain misleading daemon messages.
+                error_json_path = exchange_dir / f"{config_hash}_error.json"
+                if error_json_path.exists():
+                    payload = json.loads(error_json_path.read_text(encoding="utf-8"))
+                    error = DockerContainerError(
+                        message=f"{payload.get('type', 'UnknownError')}: {payload.get('message', '')}",
+                        fix_suggestion="Check the error traceback in the error JSON for details.",
+                        stderr_snippet=capture_stderr_snippet(stderr_text) if stderr_text else None,
+                    )
+                    error.error_payload = payload
+                else:
+                    error = translate_docker_error(returncode, stderr_text, self.image)
+
                 error.exchange_dir = str(exchange_dir)
                 # Do NOT clean up — preserve for debugging
                 exchange_dir = None  # type: ignore[assignment]
