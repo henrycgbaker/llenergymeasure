@@ -8,6 +8,7 @@ import json
 import logging
 import random
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -176,6 +177,39 @@ def expand_grid(
         )
         for s in skipped:
             logger.warning("  Skipped (%s): %s", s.short_label, s.reason[:200])
+
+    # Combinatorial explosion warnings (tiered)
+    n_valid = len(valid)
+    exec_cfg = raw_study.get("study_execution", {})
+    n_cycles = exec_cfg.get("n_cycles", 1) if isinstance(exec_cfg, dict) else 1
+    total_runs = n_valid * n_cycles
+    gap_seconds = (
+        exec_cfg.get("experiment_gap_seconds", 0) if isinstance(exec_cfg, dict) else 0
+    ) or 0
+
+    if n_valid > 2000:
+        min_hours = total_runs * gap_seconds / 3600
+        logger.warning(
+            "Extremely large study: %d experiments (%d total runs). "
+            "Minimum runtime: ~%.0fh (gap time only). "
+            "Consider reducing sweep dimensions or groups.",
+            n_valid,
+            total_runs,
+            min_hours,
+        )
+    elif n_valid > 500:
+        min_hours = total_runs * gap_seconds / 3600
+        logger.warning(
+            "Very large study: %d experiments (%d total runs with %d cycles). "
+            "Minimum runtime: ~%.0fh (gap time only). "
+            "Consider reducing sweep dimensions or groups.",
+            n_valid,
+            total_runs,
+            n_cycles,
+            min_hours,
+        )
+    elif n_valid > 100:
+        logger.info("Large study: %d experiments.", n_valid)
 
     return valid, skipped
 
@@ -739,14 +773,149 @@ def _strip_other_backend_sections(config_dict: dict[str, Any], backend: str) -> 
     return {k: v for k, v in config_dict.items() if k not in _BACKEND_SECTION_KEYS or k == backend}
 
 
+# =============================================================================
+# Sweep group helpers
+# =============================================================================
+
+
+def _is_group(value: object) -> bool:
+    """True if a sweep entry is a group (list of dicts), not an independent axis.
+
+    Disambiguation: a list of scalars is an independent axis (Cartesian product);
+    a list of dicts (or containing ``{}``) is a dependent group (union of variants).
+
+    Raises ``ConfigError`` for mixed lists (some dicts, some scalars).
+    """
+    if not isinstance(value, list) or len(value) == 0:
+        return False
+    has_dicts = any(isinstance(e, dict) for e in value)
+    if not has_dicts:
+        return False
+    all_dicts = all(isinstance(e, dict) for e in value)
+    if not all_dicts:
+        raise ConfigError(
+            "Sweep entry mixes dicts and scalars. Group entries must all be "
+            "dicts; independent axes must all be scalars."
+        )
+    return True
+
+
+def _group_backend_scope(group_key: str) -> str | None:
+    """Return backend name if a group key is backend-scoped, else None (universal)."""
+    if "." in group_key:
+        prefix = group_key.split(".", 1)[0]
+        if prefix in _BACKEND_SECTION_KEYS:
+            return prefix
+    return None
+
+
+def _expand_group_entry(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand a single group entry into one or more flat dicts (mini-grid).
+
+    Scalar-valued fields pass through unchanged. List-valued fields (list of
+    scalars) produce a Cartesian product within the entry. Nested lists like
+    ``[[0, 1]]`` are treated as literal list values (not expanded).
+    """
+    scalar_fields: dict[str, Any] = {}
+    grid_keys: list[str] = []
+    grid_values: list[list[Any]] = []
+
+    for key, value in entry.items():
+        if isinstance(value, list) and len(value) > 0 and not isinstance(value[0], (list, dict)):
+            # List of scalars -> mini-grid axis
+            grid_keys.append(key)
+            grid_values.append(value)
+        else:
+            scalar_fields[key] = value
+
+    if not grid_keys:
+        return [entry]
+
+    expanded: list[dict[str, Any]] = []
+    for combo in itertools.product(*grid_values):
+        variant = dict(scalar_fields)
+        for key, value in zip(grid_keys, combo, strict=True):
+            variant[key] = value
+        expanded.append(variant)
+    return expanded
+
+
+def _expand_group(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expand all entries in a group, flattening mini-grids into a union of variants."""
+    variants: list[dict[str, Any]] = []
+    for entry in entries:
+        variants.extend(_expand_group_entry(entry))
+    return variants
+
+
+def _route_key_value(
+    config_dict: dict[str, Any],
+    key: str,
+    value: Any,
+) -> dict[str, Any]:
+    """Route a single fully-qualified key into *config_dict*.
+
+    Routing rules:
+    - Backend-prefixed dotted key (``pytorch.batch_size``) → merge into backend section.
+    - Other dotted key (``decoder.do_sample``) → unflatten at top level.
+    - Simple key → direct assignment.
+
+    Returns the (possibly replaced) config_dict reference.
+    """
+    if "." in key:
+        prefix, param = key.split(".", 1)
+        if prefix in _BACKEND_SECTION_KEYS:
+            backend_dict = config_dict.get(prefix, {})
+            nested_update = _unflatten({param: value})
+            config_dict[prefix] = deep_merge(backend_dict, nested_update)
+        else:
+            nested_update = _unflatten({key: value})
+            config_dict = deep_merge(config_dict, nested_update)
+    else:
+        config_dict[key] = value
+    return config_dict
+
+
+def _apply_group_overlay(
+    config_dict: dict[str, Any],
+    overlay: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply a group variant's fully-qualified keys onto a config dict."""
+    for fq_key, value in overlay.items():
+        config_dict = _route_key_value(config_dict, fq_key, value)
+    return config_dict
+
+
+def _validate_sweep_groups(
+    groups: dict[str, list[dict[str, Any]]],
+    axis_keys: set[str],
+) -> None:
+    """Raise ConfigError if a group name collides with an independent axis key."""
+    collisions = set(groups.keys()) & axis_keys
+    if collisions:
+        raise ConfigError(
+            f"Sweep group name(s) collide with independent axis key(s): "
+            f"{', '.join(sorted(collisions))}. "
+            f"Use abstract names for groups (e.g. 'pytorch.compilation' not 'pytorch.torch_compile')."
+        )
+
+
+# =============================================================================
+# Sweep expansion
+# =============================================================================
+
+
 def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str, Any]]:
     """Expand a sweep: block into a flat list of raw experiment config dicts.
 
-    Dotted keys (e.g. pytorch.batch_size) are backend-scoped dimensions.
-    Non-dotted keys are universal dimensions applied to all backends.
+    Supports two entry types under ``sweep:``:
 
-    If the sweep is empty and fixed has a 'model' key, return [fixed] (single experiment).
-    If the sweep is empty and no model, return [] (no experiments).
+    - **Independent axes** (list of scalars): Cartesian product across all axes.
+    - **Dependent groups** (list of dicts): Union of variant dicts. Groups are
+      crossed with each other and with independent axes, but entries *within*
+      a group are alternatives (unioned, not crossed).
+
+    Type-based disambiguation: ``list[scalar]`` = axis, ``list[dict]`` = group.
     """
     if not sweep:
         if fixed.get("model"):
@@ -754,69 +923,104 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
             return [_strip_other_backend_sections(dict(fixed), backend)]
         return []
 
-    # Separate universal dims from backend-scoped dims
+    # ── Step 1: Partition sweep into axes and groups ──
     universal_dims: dict[str, list[Any]] = {}
     scoped_dims: dict[str, dict[str, list[Any]]] = {}  # {backend: {param: [values]}}
+    groups: dict[str, list[dict[str, Any]]] = {}  # {group_name: [variant_dicts]}
 
     for key, values in sweep.items():
+        if _is_group(values):
+            groups[key] = _expand_group(values)
+            continue
+
         if not isinstance(values, list):
             values = [values]
+
         if "." in key:
             prefix, _param = key.split(".", 1)
             if prefix in _BACKEND_SECTION_KEYS:
-                # Backend-scoped parameter: pytorch.batch_size, vllm.engine.block_size
                 scoped_dims.setdefault(prefix, {})[_param] = values
             else:
-                # Nested experiment config field: dataset.n_prompts, dataset.order
                 universal_dims[key] = values
         else:
             universal_dims[key] = values
 
-    # Determine which backends to iterate over
+    # Derive flat axis key set for collision detection
+    axis_keys = set(universal_dims.keys()) | {
+        f"{b}.{p}" for b, params in scoped_dims.items() for p in params
+    }
+    _validate_sweep_groups(groups, axis_keys)
+
+    # ── Step 2: Separate groups by backend scope ──
+    universal_groups: dict[str, list[dict[str, Any]]] = {}
+    scoped_groups: dict[str, dict[str, list[dict[str, Any]]]] = {}  # {backend: {name: variants}}
+
+    for group_name, variants in groups.items():
+        backend_scope = _group_backend_scope(group_name)
+        if backend_scope:
+            scoped_groups.setdefault(backend_scope, {})[group_name] = variants
+        else:
+            universal_groups[group_name] = variants
+
+    # ── Step 3: Determine backends ──
     fixed_backend = fixed.get("backend", "pytorch")
     if isinstance(fixed_backend, list):
         backends = list(fixed_backend)
-    elif scoped_dims:
-        backends = list(scoped_dims.keys())
+    elif scoped_dims or scoped_groups:
+        # Backends implied by scoped axes or scoped groups
+        backends = sorted(set(scoped_dims.keys()) | set(scoped_groups.keys()))
     else:
         backends = [fixed_backend]
 
+    # ── Step 4: Per-backend expansion ──
     results: list[dict[str, Any]] = []
 
     for backend in backends:
-        # Combine universal dims with this backend's scoped dims
+        # Collect applicable groups (universal + this backend's scoped)
+        applicable_groups: dict[str, list[dict[str, Any]]] = dict(universal_groups)
+        applicable_groups.update(scoped_groups.get(backend, {}))
+
+        # Collect applicable axes — reconstruct fully-qualified keys for routing
         backend_scoped = scoped_dims.get(backend, {})
-        all_dim_keys = list(universal_dims.keys()) + list(backend_scoped.keys())
+        fq_dim_keys = list(universal_dims.keys()) + [f"{backend}.{p}" for p in backend_scoped]
         all_dim_values = list(universal_dims.values()) + list(backend_scoped.values())
 
-        if not all_dim_keys:
-            # No dimensions for this backend — produce one config
+        # Cross all group variant lists with each other (lazy — iterated once)
+        group_combos: Iterable[tuple[Any, ...]]
+        if applicable_groups:
+            group_names = list(applicable_groups.keys())
+            group_variant_lists = [applicable_groups[n] for n in group_names]
+            group_combos = itertools.product(*group_variant_lists)
+        else:
+            group_combos = [()]  # single empty combo → no group overlays
+
+        if not fq_dim_keys and not applicable_groups:
+            # No dimensions or groups for this backend — produce one config
             config_dict: dict[str, Any] = _strip_other_backend_sections(dict(fixed), backend)
-            # Remove list-valued backend field
             config_dict["backend"] = backend
             results.append(config_dict)
             continue
 
-        for combo in itertools.product(*all_dim_values):
-            config_dict = _strip_other_backend_sections(dict(fixed), backend)
-            # Override list-valued backend with the specific backend string
-            config_dict["backend"] = backend
+        # Pre-compute stripped base config once per backend
+        base_config = _strip_other_backend_sections(dict(fixed), backend)
+        base_config["backend"] = backend
 
-            for dim_key, value in zip(all_dim_keys, combo, strict=True):
-                if dim_key in backend_scoped:
-                    # Backend-scoped parameter: recursively unflatten to handle multi-level paths.
-                    # "engine.block_size" -> {"engine": {"block_size": value}}
-                    backend_dict = config_dict.get(backend, {})
-                    nested_update = _unflatten({dim_key: value})
-                    config_dict[backend] = deep_merge(backend_dict, nested_update)
-                elif "." in dim_key:
-                    # Nested universal parameter: dataset.n_prompts -> {"dataset": {"n_prompts": value}}
-                    nested_update = _unflatten({dim_key: value})
-                    config_dict = deep_merge(config_dict, nested_update)
-                else:
-                    # Simple universal parameter: goes at top level
-                    config_dict[dim_key] = value
+        # axis_combos materialised — reused across group combos
+        axis_combos = list(itertools.product(*all_dim_values)) if fq_dim_keys else [()]
 
-            results.append(config_dict)
+        for group_combo in group_combos:
+            for axis_combo in axis_combos:
+                config_dict = dict(base_config)
+
+                # Apply independent axis values
+                for dim_key, value in zip(fq_dim_keys, axis_combo, strict=True):
+                    config_dict = _route_key_value(config_dict, dim_key, value)
+
+                # Apply group overlays (each group_combo entry is one variant dict)
+                for variant in group_combo:
+                    if variant:  # skip empty dicts ({} = baseline, no overlay)
+                        config_dict = _apply_group_overlay(config_dict, variant)
+
+                results.append(config_dict)
 
     return results
