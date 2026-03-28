@@ -25,10 +25,6 @@ jobs:
         include:
           - backend: pytorch
             build-args: INSTALL_FA3=false
-          - backend: vllm
-            build-args: ""
-          - backend: tensorrt
-            build-args: ""
     runs-on: ubuntu-latest
     permissions:
       packages: read

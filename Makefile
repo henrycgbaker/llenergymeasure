@@ -191,9 +191,9 @@ docker-dev:
 # Volume Management
 # =============================================================================
 
-# Clean experiment state volume (preserves caches)
+# Clean experiment state (bind mount at .state/, preserves caches)
 lem-clean-state:
-	docker volume rm lem-experiment-state 2>/dev/null || true
+	rm -rf .state/*
 	@echo "Cleared experiment state"
 
 # Clean HuggingFace cache volume (will need to re-download models)
@@ -206,7 +206,8 @@ lem-clean-trt:
 	docker volume rm lem-trt-engine-cache 2>/dev/null || true
 	@echo "Cleared TensorRT engine cache"
 
-# Clean all named volumes (state + caches)
+# Clean all volumes and state
 lem-clean-all:
-	docker volume rm lem-experiment-state lem-hf-cache lem-trt-engine-cache 2>/dev/null || true
-	@echo "Cleared all LEM volumes"
+	rm -rf .state/*
+	docker volume rm lem-hf-cache lem-trt-engine-cache 2>/dev/null || true
+	@echo "Cleared all LEM state and volumes"

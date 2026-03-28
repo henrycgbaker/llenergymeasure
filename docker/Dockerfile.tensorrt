@@ -45,7 +45,7 @@ RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
     uv pip install --system --break-system-packages --no-deps ".[tensorrt]" \
     && uv pip install --system --break-system-packages \
         pydantic typer pyyaml platformdirs nvidia-ml-py numpy \
-        pyarrow tqdm codecarbon datasets python-dotenv
+        pyarrow tqdm rich codecarbon python-dotenv
 
 # HuggingFace cache - writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface
