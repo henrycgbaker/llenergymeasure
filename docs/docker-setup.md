@@ -62,6 +62,39 @@ docker run hello-world
 
 Expected output includes `Hello from Docker!`.
 
+### BuildKit builder setup (recommended)
+
+Docker image builds use BuildKit under the hood. The default builder has a conservative
+garbage-collection limit (~10% of disk) that is too small when building all three backend
+images (PyTorch, vLLM, TensorRT). This causes build cache eviction and expensive
+recompilation (FA3 takes ~1 hour from scratch).
+
+Create a dedicated builder with a 200 GiB cache limit:
+
+```bash
+make docker-builder-setup
+```
+
+This creates a `docker-container` driver builder called `llem-builder` with tuned GC limits
+(configured in `docker/buildkitd.toml`). To use it, set the `BUILDX_BUILDER` environment
+variable:
+
+```bash
+export BUILDX_BUILDER=llem-builder
+docker compose build
+```
+
+Or add `BUILDX_BUILDER=llem-builder` to your `.env` file for project-scoped use.
+
+The command is idempotent - running it again is a no-op if the builder already exists.
+
+To recreate the builder (e.g. after changing `buildkitd.toml`):
+
+```bash
+make docker-builder-rm
+make docker-builder-setup
+```
+
 ---
 
 ## Step 2: Install NVIDIA Drivers

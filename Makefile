@@ -2,7 +2,8 @@
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-local test-runtime-docker
 .PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
-.PHONY: docker-build-dev docker-check experiment datasets validate docker-shell docker-dev
+.PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
+.PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all generate-docs check-docs
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
@@ -23,7 +24,8 @@ setup:
 
 docker-setup: setup
 	docker compose build
-	@echo "Docker environment ready. Run: lem campaign <config.yaml>"
+	@echo "Docker environment ready. Run: llem run <config.yaml>"
+	@echo "Tip: run 'make docker-builder-setup' for a BuildKit builder with larger cache limits"
 
 # =============================================================================
 # Local Development
@@ -112,6 +114,28 @@ ci: check test check-docs
 # Docker Commands (Production)
 # =============================================================================
 
+
+# Builder name used by COMPOSE_BAKE for registry-cached builds
+BUILDER_NAME := llem-builder
+
+# Create the BuildKit builder with tuned GC limits (200 GiB).
+# Idempotent — skips if builder already exists.
+docker-builder-setup:
+	@if docker buildx inspect $(BUILDER_NAME) >/dev/null 2>&1; then \
+		echo "Builder '$(BUILDER_NAME)' already exists"; \
+	else \
+		echo "Creating builder '$(BUILDER_NAME)' with 200 GiB cache limit..."; \
+		docker buildx create \
+			--name $(BUILDER_NAME) \
+			--driver docker-container \
+			--buildkitd-config docker/buildkitd.toml \
+			--bootstrap; \
+		echo "Builder '$(BUILDER_NAME)' created. Use with: BUILDX_BUILDER=$(BUILDER_NAME) docker compose build"; \
+	fi
+
+# Remove the builder (e.g. to recreate with new config)
+docker-builder-rm:
+	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
 # Build all backends (pytorch, vllm, tensorrt) — local images
 docker-build-all:
