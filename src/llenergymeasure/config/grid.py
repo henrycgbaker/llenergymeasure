@@ -8,6 +8,7 @@ import json
 import logging
 import random
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -985,6 +986,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
         all_dim_values = list(universal_dims.values()) + list(backend_scoped.values())
 
         # Cross all group variant lists with each other (lazy — iterated once)
+        group_combos: Iterable[tuple[Any, ...]]
         if applicable_groups:
             group_names = list(applicable_groups.keys())
             group_variant_lists = [applicable_groups[n] for n in group_names]
