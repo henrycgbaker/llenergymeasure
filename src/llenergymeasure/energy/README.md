@@ -67,15 +67,17 @@ Auto-selection priority: Zeus > NVML > CodeCarbon. NVML is always available on G
 
 ## Configuration
 
-Energy sampler selection is controlled by `config.energy.backend`:
+Energy sampler selection is controlled by the flat `energy_sampler` field on `ExperimentConfig`:
 
 ```yaml
-energy:
-  backend: auto      # default: auto-select
-  backend: nvml      # explicit NVML
-  backend: zeus      # explicit Zeus
-  backend: null      # disable energy measurement
+energy_sampler: auto      # default: auto-select (Zeus > NVML > CodeCarbon)
+energy_sampler: nvml      # explicit NVML
+energy_sampler: zeus      # explicit Zeus
+energy_sampler: null      # disable energy measurement
 ```
+
+All backend-specific parameters (polling intervals, CPU measurement, tracking modes) are
+resolved internally by the harness. See `docs/energy-measurement.md` for full rationale.
 
 ## Layer constraints
 

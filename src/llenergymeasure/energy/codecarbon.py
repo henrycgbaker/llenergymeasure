@@ -93,6 +93,7 @@ class CodeCarbonSampler:
                 allow_multiple_runs=True,
                 tracking_mode=self._tracking_mode,
                 log_level=logging.ERROR,
+                save_to_file=False,
             )
             tracker.start()
             logger.debug("CodeCarbon tracking started")

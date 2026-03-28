@@ -364,6 +364,7 @@ def build_preflight_panel(
     _max_ins: set[int | None] = set()
     _max_outs: set[int | None] = set()
     _energy: set[str] = set()
+    _telemetry: set[bool] = set()
     for exp in study_config.experiments:
         _backends.add(exp.backend)
         _models.add(exp.model)
@@ -371,7 +372,8 @@ def build_preflight_panel(
         _datasets.add(exp.dataset.source)
         _max_ins.add(exp.max_input_tokens)
         _max_outs.add(exp.max_output_tokens)
-        _energy.add(str(exp.energy.backend))
+        _energy.add(str(exp.energy_sampler) if exp.energy_sampler is not None else "disabled")
+        _telemetry.add(exp.gpu_telemetry)
     unique_backends = sorted(_backends)
     unique_models = sorted(_models)
     unique_n = sorted(_ns)
@@ -443,6 +445,8 @@ def build_preflight_panel(
     if len(unique_datasets) == 1:
         constants.append(("Dataset", unique_datasets[0]))
     constants.append(("Energy sampler", energy_display))
+    if False in _telemetry:
+        constants.append(("GPU telemetry", "off" if _telemetry == {False} else "mixed"))
 
     if constants:
         _section(body, "Constants")
@@ -576,7 +580,7 @@ def _collect_sweep_dimensions(
             result.append((f"dataset.{field_name}", ", ".join(sorted(unique_vals)), 0))
 
     # --- Sub-config fields (recursive) ---
-    SUB_CONFIGS_MANDATORY = ("decoder", "warmup", "baseline", "energy")
+    SUB_CONFIGS_MANDATORY = ("decoder", "warmup", "baseline")
     SUB_CONFIGS_OPTIONAL = ("pytorch", "vllm", "tensorrt", "lora")
 
     def _get_sub_config_defaults(sub_config_name: str) -> dict[str, Any]:
@@ -584,7 +588,6 @@ def _collect_sweep_dimensions(
         from llenergymeasure.config.models import (
             BaselineConfig,
             DecoderConfig,
-            EnergyConfig,
             WarmupConfig,
         )
 
@@ -592,7 +595,6 @@ def _collect_sweep_dimensions(
             "decoder": DecoderConfig(),
             "warmup": WarmupConfig(),
             "baseline": BaselineConfig(),
-            "energy": EnergyConfig(),
         }
         if sub_config_name in defaults_map:
             obj = defaults_map[sub_config_name]

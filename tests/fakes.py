@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 
-class FakeEnergyBackend:
+class FakeEnergySampler:
     """Minimal EnergySampler fake -- returns fixed EnergyMeasurement."""
 
     name = "fake-energy"

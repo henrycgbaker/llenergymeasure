@@ -43,8 +43,8 @@ baseline:
   enabled: true
   duration_seconds: 30
 
-energy:
-  backend: auto
+energy_sampler: auto
+gpu_telemetry: true
 ```
 
 A vLLM experiment (requires Docker runner):
@@ -378,7 +378,8 @@ All fields except `model` are optional and have sensible defaults.
 - [Decoder / Sampling (`decoder:`)](#decoder-sampling-decoder)
 - [Warmup (`warmup:`)](#warmup-warmup)
 - [Baseline (`baseline:`)](#baseline-baseline)
-- [Energy (`energy:`)](#energy-energy)
+- [Energy Sampler (`energy_sampler:`)](#energy-sampler-energy_sampler)
+- [GPU Telemetry (`gpu_telemetry:`)](#gpu-telemetry-gpu_telemetry)
 - [PyTorch Backend (`pytorch:`)](#pytorch-backend-pytorch)
 - [vLLM Engine (`vllm.engine:`)](#vllm-engine-vllm-engine)
 - [vLLM Sampling (`vllm.sampling:`)](#vllm-sampling-vllm-sampling)
@@ -400,7 +401,8 @@ All fields except `model` are optional and have sensible defaults.
 | `decoder` | DecoderConfig | *(see section)* | Universal decoder/generation configuration |
 | `warmup` | WarmupConfig | *(see section)* | Warmup phase configuration |
 | `baseline` | BaselineConfig | *(see section)* | Baseline power measurement configuration |
-| `energy` | EnergyConfig | *(see section)* | Energy measurement backend configuration |
+| `energy_sampler` | 'auto' | 'nvml' | 'zeus' | 'codecarbon' | None | `auto` | Energy measurement backend. auto=best available (Zeus>NVML>CodeCarbon). null disables. |
+| `gpu_telemetry` | boolean | `true` | Persist GPU power/thermal/memory timeseries to Parquet sidecar. NVML always runs for throttle detection; this controls disk output. |
 | `pytorch` | PyTorchConfig | None | `null` | PyTorch-specific configuration (only used when backend=pytorch) |
 | `vllm` | VLLMConfig | None | `null` | vLLM-specific configuration (only used when backend=vllm) |
 | `tensorrt` | TensorRTConfig | None | `null` | TensorRT-LLM configuration (only used when backend=tensorrt) |
@@ -466,11 +468,41 @@ dataset:
 | `enabled` | boolean | `true` | Enable baseline power measurement |
 | `duration_seconds` | number | `30.0` | Baseline measurement duration in seconds |
 
-### Energy (`energy:`)
+### Energy Sampler (`energy_sampler:`)
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `backend` | 'auto' | 'nvml' | 'zeus' | 'codecarbon' | None | `auto` | Energy measurement backend. None (YAML null) disables energy measurement. |
+`energy_sampler` is a flat top-level field (not a nested section). See [Energy Measurement](energy-measurement.md) for full details on backends, accuracy, and what the harness resolves internally.
+
+| Value | Description |
+|-------|-------------|
+| `auto` (default) | Best available: Zeus > NVML > CodeCarbon |
+| `nvml` | NVML power polling at 100ms intervals |
+| `zeus` | Hardware energy counters (Volta+ GPUs). Most accurate. Install: `pip install "llenergymeasure[zeus]"` |
+| `codecarbon` | System-level (GPU+CPU+RAM). Install: `pip install "llenergymeasure[codecarbon]"` |
+| `null` | Disable energy measurement (throughput-only mode) |
+
+### GPU Telemetry (`gpu_telemetry:`)
+
+`gpu_telemetry` controls whether the NVML power/thermal/memory timeseries is persisted to a
+Parquet sidecar file alongside the result JSON.
+
+```yaml
+gpu_telemetry: true    # default: write timeseries.parquet
+gpu_telemetry: false   # skip parquet output (saves disk for large studies)
+```
+
+**What it controls:** Whether `timeseries.parquet` is written to the output directory.
+
+**What it does not control:** NVML telemetry is always collected during inference for
+throttle detection and measurement quality warnings, regardless of this setting. Setting
+`gpu_telemetry: false` only suppresses disk output.
+
+The Parquet sidecar contains 1Hz downsampled data with 8 columns: `timestamp_s`,
+`gpu_index`, `power_w`, `temperature_c`, `memory_used_mb`, `memory_total_mb`,
+`sm_utilisation_pct`, `throttle_reasons`. File sizes are typically < 5KB per minute of
+inference per GPU.
+
+See [Energy Measurement](energy-measurement.md) for details on how NVML telemetry
+relates to energy measurement.
 
 ### PyTorch Backend (`pytorch:`)
 

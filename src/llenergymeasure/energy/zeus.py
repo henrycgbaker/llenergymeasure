@@ -54,7 +54,7 @@ class ZeusSampler:
         """
         from zeus.monitor import ZeusMonitor
 
-        monitor = ZeusMonitor(gpu_indices=self._gpu_indices)
+        monitor = ZeusMonitor(gpu_indices=self._gpu_indices, cpu_indices=[])
         monitor.begin_window(self.WINDOW_NAME)
         return monitor
 

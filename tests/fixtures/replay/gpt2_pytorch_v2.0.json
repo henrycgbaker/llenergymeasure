@@ -255,9 +255,8 @@
       "enabled": true,
       "duration_seconds": 30.0
     },
-    "energy": {
-      "backend": "auto"
-    },
+    "energy_sampler": "auto",
+    "gpu_telemetry": true,
     "pytorch": null,
     "vllm": null,
     "tensorrt": null,

@@ -1,6 +1,6 @@
 """Protocol conformance tests for EnergySampler.
 
-Tests that FakeEnergyBackend satisfies the runtime_checkable EnergySampler
+Tests that FakeEnergySampler satisfies the runtime_checkable EnergySampler
 Protocol interface defined in llenergymeasure.energy.base.
 
 INF-10 compliance: no unittest.mock.patch on internal modules. Fakes are
@@ -10,29 +10,29 @@ injected via constructor args and satisfy isinstance() checks at runtime.
 from __future__ import annotations
 
 from llenergymeasure.energy.base import EnergySampler
-from tests.fakes import FakeEnergyBackend
+from tests.fakes import FakeEnergySampler
 
 # ---------------------------------------------------------------------------
 # Protocol isinstance checks (structural conformance)
 # ---------------------------------------------------------------------------
 
 
-def test_fake_energy_backend_satisfies_protocol():
-    """FakeEnergyBackend satisfies isinstance(EnergySampler) at runtime."""
-    fake = FakeEnergyBackend()
+def test_fake_energy_sampler_satisfies_protocol():
+    """FakeEnergySampler satisfies isinstance(EnergySampler) at runtime."""
+    fake = FakeEnergySampler()
     assert isinstance(fake, EnergySampler)
 
 
 # ---------------------------------------------------------------------------
-# FakeEnergyBackend behaviour
+# FakeEnergySampler behaviour
 # ---------------------------------------------------------------------------
 
 
-def test_fake_energy_backend_lifecycle():
+def test_fake_energy_sampler_lifecycle():
     """start_tracking() then stop_tracking() returns an EnergyMeasurement."""
     from llenergymeasure.energy.nvml import EnergyMeasurement
 
-    fake = FakeEnergyBackend(total_j=50.0, duration_sec=10.0)
+    fake = FakeEnergySampler(total_j=50.0, duration_sec=10.0)
     tracker = fake.start_tracking()
     measurement = fake.stop_tracking(tracker)
 
@@ -41,14 +41,14 @@ def test_fake_energy_backend_lifecycle():
     assert measurement.duration_sec == 10.0
 
 
-def test_fake_energy_backend_is_available():
-    """FakeEnergyBackend.is_available() always returns True."""
-    fake = FakeEnergyBackend()
+def test_fake_energy_sampler_is_available():
+    """FakeEnergySampler.is_available() always returns True."""
+    fake = FakeEnergySampler()
     assert fake.is_available() is True
 
 
-def test_fake_energy_backend_start_tracking_returns_handle():
+def test_fake_energy_sampler_start_tracking_returns_handle():
     """start_tracking() returns a non-None tracker handle."""
-    fake = FakeEnergyBackend()
+    fake = FakeEnergySampler()
     tracker = fake.start_tracking()
     assert tracker is not None

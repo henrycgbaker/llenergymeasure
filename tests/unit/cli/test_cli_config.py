@@ -155,11 +155,11 @@ def test_config_verbose_backend_versions() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Energy backend detection
+# Energy sampler detection
 # ---------------------------------------------------------------------------
 
 
-def test_config_energy_backends_zeus() -> None:
+def test_config_energy_samplers_zeus() -> None:
     """When zeus is installed, Energy section shows 'zeus'."""
 
     def fake_find_spec_zeus(name: str) -> MagicMock | None:
@@ -177,8 +177,8 @@ def test_config_energy_backends_zeus() -> None:
     assert "Energy: zeus" in result.output
 
 
-def test_config_energy_backends_none() -> None:
-    """When no energy backends are installed, Energy section shows 'Energy: none'."""
+def test_config_energy_samplers_none() -> None:
+    """When no energy samplers are installed, Energy section shows 'Energy: none'."""
 
     def fake_find_spec_none(name: str) -> None:
         return None

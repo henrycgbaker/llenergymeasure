@@ -66,7 +66,7 @@ Fast, isolated tests for individual components.
 | `test_core_prompts.py` | Batch creation, tokenization |
 | `test_core_distributed.py` | Distributed utilities |
 | `test_core_model_loader.py` | Model loading logic |
-| `test_core_energy_backends.py` | Energy backend interface |
+| `test_core_energy_backends.py` | Energy sampler interface |
 | `test_core_compute_metrics.py` | Memory/utilization stats |
 | `test_domain_metrics.py` | Metric model validation |
 | `test_domain_experiment.py` | Result model validation |

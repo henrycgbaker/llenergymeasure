@@ -18,6 +18,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from llenergymeasure.config.models import EnergySamplerName
+
 
 class UserOutputConfig(BaseModel):
     """Output path preferences."""
@@ -75,8 +77,8 @@ class UserMeasurementConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    energy_backend: Literal["auto", "nvml", "zeus"] = Field(
-        default="auto", description="Energy backend: auto=zeus if installed else nvml"
+    energy_sampler: EnergySamplerName = Field(
+        default="auto", description="Energy sampler: auto=best available (Zeus>NVML>CodeCarbon)"
     )
     carbon_intensity_gco2_kwh: float | None = Field(
         default=None, ge=0.0, description="gCO2/kWh for local electricity grid"
@@ -94,16 +96,6 @@ class UserUIConfig(BaseModel):
     progress_mode: Literal["auto", "plain", "quiet"] = Field(
         default="auto",
         description="Progress output mode: auto=Rich Live TTY, plain=sequential print, quiet=silent",
-    )
-
-
-class UserAdvancedConfig(BaseModel):
-    """Advanced measurement tuning."""
-
-    model_config = {"extra": "forbid"}
-
-    nvml_poll_interval_ms: int = Field(
-        default=100, ge=10, le=10000, description="NVML sampling interval in milliseconds"
     )
 
 
@@ -133,7 +125,6 @@ class UserConfig(BaseModel):
     runners: UserRunnersConfig = Field(default_factory=UserRunnersConfig)
     measurement: UserMeasurementConfig = Field(default_factory=UserMeasurementConfig)
     ui: UserUIConfig = Field(default_factory=UserUIConfig)
-    advanced: UserAdvancedConfig = Field(default_factory=UserAdvancedConfig)
     execution: UserExecutionConfig = Field(default_factory=UserExecutionConfig)
 
 

@@ -1,6 +1,6 @@
 """llem config command — environment and configuration display.
 
-Prints GPU info, installed backends, energy backend status, and user config
+Prints GPU info, installed backends, energy sampler status, and user config
 path. Designed to be the first thing a researcher runs to verify their
 environment is correctly set up.
 
