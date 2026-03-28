@@ -114,16 +114,7 @@ docker build -f docker/Dockerfile.tensorrt -t llenergymeasure:tensorrt .
 Docker image builds can be slow - especially the PyTorch image which compiles FlashAttention
 from source (~1 hour cold build). To skip this by pulling pre-compiled layers from GHCR:
 
-**1. Log in to GitHub Container Registry:**
-
-```bash
-docker login ghcr.io
-```
-
-You need a GitHub account with a
-[personal access token](https://github.com/settings/tokens) (read:packages scope).
-
-**2. Enable COMPOSE_BAKE in your `.env`:**
+**1. Enable COMPOSE_BAKE in your `.env`:**
 
 ```bash
 COMPOSE_BAKE=true
@@ -133,7 +124,7 @@ This is already set in `.env.example`. It tells Docker Compose to delegate build
 BuildKit's [bake](https://docs.docker.com/build/bake/) engine, which has full support for
 registry-based build cache.
 
-**3. Build as normal:**
+**2. Build as normal:**
 
 ```bash
 docker compose build pytorch
@@ -143,9 +134,25 @@ Compose will pull cached layers from GHCR (written by CI on each release) and on
 layers that have changed locally. A cached PyTorch build typically completes in under 2
 minutes instead of ~1 hour.
 
+**How it works:**
+
+- CI pushes build cache to GHCR on each release (`ghcr.io/henrycgbaker/llenergymeasure/{backend}:buildcache`)
+- `docker-compose.yml` has `cache_from` entries that pull from these cache images
+- `COMPOSE_BAKE=true` enables BuildKit bake delegation, which supports registry cache
+- Users only pull cache - no write access or authentication is needed for public packages
+- If cache is unavailable (network issues, not yet published), the build proceeds
+  normally without errors
+
+**Authentication:** The build cache packages are public. No `docker login` is required to
+pull them. If you are behind a corporate proxy or encounter rate limits, logging in with
+`docker login ghcr.io` (using a
+[personal access token](https://github.com/settings/tokens) with `read:packages` scope)
+may help.
+
 **Requirements:** Docker Compose v2.32+ (`docker compose version` to check). If you have
 an older version, see the
-[Docker Compose install docs](https://docs.docker.com/compose/install/) to upgrade.
+[Docker Compose install docs](https://docs.docker.com/compose/install/) or the upgrade
+instructions in the [Docker Setup Guide](docker-setup.md#step-1-install-docker).
 
 **Without COMPOSE_BAKE:** Builds work normally but don't use registry cache. The `cache_from`
 entries in `docker-compose.yml` are silently ignored. No errors, just slower builds.
