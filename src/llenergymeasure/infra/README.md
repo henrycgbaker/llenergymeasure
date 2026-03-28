@@ -67,12 +67,30 @@ Precedence chain (highest wins):
 
 ## Docker image resolution
 
+### Image sources
+
 Two image sources exist for each backend:
 
 | Source | Tag pattern | Built by | Use case |
 |--------|------------|----------|----------|
-| **Local** | `llenergymeasure:{backend}` | `docker compose build` / `make docker-build-all` | Dev iteration — always reflects current source |
+| **Local** | `llenergymeasure:{backend}` | `make docker-build-{backend}` | Dev iteration - always reflects current source |
 | **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}` | CI on release tags | Production, CI, pip-install users |
+
+### Resolution precedence (`resolve_image()`)
+
+The full image resolution chain (highest wins):
+
+1. **Env var** `LLEM_IMAGE_{BACKEND}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
+2. **Study YAML** `images:` section
+3. **Runner spec** shorthand (`docker:my/custom:tag` in `runners:`)
+4. **User config** `images:` section
+5. **Smart default** via `get_default_image()`: local build → registry fallback
+
+Each level returns an `(image, image_source)` tuple. The `image_source` string
+(`"env"`, `"yaml"`, `"runner_override"`, `"user_config"`, `"local_build"`,
+`"registry_cached"`, `"registry"`) tracks provenance for display and diagnostics.
+
+### Smart default behaviour
 
 `get_default_image(backend)` checks for a local image first, then falls back to the registry tag:
 
@@ -84,7 +102,31 @@ image = get_default_image("vllm")
 # → "ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"  (otherwise)
 ```
 
-Override in study YAML:
+The distinction between `"registry"` and `"registry_cached"` source: when a registry image
+is already present in the local Docker cache (from a prior pull), the source is
+`"registry_cached"`. When it will need pulling, the source is `"registry"`.
+
+### Building local images
+
+```bash
+make docker-build-all          # all 3 backends
+make docker-build-pytorch      # just pytorch
+make docker-build-vllm         # just vllm
+make docker-build-tensorrt     # just tensorrt
+```
+
+These use `docker compose build`. With `COMPOSE_BAKE=true` in `.env`, builds use the GHCR
+registry build cache for dramatically faster builds (e.g. PyTorch: ~2 min cached vs ~1 hour
+cold). See `docs/installation.md#build-cache-recommended` for details.
+
+### Study-level image preparation
+
+For multi-experiment studies, `StudyRunner._prepare_images()` checks and pulls all required
+Docker images **once** before the first experiment, rather than per-experiment. This avoids
+redundant `docker pull` calls when multiple experiments share the same backend. The CLI shows
+this as a "Preparing Docker images" section with per-image status and metadata.
+
+### YAML overrides
 
 ```yaml
 runners:

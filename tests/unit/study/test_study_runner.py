@@ -891,6 +891,7 @@ def test_docker_runner_spec_dispatches_to_docker(
                 "llenergymeasure.results.persistence.save_result",
                 return_value=Path("/tmp/test-docker/r.json"),
             ),
+            patch.object(runner, "_prepare_images"),
         ):
             results = runner.run()
 
@@ -977,7 +978,8 @@ def test_docker_error_caught_and_converted_to_failure_dict(
         runner = StudyRunner(
             study_config, manifest, Path("/tmp/test-docker-err"), runner_specs=runner_specs
         )
-        results = runner.run()
+        with patch.object(runner, "_prepare_images"):
+            results = runner.run()
 
     # Subprocess Process() must NOT have been spawned
     assert subprocess_process_calls == [], (
@@ -1380,7 +1382,8 @@ def test_error_payload_persisted_to_failed_runs_subdir(
         patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
     ):
         runner = StudyRunner(study_config, manifest, tmp_path, runner_specs=runner_specs)
-        results = runner.run()
+        with patch.object(runner, "_prepare_images"):
+            results = runner.run()
 
     assert len(results) == 1
     result = results[0]
@@ -1435,7 +1438,8 @@ def test_docker_error_persists_to_failed_runs_subdir(
         patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
     ):
         runner = StudyRunner(study_config, manifest, tmp_path, runner_specs=runner_specs)
-        results = runner.run()
+        with patch.object(runner, "_prepare_images"):
+            results = runner.run()
 
     assert len(results) == 1
     result = results[0]
@@ -1449,3 +1453,302 @@ def test_docker_error_persists_to_failed_runs_subdir(
     assert log_dest.read_text(encoding="utf-8") == "error stderr"
 
     manifest.mark_failed.assert_called_once()
+
+
+# =============================================================================
+# _prepare_images() — study-level Docker image preparation
+# =============================================================================
+
+FAKE_INSPECT_JSON = b"""[{
+    "Id": "sha256:abc123def456",
+    "Size": 7620000000,
+    "Created": "2026-03-20T10:00:00Z",
+    "RootFS": {"Layers": ["sha256:a", "sha256:b", "sha256:c"]}
+}]"""
+
+
+class TestPrepareImages:
+    """Tests for StudyRunner._prepare_images() across all image resolution paths."""
+
+    def _make_runner(
+        self,
+        study_config: StudyConfig,
+        runner_specs: dict,
+        tmp_path: Path,
+        progress: MagicMock | None = None,
+    ) -> StudyRunner:
+        manifest = MagicMock()
+        fake_ctx = MagicMock()
+        with patch("multiprocessing.get_context", return_value=fake_ctx):
+            runner = StudyRunner(
+                study_config, manifest, tmp_path, runner_specs=runner_specs, progress=progress
+            )
+        return runner
+
+    def test_no_runner_specs_noop(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        """No runner_specs means _prepare_images is a no-op."""
+        runner = self._make_runner(study_config, {}, tmp_path)
+        runner._prepare_images()
+        assert not runner._images_prepared
+
+    def test_local_only_specs_noop(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        """Local-mode runner_specs skip image preparation entirely."""
+        runner = self._make_runner(study_config, {"pytorch": _make_local_runner_spec()}, tmp_path)
+        runner._prepare_images()
+        assert not runner._images_prepared
+
+    def test_local_cache_hit(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        """Image found locally — no pull, metadata extracted, _images_prepared set."""
+        import subprocess
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        fake_result = MagicMock(spec=subprocess.CompletedProcess)
+        fake_result.returncode = 0
+        fake_result.stdout = FAKE_INSPECT_JSON
+
+        with patch("subprocess.run", return_value=fake_result) as mock_run:
+            runner._prepare_images()
+
+        assert runner._images_prepared
+        # Only inspect should have been called (no pull)
+        assert mock_run.call_count == 1
+        assert "inspect" in mock_run.call_args_list[0][0][0]
+
+        progress.begin_image_prep.assert_called_once_with(["pytorch"])
+        progress.image_ready.assert_called_once()
+        call_kwargs = progress.image_ready.call_args
+        assert call_kwargs[1]["cached"] is True or call_kwargs[0][2] is True
+        progress.end_image_prep.assert_called_once()
+
+    def test_registry_pull_success(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        """Image not found locally, pulled from registry successfully."""
+        import subprocess
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        inspect_fail = MagicMock(spec=subprocess.CompletedProcess)
+        inspect_fail.returncode = 1
+
+        pull_ok = MagicMock(spec=subprocess.CompletedProcess)
+        pull_ok.returncode = 0
+
+        inspect_ok = MagicMock(spec=subprocess.CompletedProcess)
+        inspect_ok.returncode = 0
+        inspect_ok.stdout = FAKE_INSPECT_JSON
+
+        with patch("subprocess.run", side_effect=[inspect_fail, pull_ok, inspect_ok]):
+            runner._prepare_images()
+
+        assert runner._images_prepared
+        progress.image_ready.assert_called_once()
+        call_args = progress.image_ready.call_args
+        # cached=False when image was pulled
+        assert (
+            call_args[1].get("cached", call_args[0][2] if len(call_args[0]) > 2 else None) is False
+        )
+        progress.end_image_prep.assert_called_once()
+
+    def test_pull_fails_raises_pull_error(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        """Image not locally cached, pull fails — raises DockerImagePullError."""
+        import subprocess
+
+        from llenergymeasure.infra.docker_errors import DockerImagePullError
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        inspect_fail = MagicMock(spec=subprocess.CompletedProcess)
+        inspect_fail.returncode = 1
+
+        pull_fail = MagicMock(spec=subprocess.CompletedProcess)
+        pull_fail.returncode = 1
+
+        with (
+            patch("subprocess.run", side_effect=[inspect_fail, pull_fail]),
+            pytest.raises(DockerImagePullError, match="Image not found"),
+        ):
+            runner._prepare_images()
+
+        assert not runner._images_prepared
+        progress.image_failed.assert_called_once()
+        progress.end_image_prep.assert_called_once()
+
+    def test_pull_timeout_raises_pull_error(
+        self, study_config: StudyConfig, tmp_path: Path
+    ) -> None:
+        """Pull times out — raises DockerImagePullError with timeout message."""
+        import subprocess
+
+        from llenergymeasure.infra.docker_errors import DockerImagePullError
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        inspect_fail = MagicMock(spec=subprocess.CompletedProcess)
+        inspect_fail.returncode = 1
+
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=[inspect_fail, subprocess.TimeoutExpired("docker pull", 1800)],
+            ),
+            pytest.raises(DockerImagePullError, match="timed out"),
+        ):
+            runner._prepare_images()
+
+        assert not runner._images_prepared
+        progress.image_failed.assert_called_once()
+
+    def test_multi_backend_all_cached(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        """Multiple Docker backends, all found locally."""
+        import subprocess
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {
+                "pytorch": _make_docker_runner_spec(image="llem:pytorch"),
+                "vllm": _make_docker_runner_spec(image="llem:vllm"),
+            },
+            tmp_path,
+            progress=progress,
+        )
+
+        ok = MagicMock(spec=subprocess.CompletedProcess)
+        ok.returncode = 0
+        ok.stdout = FAKE_INSPECT_JSON
+
+        with patch("subprocess.run", return_value=ok):
+            runner._prepare_images()
+
+        assert runner._images_prepared
+        assert progress.image_ready.call_count == 2
+        progress.begin_image_prep.assert_called_once_with(["pytorch", "vllm"])
+        progress.end_image_prep.assert_called_once()
+
+    def test_inspect_exception_falls_through_to_pull(
+        self, study_config: StudyConfig, tmp_path: Path
+    ) -> None:
+        """If docker inspect raises (e.g. docker not found), falls through to pull."""
+        import subprocess
+
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+        )
+
+        pull_ok = MagicMock(spec=subprocess.CompletedProcess)
+        pull_ok.returncode = 0
+
+        inspect_ok = MagicMock(spec=subprocess.CompletedProcess)
+        inspect_ok.returncode = 0
+        inspect_ok.stdout = FAKE_INSPECT_JSON
+
+        with patch(
+            "subprocess.run",
+            side_effect=[FileNotFoundError("docker"), pull_ok, inspect_ok],
+        ):
+            runner._prepare_images()
+
+        assert runner._images_prepared
+
+    def test_images_prepared_flag_enables_skip_image_check(
+        self, study_config: StudyConfig, tmp_path: Path
+    ) -> None:
+        """After _prepare_images, _run_one_docker passes skip_image_check=True."""
+
+        from llenergymeasure.domain.experiment import ExperimentResult
+
+        progress = MagicMock()
+        manifest = MagicMock()
+
+        fake_ctx = MagicMock()
+        with patch("multiprocessing.get_context", return_value=fake_ctx):
+            runner = StudyRunner(
+                study_config,
+                manifest,
+                tmp_path,
+                runner_specs={"pytorch": _make_docker_runner_spec()},
+                progress=progress,
+            )
+
+        # Pre-set _images_prepared to True (simulating successful prep)
+        runner._images_prepared = True
+
+        fake_result = MagicMock(spec=ExperimentResult)
+        fake_result.total_energy_j = 1.0
+
+        docker_run_kwargs: list[dict] = []
+
+        def capture_docker_run(config, **kwargs):
+            docker_run_kwargs.append(kwargs)
+            return fake_result
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.DockerRunner.run",
+                side_effect=capture_docker_run,
+            ),
+            patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
+            patch(
+                "llenergymeasure.results.persistence.save_result",
+                return_value=Path("/tmp/r.json"),
+            ),
+            patch.object(runner, "_prepare_images"),
+        ):
+            runner.run()
+
+        # DockerRunner.run should have been called with skip_image_check=True
+        assert len(docker_run_kwargs) == 1
+        assert docker_run_kwargs[0].get("skip_image_check") is True
+
+
+class TestParseImageMetadata:
+    """Tests for StudyRunner._parse_image_metadata()."""
+
+    def test_valid_inspect_output(self) -> None:
+        meta = StudyRunner._parse_image_metadata(FAKE_INSPECT_JSON)
+        assert meta is not None
+        assert meta["id"] == "abc123def456"
+        assert "GB" in meta["size"]
+        assert meta["layers"] == "3"
+
+    def test_empty_json_array(self) -> None:
+        assert StudyRunner._parse_image_metadata(b"[]") is None
+
+    def test_invalid_json(self) -> None:
+        assert StudyRunner._parse_image_metadata(b"not json") is None
+
+    def test_size_mb_format(self) -> None:
+        data = b'[{"Id": "sha256:abc123", "Size": 524288000}]'
+        meta = StudyRunner._parse_image_metadata(data)
+        assert meta is not None
+        assert "MB" in meta["size"]
+
+    def test_missing_fields_returns_none(self) -> None:
+        data = b"[{}]"
+        assert StudyRunner._parse_image_metadata(data) is None

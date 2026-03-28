@@ -37,6 +37,9 @@ SOURCE_MULTI_BACKEND_ELEVATION: Final = "multi_backend_elevation"
 
 RunnerMode = Literal["local", "docker"]
 
+DOCKER_PULL_TIMEOUT: Final = 1800
+"""Maximum seconds to wait for ``docker pull`` (30 min — generous for large images like TensorRT ~10 GB)."""
+
 # ---------------------------------------------------------------------------
 # Backend capability dicts
 # ---------------------------------------------------------------------------
@@ -96,6 +99,7 @@ __all__ = [
     "BACKEND_VLLM",
     "DECODER_PARAM_SUPPORT",
     "DECODING_SUPPORT",
+    "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
     "RUNNER_DOCKER",
     "RUNNER_LOCAL",

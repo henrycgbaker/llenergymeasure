@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from llenergymeasure.domain.progress import ProgressCallback
 
-from llenergymeasure.config.ssot import BACKEND_TENSORRT
+from llenergymeasure.config.ssot import BACKEND_TENSORRT, DOCKER_PULL_TIMEOUT
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerTimeoutError,
@@ -119,14 +119,20 @@ class DockerRunner:
     @property
     def short_image(self) -> str:
         """Short image tag for display (e.g. 'pytorch:v0.9.0')."""
-        return self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
+        from llenergymeasure.utils.formatting import short_name
+
+        return short_name(self.image)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def run(
-        self, config: Any, progress: ProgressCallback | None = None, save_timeseries: bool = True
+        self,
+        config: Any,
+        progress: ProgressCallback | None = None,
+        save_timeseries: bool = True,
+        skip_image_check: bool = False,
     ) -> Any:
         """Run an experiment inside an ephemeral Docker container.
 
@@ -166,7 +172,8 @@ class DockerRunner:
 
         try:
             # --- Ensure image is available (pull with visible output if needed) ---
-            self._ensure_image(progress=_p)
+            if not skip_image_check:
+                self._ensure_image(progress=_p)
 
             # --- Write config JSON ---
             # Compute config_hash from the clean config (no output path mutation).
@@ -315,6 +322,7 @@ class DockerRunner:
 
         Always emits an ``image_check`` step so the user sees the cache lookup.
         If the image is not cached, emits a separate ``pull`` step.
+        Substeps report image metadata (ID, size, age) for provenance visibility.
         """
         short_image = self.short_image
 
@@ -343,16 +351,12 @@ class DockerRunner:
         t0_pull = time.perf_counter()
 
         print(f"Pulling image: {self.image}", file=sys.stderr)
-        # Pull timeout is independent of the container run timeout — large images
-        # (e.g. TensorRT NGC ~10 GB) routinely exceed the run timeout.  30 minutes
-        # is generous for most registries; None would also be defensible.
-        _PULL_TIMEOUT = 1800
         try:
             pull = subprocess.run(
                 ["docker", "pull", self.image],
                 stdout=sys.stderr,
                 stderr=sys.stderr,
-                timeout=_PULL_TIMEOUT,
+                timeout=DOCKER_PULL_TIMEOUT,
             )
         except subprocess.TimeoutExpired as exc:
             if progress:
@@ -360,7 +364,7 @@ class DockerRunner:
             from llenergymeasure.infra.docker_errors import DockerImagePullError
 
             raise DockerImagePullError(
-                message=f"Image pull timed out after {_PULL_TIMEOUT}s: {self.image}",
+                message=f"Image pull timed out after {DOCKER_PULL_TIMEOUT}s: {self.image}",
                 fix_suggestion=f"Pull manually: docker pull {self.image}",
             ) from exc
         if pull.returncode != 0:

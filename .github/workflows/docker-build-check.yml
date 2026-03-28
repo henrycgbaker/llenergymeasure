@@ -1,0 +1,51 @@
+name: Docker Build Check
+
+# Validates all backend Docker images build successfully (no push).
+# Catches broken Dockerfiles before release. Uses registry cache for speed.
+
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "docker/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "src/**"
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  docker-build-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [pytorch, vllm, tensorrt]
+        include:
+          - backend: pytorch
+            build-args: INSTALL_FA3=false
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Login for cache pull (read-only - no push)
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.backend }} image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.${{ matrix.backend }}
+          target: runtime
+          push: false
+          build-args: ${{ matrix.build-args }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.backend }}:buildcache

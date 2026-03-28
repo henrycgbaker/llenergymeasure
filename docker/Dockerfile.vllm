@@ -13,7 +13,7 @@
 # ============================================================
 ARG VLLM_VERSION=v0.7.3
 
-FROM vllm/vllm-openai:${VLLM_VERSION}
+FROM vllm/vllm-openai:${VLLM_VERSION} AS runtime
 
 # Reset upstream ENTRYPOINT — vLLM sets ENTRYPOINT to its API server,
 # which conflicts with DockerRunner's command override pattern.

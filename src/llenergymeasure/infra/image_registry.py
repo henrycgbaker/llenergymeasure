@@ -257,7 +257,12 @@ def resolve_image(
     # 5. Smart default: delegate to get_default_image() (local build → registry)
     image = get_default_image(backend)
     local_image = LOCAL_IMAGE_TEMPLATE.format(backend=backend)
-    source = "local_build" if image == local_image else "registry"
+    if image == local_image:
+        source = "local_build"
+    elif _image_exists_locally(image):
+        source = "registry_cached"
+    else:
+        source = "registry"
     return (image, source)
 
 

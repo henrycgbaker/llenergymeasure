@@ -163,6 +163,47 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         """
         ...
 
+    def begin_image_prep(self, backends: list[str]) -> None:
+        """Signal the start of study-level Docker image preparation.
+
+        Args:
+            backends: Backend names that require Docker images.
+        """
+        ...
+
+    def image_ready(
+        self,
+        backend: str,
+        image: str,
+        cached: bool,
+        elapsed: float,
+        metadata: dict[str, str] | None = None,
+    ) -> None:
+        """Signal that a Docker image is ready (found locally or pulled).
+
+        Args:
+            backend: Backend name (e.g. "pytorch").
+            image: Docker image reference.
+            cached: True if image was found locally, False if pulled.
+            elapsed: Wall-clock time for the check/pull.
+            metadata: Optional image metadata (id, size, built, layers).
+        """
+        ...
+
+    def image_failed(self, backend: str, image: str, error: str) -> None:
+        """Signal that a Docker image could not be prepared.
+
+        Args:
+            backend: Backend name.
+            image: Docker image reference that was attempted.
+            error: Human-readable error message.
+        """
+        ...
+
+    def end_image_prep(self) -> None:
+        """Signal the end of study-level Docker image preparation."""
+        ...
+
     def show_gap(self, text: str) -> None:
         """Show a gap countdown line in the display (e.g. 'Experiment gap: 7s')."""
         ...
@@ -252,6 +293,9 @@ STEPS_DOCKER = [
     STEP_FLOPS,
     STEP_SAVE,
 ]
+
+# Docker per-experiment path: image_check/pull handled at study level.
+STEPS_DOCKER_RUN = [s for s in STEPS_DOCKER if s not in {STEP_IMAGE_CHECK, STEP_PULL}]
 
 # Local path: no Docker steps, direct harness measurement.
 STEPS_LOCAL = [

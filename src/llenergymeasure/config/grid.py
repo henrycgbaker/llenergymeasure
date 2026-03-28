@@ -471,10 +471,8 @@ def build_preflight_panel(
             body.append("\n")
             # Show image resolution for Docker backends
             if spec.mode == "docker" and spec.image:
-                src = _IMAGE_SOURCE_SHORT.get(spec.image_source or "", spec.image_source or "")
-                body.append(f"    {'':18}", style="dim")
-                body.append(f"↳ {spec.image}", style="dim")
-                body.append(f"  ({src})\n", style="dim")
+                body.append("    ", style="dim")
+                body.append(f"\u21b3 {spec.image}\n", style="dim")
         else:
             mode_str = str(yaml_runners.get(b, "local"))
             _line(body, b, mode_str)
@@ -537,7 +535,7 @@ def build_preflight_panel(
 
     body.append("\n")
     # Hash (dimmed)
-    body.append("Study design hasH:\n ", style="dim")
+    body.append("Study design hash:\n ", style="dim")
     body.append(f"  {hash_display}\n", style="dim")
     # Results path (bold cyan)
     if study_dir is not None:
@@ -552,15 +550,6 @@ def build_preflight_panel(
         padding=(0, 1),
     )
 
-
-_IMAGE_SOURCE_SHORT: dict[str, str] = {
-    "local_build": "local build",
-    "registry": "registry",
-    "env": "env var",
-    "yaml": "study YAML",
-    "runner_override": "runner override",
-    "user_config": "user config",
-}
 
 _ENERGY_SAMPLER_NAMES: dict[str, str] = {
     "nvml": "NVMLSampler",
