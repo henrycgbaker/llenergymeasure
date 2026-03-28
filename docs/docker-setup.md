@@ -76,8 +76,15 @@ make docker-builder-setup
 ```
 
 This creates a `docker-container` driver builder called `llem-builder` with tuned GC limits
-(configured in `docker/buildkitd.toml`) and sets it as the default. The builder is used
-automatically by `docker compose build` when `COMPOSE_BAKE=true`.
+(configured in `docker/buildkitd.toml`). To use it, set the `BUILDX_BUILDER` environment
+variable:
+
+```bash
+export BUILDX_BUILDER=llem-builder
+docker compose build
+```
+
+Or add `BUILDX_BUILDER=llem-builder` to your `.env` file for project-scoped use.
 
 The command is idempotent - running it again is a no-op if the builder already exists.
 

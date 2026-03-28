@@ -77,7 +77,8 @@ multiple backends, causing expensive recompilation.
 make docker-builder-setup
 ```
 
-This creates a `llem-builder` with a 200 GiB GC limit (vs ~93 GiB default). Run once per
+This creates a `llem-builder` with a 200 GiB GC limit. To use it, set
+`BUILDX_BUILDER=llem-builder` in your `.env` file or export it in your shell. Run once per
 machine. See [Docker Setup - BuildKit](docker-setup.md#buildkit-builder-setup-recommended)
 for details.
 

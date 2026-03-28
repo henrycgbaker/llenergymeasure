@@ -22,9 +22,10 @@ setup:
 	pre-commit install
 	@echo "Dev environment ready. Run: lem --help"
 
-docker-setup: setup docker-builder-setup
+docker-setup: setup
 	docker compose build
 	@echo "Docker environment ready. Run: llem run <config.yaml>"
+	@echo "Tip: run 'make docker-builder-setup' for a BuildKit builder with larger cache limits"
 
 # =============================================================================
 # Local Development
@@ -127,10 +128,9 @@ docker-builder-setup:
 		docker buildx create \
 			--name $(BUILDER_NAME) \
 			--driver docker-container \
-			--config docker/buildkitd.toml \
-			--bootstrap \
-			--use; \
-		echo "Builder '$(BUILDER_NAME)' created and set as default"; \
+			--buildkitd-config docker/buildkitd.toml \
+			--bootstrap; \
+		echo "Builder '$(BUILDER_NAME)' created. Use with: BUILDX_BUILDER=$(BUILDER_NAME) docker compose build"; \
 	fi
 
 # Remove the builder (e.g. to recreate with new config)

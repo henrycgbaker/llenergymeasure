@@ -2,7 +2,7 @@
 #
 # Our Docker images are large (PyTorch ~8 GB, vLLM ~17 GB, TensorRT ~54 GB)
 # and the builder stages (FA2/FA3 compilation) add significant cache. The
-# default BuildKit GC limit (~10% of disk, typically ~93 GiB) is too small
+# default BuildKit GC limit (~10% of disk) is too small
 # to hold all three images' build cache simultaneously, causing cache eviction
 # and expensive recompilation (~1 hour for FA3).
 #
