@@ -132,8 +132,17 @@ for the full resolution chain.
 
 ### Build Cache (recommended)
 
-Docker image builds can be slow - especially the PyTorch image which compiles FlashAttention
-from source (~1 hour cold build). To skip this by pulling pre-compiled layers from GHCR:
+Docker image builds can be slow without caching. To speed them up, pull pre-compiled layers
+from GHCR:
+
+| Backend | Image Size | Cold Build | Cached Rebuild |
+|---------|-----------|------------|----------------|
+| PyTorch (FA3 on) | ~8.5 GB | ~30 min | ~30 sec |
+| vLLM | ~17 GB | ~30 min | ~5 min |
+| TensorRT-LLM | ~54 GB | ~40 min | ~10 min |
+
+Cold build = no cache, compiling from scratch. Cached rebuild = `COMPOSE_BAKE=true` with
+local BuildKit cache populated. Times depend on network speed and hardware.
 
 **1. Enable COMPOSE_BAKE in your `.env`:**
 
@@ -152,8 +161,8 @@ docker compose build pytorch
 ```
 
 Compose will pull cached layers from GHCR (written by CI on each release) and only rebuild
-layers that have changed locally. A cached PyTorch build typically completes in under 2
-minutes instead of ~1 hour.
+layers that have changed locally. A cached PyTorch build completes in under a minute
+instead of ~30 minutes.
 
 **How it works:**
 
@@ -181,8 +190,8 @@ entries in `docker-compose.yml` are silently ignored. No errors, just slower bui
 
 The PyTorch Docker image ships with both FlashAttention-2 (FA2) and FlashAttention-3 (FA3)
 pre-built. FA3 is compiled from source during the image build, which is the slowest build
-step (~1 hour cold). With the GHCR build cache enabled (`COMPOSE_BAKE=true`), FA3 layers
-are pulled pre-compiled and the build completes in under 2 minutes.
+step (~20 min). With the build cache enabled (`COMPOSE_BAKE=true`), FA3 layers are pulled
+pre-compiled and the build completes in under a minute.
 
 FA3 provides Hopper-optimised attention kernels. Use it via
 `pytorch.attn_implementation: flash_attention_3` in your experiment configs.
