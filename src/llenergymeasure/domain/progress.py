@@ -101,7 +101,13 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         - StudyStepDisplay (cli/_step_display.py)
     """
 
-    def begin_experiment(self, index: int, header: str, steps: list[str]) -> None:
+    def begin_experiment(
+        self,
+        index: int,
+        header: str,
+        steps: list[str],
+        runner_info: dict[str, str | None] | None = None,
+    ) -> None:
         """Signal that a new experiment is starting within the study.
 
         Args:
@@ -109,6 +115,10 @@ class StudyProgressCallback(ProgressCallback, Protocol):
             header: Pre-built display string (e.g. "Qwen2.5-0.5B / pytorch / bf16 batch=4").
                     Built by ``format_experiment_header()`` in ``utils/formatting.py``.
             steps: Ordered step names for this experiment's [x/y] counter.
+            runner_info: Optional dict with runner/image provenance for display:
+                ``mode`` ("local" or "docker"), ``source`` (where mode was resolved),
+                ``image`` (Docker image tag or None), ``image_source`` (where image
+                was resolved: "local_build", "registry", "env", "yaml", etc.).
         """
         ...
 

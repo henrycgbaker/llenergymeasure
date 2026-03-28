@@ -123,6 +123,14 @@ class UserConfig(BaseModel):
 
     output: UserOutputConfig = Field(default_factory=UserOutputConfig)
     runners: UserRunnersConfig = Field(default_factory=UserRunnersConfig)
+    images: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Per-backend Docker image overrides (orthogonal to runners). "
+            "Keys are backend names, values are image references. "
+            "Empty dict = use smart default (local build → registry fallback)."
+        ),
+    )
     measurement: UserMeasurementConfig = Field(default_factory=UserMeasurementConfig)
     ui: UserUIConfig = Field(default_factory=UserUIConfig)
     execution: UserExecutionConfig = Field(default_factory=UserExecutionConfig)
