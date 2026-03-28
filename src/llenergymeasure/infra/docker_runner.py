@@ -126,7 +126,11 @@ class DockerRunner:
     # ------------------------------------------------------------------
 
     def run(
-        self, config: Any, progress: ProgressCallback | None = None, save_timeseries: bool = True
+        self,
+        config: Any,
+        progress: ProgressCallback | None = None,
+        save_timeseries: bool = True,
+        skip_image_check: bool = False,
     ) -> Any:
         """Run an experiment inside an ephemeral Docker container.
 
@@ -166,7 +170,8 @@ class DockerRunner:
 
         try:
             # --- Ensure image is available (pull with visible output if needed) ---
-            self._ensure_image(progress=_p)
+            if not skip_image_check:
+                self._ensure_image(progress=_p)
 
             # --- Write config JSON ---
             # Compute config_hash from the clean config (no output path mutation).
@@ -315,6 +320,7 @@ class DockerRunner:
 
         Always emits an ``image_check`` step so the user sees the cache lookup.
         If the image is not cached, emits a separate ``pull`` step.
+        Substeps report image metadata (ID, size, age) for provenance visibility.
         """
         short_image = self.short_image
 

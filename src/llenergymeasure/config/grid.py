@@ -462,6 +462,8 @@ def build_preflight_panel(
     # -- Runners --
     _section(body, "Runners")
     yaml_runners = study_config.runners or {}
+    has_docker = False
+    needs_build = False
     for b in unique_backends:
         if runner_specs and b in runner_specs:
             spec = runner_specs[b]
@@ -471,13 +473,25 @@ def build_preflight_panel(
             body.append("\n")
             # Show image resolution for Docker backends
             if spec.mode == "docker" and spec.image:
+                has_docker = True
                 src = _IMAGE_SOURCE_SHORT.get(spec.image_source or "", spec.image_source or "")
                 body.append(f"    {'':18}", style="dim")
-                body.append(f"↳ {spec.image}", style="dim")
+                body.append(f"\u21b3 {spec.image}", style="dim")
                 body.append(f"  ({src})\n", style="dim")
+                if spec.image_source == "registry":
+                    needs_build = True
+            elif spec.mode == "docker":
+                has_docker = True
         else:
             mode_str = str(yaml_runners.get(b, "local"))
             _line(body, b, mode_str)
+
+    # Docker build hint when images need building or pulling
+    if has_docker and needs_build:
+        body.append(
+            "    \u2139  Build locally: COMPOSE_BAKE=true docker compose build <backend>\n",
+            style="dim",
+        )
 
     # -- Study-wide constants (shown when NOT varying across experiments) --
     constants: list[tuple[str, str]] = []
@@ -537,7 +551,7 @@ def build_preflight_panel(
 
     body.append("\n")
     # Hash (dimmed)
-    body.append("Study design hasH:\n ", style="dim")
+    body.append("Study design hash:\n ", style="dim")
     body.append(f"  {hash_display}\n", style="dim")
     # Results path (bold cyan)
     if study_dir is not None:
@@ -554,8 +568,8 @@ def build_preflight_panel(
 
 
 _IMAGE_SOURCE_SHORT: dict[str, str] = {
-    "local_build": "local build",
-    "registry": "registry",
+    "local_build": "local build \u2713",
+    "registry": "registry \u2014 needs pull",
     "env": "env var",
     "yaml": "study YAML",
     "runner_override": "runner override",

@@ -566,6 +566,15 @@ class StudyStepDisplay:
         self._total_start: float = 0.0
         self._gap_text: str = ""
 
+        # Image prep state (study-level Docker image preparation)
+        self._image_prep_active: bool = False
+        self._image_prep_total: int = 0
+        self._image_prep_done: list[
+            tuple[str, str, bool, float, dict[str, str] | None]
+        ] = []  # (backend, image, cached, elapsed, metadata)
+        self._image_prep_active_backend: str | None = None
+        self._image_prep_failed: tuple[str, str, str] | None = None  # (backend, image, error)
+
     def start(self, *, print_header: bool = True) -> None:
         """Begin the display. Optionally prints study header and starts Rich Live if TTY.
 
@@ -786,6 +795,108 @@ class StudyStepDisplay:
             self._gap_text = ""
         self._refresh()
 
+    # -- Image prep (study-level Docker image preparation) --
+
+    def begin_image_prep(self, backends: list[str]) -> None:
+        """Signal the start of study-level Docker image preparation."""
+        with self._lock:
+            self._image_prep_active = True
+            self._image_prep_total = len(backends)
+        if not self._is_tty:
+            self._console.print("\n  Docker images", highlight=False)
+        self._refresh()
+
+    def image_ready(
+        self,
+        backend: str,
+        image: str,
+        cached: bool,
+        elapsed: float,
+        metadata: dict[str, str] | None = None,
+    ) -> None:
+        """Signal that a Docker image is ready."""
+        with self._lock:
+            self._image_prep_done.append((backend, image, cached, elapsed, metadata))
+            self._image_prep_active_backend = None
+        if not self._is_tty:
+            idx = len(self._image_prep_done)
+            total = self._image_prep_total
+            status = "cached" if cached else "pulled"
+            short_img = image.rsplit("/", 1)[-1] if "/" in image else image
+            line = f"      [{idx}/{total}]  {backend:<16s}{short_img} ({status})"
+            line += f"  \u2713  {_format_elapsed(elapsed)}"
+            self._console.print(line, highlight=False)
+            if metadata:
+                parts = [f"{k}: {v}" for k, v in metadata.items()]
+                meta_text = " \u00b7 ".join(parts)
+                self._console.print(
+                    f"                    \u00b7 {meta_text}",
+                    style="dim",
+                    highlight=False,
+                )
+        self._refresh()
+
+    def image_failed(self, backend: str, image: str, error: str) -> None:
+        """Signal that a Docker image could not be prepared."""
+        with self._lock:
+            self._image_prep_failed = (backend, image, error)
+            self._image_prep_active_backend = None
+        if not self._is_tty:
+            idx = len(self._image_prep_done) + 1
+            total = self._image_prep_total
+            short_img = image.rsplit("/", 1)[-1] if "/" in image else image
+            self._console.print(
+                f"      [{idx}/{total}]  {backend:<16s}{short_img}  \u2717",
+                highlight=False,
+            )
+            self._console.print(
+                f"                    \u00b7 {error}",
+                style="dim",
+                highlight=False,
+            )
+        self._refresh()
+
+    def end_image_prep(self) -> None:
+        """Signal the end of study-level Docker image preparation."""
+        with self._lock:
+            self._image_prep_active = False
+        self._refresh()
+
+    def _render_image_prep(self) -> Text:
+        """Render the Docker image preparation section."""
+        lines = Text()
+        if not self._image_prep_done and self._image_prep_failed is None:
+            if self._image_prep_active:
+                lines.append("\n  Docker images\n", style="bold")
+            return lines
+
+        lines.append("\n  Docker images\n")
+        total = self._image_prep_total
+
+        for idx, (backend, image, cached, elapsed, metadata) in enumerate(self._image_prep_done, 1):
+            status = "cached" if cached else "pulled"
+            short_img = image.rsplit("/", 1)[-1] if "/" in image else image
+            counter = f"[{idx}/{total}]"
+            lines.append(f"      {counter:>7s}  {backend:<16s}{short_img} ({status})")
+            lines.append("  \u2713", style="bold green")
+            lines.append(f"  {_format_elapsed(elapsed)}\n")
+            if metadata:
+                parts = [f"{k}: {v}" for k, v in metadata.items()]
+                meta_text = " \u00b7 ".join(parts)
+                lines.append(f"                    \u00b7 {meta_text}\n", style="dim")
+
+        if self._image_prep_failed:
+            fail_backend, fail_image, fail_error = self._image_prep_failed
+            idx = len(self._image_prep_done) + 1
+            short_img = fail_image.rsplit("/", 1)[-1] if "/" in fail_image else fail_image
+            counter = f"[{idx}/{total}]"
+            lines.append(f"      {counter:>7s}  {fail_backend:<16s}{short_img}")
+            lines.append("  \u2717", style="bold red")
+            lines.append("\n")
+            lines.append(f"                    \u00b7 {fail_error}\n", style="dim")
+
+        return lines
+
     # -- Rendering --
 
     def _build_table(self) -> Table:
@@ -899,12 +1010,13 @@ class StudyStepDisplay:
         return lines
 
     def _render(self) -> Group:
-        """Render completed experiments table + active experiment step display + gap."""
+        """Render image prep + completed experiments table + active steps + gap."""
         with self._lock:
+            image_prep = self._render_image_prep()
             table = self._build_table()
             step_text = self._render_active_steps()
             gap = Text(f"\n  {self._gap_text}", style="dim") if self._gap_text else Text("")
-        return Group(table, step_text, gap)
+        return Group(image_prep, table, step_text, gap)
 
     def _refresh(self) -> None:
         """Trigger immediate Live repaint (auto-refresh handles animation)."""

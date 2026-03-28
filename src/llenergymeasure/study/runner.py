@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure.config.ssot import RUNNER_DOCKER
-from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_LOCAL
+from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_DOCKER_RUN, STEPS_LOCAL
 from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
@@ -473,6 +473,8 @@ class StudyRunner:
         self._cycle_counters: dict[str, int] = {}
         # Study-level environment snapshot cache — collected once, reused across experiments
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
+        # Study-level image preparation: True after _prepare_images() succeeds
+        self._images_prepared: bool = False
 
     def run(self) -> list[Any]:
         """Run all experiments in order; return list of results or failure dicts.
@@ -523,6 +525,10 @@ class StudyRunner:
                     _kill_process_group(self._active_process.pid, signal.SIGKILL)  # SIGKILL
 
         original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
+
+        # Study-level Docker image preparation: check/pull all images once
+        # before the experiment loop. Per-experiment image_check is then skipped.
+        self._prepare_images()
 
         try:
             results: list[Any] = []
@@ -576,6 +582,156 @@ class StudyRunner:
 
             self._env_snapshot_future = collect_environment_snapshot_async()
         return self._env_snapshot_future.result(timeout=10)
+
+    def _prepare_images(self) -> None:
+        """Check/pull Docker images for all Docker backends before experiments.
+
+        Runs once at the start of the study. Each backend's image is verified
+        (or pulled) sequentially. On failure, raises so the study aborts early.
+        Sets ``_images_prepared`` so per-experiment image_check is skipped.
+        """
+        import subprocess
+
+        if not self._runner_specs:
+            return
+
+        docker_backends = [
+            (backend, spec)
+            for backend, spec in self._runner_specs.items()
+            if spec.mode == RUNNER_DOCKER and spec.image
+        ]
+        if not docker_backends:
+            return
+
+        if self._progress:
+            self._progress.begin_image_prep([b for b, _ in docker_backends])
+
+        for backend, spec in docker_backends:
+            image = spec.image
+            assert image is not None  # narrowing for type checker
+            t0 = time.monotonic()
+
+            # Check if image exists locally
+            try:
+                check = subprocess.run(
+                    ["docker", "image", "inspect", image],
+                    capture_output=True,
+                    timeout=10,
+                )
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                check = None
+
+            if check is not None and check.returncode == 0:
+                elapsed = time.monotonic() - t0
+                metadata = self._parse_image_metadata(check.stdout)
+                if self._progress:
+                    self._progress.image_ready(
+                        backend, image, cached=True, elapsed=elapsed, metadata=metadata
+                    )
+                continue
+
+            # Image not found locally — try to pull
+            logger.info("Image %s not found locally, pulling...", image)
+            try:
+                pull = subprocess.run(
+                    ["docker", "pull", image],
+                    capture_output=True,
+                    timeout=1800,
+                )
+            except subprocess.TimeoutExpired as exc:
+                if self._progress:
+                    self._progress.image_failed(backend, image, "pull timed out (30min)")
+                    self._progress.end_image_prep()
+                from llenergymeasure.infra.docker_errors import DockerImagePullError
+
+                raise DockerImagePullError(
+                    message=f"Image pull timed out: {image}",
+                    fix_suggestion=f"COMPOSE_BAKE=true docker compose build {backend}",
+                ) from exc
+
+            if pull.returncode != 0:
+                tip = f"COMPOSE_BAKE=true docker compose build {backend}"
+                if self._progress:
+                    self._progress.image_failed(backend, image, f"not found \u2014 run: {tip}")
+                    self._progress.end_image_prep()
+                from llenergymeasure.infra.docker_errors import DockerImagePullError
+
+                raise DockerImagePullError(
+                    message=f"Image not found: {image}",
+                    fix_suggestion=tip,
+                )
+
+            elapsed = time.monotonic() - t0
+            # Re-inspect for metadata after pull
+            try:
+                inspect = subprocess.run(
+                    ["docker", "image", "inspect", image],
+                    capture_output=True,
+                    timeout=10,
+                )
+                metadata = self._parse_image_metadata(inspect.stdout)
+            except Exception:
+                metadata = None
+
+            if self._progress:
+                self._progress.image_ready(
+                    backend, image, cached=False, elapsed=elapsed, metadata=metadata
+                )
+
+        if self._progress:
+            self._progress.end_image_prep()
+
+        self._images_prepared = True
+
+    @staticmethod
+    def _parse_image_metadata(inspect_stdout: bytes) -> dict[str, str] | None:
+        """Extract human-readable metadata from docker image inspect JSON."""
+        import json
+
+        try:
+            data = json.loads(inspect_stdout)
+            if not data:
+                return None
+            info = data[0]
+            meta: dict[str, str] = {}
+
+            image_id = info.get("Id", "")
+            if image_id.startswith("sha256:"):
+                image_id = image_id[7:19]
+            if image_id:
+                meta["id"] = image_id
+
+            size_bytes = info.get("Size", 0)
+            if size_bytes:
+                if size_bytes >= 1_073_741_824:
+                    meta["size"] = f"{size_bytes / 1_073_741_824:.1f} GB"
+                else:
+                    meta["size"] = f"{size_bytes / 1_048_576:.0f} MB"
+
+            created = info.get("Created", "")
+            if created:
+                from datetime import datetime, timezone
+
+                try:
+                    created_dt = datetime.fromisoformat(created[:26].rstrip("Z"))
+                    created_dt = created_dt.replace(tzinfo=timezone.utc)
+                    age = datetime.now(timezone.utc) - created_dt
+                    if age.days > 0:
+                        meta["built"] = f"{age.days}d ago"
+                    elif age.seconds >= 3600:
+                        meta["built"] = f"{age.seconds // 3600}h ago"
+                    else:
+                        meta["built"] = f"{age.seconds // 60}m ago"
+                except (ValueError, TypeError):
+                    pass
+
+            layers = info.get("RootFS", {}).get("Layers", [])
+            if layers:
+                meta["layers"] = str(len(layers))
+
+            return meta if meta else None
+        except (json.JSONDecodeError, KeyError, IndexError):
+            return None
 
     def _run_gap(self, seconds: float, label: str) -> None:
         """Run a thermal gap, rendering countdown in the live display or terminal."""
@@ -829,10 +985,13 @@ class StudyRunner:
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
+            # Use STEPS_DOCKER_RUN (no image_check/pull) when images were
+            # prepared at study level; fall back to full STEPS_DOCKER otherwise.
+            steps = list(STEPS_DOCKER_RUN) if self._images_prepared else list(STEPS_DOCKER)
             self._progress.begin_experiment(
                 index,
                 format_experiment_header(config),
-                list(STEPS_DOCKER),
+                steps,
                 runner_info=spec.to_runner_info(),
             )
             # Host-side preflight doesn't run in Docker path — mark as skipped
@@ -843,10 +1002,12 @@ class StudyRunner:
         result: Any
         try:
             # Pass study progress as step callback — DockerRunner calls on_step_*
+            # skip_image_check=True when images were verified at study level.
             result = docker_runner.run(
                 config,
                 progress=self._progress,
                 save_timeseries=self.study.output.save_timeseries,
+                skip_image_check=self._images_prepared,
             )
         except DockerError as exc:
             # Use structured error payload from container entrypoint when available,
