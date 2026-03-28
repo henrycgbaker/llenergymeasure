@@ -29,6 +29,12 @@ from llenergymeasure.utils.formatting import truncate_detail as _truncate_detail
 # Braille spinner frames (same as Docker BuildKit / ora)
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
+
+def _short_image(image: str) -> str:
+    """Strip registry prefix from Docker image reference for display."""
+    return image.rsplit("/", 1)[-1] if "/" in image else image
+
+
 # Heartbeat interval for non-TTY mode (seconds)
 _HEARTBEAT_INTERVAL = 5.0
 
@@ -563,8 +569,6 @@ class StudyStepDisplay:
         # Per-experiment save paths: (index, host_path, container_path | None)
         self._saved_paths: list[tuple[int, str, str | None]] = []
 
-        # (reserved for future section headers)
-
         self._live: Live | None = None
         self._total_start: float = 0.0
         self._gap_text: str = ""
@@ -575,7 +579,6 @@ class StudyStepDisplay:
         self._image_prep_done: list[
             tuple[str, str, bool, float, dict[str, str] | None]
         ] = []  # (backend, image, cached, elapsed, metadata)
-        self._image_prep_active_backend: str | None = None
         self._image_prep_failed: tuple[str, str, str] | None = None  # (backend, image, error)
 
     def start(self, *, print_header: bool = True) -> None:
@@ -820,12 +823,11 @@ class StudyStepDisplay:
         """Signal that a Docker image is ready."""
         with self._lock:
             self._image_prep_done.append((backend, image, cached, elapsed, metadata))
-            self._image_prep_active_backend = None
         if not self._is_tty:
             idx = len(self._image_prep_done)
             total = self._image_prep_total
             status = "cached" if cached else "pulled"
-            short_img = image.rsplit("/", 1)[-1] if "/" in image else image
+            short_img = _short_image(image)
             line = f"      [{idx}/{total}]  {backend:<16s}{short_img} ({status})"
             line += f"  \u2713  {_format_elapsed(elapsed)}"
             self._console.print(line, highlight=False)
@@ -843,11 +845,10 @@ class StudyStepDisplay:
         """Signal that a Docker image could not be prepared."""
         with self._lock:
             self._image_prep_failed = (backend, image, error)
-            self._image_prep_active_backend = None
         if not self._is_tty:
             idx = len(self._image_prep_done) + 1
             total = self._image_prep_total
-            short_img = image.rsplit("/", 1)[-1] if "/" in image else image
+            short_img = _short_image(image)
             self._console.print(
                 f"      [{idx}/{total}]  {backend:<16s}{short_img}  \u2717",
                 highlight=False,
@@ -878,7 +879,7 @@ class StudyStepDisplay:
 
         for idx, (backend, image, cached, elapsed, metadata) in enumerate(self._image_prep_done, 1):
             status = "cached" if cached else "pulled"
-            short_img = image.rsplit("/", 1)[-1] if "/" in image else image
+            short_img = _short_image(image)
             counter = f"[{idx}/{total}]"
             lines.append(f"      {counter:>7s}  {backend:<16s}{short_img} ({status})")
             lines.append("  \u2713", style="bold green")
@@ -891,7 +892,7 @@ class StudyStepDisplay:
         if self._image_prep_failed:
             fail_backend, fail_image, fail_error = self._image_prep_failed
             idx = len(self._image_prep_done) + 1
-            short_img = fail_image.rsplit("/", 1)[-1] if "/" in fail_image else fail_image
+            short_img = _short_image(fail_image)
             counter = f"[{idx}/{total}]"
             lines.append(f"      {counter:>7s}  {fail_backend:<16s}{short_img}")
             lines.append("  \u2717", style="bold red")
