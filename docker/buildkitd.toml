@@ -1,0 +1,34 @@
+# BuildKit daemon configuration for the llem-builder.
+#
+# Our Docker images are large (PyTorch ~8 GB, vLLM ~17 GB, TensorRT ~54 GB)
+# and the builder stages (FA2/FA3 compilation) add significant cache. The
+# default BuildKit GC limit (~10% of disk) is too small
+# to hold all three images' build cache simultaneously, causing cache eviction
+# and expensive recompilation (~1 hour for FA3).
+#
+# This config raises the GC limits to 200 GiB so all three backends can
+# coexist in the build cache without evicting each other.
+#
+# Applied via: docker buildx create --config docker/buildkitd.toml
+# See: https://docs.docker.com/build/buildkit/toml-configuration/
+
+[worker.oci]
+  # GC rules are evaluated in order. First matching rule wins.
+
+  # Rule 0: local sources and cache mounts — keep 48h, cap at 5 GiB
+  [[worker.oci.gcpolicy]]
+    filters = ["type==source.local", "type==exec.cachemount", "type==source.git.checkout"]
+    keepDuration = "48h"
+    maxUsedSpace = "5GiB"
+
+  # Rule 1: non-internal layers — keep 60 days, generous space
+  [[worker.oci.gcpolicy]]
+    keepDuration = "1440h"
+    reservedSpace = "20GiB"
+    maxUsedSpace = "200GiB"
+
+  # Rule 2: all layers — reserve 20 GiB, cap at 200 GiB
+  [[worker.oci.gcpolicy]]
+    all = true
+    reservedSpace = "20GiB"
+    maxUsedSpace = "200GiB"
