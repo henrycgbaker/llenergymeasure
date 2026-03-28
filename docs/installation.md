@@ -67,6 +67,20 @@ For vLLM or TensorRT-LLM backends, Docker with NVIDIA Container Toolkit is requi
 
 ---
 
+## BuildKit Builder Setup
+
+Before building Docker images locally, set up a dedicated BuildKit builder with sufficient
+cache space. Without this, the default builder may evict cached layers when building
+multiple backends, causing expensive recompilation.
+
+```bash
+make docker-builder-setup
+```
+
+This creates a `llem-builder` with a 200 GiB GC limit (vs ~93 GiB default). Run once per
+machine. See [Docker Setup - BuildKit](docker-setup.md#buildkit-builder-setup-recommended)
+for details.
+
 ## Building Docker Images from Source
 
 The pre-built images from GHCR work for most users. If you need to rebuild images locally
