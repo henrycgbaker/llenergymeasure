@@ -47,6 +47,20 @@ sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
+**Verify Docker Compose version** (v2.32+ recommended for [build cache](installation.md#build-cache-recommended)):
+
+```bash
+docker compose version
+```
+
+If your version is below v2.32, you can upgrade the plugin directly:
+
+```bash
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
+  -o /usr/libexec/docker/cli-plugins/docker-compose
+sudo chmod 755 /usr/libexec/docker/cli-plugins/docker-compose
+```
+
 **Post-install step:** Add your user to the `docker` group so you can run Docker without `sudo`:
 
 ```bash
@@ -352,3 +366,4 @@ llem run experiment.yaml --skip-preflight
 
 - [Getting Started](getting-started.md) — run your first vLLM or TensorRT-LLM experiment
 - [Backend Configuration](backends.md) — configure vLLM, TensorRT-LLM, and switch between backends
+- [Build Cache](installation.md#build-cache-recommended) — speed up local Docker builds with GHCR registry cache

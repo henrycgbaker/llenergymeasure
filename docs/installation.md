@@ -9,6 +9,7 @@
 | GPU | NVIDIA with CUDA 12.x | Required for all inference backends |
 | CUDA (host) | 12.x | For container image compatibility |
 | Docker + NVIDIA Container Toolkit | Latest | Required for vLLM and TensorRT-LLM |
+| Docker Compose | v2.32+ recommended | Required for build cache (see below). v2.11+ minimum |
 
 **macOS/Windows:** PyTorch backend only. Docker-based backends (vLLM, TensorRT-LLM) require Linux.
 
@@ -85,27 +86,69 @@ for details.
 ## Building Docker Images from Source
 
 The pre-built images from GHCR work for most users. If you need to rebuild images locally
-(e.g. after modifying the source code, or to include FlashAttention-3), build from the
-repository root:
+(e.g. after modifying the source code, or to include FlashAttention-3), use Docker Compose:
 
 ```bash
-# PyTorch image (includes FA2, excludes FA3 by default)
-docker build -f docker/Dockerfile.pytorch -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
+# Build a specific backend
+docker compose build pytorch
 
-# vLLM image
-docker build -f docker/Dockerfile.vllm -t ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0 .
-
-# TensorRT-LLM image
-docker build -f docker/Dockerfile.tensorrt -t ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0 .
+# Build all backends
+docker compose build pytorch vllm tensorrt
 ```
 
-Replace `v0.9.0` with the version shown by `llem --version`. The tag must match the
-installed version so the tool finds the correct image.
+Or with plain `docker build`:
+
+```bash
+docker build -f docker/Dockerfile.pytorch -t llenergymeasure:pytorch .
+docker build -f docker/Dockerfile.vllm -t llenergymeasure:vllm .
+docker build -f docker/Dockerfile.tensorrt -t llenergymeasure:tensorrt .
+```
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, backends, or the container entrypoint, you must rebuild for changes
 > to take effect inside containers. Local-runner experiments (PyTorch) use the installed
 > source directly and do not need a rebuild.
+
+### Build Cache (recommended)
+
+Docker image builds can be slow - especially the PyTorch image which compiles FlashAttention
+from source (~1 hour cold build). To skip this by pulling pre-compiled layers from GHCR:
+
+**1. Log in to GitHub Container Registry:**
+
+```bash
+docker login ghcr.io
+```
+
+You need a GitHub account with a
+[personal access token](https://github.com/settings/tokens) (read:packages scope).
+
+**2. Enable COMPOSE_BAKE in your `.env`:**
+
+```bash
+COMPOSE_BAKE=true
+```
+
+This is already set in `.env.example`. It tells Docker Compose to delegate builds to
+BuildKit's [bake](https://docs.docker.com/build/bake/) engine, which has full support for
+registry-based build cache.
+
+**3. Build as normal:**
+
+```bash
+docker compose build pytorch
+```
+
+Compose will pull cached layers from GHCR (written by CI on each release) and only rebuild
+layers that have changed locally. A cached PyTorch build typically completes in under 2
+minutes instead of ~1 hour.
+
+**Requirements:** Docker Compose v2.32+ (`docker compose version` to check). If you have
+an older version, see the
+[Docker Compose install docs](https://docs.docker.com/compose/install/) to upgrade.
+
+**Without COMPOSE_BAKE:** Builds work normally but don't use registry cache. The `cache_from`
+entries in `docker-compose.yml` are silently ignored. No errors, just slower builds.
 
 ### FlashAttention-3 (optional)
 
