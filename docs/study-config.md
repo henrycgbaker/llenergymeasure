@@ -80,8 +80,10 @@ llem run experiment.yaml
 A study runs multiple experiments with different configurations. There are two ways to define
 the experiment set:
 
-- **`sweep:`** — defines a grid of parameter values. llenergymeasure takes the Cartesian
-  product of all sweep dimensions to produce every combination.
+- **`sweep:`** — defines a grid of parameter values. Supports two entry types:
+  - **Independent axes** (list of scalars) — Cartesian product across all axes.
+  - **Dependent groups** (list of dicts) — alternatives within a group, crossed with other
+    groups and axes. Use for parameters with mutual exclusivity or co-dependencies.
 - **`experiments:`** — explicit list of experiment configs. Each entry is merged with any
   top-level shared fields.
 
@@ -286,6 +288,141 @@ study_execution:
   n_cycles: 3
   experiment_order: shuffle
 ```
+
+---
+
+### Dependent groups (sweep groups)
+
+Some parameters have constraints: `torch_compile_mode` only makes sense when
+`torch_compile: true`, quantisation sub-params like `bnb_4bit_quant_type` require
+`load_in_4bit: true`, and beam search requires `do_sample: false`. A plain Cartesian
+sweep would produce invalid combinations. **Dependent groups** solve this by bundling
+constrained parameters into named groups of alternative variants.
+
+**Type-based disambiguation:** a list of scalars is an independent axis; a list of dicts
+is a dependent group. Groups are crossed with each other and with independent axes, but
+entries *within* a group are alternatives (unioned, not crossed).
+
+```yaml
+# 6 configs: 2 dtype × 3 compilation variants
+name: compile-sweep
+model: gpt2
+backend: pytorch
+
+sweep:
+  dtype: [float16, bfloat16]                     # independent axis (2 values)
+  pytorch.compilation:                            # dependent group (3 variants)
+    - pytorch.torch_compile: false
+    - pytorch.torch_compile: true
+      pytorch.torch_compile_mode: default
+    - pytorch.torch_compile: true
+      pytorch.torch_compile_mode: max-autotune
+```
+
+The group name (`pytorch.compilation`) is an abstract label - it doesn't map to a config
+field. Keys within each variant dict are fully-qualified dotted paths, routed the same way
+as independent axis keys.
+
+---
+
+### Baseline variant (`{}`)
+
+Use an empty dict `{}` as a group entry to include a "no override" baseline:
+
+```yaml
+sweep:
+  pytorch.quantization:
+    - {}                              # baseline: no quantisation
+    - pytorch.load_in_8bit: true
+    - pytorch.load_in_4bit: true
+      pytorch.bnb_4bit_quant_type: nf4
+```
+
+Produces 3 variants: unquantised baseline, 8-bit, and 4-bit.
+
+---
+
+### Mini-grids within group entries
+
+A group entry can contain list-valued fields (list of scalars), which expand as a
+mini Cartesian product within that entry:
+
+```yaml
+sweep:
+  pytorch.caching:
+    - {}                              # baseline
+    - pytorch.use_cache: true
+      pytorch.cache_implementation: [static, offloaded_static, sliding_window]
+```
+
+Produces 4 variants: 1 baseline + 3 cache implementations (all with `use_cache: true`).
+
+---
+
+### Cross-section overrides
+
+Group entries can override fields outside their backend section, such as decoder settings:
+
+```yaml
+sweep:
+  pytorch.decoding:
+    - {}                              # baseline: use shared decoder settings
+    - decoder.do_sample: false
+      decoder.temperature: 0.0
+      pytorch.num_beams: 4
+      pytorch.early_stopping: true
+```
+
+---
+
+### YAML anchors for repetition reduction
+
+Use YAML anchors (`&name`) and merge keys (`<<: *name`) to avoid repeating shared fields
+across group variants:
+
+```yaml
+sweep:
+  tensorrt.quant_config:
+    - {}                              # baseline: no quantisation
+    - &trt_int8
+      tensorrt.quant.quant_algo: INT8
+    - <<: *trt_int8
+      tensorrt.quant.kv_cache_quant_algo: INT8
+    - tensorrt.quant.quant_algo: W4A16_AWQ
+```
+
+---
+
+### Multiple groups crossed
+
+When a sweep has multiple groups, they are crossed with each other (and with independent
+axes):
+
+```yaml
+# 2 dtype × 2 compilation × 3 quantisation = 12 configs
+sweep:
+  dtype: [float16, bfloat16]
+  pytorch.compilation:
+    - pytorch.torch_compile: false
+    - pytorch.torch_compile: true
+      pytorch.torch_compile_mode: default
+  pytorch.quantization:
+    - {}
+    - pytorch.load_in_8bit: true
+    - pytorch.load_in_4bit: true
+      pytorch.bnb_4bit_quant_type: nf4
+```
+
+---
+
+### Backend-scoped groups
+
+Groups with a backend-prefixed name (e.g. `pytorch.compilation`, `vllm.decoding`) only
+apply to that backend's experiments. Universal groups (no backend prefix) apply to all
+backends.
+
+> **Collision rule:** A group name must not match an independent axis key. Use abstract
+> names like `pytorch.compilation` (not `pytorch.torch_compile`) to avoid collisions.
 
 ---
 

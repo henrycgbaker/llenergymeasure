@@ -168,11 +168,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   pytorch.caching:
     - {}                                          # baseline: default caching
     - pytorch.use_cache: true
-      pytorch.cache_implementation: static
-    - pytorch.use_cache: true
-      pytorch.cache_implementation: offloaded_static
-    - pytorch.use_cache: true
-      pytorch.cache_implementation: sliding_window
+      pytorch.cache_implementation: [static, offloaded_static, sliding_window]
 
   # beam search requires decoder.do_sample: false (cross-section dependency)
   # TODO: as above: move this into sweep logic and validate that incompatible params are automatically filtered out (e.g. if beam search params are swept together with sampling params, does it automatically disable the sampling params when beam search is enabled, or does it produce invalid configs that need to be filtered out?) - if this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed.
