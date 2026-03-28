@@ -127,7 +127,7 @@ def _render_runner_info(lines: Text, info: dict[str, str | None]) -> None:
     image = info.get("image")
     image_source = info.get("image_source")
 
-    source_label = _RUNNER_SOURCE_LABELS.get(source, source)
+    source_label = _RUNNER_SOURCE_LABELS.get(source or "", source or "")
 
     if mode == "local":
         lines.append(f"       mode:    local ({source_label})\n", style="dim")
