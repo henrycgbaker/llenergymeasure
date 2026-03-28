@@ -142,13 +142,12 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   pytorch.quantization:
     - {}                                          # baseline: no quantisation
     - pytorch.load_in_8bit: true
-    - &bnb4_base
-      pytorch.load_in_4bit: true
+    - pytorch.load_in_4bit: true
+      pytorch.bnb_4bit_compute_dtype: float16
+      pytorch.bnb_4bit_quant_type: [nf4, fp4]
+    - pytorch.load_in_4bit: true
       pytorch.bnb_4bit_compute_dtype: float16
       pytorch.bnb_4bit_quant_type: nf4
-    - <<: *bnb4_base
-      pytorch.bnb_4bit_quant_type: fp4
-    - <<: *bnb4_base
       pytorch.bnb_4bit_use_double_quant: true
 
   # cache_implementation requires use_cache: true
@@ -214,16 +213,14 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
   tensorrt.quant_config:
     - {}                                          # baseline: no quantisation
-    - &trt_int8
-      tensorrt.quant.quant_algo: INT8
-    - <<: *trt_int8
+    - tensorrt.quant.quant_algo: INT8
+    - tensorrt.quant.quant_algo: INT8
       tensorrt.quant.kv_cache_quant_algo: INT8
-    - <<: *trt_int8
+    - tensorrt.quant.quant_algo: INT8
       tensorrt.calib.calib_batches: 512
       tensorrt.calib.calib_dataset: cnn_dailymail
       tensorrt.calib.calib_max_seq_length: 512
-    - tensorrt.quant.quant_algo: W4A16_AWQ
-    - tensorrt.quant.quant_algo: W8A16
+    - tensorrt.quant.quant_algo: [W4A16_AWQ, W8A16]
     # - tensorrt.quant.quant_algo: FP8  # Requires SM >= 8.9 (Ada Lovelace / Hopper)
 
   # KV cache compound settings (block_reuse + memory_fraction travel together)
