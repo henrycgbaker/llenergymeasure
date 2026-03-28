@@ -101,8 +101,14 @@ jobs:
           generate_release_notes: true
           files: dist/*
 
+  docker-build-check:
+    needs: [lint, type-check, test, validate-version]
+    uses: ./.github/workflows/docker-build-check.yml
+    permissions:
+      packages: read
+
   docker:
-    needs: release
+    needs: [release, docker-build-check]
     uses: ./.github/workflows/docker-publish.yml
     with:
       version: ${{ github.ref_name }}

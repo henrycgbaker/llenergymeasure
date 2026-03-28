@@ -115,17 +115,17 @@ ci: check test check-docs
 
 # Build all backends (pytorch, vllm, tensorrt) — local images
 docker-build-all:
-	docker compose build base pytorch vllm tensorrt
-	
+	docker compose build pytorch vllm tensorrt
+
 # Build PyTorch backend (default, recommended for most users)
 docker-build-pytorch:
-	docker compose build base pytorch
+	docker compose build pytorch
 # Build specific backends — local images
 docker-build-vllm:
-	docker compose build base vllm
+	docker compose build vllm
 
 docker-build-tensorrt:
-	docker compose build base tensorrt
+	docker compose build tensorrt
 
 # Pull versioned registry images (ghcr.io) instead of building locally
 docker-pull:
@@ -181,7 +181,7 @@ docker-shell:
 
 # Build the dev Docker image
 docker-build-dev:
-	docker compose --profile dev build base pytorch-dev
+	docker compose --profile dev build pytorch-dev
 
 # Interactive dev shell with source mounted
 docker-dev:
@@ -191,9 +191,9 @@ docker-dev:
 # Volume Management
 # =============================================================================
 
-# Clean experiment state volume (preserves caches)
+# Clean experiment state (bind mount at .state/, preserves caches)
 lem-clean-state:
-	docker volume rm lem-experiment-state 2>/dev/null || true
+	rm -rf .state/*
 	@echo "Cleared experiment state"
 
 # Clean HuggingFace cache volume (will need to re-download models)
@@ -206,7 +206,8 @@ lem-clean-trt:
 	docker volume rm lem-trt-engine-cache 2>/dev/null || true
 	@echo "Cleared TensorRT engine cache"
 
-# Clean all named volumes (state + caches)
+# Clean all volumes and state
 lem-clean-all:
-	docker volume rm lem-experiment-state lem-hf-cache lem-trt-engine-cache 2>/dev/null || true
-	@echo "Cleared all LEM volumes"
+	rm -rf .state/*
+	docker volume rm lem-hf-cache lem-trt-engine-cache 2>/dev/null || true
+	@echo "Cleared all LEM state and volumes"
