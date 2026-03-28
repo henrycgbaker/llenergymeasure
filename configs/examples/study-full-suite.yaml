@@ -104,12 +104,17 @@ output:
   save_timeseries: true            # Persist GPU power/thermal/memory timeseries as Parquet sidecar
 
 # =====================================================================
-# Sweep axes (Cartesian product)
+# Sweep configuration (axes + dependent groups)
 # =====================================================================
-# Independent parameters - each value list is crossed with all others.
-# Dotted paths (e.g. pytorch.batch_size) scope params to that backend.
-# Each backend's scoped params are crossed only with each other and with
-# universal (non-dotted) axes.
+# Two entry types under sweep:
+#   - Independent axes (list of scalars): Cartesian product across all axes.
+#   - Dependent groups (list of dicts): Union of variant dicts. Groups are
+#     crossed with each other and with independent axes, but entries *within*
+#     a group are alternatives (unioned, not crossed).
+#
+# Type-based disambiguation: list[scalar] = axis, list[dict] = group.
+# YAML anchors (&name) + merge keys (<<: *name) reduce repetition in groups.
+# See .product/designs/sweep-constraints.md for full design rationale.
 
 sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- Universal (applies to all three backends) ---
@@ -132,6 +137,61 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     - eager
 
   #TODO add others - e.g. torch_compile, num_beams, quantisation, parallelisation, etc.
+
+  # --- PyTorch: dependent groups ─────────────────────────────────
+
+  # torch_compile_mode requires torch_compile: true
+  #TODO change this -> can we not add another dot hierarchy?
+  # depending on what the underlying pytorch field names are:
+  # pytorch.torch_compile: true/false? -> pytorch.torch_compile.mode (what is the name of the underlying field is it torch_compile_mode or just mode????? make sure to use native pytorch terminology)
+  # maybe e.g. pytorch.torch_compile.mode: default | reduce-overhead | max-autotune, and then have torch_compile: true/false as a separate axis? This way we could sweep torch_compile_mode with torch_compile: true, and also have torch_compile: false configs without needing to list them explicitly? Need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?) -> if this works as intended, we could remove the need for the explicit experiments below that test different torch_compile modes with torch_compile: true, and instead just have those as part of the sweep. The explicit experiments section would then only be needed for truly unique experiments that can't be easily captured in the sweep (e.g. specific quantisation configurations, beam search parameters, etc.) - need to validate this and potentially refactor to simplify the config and reduce the number of explicit experiments needed.
+  # OR have validate that these only work when torch_compile: true and automatically filter out invalid configs if torch_compile: false - this would allow us to keep the torch_compile_mode sweep separate from the torch_compile: true/false axis, which would be cleaner and more modular - need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?)
+  pytorch.compilation:
+    - pytorch.torch_compile: false
+    - &compile_base
+      pytorch.torch_compile: true
+      pytorch.torch_compile_backend: inductor
+      pytorch.torch_compile_mode: default
+    - <<: *compile_base
+      pytorch.torch_compile_mode: reduce-overhead
+    - <<: *compile_base
+      pytorch.torch_compile_mode: max-autotune
+
+  # load_in_4bit and load_in_8bit are mutually exclusive;
+  # bnb_4bit_* sub-params require load_in_4bit: true
+  # TODO: why are these not in sweep logic, and just have being filtered out when incompatible with load_in_8bit or load_in_4bit? If this works as intended, we could move these into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
+  pytorch.quantization:
+    - {}                                          # baseline: no quantisation
+    - pytorch.load_in_8bit: true
+    - &bnb4_base
+      pytorch.load_in_4bit: true
+      pytorch.bnb_4bit_compute_dtype: float16
+      pytorch.bnb_4bit_quant_type: nf4
+    - <<: *bnb4_base
+      pytorch.bnb_4bit_quant_type: fp4
+    - <<: *bnb4_base
+      pytorch.bnb_4bit_use_double_quant: true
+
+  # cache_implementation requires use_cache: true
+  pytorch.caching:
+    - {}                                          # baseline: default caching
+    - pytorch.use_cache: true
+      pytorch.cache_implementation: static
+    - pytorch.use_cache: true
+      pytorch.cache_implementation: offloaded_static
+    - pytorch.use_cache: true
+      pytorch.cache_implementation: sliding_window
+
+  # beam search requires decoder.do_sample: false (cross-section dependency)
+  # TODO: as above: move this into sweep logic and validate that incompatible params are automatically filtered out (e.g. if beam search params are swept together with sampling params, does it automatically disable the sampling params when beam search is enabled, or does it produce invalid configs that need to be filtered out?) - if this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed.
+  pytorch.decoding:
+    - {}                                          # baseline: use shared decoder settings
+    - decoder.do_sample: false
+      decoder.temperature: 0.0
+      pytorch.num_beams: 4
+      pytorch.early_stopping: true
+      pytorch.length_penalty: 1.0
+      pytorch.no_repeat_ngram_size: 3
 
   # --- vLLM parameter space ---
 
@@ -186,6 +246,21 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
 
     #TODO add others - e.g. attention backend, speculative decoding, quantisation, parallelisation, etc.
 
+  # --- vLLM: dependent groups ─────────────────────────────────────
+
+  # beam_search and sampling sections are mutually exclusive;
+  # beam search requires decoder.do_sample: false
+  vllm.decoding:
+    - {}                                          # baseline: use shared decoder settings
+    - decoder.do_sample: false
+      decoder.temperature: 0.0
+      vllm.beam_search.beam_width: 4
+      vllm.beam_search.early_stopping: true
+      vllm.beam_search.length_penalty: 1.0
+      vllm.beam_search.max_tokens: 256
+    - vllm.sampling.presence_penalty: 0.6
+      vllm.sampling.frequency_penalty: 0.6
+
   # --- TensorRT parameter space ---
   tensorrt.max_batch_size:
     - 1
@@ -196,12 +271,9 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   tensorrt.max_seq_len:
     - 1536
     - 2048
-  tensorrt.quant.quant_algo: # TODO: is this not tensorrt.dtype??
-    - int8
-    - w4a16_awq
-    - w8a16
-    # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
-    # - FP8
+  # tensorrt.quant.quant_algo moved to tensorrt.quant_config group below
+  # (quant_algo has dependent sub-params: kv_cache_quant_algo, calib.*)
+  # TODO: is this not tensorrt.dtype??
   # Moved from explicit experiments: scheduling is an independent axis
   tensorrt.max_input_len:
     - 512
@@ -214,6 +286,33 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   #   - 2
   #   - 4
 
+  # --- TensorRT: dependent groups ─────────────────────────────────
+
+  # kv_cache_quant_algo requires quant_algo; calib requires quant_algo
+  # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
+  tensorrt.quant_config:
+    - {}                                          # baseline: no quantisation
+    - &trt_int8
+      tensorrt.quant.quant_algo: INT8
+    - <<: *trt_int8
+      tensorrt.quant.kv_cache_quant_algo: INT8
+    - <<: *trt_int8
+      tensorrt.calib.calib_batches: 512
+      tensorrt.calib.calib_dataset: cnn_dailymail
+      tensorrt.calib.calib_max_seq_length: 512
+    - tensorrt.quant.quant_algo: W4A16_AWQ
+    - tensorrt.quant.quant_algo: W8A16
+    # - tensorrt.quant.quant_algo: FP8  # Requires SM >= 8.9 (Ada Lovelace / Hopper)
+
+  # KV cache compound settings (block_reuse + memory_fraction travel together)
+  tensorrt.kv_cache_config:
+    - {}                                          # baseline: default KV cache
+    - tensorrt.kv_cache.enable_block_reuse: true
+      tensorrt.kv_cache.free_gpu_memory_fraction: 0.9
+    - tensorrt.kv_cache.host_cache_size: 1073741824
+    - tensorrt.kv_cache.max_tokens: 8192
+      tensorrt.kv_cache.free_gpu_memory_fraction: 0.85
+
     # --- Shared TRT-LLM backend settings ---
 # Applied to all TensorRT sweep experiments. Explicit TRT experiments
 # override these where needed.
@@ -221,142 +320,28 @@ tensorrt: #TODO - IM LEAVING THIS HERE AS REMINDER TO WORK OUT WHART THIS WAS AN
   max_input_len: 1024
 
 # =====================================================================
-# Explicit experiments (truly dependent or feature-specific params)
+# Explicit experiments (truly unique overrides only)
 # =====================================================================
-# Only experiments with parameter dependencies or unique overrides belong here.
-# Independent single-axis variations should be sweep axes (above).
-#
-# Remaining explicit experiments fall into these categories:
-#   - Dependent params: torch_compile + mode, BnB quantisation, beam search
-#   - Cross-section deps: beam search requires decoder.do_sample: false
-#   - Axis overrides: speculative decoding requires batch_size: 1
-#   - Compound settings: KV cache block_reuse + memory_fraction travel together
-#
-# TODO: These will move to sweep_groups once that feature is implemented.
+# Most dependent experiments are now handled by sweep groups above.
+# This section is reserved for experiments that:
+#   - Override sweep axes (e.g. batch_size: 1 for speculative decoding)
+#   - Use params not in any sweep axis or group (e.g. cpu_offload_gb)
+#   - Require unique combinations spanning multiple unrelated groups
 # See .product/designs/sweep-constraints.md for the design.
 
 experiments:
 
   # =================================================================
-  # PYTORCH - dependent experiments
+  # PYTORCH - unique experiments
   # =================================================================
-
-  # -----------------------------------------------------------------
-  # torch.compile modes
-  # -----------------------------------------------------------------
-  # torch_compile_mode requires torch_compile: true - can't be swept
-  # with torch_compile: false configs, so listed explicitly.
-  #TODO change this -> can we not add another dot hierarchy?
-  # depending on what the underlying pytorch field names are:
-  # pytorch.torch_compile: true/false? -> pytorch.torch_compile.mode (what is the name of the underlying field is it torch_compile_mode or just mode????? make sure to use native pytorch terminology)
-  # maybe e.g. pytorch.torch_compile.mode: default | reduce-overhead | max-autotune, and then have torch_compile: true/false as a separate axis? This way we could sweep torch_compile_mode with torch_compile: true, and also have torch_compile: false configs without needing to list them explicitly? Need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?) -> if this works as intended, we could remove the need for the explicit experiments below that test different torch_compile modes with torch_compile: true, and instead just have those as part of the sweep. The explicit experiments section would then only be needed for truly unique experiments that can't be easily captured in the sweep (e.g. specific quantisation configurations, beam search parameters, etc.) - need to validate this and potentially refactor to simplify the config and reduce the number of explicit experiments needed.
-  # OR have validate that these only work when torch_compile: true and automatically filter out invalid configs if torch_compile: false - this would allow us to keep the torch_compile_mode sweep separate from the torch_compile: true/false axis, which would be cleaner and more modular - need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?)
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      torch_compile: true
-      torch_compile_mode: default
-      torch_compile_backend: inductor
-      device_map: auto
-      trust_remote_code: true
-
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      torch_compile: true
-      torch_compile_mode: reduce-overhead
-      torch_compile_backend: inductor
-      device_map: auto
-      trust_remote_code: true
-
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      torch_compile: true
-      torch_compile_mode: max-autotune
-      torch_compile_backend: inductor
-      device_map: auto
-      trust_remote_code: true
-
-  # -----------------------------------------------------------------
-  # BitsAndBytes quantization
-  # -----------------------------------------------------------------
-  # 4-bit and 8-bit are mutually exclusive - cannot be swept together.
-  # TODO: why are these not in sweep logic, and just have being filtered out when incompatible with load_in_8bit or load_in_4bit? If this works as intended, we could move these into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: float16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      load_in_8bit: true
-      device_map: auto
-      trust_remote_code: true
-
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: float16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      load_in_4bit: true
-      bnb_4bit_compute_dtype: float16
-      bnb_4bit_quant_type: nf4
-      device_map: auto
-      trust_remote_code: true
-
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: float16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      load_in_4bit: true
-      bnb_4bit_compute_dtype: float16
-      bnb_4bit_quant_type: nf4
-      bnb_4bit_use_double_quant: true
-      device_map: auto
-      trust_remote_code: true
-
-  # -----------------------------------------------------------------
-  # PyTorch beam search
-  # -----------------------------------------------------------------
-  # TODO: as above: move this into sweep logic and validate that incompatible params are automatically filtered out (e.g. if beam search params are swept together with sampling params, does it automatically disable the sampling params when beam search is enabled, or does it produce invalid configs that need to be filtered out?) - if this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed.
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    decoder:
-      temperature: 0.0
-      do_sample: false
-    pytorch:
-      batch_size: 4
-      num_beams: 4
-      early_stopping: true
-      length_penalty: 1.0
-      no_repeat_ngram_size: 3
-      device_map: auto
-      trust_remote_code: true
+  # torch.compile, quantisation, caching, and beam search are now handled
+  # by sweep groups above (pytorch.compilation, pytorch.quantization,
+  # pytorch.caching, pytorch.decoding).
 
   # -----------------------------------------------------------------
   # PyTorch speculative decoding (prompt-lookup)
   # -----------------------------------------------------------------
+  # Requires batch_size=1, overriding the sweep axis - must remain explicit.
   # TODO: again as above: why is this not in sweep logic, and just have being filtered out when incompatible with do_sample: false? If this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
@@ -366,52 +351,6 @@ experiments:
     pytorch:
       batch_size: 1
       prompt_lookup_num_tokens: 3
-      device_map: auto
-      trust_remote_code: true
-
-  # -----------------------------------------------------------------
-  # Static KV cache
-  # -----------------------------------------------------------------
-  # TODO: again, as above: move this into sweep logic.
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      use_cache: true
-      cache_implementation: static
-      device_map: auto
-      trust_remote_code: true
-
-  # -----------------------------------------------------------------
-  # Offloaded static KV cache (dependent: cache_implementation requires use_cache)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      use_cache: true
-      cache_implementation: offloaded_static
-      device_map: auto
-      trust_remote_code: true
-
-  # -----------------------------------------------------------------
-  # Sliding window KV cache (dependent: cache_implementation requires use_cache)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    pytorch:
-      batch_size: 4
-      use_cache: true
-      cache_implementation: sliding_window
       device_map: auto
       trust_remote_code: true
 
@@ -462,43 +401,10 @@ experiments:
   #     trust_remote_code: true
 
   # =================================================================
-  # VLLM - dependent experiments
+  # VLLM - unique experiments
   # =================================================================
-
-  # -----------------------------------------------------------------
-  # Beam search (cross-section dep: requires decoder.do_sample: false;
-  # mutually exclusive with vllm.sampling section)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: vllm
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    decoder:
-      temperature: 0.0
-      do_sample: false
-    vllm:
-      beam_search:
-        beam_width: 4
-        early_stopping: true
-        length_penalty: 1.0
-        max_tokens: 256              # Overrides universal max_output_tokens for beam search
-
-  # -----------------------------------------------------------------
-  # Sampling with penalties (mutually exclusive with beam_search section)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: vllm
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    decoder:
-      temperature: 0.8
-      do_sample: true
-    vllm:
-      sampling:
-        presence_penalty: 0.6
-        frequency_penalty: 0.6
+  # Beam search and sampling penalties are now handled by the
+  # vllm.decoding sweep group above.
 
   # -----------------------------------------------------------------
   # Tensor parallel (special: requires multi-GPU hardware)
@@ -654,64 +560,13 @@ experiments:
   #       enforce_eager: false
 
   # =================================================================
-  # TENSORRT - dependent experiments
+  # TENSORRT - unique experiments
   # =================================================================
-  # Note: standalone quantisation algo experiments (INT8, W4A16_AWQ, W8A16)
-  # are now covered by the tensorrt.quant.quant_algo sweep axis above.
-  # Only compound/dependent configs remain here.
+  # Quantisation configs and KV cache variants are now handled by the
+  # tensorrt.quant_config and tensorrt.kv_cache_config sweep groups above.
 
   # -----------------------------------------------------------------
-  # INT8 + KV cache quantisation (compound: kv_cache_quant requires quant_algo)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: tensorrt
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      quant:
-        quant_algo: INT8
-        kv_cache_quant_algo: INT8
-      build_cache:
-        max_cache_storage_gb: 256
-
-  # -----------------------------------------------------------------
-  # KV cache variants (compound: settings travel together)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: tensorrt
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      kv_cache:
-        enable_block_reuse: true
-        free_gpu_memory_fraction: 0.9
-      build_cache:
-        max_cache_storage_gb: 256
-
-  - model: Qwen/Qwen2.5-0.5B
-    backend: tensorrt
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      kv_cache:
-        host_cache_size: 1073741824    # 1 GiB in bytes
-      build_cache:
-        max_cache_storage_gb: 256
-
-  # -----------------------------------------------------------------
-  # Fast build mode (single flag, not a sweep axis)
+  # Fast build mode (single flag, not part of any group)
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     backend: tensorrt
@@ -726,26 +581,7 @@ experiments:
       build_cache:
         max_cache_storage_gb: 256
 
-  # -----------------------------------------------------------------
-  # PTQ calibration (dependent: calib requires quant_algo)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: tensorrt
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      quant:
-        quant_algo: INT8
-      calib:
-        calib_batches: 512
-        calib_dataset: cnn_dailymail
-        calib_max_seq_length: 512
-      build_cache:
-        max_cache_storage_gb: 256
+  # PTQ calibration is now handled by tensorrt.quant_config sweep group above.
 
   # -----------------------------------------------------------------
   # TRT-LLM sampling extensions (min_tokens, multi-sequence, perf metrics)
@@ -796,23 +632,7 @@ experiments:
   #     max_batch_size: 8
   #     max_seq_len: 2048
 
-  # -----------------------------------------------------------------
-  # KV cache with max_tokens limit
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    backend: tensorrt
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      kv_cache:
-        max_tokens: 8192
-        free_gpu_memory_fraction: 0.85
-      build_cache:
-        max_cache_storage_gb: 256
+  # KV cache max_tokens is now handled by tensorrt.kv_cache_config sweep group above.
 
   # -----------------------------------------------------------------
   # Build cache with custom root and record limits
