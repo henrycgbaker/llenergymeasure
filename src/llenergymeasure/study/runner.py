@@ -46,6 +46,7 @@ __all__ = [
     "StudyRunner",
     "_calculate_timeout",
     "_kill_process_group",
+    "_resolve_ts_source_dir",
     "_run_experiment_worker",
     "_save_and_record",
 ]
@@ -56,6 +57,27 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Module-level helpers
 # =============================================================================
+
+
+def _resolve_ts_source_dir(
+    result: Any,
+    spec: RunnerSpec | None,
+    local_ts_tmpdir: Path | None,
+) -> Path | None:
+    """Resolve the directory containing timeseries.parquet for _save_and_record.
+
+    Docker path: DockerRunner rescues parquet to a temp dir and writes the
+    host path into effective_config["output_dir"].
+    Local path: the caller passes the temp dir it created for the harness.
+    """
+    if isinstance(result, dict):
+        return None
+    if spec is not None and spec.mode == RUNNER_DOCKER and hasattr(result, "effective_config"):
+        ts_dir_str = result.effective_config.get("output_dir")
+        if ts_dir_str and Path(ts_dir_str).exists():
+            return Path(ts_dir_str)
+        return None
+    return local_ts_tmpdir
 
 
 def _calculate_timeout(config: ExperimentConfig) -> int:
@@ -837,11 +859,7 @@ class StudyRunner:
 
         # Resolve the timeseries temp dir that DockerRunner created for the
         # rescued parquet (now copied into the study dir by _save_and_record).
-        docker_ts_dir: Path | None = None
-        if not isinstance(result, dict) and hasattr(result, "effective_config"):
-            ts_tmpdir_str = result.effective_config.get("output_dir")
-            if ts_tmpdir_str and Path(ts_tmpdir_str).exists():
-                docker_ts_dir = Path(ts_tmpdir_str)
+        docker_ts_dir = _resolve_ts_source_dir(result, spec, None)
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(

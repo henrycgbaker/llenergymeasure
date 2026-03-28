@@ -449,22 +449,19 @@ class OutputConfig(BaseModel):
     is an operational concern, not part of the scientific specification.
 
     Resolution chain (highest wins):
-        study YAML output: > user_config.output.results_dir > "./results"
+        study YAML output.results_dir > user_config.output.results_dir > "./results"
     """
 
     model_config = {"extra": "forbid"}
 
-    results_dir: str = Field(
-        default="./results",
+    results_dir: str | None = Field(
+        default=None,
         description=(
             "Base directory for study results. A timestamped study subdirectory "
             "is created within this path. Resolved identically for local and "
-            "Docker runs (Docker results are always written back to host)."
+            "Docker runs (Docker results are always written back to host). "
+            "None = defer to user config or built-in default (./results)."
         ),
-    )
-    format: Literal["json", "parquet", "csv"] = Field(
-        default="json",
-        description="Output format for experiment results.",
     )
     save_timeseries: bool = Field(
         default=True,

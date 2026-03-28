@@ -104,7 +104,6 @@ passthrough_kwargs:
 
 output:
   results_dir: ./results           # Base directory for study results (timestamped subdirectory created within)
-  format: json                     # json | parquet | csv
   save_timeseries: true            # Persist GPU power/thermal/memory timeseries as Parquet sidecar
 
 # =====================================================================

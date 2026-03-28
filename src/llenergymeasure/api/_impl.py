@@ -252,10 +252,7 @@ def _run(
         )
 
     # Resolve results_dir: study YAML > user config > built-in default
-    results_dir_str = study.output.results_dir
-    if results_dir_str == "./results":
-        # Study didn't override — check user config for a custom default
-        results_dir_str = user_config.output.results_dir
+    results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
     study_dir = create_study_dir(study.study_name, Path(results_dir_str))
     manifest = ManifestWriter(study, study_dir)
 
@@ -359,7 +356,7 @@ def _run_in_process(
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
-    from llenergymeasure.study.runner import _save_and_record
+    from llenergymeasure.study.runner import _resolve_ts_source_dir, _save_and_record
 
     config = study.experiments[0]
     config_hash = compute_measurement_config_hash(config)
@@ -377,6 +374,7 @@ def _run_in_process(
     manifest.mark_running(config_hash, cycle)
 
     save_ts = study.output.save_timeseries
+    ts_tmpdir: Path | None = None  # Only set for local path
 
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
@@ -408,6 +406,7 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
+        import shutil
         import tempfile
 
         from llenergymeasure.backends import get_backend
@@ -424,17 +423,22 @@ def _run_in_process(
         # Create temp dir for timeseries parquet (if enabled)
         ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-")) if save_ts else None
 
-        backend = get_backend(config.backend)
-        harness = MeasurementHarness()
-        gpu_indices = _resolve_gpu_indices(config)
-        result = harness.run(
-            backend,
-            config,
-            gpu_indices=gpu_indices,
-            progress=progress,
-            output_dir=str(ts_tmpdir) if ts_tmpdir else None,
-            save_timeseries=save_ts,
-        )
+        try:
+            backend = get_backend(config.backend)
+            harness = MeasurementHarness()
+            gpu_indices = _resolve_gpu_indices(config)
+            result = harness.run(
+                backend,
+                config,
+                gpu_indices=gpu_indices,
+                progress=progress,
+                output_dir=str(ts_tmpdir) if ts_tmpdir else None,
+                save_timeseries=save_ts,
+            )
+        except Exception:
+            if ts_tmpdir is not None:
+                shutil.rmtree(ts_tmpdir, ignore_errors=True)
+            raise
 
     # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
     if isinstance(result, dict) and "type" in result:
@@ -444,20 +448,7 @@ def _run_in_process(
         return [], [None], [error_message]
 
     # Resolve timeseries source dir for _save_and_record
-    ts_source: Path | None = None
-    if not isinstance(result, dict):
-        if spec is not None and spec.mode == RUNNER_DOCKER:
-            # Docker path: DockerRunner rescues parquet to a temp dir and writes
-            # the path into effective_config["output_dir"]
-            ts_dir_str = (
-                result.effective_config.get("output_dir")
-                if hasattr(result, "effective_config")
-                else None
-            )
-            if ts_dir_str and Path(ts_dir_str).exists():
-                ts_source = Path(ts_dir_str)
-        elif ts_tmpdir is not None:
-            ts_source = ts_tmpdir
+    ts_source: Path | None = _resolve_ts_source_dir(result, spec, ts_tmpdir)
 
     result_files: list[str] = []
     warnings: list[str] = []

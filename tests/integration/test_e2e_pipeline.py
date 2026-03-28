@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.conftest import make_result, make_study_result
+from tests.conftest import make_result, make_study_result, make_user_config
 
 # =============================================================================
 # Shared patch helpers
@@ -55,15 +55,7 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     )
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
-        lambda **kwargs: type(
-            "C",
-            (),
-            {
-                "runners": None,
-                "output": type("O", (), {"results_dir": "./results"})(),
-                "ui": type("U", (), {"progress_mode": "quiet"})(),
-            },
-        )(),
+        lambda **kwargs: make_user_config(),
     )
     # Force all backends to use the local in-process path.
     # Without this, resolve_study_runners may return docker specs on Docker-enabled hosts.

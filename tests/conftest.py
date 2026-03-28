@@ -145,6 +145,18 @@ def make_raw_process_result(**overrides) -> RawProcessResult:
     return RawProcessResult(**defaults)
 
 
+def make_user_config(**overrides):
+    """Return a minimal mock UserConfig for tests that need load_user_config.
+
+    Uses real Pydantic models to avoid fragile anonymous-type hacks.
+    """
+    from llenergymeasure.config.user_config import UserConfig
+
+    defaults: dict = {}
+    defaults.update(overrides)
+    return UserConfig(**defaults)
+
+
 @pytest.fixture
 def sample_config() -> ExperimentConfig:
     return make_config()

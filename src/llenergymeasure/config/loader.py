@@ -55,7 +55,7 @@ def load_experiment_config(
         cli_overrides: Dict of CLI flag overrides (e.g. {"model": "gpt2", "backend": "pytorch"}).
             Keys match ExperimentConfig field names. None values are ignored (unset flags).
         user_config_defaults: Dict of user config defaults to apply as lowest priority.
-            Only fields valid on ExperimentConfig (e.g. output_dir, backend defaults).
+            Only fields valid on ExperimentConfig (e.g. energy_sampler, backend defaults).
 
     Returns:
         Validated ExperimentConfig.
