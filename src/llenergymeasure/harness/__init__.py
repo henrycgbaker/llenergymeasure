@@ -118,14 +118,6 @@ def measure_baseline_power(
     return _mbp(duration_sec=duration_sec, gpu_indices=gpu_indices)
 
 
-def select_energy_backend(
-    explicit: str | None,
-    gpu_indices: list[int] | None = None,
-) -> EnergySampler | None:  # pragma: no cover
-
-    return select_energy_sampler(explicit, gpu_indices=gpu_indices)
-
-
 def estimate_flops_palm(
     model: Any, n_input_tokens: int, n_output_tokens: int
 ) -> FlopsResult:  # pragma: no cover
@@ -340,17 +332,17 @@ class MeasurementHarness:
             if _p:
                 _p.on_step_start("energy_select", "Selecting", "energy sampler")
                 t0_energy = time.perf_counter()
-            energy_backend = select_energy_backend(config.energy.backend, gpu_indices=gpu_indices)
-            energy_backend_name = type(energy_backend).__name__ if energy_backend else "none"
-            _substep("energy_select", f"selected: {energy_backend_name}")
+            energy_sampler = select_energy_sampler(config.energy_sampler, gpu_indices=gpu_indices)
+            sampler_name = type(energy_sampler).__name__ if energy_sampler else "none"
+            _substep("energy_select", f"selected: {sampler_name}")
             if _p:
-                _p.on_step_update("energy_select", f"energy sampler ({energy_backend_name})")
+                _p.on_step_update("energy_select", f"energy sampler ({sampler_name})")
                 _p.on_step_done("energy_select", time.perf_counter() - t0_energy)
 
             # 8. Start energy tracking (after warmup + thermal floor)
             energy_tracker = None
-            if energy_backend is not None:
-                energy_tracker = energy_backend.start_tracking()
+            if energy_sampler is not None:
+                energy_tracker = energy_sampler.start_tracking()
 
             # 9. CUDA sync before inference (Zeus best practice)
             _cuda_sync()
@@ -366,7 +358,7 @@ class MeasurementHarness:
             start_time = datetime.now()
 
             # Start thermal sampler around inference for timeseries + throttle detection
-            with PowerThermalSampler(gpu_indices=gpu_indices) as sampler:
+            with PowerThermalSampler(gpu_indices=gpu_indices) as thermal_sampler:
                 output = backend.run_inference(config, model, prompts)
 
             t_inference_end = time.perf_counter()
@@ -378,16 +370,16 @@ class MeasurementHarness:
             if _p:
                 _p.on_step_done("measure", t_inference_end - t_inference_start)
 
-            thermal_info = sampler.get_thermal_throttle_info()
-            timeseries_samples = sampler.get_samples()
+            thermal_info = thermal_sampler.get_thermal_throttle_info()
+            timeseries_samples = thermal_sampler.get_samples()
 
             # Harness sets canonical inference timer — overrides backend's elapsed_time_sec
             output.inference_time_sec = t_inference_end - t_inference_start
 
             # 12. Stop energy tracking
             energy_measurement = None
-            if energy_backend is not None and energy_tracker is not None:
-                energy_measurement = energy_backend.stop_tracking(energy_tracker)
+            if energy_sampler is not None and energy_tracker is not None:
+                energy_measurement = energy_sampler.stop_tracking(energy_tracker)
             end_time = datetime.now()
 
             # 13. FLOPs estimation (warmup tokens excluded)
@@ -416,7 +408,7 @@ class MeasurementHarness:
             t0_save = time.perf_counter()
 
         timeseries_path: str | None = None
-        if config.output_dir is not None and timeseries_samples:
+        if config.gpu_telemetry and config.output_dir is not None and timeseries_samples:
             ts_file = write_timeseries_parquet(
                 timeseries_samples,
                 Path(config.output_dir) / "timeseries.parquet",
@@ -582,7 +574,7 @@ class MeasurementHarness:
             end_time: Measurement end time.
             duration_sec: Pre-computed (end_time - start_time).total_seconds().
             thermal_info: ThermalThrottleInfo from PowerThermalSampler.
-            energy_measurement: EnergyMeasurement from energy backend, or None.
+            energy_measurement: EnergyMeasurement from energy sampler, or None.
             baseline: BaselineCache from baseline measurement, or None.
             flops_result: FlopsResult from estimate_flops_palm(), or None.
             timeseries_path: Relative path to Parquet sidecar, or None.
@@ -607,7 +599,7 @@ class MeasurementHarness:
             else 0.0
         )
 
-        # Real energy values from measurement backend
+        # Real energy values from energy sampler
         total_energy_j = energy_measurement.total_j if energy_measurement is not None else 0.0
         # duration_sec is passed in from run() — computed once, not recalculated here
 
@@ -618,7 +610,7 @@ class MeasurementHarness:
         )
 
         # Energy breakdown with baseline adjustment.
-        # Use energy backend's sampler window duration for baseline adjustment,
+        # Use energy sampler's window duration for baseline adjustment,
         # not harness datetime duration, to avoid CUDA sync latency skew.
         energy_duration = (
             energy_measurement.duration_sec if energy_measurement is not None else duration_sec

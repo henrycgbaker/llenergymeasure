@@ -1,4 +1,4 @@
-"""Unit tests for v2.0 energy backends and auto-selection.
+"""Unit tests for v2.0 energy samplers and auto-selection.
 
 All tests are fully mocked — no GPU or installed energy packages required.
 Tests cover NVMLSampler, ZeusSampler, EnergyMeasurement, and select_energy_sampler().

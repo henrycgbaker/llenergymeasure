@@ -75,8 +75,8 @@ class UserMeasurementConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    energy_backend: Literal["auto", "nvml", "zeus"] = Field(
-        default="auto", description="Energy backend: auto=zeus if installed else nvml"
+    energy_sampler: Literal["auto", "nvml", "zeus", "codecarbon"] = Field(
+        default="auto", description="Energy sampler: auto=best available (Zeus>NVML>CodeCarbon)"
     )
     carbon_intensity_gco2_kwh: float | None = Field(
         default=None, ge=0.0, description="gCO2/kWh for local electricity grid"
@@ -102,7 +102,7 @@ class UserAdvancedConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    nvml_poll_interval_ms: int = Field(
+    nvml_poll_interval_ms: int = Field(  # TODO: ghost code remove — not wired to anything
         default=100, ge=10, le=10000, description="NVML sampling interval in milliseconds"
     )
 

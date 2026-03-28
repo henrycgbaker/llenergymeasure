@@ -129,9 +129,9 @@ and execution continues with the remaining experiments.
 is unavailable, energy measurement falls back gracefully to zero rather than crashing.
 
 **Fix:**
-1. Check `llem config` — it shows the active energy backend under `Energy:`.
+1. Check `llem config` — it shows the active energy sampler under `Energy:`.
 2. Verify pynvml can access the GPU: run `python -c "import pynvml; pynvml.nvmlInit(); print('OK')"`.
-3. Check your `energy:` config. Setting `energy: { backend: null }` explicitly disables
+3. Check your config. Setting `energy_sampler: null` explicitly disables
    energy measurement (throughput-only mode).
 4. If `baseline.enabled: true` (default), ensure the baseline measurement is completing.
    A failed baseline causes `adjusted_j` to be null.
@@ -237,7 +237,7 @@ Notes:
 ## Getting Help
 
 Run `llem config --verbose` to capture full environment details (Python version, installed
-backends, GPU info, energy backend status, config file path). Include this output when
+backends, GPU info, energy sampler status, config file path). Include this output when
 filing a bug report.
 
 File issues at: [github.com/henrycgbaker/llenergymeasure/issues](https://github.com/henrycgbaker/llenergymeasure/issues)

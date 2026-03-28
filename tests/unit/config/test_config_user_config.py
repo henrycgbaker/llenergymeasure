@@ -47,7 +47,7 @@ def test_load_user_config_missing_file_returns_defaults(tmp_path):
     assert isinstance(config, UserConfig)
     # Default values from the model
     assert config.output.results_dir == "./results"
-    assert config.measurement.energy_backend == "auto"
+    assert config.measurement.energy_sampler == "auto"
     assert config.ui.log_level == "WARNING"
 
 
@@ -83,12 +83,12 @@ def test_load_user_config_partial_file_uses_defaults_for_missing(tmp_path):
     assert config.output.results_dir == "./results"
 
 
-def test_load_user_config_energy_backend_override(tmp_path):
-    """User config can override energy backend."""
+def test_load_user_config_energy_sampler_override(tmp_path):
+    """User config can override energy sampler preference."""
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("measurement:\n  energy_backend: nvml\n")
+    config_file.write_text("measurement:\n  energy_sampler: nvml\n")
     config = load_user_config(config_path=config_file)
-    assert config.measurement.energy_backend == "nvml"
+    assert config.measurement.energy_sampler == "nvml"
 
 
 def test_load_user_config_advanced_section(tmp_path):

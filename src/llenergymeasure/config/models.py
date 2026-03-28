@@ -196,22 +196,6 @@ class BaselineConfig(BaseModel):
 
 
 # =============================================================================
-# Energy Configuration
-# =============================================================================
-
-
-class EnergyConfig(BaseModel):
-    """Energy measurement backend configuration."""
-
-    model_config = {"extra": "forbid"}
-
-    backend: Literal["auto", "nvml", "zeus", "codecarbon"] | None = Field(
-        default="auto",
-        description="Energy measurement backend. None (YAML null) disables energy measurement.",
-    )
-
-
-# =============================================================================
 # Dataset Configuration
 # =============================================================================
 
@@ -354,8 +338,20 @@ class ExperimentConfig(BaseModel):
     baseline: BaselineConfig = Field(
         default_factory=BaselineConfig, description="Baseline power measurement configuration"
     )
-    energy: EnergyConfig = Field(
-        default_factory=EnergyConfig, description="Energy measurement backend configuration"
+    energy_sampler: Literal["auto", "nvml", "zeus", "codecarbon"] | None = Field(
+        default="auto",
+        description=(
+            "Energy measurement backend. "
+            "auto=best available (Zeus>NVML>CodeCarbon). null disables energy measurement."
+        ),
+    )
+    gpu_telemetry: bool = Field(
+        default=True,
+        description=(
+            "Persist GPU power/thermal/memory timeseries to a Parquet sidecar file. "
+            "NVML telemetry is always collected for throttle detection; this controls "
+            "whether the full timeseries is written to disk."
+        ),
     )
 
     # Backend sections (None = use backend's own defaults)

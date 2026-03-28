@@ -270,70 +270,64 @@ def test_make_config_override():
 
 
 # ---------------------------------------------------------------------------
-# EnergyConfig schema tests (moved from test_warmup_v2.py)
+# energy_sampler field tests (flat Literal on ExperimentConfig)
 # ---------------------------------------------------------------------------
 
 
-def test_energy_config_default() -> None:
-    """EnergyConfig defaults to backend='auto'."""
-    from llenergymeasure.config.models import EnergyConfig
-
-    assert EnergyConfig().backend == "auto"
-
-
-def test_energy_config_null() -> None:
-    """EnergyConfig(backend=None) disables energy measurement."""
-    from llenergymeasure.config.models import EnergyConfig
-
-    cfg = EnergyConfig(backend=None)
-    assert cfg.backend is None
-
-
-def test_energy_config_valid_backends() -> None:
-    """All backend literal values are accepted."""
-    from llenergymeasure.config.models import EnergyConfig
-
-    for backend in ("auto", "nvml", "zeus", "codecarbon"):
-        cfg = EnergyConfig(backend=backend)
-        assert cfg.backend == backend
-
-
-def test_energy_config_invalid_backend() -> None:
-    """Unknown backend values raise ValidationError."""
-    from llenergymeasure.config.models import EnergyConfig
-
-    with pytest.raises(ValidationError):
-        EnergyConfig(backend="unknown_backend")  # type: ignore[arg-type]
-
-
-def test_energy_config_extra_forbid() -> None:
-    """EnergyConfig: extra fields raise ValidationError."""
-    from llenergymeasure.config.models import EnergyConfig
-
-    with pytest.raises(ValidationError):
-        EnergyConfig(backend="auto", extra_field=1)  # type: ignore[call-arg]
-
-
-def test_experiment_config_has_energy() -> None:
-    """ExperimentConfig.energy defaults to EnergyConfig with backend='auto'."""
+def test_energy_sampler_default() -> None:
+    """energy_sampler defaults to 'auto'."""
     cfg = ExperimentConfig(model="gpt2")
-    assert cfg.energy.backend == "auto"
+    assert cfg.energy_sampler == "auto"
 
 
-def test_experiment_config_energy_override() -> None:
-    """ExperimentConfig allows overriding energy backend."""
-    from llenergymeasure.config.models import EnergyConfig
-
-    cfg = ExperimentConfig(model="gpt2", energy=EnergyConfig(backend="nvml"))
-    assert cfg.energy.backend == "nvml"
+def test_energy_sampler_null_disables() -> None:
+    """energy_sampler=None disables energy measurement."""
+    cfg = ExperimentConfig(model="gpt2", energy_sampler=None)
+    assert cfg.energy_sampler is None
 
 
-def test_experiment_config_energy_disabled() -> None:
-    """ExperimentConfig allows disabling energy measurement via null."""
-    from llenergymeasure.config.models import EnergyConfig
+def test_energy_sampler_valid_backends() -> None:
+    """All energy_sampler literal values are accepted."""
+    for backend in ("auto", "nvml", "zeus", "codecarbon"):
+        cfg = ExperimentConfig(model="gpt2", energy_sampler=backend)
+        assert cfg.energy_sampler == backend
 
-    cfg = ExperimentConfig(model="gpt2", energy=EnergyConfig(backend=None))
-    assert cfg.energy.backend is None
+
+def test_energy_sampler_invalid_backend() -> None:
+    """Unknown energy_sampler values raise ValidationError."""
+    with pytest.raises(ValidationError):
+        ExperimentConfig(model="gpt2", energy_sampler="unknown_backend")
+
+
+def test_energy_sampler_override() -> None:
+    """ExperimentConfig allows overriding energy_sampler."""
+    cfg = ExperimentConfig(model="gpt2", energy_sampler="nvml")
+    assert cfg.energy_sampler == "nvml"
+
+
+# ---------------------------------------------------------------------------
+# gpu_telemetry field tests (boolean on ExperimentConfig)
+# ---------------------------------------------------------------------------
+
+
+def test_gpu_telemetry_default_true() -> None:
+    """gpu_telemetry defaults to True."""
+    cfg = ExperimentConfig(model="gpt2")
+    assert cfg.gpu_telemetry is True
+
+
+def test_gpu_telemetry_false_disables_parquet() -> None:
+    """gpu_telemetry=False is accepted."""
+    cfg = ExperimentConfig(model="gpt2", gpu_telemetry=False)
+    assert cfg.gpu_telemetry is False
+
+
+def test_gpu_telemetry_coerces_common_values() -> None:
+    """gpu_telemetry coerces common truthy/falsy strings (Pydantic lax mode)."""
+    cfg_yes = ExperimentConfig(model="gpt2", gpu_telemetry="yes")  # type: ignore[arg-type]
+    assert cfg_yes.gpu_telemetry is True
+    cfg_no = ExperimentConfig(model="gpt2", gpu_telemetry="no")  # type: ignore[arg-type]
+    assert cfg_no.gpu_telemetry is False
 
 
 # ---------------------------------------------------------------------------
