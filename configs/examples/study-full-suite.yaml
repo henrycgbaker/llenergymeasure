@@ -133,14 +133,9 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # torch_compile_mode requires torch_compile: true
   pytorch.compilation:
     - pytorch.torch_compile: false
-    - &compile_base
-      pytorch.torch_compile: true
+    - pytorch.torch_compile: true
       pytorch.torch_compile_backend: inductor
-      pytorch.torch_compile_mode: default
-    - <<: *compile_base
-      pytorch.torch_compile_mode: reduce-overhead
-    - <<: *compile_base
-      pytorch.torch_compile_mode: max-autotune
+      pytorch.torch_compile_mode: [default, reduce-overhead, max-autotune]
 
   # load_in_4bit and load_in_8bit are mutually exclusive;
   # bnb_4bit_* sub-params require load_in_4bit: true
