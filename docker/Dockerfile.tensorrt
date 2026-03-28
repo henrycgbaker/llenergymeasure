@@ -13,7 +13,7 @@
 # ============================================================
 ARG TRTLLM_VERSION=0.21.0
 
-FROM nvcr.io/nvidia/tensorrt-llm/release:${TRTLLM_VERSION}
+FROM nvcr.io/nvidia/tensorrt-llm/release:${TRTLLM_VERSION} AS runtime
 
 # Reset upstream ENTRYPOINT - NGC container may set one
 # that conflicts with DockerRunner's command override pattern.
