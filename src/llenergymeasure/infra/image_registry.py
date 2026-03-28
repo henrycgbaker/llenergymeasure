@@ -33,8 +33,6 @@ import logging
 import subprocess
 from functools import lru_cache
 
-logger = logging.getLogger(__name__)
-
 from llenergymeasure.config.ssot import (
     BACKEND_PYTORCH,
     BACKEND_TENSORRT,
@@ -43,6 +41,8 @@ from llenergymeasure.config.ssot import (
     RUNNER_LOCAL,
     RunnerMode,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_IMAGE_TEMPLATE",
