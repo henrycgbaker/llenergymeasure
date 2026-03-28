@@ -76,3 +76,8 @@ ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
 CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]
+
+# Dev stage — adds development tools for local iteration
+FROM runtime AS dev
+RUN uv pip install --system --no-cache ruff mypy pytest pytest-cov
+CMD ["/bin/bash"]
