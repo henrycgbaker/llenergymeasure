@@ -46,7 +46,6 @@ def _make_mock_result() -> MagicMock:
     result.latency_stats = None
     result.warmup_excluded_samples = None
     result.process_results = []
-    result.output_dir = None
     return result
 
 
@@ -62,7 +61,6 @@ def _make_mock_config() -> MagicMock:
     config.dataset.source = "aienergyscore"
     config.dataset.n_prompts = 100
     config.dataset.order = "interleaved"
-    config.output_dir = None
     config.max_input_tokens = 256
     config.max_output_tokens = 256
     config.pytorch = None
@@ -475,9 +473,8 @@ def test_run_study_routing_experiments_yaml(tmp_path):
 
 
 def test_run_saves_to_output_dir(tmp_path):
-    """When output_dir is set on the config, save_result is called."""
+    """When --output CLI flag is passed, save_result is called."""
     mock_config = _make_mock_config()
-    mock_config.output_dir = str(tmp_path / "out")
     mock_result = _make_mock_result()
     mock_result.timeseries = None
 

@@ -859,12 +859,12 @@ def test_harness_flops_none_result_has_none_derived(minimal_config):
 
 
 # ---------------------------------------------------------------------------
-# gpu_telemetry: parquet sidecar gating
+# save_timeseries: parquet sidecar gating
 # ---------------------------------------------------------------------------
 
 
-def test_harness_gpu_telemetry_false_skips_parquet(tmp_path):
-    """gpu_telemetry=False prevents write_timeseries_parquet from being called."""
+def test_harness_save_timeseries_false_skips_parquet(tmp_path):
+    """save_timeseries=False prevents write_timeseries_parquet from being called."""
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     config = ExperimentConfig(
@@ -873,8 +873,6 @@ def test_harness_gpu_telemetry_false_skips_parquet(tmp_path):
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
-        output_dir=str(tmp_path),
-        gpu_telemetry=False,
     )
 
     backend = FakeBackend()
@@ -895,14 +893,14 @@ def test_harness_gpu_telemetry_false_skips_parquet(tmp_path):
         ) as mock_write_ts,
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        result = harness.run(backend, config)
+        result = harness.run(backend, config, output_dir=str(tmp_path), save_timeseries=False)
 
     mock_write_ts.assert_not_called()
     assert result.timeseries is None
 
 
-def test_harness_gpu_telemetry_true_writes_parquet(tmp_path):
-    """gpu_telemetry=True (default) writes timeseries parquet when output_dir is set."""
+def test_harness_save_timeseries_true_writes_parquet(tmp_path):
+    """save_timeseries=True (default) writes timeseries parquet when output_dir is set."""
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     config = ExperimentConfig(
@@ -911,8 +909,6 @@ def test_harness_gpu_telemetry_true_writes_parquet(tmp_path):
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
-        output_dir=str(tmp_path),
-        gpu_telemetry=True,
     )
 
     backend = FakeBackend()
@@ -935,6 +931,6 @@ def test_harness_gpu_telemetry_true_writes_parquet(tmp_path):
         ) as mock_write_ts,
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(backend, config)
+        harness.run(backend, config, output_dir=str(tmp_path), save_timeseries=True)
 
     mock_write_ts.assert_called_once()

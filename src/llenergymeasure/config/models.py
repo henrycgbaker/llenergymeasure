@@ -348,15 +348,6 @@ class ExperimentConfig(BaseModel):
             "auto=best available (Zeus>NVML>CodeCarbon). null disables energy measurement."
         ),
     )
-    gpu_telemetry: bool = Field(
-        default=True,
-        description=(
-            "Persist GPU power/thermal/memory timeseries to a Parquet sidecar file. "
-            "NVML telemetry is always collected for throttle detection; this controls "
-            "whether the full timeseries is written to disk."
-        ),
-    )
-
     # Backend sections (None = use backend's own defaults)
     # All current backends (pytorch, vllm, tensorrt) are GPU-only; cpu backend is future scope.
     pytorch: PyTorchConfig | None = Field(
@@ -380,12 +371,6 @@ class ExperimentConfig(BaseModel):
         default=None,
         description="Extra kwargs passed through to backend at execution time. "
         "Keys must not collide with ExperimentConfig top-level fields.",
-    )
-
-    # Output override
-    output_dir: str | None = Field(
-        default=None,
-        description="Per-experiment output directory override",
     )
 
     # -------------------------------------------------------------------------
@@ -454,6 +439,38 @@ def _rebuild_experiment_config() -> None:
 
 
 _rebuild_experiment_config()
+
+
+class OutputConfig(BaseModel):
+    """Study-level output configuration.
+
+    Controls where results are written and what auxiliary artefacts are persisted.
+    Lives on StudyConfig only - experiments don't own output config because output
+    is an operational concern, not part of the scientific specification.
+
+    Resolution chain (highest wins):
+        study YAML output.results_dir > user_config.output.results_dir > "./results"
+    """
+
+    model_config = {"extra": "forbid"}
+
+    results_dir: str | None = Field(
+        default=None,
+        description=(
+            "Base directory for study results. A timestamped study subdirectory "
+            "is created within this path. Resolved identically for local and "
+            "Docker runs (Docker results are always written back to host). "
+            "None = defer to user config or built-in default (./results)."
+        ),
+    )
+    save_timeseries: bool = Field(
+        default=True,
+        description=(
+            "Persist GPU power/thermal/memory timeseries as Parquet sidecar. "
+            "NVML telemetry is always collected for throttle detection; this "
+            "controls whether the full timeseries is written to disk."
+        ),
+    )
 
 
 class ExecutionConfig(BaseModel):
@@ -531,6 +548,10 @@ class StudyConfig(BaseModel):
     )
     study_name: str | None = Field(
         default=None, description="Study name (used in output directory naming)"
+    )
+    output: OutputConfig = Field(
+        default_factory=OutputConfig,
+        description="Study-level output configuration (results_dir, format, save_timeseries)",
     )
     study_execution: ExecutionConfig = Field(
         default_factory=ExecutionConfig,

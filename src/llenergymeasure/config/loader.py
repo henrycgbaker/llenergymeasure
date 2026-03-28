@@ -25,7 +25,12 @@ from llenergymeasure.config.grid import (
     compute_study_design_hash,
     expand_grid,
 )
-from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import (
+    ExecutionConfig,
+    ExperimentConfig,
+    OutputConfig,
+    StudyConfig,
+)
 from llenergymeasure.utils.exceptions import ConfigError
 
 __all__ = ["deep_merge", "load_experiment_config", "load_study_config"]
@@ -50,7 +55,7 @@ def load_experiment_config(
         cli_overrides: Dict of CLI flag overrides (e.g. {"model": "gpt2", "backend": "pytorch"}).
             Keys match ExperimentConfig field names. None values are ignored (unset flags).
         user_config_defaults: Dict of user config defaults to apply as lowest priority.
-            Only fields valid on ExperimentConfig (e.g. output_dir, backend defaults).
+            Only fields valid on ExperimentConfig (e.g. energy_sampler, backend defaults).
 
     Returns:
         Validated ExperimentConfig.
@@ -157,6 +162,9 @@ def load_study_config(
     # None if not specified in YAML — caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
 
+    # Parse output block — Pydantic validates it
+    output = OutputConfig(**(raw.get("output") or {}))
+
     # Parse execution block — Pydantic validates it
     execution = ExecutionConfig(**(raw.get("study_execution") or {}))
 
@@ -195,6 +203,7 @@ def load_study_config(
     return StudyConfig(
         experiments=ordered,
         study_name=name,
+        output=output,
         study_execution=execution,
         runners=runners,
         study_design_hash=study_hash,

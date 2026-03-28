@@ -46,6 +46,7 @@ __all__ = [
     "StudyRunner",
     "_calculate_timeout",
     "_kill_process_group",
+    "_resolve_ts_source_dir",
     "_run_experiment_worker",
     "_save_and_record",
 ]
@@ -56,6 +57,27 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Module-level helpers
 # =============================================================================
+
+
+def _resolve_ts_source_dir(
+    result: Any,
+    spec: RunnerSpec | None,
+    local_ts_tmpdir: Path | None,
+) -> Path | None:
+    """Resolve the directory containing timeseries.parquet for _save_and_record.
+
+    Docker path: DockerRunner rescues parquet to a temp dir and writes the
+    host path into effective_config["output_dir"].
+    Local path: the caller passes the temp dir it created for the harness.
+    """
+    if isinstance(result, dict):
+        return None
+    if spec is not None and spec.mode == RUNNER_DOCKER and hasattr(result, "effective_config"):
+        ts_dir_str = result.effective_config.get("output_dir")
+        if ts_dir_str and Path(ts_dir_str).exists():
+            return Path(ts_dir_str)
+        return None
+    return local_ts_tmpdir
 
 
 def _calculate_timeout(config: ExperimentConfig) -> int:
@@ -74,6 +96,7 @@ def _save_and_record(
     cycle: int,
     result_files: list[str],
     experiment_index: int | None = None,
+    ts_source_dir: Path | None = None,
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
@@ -81,24 +104,23 @@ def _save_and_record(
     to save_result() so it is copied into the experiment subdirectory. The stale
     flat file written by MeasurementHarness is removed after the copy.
 
+    Args:
+        ts_source_dir: Directory where the harness wrote timeseries.parquet.
+            When provided, overrides the legacy effective_config["output_dir"] lookup.
+
     On save failure, marks the experiment as completed with empty path.
     """
     try:
         from llenergymeasure.results.persistence import save_result
 
         # Resolve timeseries sidecar from result fields.
-        # MeasurementHarness writes timeseries.parquet to config.output_dir and
+        # MeasurementHarness writes timeseries.parquet to the output_dir and
         # sets result.timeseries = "timeseries.parquet". Both must be present for
         # the copy to proceed.
         ts_source: Path | None = None
         ts_filename = getattr(result, "timeseries", None)
-        output_dir_str = (
-            result.effective_config.get("output_dir")
-            if hasattr(result, "effective_config")
-            else None
-        )
-        if ts_filename and output_dir_str:
-            candidate = Path(output_dir_str) / ts_filename
+        if ts_filename and ts_source_dir is not None:
+            candidate = ts_source_dir / ts_filename
             if candidate.exists():
                 ts_source = candidate
 
@@ -176,6 +198,8 @@ def _run_experiment_worker(
     conn: Any,  # multiprocessing.Connection (child end)
     progress_queue: Any,  # multiprocessing.Queue
     snapshot: EnvironmentSnapshot | None = None,
+    output_dir: str | None = None,
+    save_timeseries: bool = True,
 ) -> None:
     """Entry point for the child process. Runs one experiment and returns result via Pipe.
 
@@ -188,6 +212,10 @@ def _run_experiment_worker(
         On success: sends ExperimentResult (or result dict) via conn.
         On failure: sends {"type": ..., "message": ..., "traceback": ...} via conn.
         Progress events are put to progress_queue for the consumer thread.
+
+    Args:
+        output_dir: Directory for timeseries parquet output. Passed through to harness.
+        save_timeseries: Whether to persist GPU timeseries. Passed through to harness.
     """
     # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
     # share this PGID. The parent can then kill the whole group via os.killpg().
@@ -223,7 +251,13 @@ def _run_experiment_worker(
 
         gpu_indices = _resolve_gpu_indices(config)
         result = harness.run(
-            backend, config, snapshot=snapshot, gpu_indices=gpu_indices, progress=progress_cb
+            backend,
+            config,
+            snapshot=snapshot,
+            gpu_indices=gpu_indices,
+            progress=progress_cb,
+            output_dir=output_dir,
+            save_timeseries=save_timeseries,
         )
 
         # Send result back to parent via Pipe
@@ -595,12 +629,11 @@ class StudyRunner:
 
         exp_start = time.monotonic()
 
-        # Create a temp dir for timeseries parquet output. The harness gates
-        # parquet writing on config.output_dir being non-None, so we must set
-        # it here. The temp dir is cleaned up after _handle_result copies the
-        # parquet into the study directory.
-        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-"))
-        config = config.model_copy(update={"output_dir": str(ts_tmpdir)})
+        # Create a temp dir for timeseries parquet output. The harness receives
+        # output_dir as a runtime param (not from config). The temp dir is
+        # cleaned up after _handle_result copies the parquet into the study directory.
+        save_ts = self.study.output.save_timeseries
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-")) if save_ts else None
 
         # Resolve cached snapshot in parent — serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
@@ -611,6 +644,10 @@ class StudyRunner:
         p = mp_ctx.Process(
             target=_run_experiment_worker,
             args=(config, child_conn, progress_queue, snapshot),
+            kwargs={
+                "output_dir": str(ts_tmpdir) if ts_tmpdir else None,
+                "save_timeseries": save_ts,
+            },
             daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
         )
 
@@ -663,11 +700,12 @@ class StudyRunner:
         parent_conn.close()
 
         exp_elapsed = time.monotonic() - exp_start
-        self._handle_result(result, config_hash, cycle, index, exp_elapsed)
+        self._handle_result(result, config_hash, cycle, index, exp_elapsed, ts_source_dir=ts_tmpdir)
 
         # Clean up the temp dir created for timeseries parquet output.
         # _save_and_record already copied the parquet into the study dir.
-        shutil.rmtree(ts_tmpdir, ignore_errors=True)
+        if ts_tmpdir is not None:
+            shutil.rmtree(ts_tmpdir, ignore_errors=True)
 
         return result
 
@@ -678,6 +716,7 @@ class StudyRunner:
         cycle: int,
         index: int,
         elapsed: float,
+        ts_source_dir: Path | None = None,
     ) -> None:
         """Update manifest and signal study display based on experiment outcome."""
         if isinstance(result, dict) and "type" in result:
@@ -698,6 +737,7 @@ class StudyRunner:
                 cycle,
                 self.result_files,
                 experiment_index=index,
+                ts_source_dir=ts_source_dir,
             )
             if self._progress:
                 # Emit save paths as substeps BEFORE end_experiment_ok (which clears
@@ -794,7 +834,11 @@ class StudyRunner:
         result: Any
         try:
             # Pass study progress as step callback — DockerRunner calls on_step_*
-            result = docker_runner.run(config, progress=self._progress)
+            result = docker_runner.run(
+                config,
+                progress=self._progress,
+                save_timeseries=self.study.output.save_timeseries,
+            )
         except DockerError as exc:
             # Use structured error payload from container entrypoint when available,
             # falling back to the exception type/message for stderr-based errors.
@@ -813,15 +857,18 @@ class StudyRunner:
                 }
             self._persist_failure_artefacts(exc, config_hash, cycle, result)
 
-        exp_elapsed = time.monotonic() - exp_start
-        self._handle_result(result, config_hash, cycle, index, exp_elapsed)
+        # Resolve the timeseries temp dir that DockerRunner created for the
+        # rescued parquet (now copied into the study dir by _save_and_record).
+        docker_ts_dir = _resolve_ts_source_dir(result, spec, None)
 
-        # Clean up the temp dir that DockerRunner created for the rescued
-        # timeseries parquet (now copied into the study dir by _save_and_record).
-        if not isinstance(result, dict) and hasattr(result, "effective_config"):
-            ts_tmpdir = result.effective_config.get("output_dir")
-            if ts_tmpdir and Path(ts_tmpdir).exists():
-                shutil.rmtree(ts_tmpdir, ignore_errors=True)
+        exp_elapsed = time.monotonic() - exp_start
+        self._handle_result(
+            result, config_hash, cycle, index, exp_elapsed, ts_source_dir=docker_ts_dir
+        )
+
+        # Clean up the temp dir after _save_and_record has copied the parquet.
+        if docker_ts_dir is not None:
+            shutil.rmtree(docker_ts_dir, ignore_errors=True)
 
         return result
 

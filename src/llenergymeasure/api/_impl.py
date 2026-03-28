@@ -251,8 +251,9 @@ def _run(
             "consider running all backends in Docker."
         )
 
-    # Always create study dir + manifest
-    study_dir = create_study_dir(study.study_name, Path("results"))
+    # Resolve results_dir: study YAML > user config > built-in default
+    results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
+    study_dir = create_study_dir(study.study_name, Path(results_dir_str))
     manifest = ManifestWriter(study, study_dir)
 
     wall_start = time.monotonic()
@@ -355,7 +356,7 @@ def _run_in_process(
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
-    from llenergymeasure.study.runner import _save_and_record
+    from llenergymeasure.study.runner import _resolve_ts_source_dir, _save_and_record
 
     config = study.experiments[0]
     config_hash = compute_measurement_config_hash(config)
@@ -371,6 +372,9 @@ def _run_in_process(
     spec = runner_specs.get(config.backend) if runner_specs else None
 
     manifest.mark_running(config_hash, cycle)
+
+    save_ts = study.output.save_timeseries
+    ts_tmpdir: Path | None = None  # Only set for local path
 
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
@@ -388,7 +392,7 @@ def _run_in_process(
             extra_mounts=spec.extra_mounts,
         )
         try:
-            result = docker_runner.run(config, progress=progress)
+            result = docker_runner.run(config, progress=progress, save_timeseries=save_ts)
         except DockerError as exc:
             # Convert to failure dict — manifest marks failed, study continues
             error_payload: dict[str, Any] = {
@@ -402,6 +406,9 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
+        import shutil
+        import tempfile
+
         from llenergymeasure.backends import get_backend
         from llenergymeasure.harness import MeasurementHarness
         from llenergymeasure.harness.preflight import run_preflight
@@ -413,10 +420,25 @@ def _run_in_process(
         if progress:
             progress.on_step_done("container_preflight", time.perf_counter() - t0)
 
-        backend = get_backend(config.backend)
-        harness = MeasurementHarness()
-        gpu_indices = _resolve_gpu_indices(config)
-        result = harness.run(backend, config, gpu_indices=gpu_indices, progress=progress)
+        # Create temp dir for timeseries parquet (if enabled)
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-")) if save_ts else None
+
+        try:
+            backend = get_backend(config.backend)
+            harness = MeasurementHarness()
+            gpu_indices = _resolve_gpu_indices(config)
+            result = harness.run(
+                backend,
+                config,
+                gpu_indices=gpu_indices,
+                progress=progress,
+                output_dir=str(ts_tmpdir) if ts_tmpdir else None,
+                save_timeseries=save_ts,
+            )
+        except Exception:
+            if ts_tmpdir is not None:
+                shutil.rmtree(ts_tmpdir, ignore_errors=True)
+            raise
 
     # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
     if isinstance(result, dict) and "type" in result:
@@ -425,9 +447,20 @@ def _run_in_process(
         manifest.mark_failed(config_hash, cycle, error_type, error_message)
         return [], [None], [error_message]
 
+    # Resolve timeseries source dir for _save_and_record
+    ts_source: Path | None = _resolve_ts_source_dir(result, spec, ts_tmpdir)
+
     result_files: list[str] = []
     warnings: list[str] = []
-    _save_and_record(result, study_dir, manifest, config_hash, cycle, result_files)
+    _save_and_record(
+        result, study_dir, manifest, config_hash, cycle, result_files, ts_source_dir=ts_source
+    )
+
+    # Clean up temp dirs
+    if ts_source is not None and ts_source.exists():
+        import shutil
+
+        shutil.rmtree(ts_source, ignore_errors=True)
 
     return result_files, [result], warnings
 

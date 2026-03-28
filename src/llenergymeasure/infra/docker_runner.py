@@ -125,7 +125,9 @@ class DockerRunner:
     # Public API
     # ------------------------------------------------------------------
 
-    def run(self, config: Any, progress: ProgressCallback | None = None) -> Any:
+    def run(
+        self, config: Any, progress: ProgressCallback | None = None, save_timeseries: bool = True
+    ) -> Any:
         """Run an experiment inside an ephemeral Docker container.
 
         When a progress callback is provided, streams container stdout line by
@@ -167,16 +169,16 @@ class DockerRunner:
             self._ensure_image(progress=_p)
 
             # --- Write config JSON ---
-            # Set output_dir to the container-side exchange dir mount so the
-            # harness writes timeseries.parquet there (appears on host as
-            # exchange_dir/timeseries.parquet).
-            # IMPORTANT: compute config_hash AFTER mutating output_dir so the
-            # container (which reads this mutated config and recomputes the hash)
-            # produces the same hash as the host uses for result file lookup.
-            config = config.model_copy(update={"output_dir": "/run/llem"})
+            # Compute config_hash from the clean config (no output path mutation).
+            # Output dir and save_timeseries are passed via env vars, not config.
             config_hash = compute_measurement_config_hash(config)
             config_path = exchange_dir / f"{config_hash}_config.json"
             config_path.write_text(config.model_dump_json(), encoding="utf-8")
+
+            # Pass output params via env vars so the container entrypoint can
+            # forward them to the harness as runtime params.
+            secrets["LLEM_OUTPUT_DIR"] = "/run/llem"
+            secrets["LLEM_SAVE_TIMESERIES"] = "1" if save_timeseries else "0"
 
             # --- Build and execute docker command ---
             t0_container: float | None = None

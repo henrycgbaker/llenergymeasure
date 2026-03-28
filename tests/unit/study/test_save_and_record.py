@@ -22,7 +22,6 @@ from llenergymeasure.study.runner import _save_and_record
 
 
 def _make_result(
-    tmp_path: Path,
     *,
     with_timeseries: bool = True,
 ) -> ExperimentResult:
@@ -31,8 +30,6 @@ def _make_result(
         "model": "gpt2",
         "backend": "pytorch",
     }
-    if with_timeseries:
-        effective_config["output_dir"] = str(tmp_path)
 
     return ExperimentResult(
         experiment_id="test-save-record-001",
@@ -79,11 +76,13 @@ def test_save_and_record_copies_timeseries_sidecar(tmp_path: Path) -> None:
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    result = _make_result(tmp_path, with_timeseries=True)
+    result = _make_result(with_timeseries=True)
     manifest = MagicMock()
     result_files: list[str] = []
 
-    _save_and_record(result, study_dir, manifest, "aabb1122", 1, result_files)
+    _save_and_record(
+        result, study_dir, manifest, "aabb1122", 1, result_files, ts_source_dir=tmp_path
+    )
 
     # result.json should have been saved into a subdirectory under study_dir
     assert len(result_files) == 1
@@ -110,7 +109,7 @@ def test_save_and_record_no_timeseries(tmp_path: Path) -> None:
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    result = _make_result(tmp_path, with_timeseries=False)
+    result = _make_result(with_timeseries=False)
     assert result.timeseries is None
 
     manifest = MagicMock()
@@ -141,7 +140,7 @@ def test_save_and_record_missing_source_file(tmp_path: Path) -> None:
     study_dir.mkdir()
 
     # Result claims timeseries exists but we deliberately do NOT create the file
-    result = _make_result(tmp_path, with_timeseries=True)
+    result = _make_result(with_timeseries=True)
     assert result.timeseries == "timeseries.parquet"
     source_parquet = tmp_path / "timeseries.parquet"
     assert not source_parquet.exists(), "Pre-condition: source file must NOT exist"
@@ -150,7 +149,9 @@ def test_save_and_record_missing_source_file(tmp_path: Path) -> None:
     result_files: list[str] = []
 
     # Must not raise
-    _save_and_record(result, study_dir, manifest, "eeff7788", 1, result_files)
+    _save_and_record(
+        result, study_dir, manifest, "eeff7788", 1, result_files, ts_source_dir=tmp_path
+    )
 
     # result.json still saved
     assert len(result_files) == 1
@@ -181,7 +182,7 @@ def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:
     study_dir = tmp_path / "study"
     study_dir.mkdir()
 
-    result = _make_result(tmp_path, with_timeseries=False)
+    result = _make_result(with_timeseries=False)
     manifest = MagicMock()
     result_files: list[str] = []
 

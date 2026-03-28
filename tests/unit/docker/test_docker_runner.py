@@ -30,15 +30,15 @@ IMAGE = "ghcr.io/llenergymeasure/vllm:1.19.0-cuda12"
 
 
 def _docker_config_hash(config) -> str:
-    """Return the config hash as DockerRunner computes it: after setting output_dir=/run/llem.
+    """Return the config hash as DockerRunner computes it: from the clean config.
 
-    DockerRunner mutates output_dir before computing the hash so the container
-    (which reads the mutated config and recomputes) produces the same hash.
-    Tests that write result files must use this helper to match the actual file name.
+    DockerRunner computes the hash from the unmodified config (output_dir is no
+    longer a config field). Tests that write result files must use this helper
+    to match the actual file name.
     """
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
-    return compute_measurement_config_hash(config.model_copy(update={"output_dir": "/run/llem"}))
+    return compute_measurement_config_hash(config)
 
 
 def _make_proc(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
@@ -98,30 +98,22 @@ class TestSuccessPath:
         # Exchange dir should be cleaned up on success
         mock_rmtree.assert_called_once()
 
-    def test_hash_consistent_with_container_output_dir(self, tmp_path):
-        """Config hash is computed AFTER setting output_dir=/run/llem.
+    def test_hash_independent_of_output_settings(self, tmp_path):
+        """Config hash is computed from the clean config without output path influence.
 
-        Regression test for: host computed hash from original config (output_dir=None)
-        but container recomputed from mutated config (output_dir=/run/llem), producing
-        different hashes. Result file was written under the container hash but host looked
-        for it under the original hash → DockerContainerError → experiment marked failed.
-
-        The fix: hash is computed after mutation so both sides agree.
+        output_dir has been removed from ExperimentConfig entirely. The hash is
+        deterministic and stable regardless of any output settings (which are now
+        passed via env vars, not config fields).
         """
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
-        config = make_config()  # output_dir=None
+        config = make_config()
         result = make_result()
 
-        # Hash of ORIGINAL config (output_dir=None) — the old broken behaviour
-        original_hash = compute_measurement_config_hash(config)
-        # Hash of MUTATED config (output_dir="/run/llem") — what both sides must agree on
-        mutated_hash = compute_measurement_config_hash(
-            config.model_copy(update={"output_dir": "/run/llem"})
-        )
-
-        # The two hashes must differ (otherwise this test is trivially passing)
-        assert original_hash != mutated_hash, "Precondition: output_dir affects the hash"
+        # Hash is the same whether computed directly or via the helper
+        direct_hash = compute_measurement_config_hash(config)
+        helper_hash = _docker_config_hash(config)
+        assert direct_hash == helper_hash
 
         exchange_dir = tmp_path / "llem-hashfix"
         exchange_dir.mkdir()
@@ -137,12 +129,11 @@ class TestSuccessPath:
             ),
             patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
         ):
-            # Write result under the MUTATED hash (what the container does)
-            result_path = exchange_dir / f"{mutated_hash}_result.json"
+            # Write result under the clean hash — both host and container agree
+            result_path = exchange_dir / f"{direct_hash}_result.json"
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE)
-            # Must succeed — runner now looks for the mutated-hash file
             returned = runner.run(config)
 
         assert returned.experiment_id == result.experiment_id
@@ -703,8 +694,8 @@ class TestHFTokenSecure:
         # File must be deleted after context exits
         assert not captured_path[0].exists()
 
-    def test_no_env_file_when_no_token(self, tmp_path, monkeypatch):
-        """No --env-file flag in docker command when HF_TOKEN is absent."""
+    def test_env_file_without_hf_token_still_has_output_vars(self, tmp_path, monkeypatch):
+        """When HF_TOKEN is absent, env-file still exists (LLEM_OUTPUT_DIR etc.) but has no HF_TOKEN."""
         monkeypatch.delenv("HF_TOKEN", raising=False)
         config = make_config()
         exchange_dir = tmp_path / "llem-s1-notoken"
@@ -731,7 +722,11 @@ class TestHFTokenSecure:
                 runner.run(config)
 
         cmd = captured_cmds[0]
-        assert "--env-file" not in cmd
+        # Env-file is still used for LLEM_OUTPUT_DIR and LLEM_SAVE_TIMESERIES
+        assert "--env-file" in cmd
+        # But HF_TOKEN must not appear anywhere in the command
+        joined = " ".join(cmd)
+        assert "HF_TOKEN" not in joined
 
     def test_env_file_cleanup_on_failure(self):
         """Temp env-file is deleted even when an exception is raised inside the context."""
@@ -1030,19 +1025,18 @@ class TestTimeseriesParquetRescue:
 
     The harness inside the container writes timeseries.parquet to /run/llem
     (= exchange_dir on host). DockerRunner must move it to a temp dir and
-    rewrite effective_config["output_dir"] to point there, so the study
+    inject effective_config["output_dir"] pointing there, so the study
     runner's _save_and_record can find it.
     """
 
-    def test_parquet_rescued_and_output_dir_rewritten(self, tmp_path):
-        """When timeseries.parquet exists, it is rescued and output_dir points to temp dir."""
+    def test_parquet_rescued_to_temp_dir(self, tmp_path):
+        """When timeseries.parquet exists, it is rescued to a temp dir and output_dir set."""
         config = make_config()
         result = make_result(
             timeseries="timeseries.parquet",
             effective_config={
                 "model": "gpt2",
                 "backend": "pytorch",
-                "output_dir": "/run/llem",
             },
         )
 
@@ -1078,8 +1072,8 @@ class TestTimeseriesParquetRescue:
             runner = DockerRunner(image=IMAGE)
             returned = runner.run(config)
 
-        # output_dir must NOT be /run/llem (container path) — must be rewritten
-        # to the host-side rescue dir containing the rescued parquet
+        # output_dir in effective_config must point to the rescue dir so
+        # _save_and_record can find the parquet sidecar
         output_dir = returned.effective_config.get("output_dir")
         assert output_dir == str(rescue_dir)
         assert (rescue_dir / "timeseries.parquet").exists()
@@ -1089,15 +1083,12 @@ class TestTimeseriesParquetRescue:
         mock_rmtree.assert_called_once()
 
     def test_no_parquet_no_rescue(self, tmp_path):
-        """When no timeseries.parquet exists, output_dir stays as /run/llem."""
+        """When no timeseries.parquet exists, result is returned without output_dir rewrite."""
         config = make_config()
-        # The container harness includes output_dir in effective_config
-        # (from the config we set it on), so the result must reflect that.
         result = make_result(
             effective_config={
                 "model": "gpt2",
                 "backend": "pytorch",
-                "output_dir": "/run/llem",
             },
         )
 
@@ -1122,15 +1113,12 @@ class TestTimeseriesParquetRescue:
             runner = DockerRunner(image=IMAGE)
             returned = runner.run(config)
 
-        # output_dir should reflect the /run/llem we set on the config
-        # (no rescue needed, no rewrite)
-        output_dir = returned.effective_config.get("output_dir")
-        assert output_dir == "/run/llem"
+        # No parquet rescue means no output_dir injected into effective_config
+        assert "output_dir" not in returned.effective_config
 
-    def test_config_serialised_with_output_dir(self, tmp_path):
-        """Config JSON written to exchange dir must have output_dir=/run/llem."""
+    def test_config_serialised_without_output_dir(self, tmp_path):
+        """Config JSON written to exchange dir must not contain output_dir (passed via env)."""
         config = make_config()
-        assert config.output_dir is None, "Pre-condition: config starts with output_dir=None"
 
         result = make_result()
         exchange_dir = tmp_path / "llem-cfg-check"
@@ -1157,7 +1145,7 @@ class TestTimeseriesParquetRescue:
         # Read back the config JSON that was written for the container
         config_path = exchange_dir / f"{config_hash}_config.json"
         written_config = json.loads(config_path.read_text(encoding="utf-8"))
-        assert written_config["output_dir"] == "/run/llem"
+        assert "output_dir" not in written_config
 
 
 # ---------------------------------------------------------------------------
