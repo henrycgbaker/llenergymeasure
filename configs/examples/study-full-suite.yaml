@@ -1,5 +1,9 @@
 # Full-suite multi-backend study - comprehensive coverage across all backends
 # Run: llem run configs/examples/study-full-suite.yaml
+#
+# Reference config - not intended for end-to-end execution.
+# Expands to ~152,455 experiments (PyTorch: 9,601 | vLLM: 139,972 | TensorRT: 2,882).
+# With n_cycles=3 that is ~457k total runs.
 
 study_name: full-suite-all-backends
 
