@@ -87,17 +87,25 @@ for details.
 ## Building Docker Images from Source
 
 The pre-built images from GHCR work for most users. If you need to rebuild images locally
-(e.g. after modifying the source code, or to include FlashAttention-3), use Docker Compose:
+(e.g. after modifying the source code), use the Make targets:
 
 ```bash
-# Build a specific backend
-docker compose build pytorch
+# Build all backends (pytorch, vllm, tensorrt)
+make docker-build-all
 
-# Build all backends
+# Build a specific backend
+make docker-build-pytorch
+make docker-build-vllm
+make docker-build-tensorrt
+```
+
+These use `docker compose build` under the hood. You can also call it directly:
+
+```bash
 docker compose build pytorch vllm tensorrt
 ```
 
-Or with plain `docker build`:
+Or with plain `docker build` (no Compose, no build cache):
 
 ```bash
 docker build -f docker/Dockerfile.pytorch -t llenergymeasure:pytorch .
@@ -105,10 +113,22 @@ docker build -f docker/Dockerfile.vllm -t llenergymeasure:vllm .
 docker build -f docker/Dockerfile.tensorrt -t llenergymeasure:tensorrt .
 ```
 
+Local builds produce images tagged `llenergymeasure:{backend}`. When present, `llem`
+prefers these over registry images. See [Image Management](docker-setup.md#image-management)
+for the full resolution chain.
+
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, backends, or the container entrypoint, you must rebuild for changes
 > to take effect inside containers. Local-runner experiments (PyTorch) use the installed
 > source directly and do not need a rebuild.
+
+### Other Docker Make targets
+
+| Target | Description |
+|--------|-------------|
+| `make docker-pull` | Pull all registry images for your installed version |
+| `make docker-images` | Show which image each backend resolves to (local vs registry) |
+| `make docker-check` | Validate `docker-compose.yml` configuration |
 
 ### Build Cache (recommended)
 
@@ -157,28 +177,29 @@ instructions in the [Docker Setup Guide](docker-setup.md#step-1-install-docker).
 **Without COMPOSE_BAKE:** Builds work normally but don't use registry cache. The `cache_from`
 entries in `docker-compose.yml` are silently ignored. No errors, just slower builds.
 
-### FlashAttention-3 (optional)
+### FlashAttention-3
 
-The PyTorch Docker image ships with FlashAttention-2 (FA2) pre-built. FlashAttention-3 (FA3)
-is **not included by default** because it must be compiled from source, which adds
-approximately 1 hour to the image build.
+The PyTorch Docker image ships with both FlashAttention-2 (FA2) and FlashAttention-3 (FA3)
+pre-built. FA3 is compiled from source during the image build, which is the slowest build
+step (~1 hour cold). With the GHCR build cache enabled (`COMPOSE_BAKE=true`), FA3 layers
+are pulled pre-compiled and the build completes in under 2 minutes.
 
-FA3 provides Hopper-optimised attention kernels. It is required if you want to use
+FA3 provides Hopper-optimised attention kernels. Use it via
 `pytorch.attn_implementation: flash_attention_3` in your experiment configs.
 
-**To build the PyTorch image with FA3:**
+**To skip FA3** (e.g. for faster CI builds):
 
 ```bash
 docker build -f docker/Dockerfile.pytorch \
-  --build-arg INSTALL_FA3=true \
-  -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
+  --build-arg INSTALL_FA3=false \
+  -t llenergymeasure:pytorch .
 ```
 
-**Why FA3 takes so long:** FA3 has no pre-built PyPI wheel. It is compiled from the
-`hopper/` subdirectory of the [flash-attention](https://github.com/Dao-AILab/flash-attention)
+**Why FA3 takes so long from scratch:** FA3 has no pre-built PyPI wheel. It is compiled from
+the `hopper/` subdirectory of the [flash-attention](https://github.com/Dao-AILab/flash-attention)
 repository using `nvcc` for CUDA architectures SM 8.0 (A100) and SM 9.0 (H100). CUDA kernel
 compilation is inherently slow - each architecture target requires a separate compilation
-pass.
+pass. This is why the build cache is so valuable.
 
 **FA3 hardware requirements:**
 

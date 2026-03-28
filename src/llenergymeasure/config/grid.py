@@ -462,8 +462,6 @@ def build_preflight_panel(
     # -- Runners --
     _section(body, "Runners")
     yaml_runners = study_config.runners or {}
-    has_docker = False
-    needs_build = False
     for b in unique_backends:
         if runner_specs and b in runner_specs:
             spec = runner_specs[b]
@@ -473,23 +471,11 @@ def build_preflight_panel(
             body.append("\n")
             # Show image resolution for Docker backends
             if spec.mode == "docker" and spec.image:
-                has_docker = True
                 body.append("    ", style="dim")
                 body.append(f"\u21b3 {spec.image}\n", style="dim")
-                if spec.image_source == "registry":
-                    needs_build = True
-            elif spec.mode == "docker":
-                has_docker = True
         else:
             mode_str = str(yaml_runners.get(b, "local"))
             _line(body, b, mode_str)
-
-    # Docker build hint when images need building or pulling
-    if has_docker and needs_build:
-        body.append(
-            "    \u2139  Build locally: COMPOSE_BAKE=true docker compose build <backend>\n",
-            style="dim",
-        )
 
     # -- Study-wide constants (shown when NOT varying across experiments) --
     constants: list[tuple[str, str]] = []
@@ -564,16 +550,6 @@ def build_preflight_panel(
         padding=(0, 1),
     )
 
-
-_IMAGE_SOURCE_SHORT: dict[str, str] = {
-    "local_build": "local build \u2713 cached",
-    "registry": "registry \u2014 not cached, will pull",
-    "registry_cached": "registry \u2713 cached locally",
-    "env": "env var",
-    "yaml": "study YAML",
-    "runner_override": "runner override",
-    "user_config": "user config",
-}
 
 _ENERGY_SAMPLER_NAMES: dict[str, str] = {
     "nvml": "NVMLSampler",

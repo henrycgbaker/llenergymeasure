@@ -261,32 +261,121 @@ for the full TensorRT-LLM walkthrough.
 
 ## Image Management
 
-llenergymeasure uses pre-built Docker images from GitHub Container Registry. Images follow
-this naming convention:
+### Image sources
+
+Each backend has two possible image sources:
+
+| Source | Tag pattern | Built by | Use case |
+|--------|------------|----------|----------|
+| **Local build** | `llenergymeasure:{backend}` | `make docker-build-{backend}` | Development - reflects current source tree |
+| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}` | CI on release tags | Production, CI, pip-install users |
+
+### Image resolution
+
+When you run `llem run`, the tool resolves which image to use for each backend. Resolution
+follows a precedence chain (highest wins):
+
+1. **Environment variable** `LLEM_IMAGE_{BACKEND}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
+2. **Study YAML** `images:` section
+3. **Runner spec** shorthand (`docker:my/custom:tag` in `runners:`)
+4. **User config** `images:` section (`~/.config/llenergymeasure/config.yaml`)
+5. **Smart default**: local build image if present, otherwise registry image
+
+In practice, most users rely on the smart default (level 5). If you have built images locally
+with `make docker-build-all`, those are used. Otherwise, `llem` uses the GHCR registry image
+matching your installed version.
+
+### Auto-pull on first use
+
+When `llem` needs a registry image that is not cached locally, it pulls it automatically
+before the experiment runs. The preflight panel shows which images will be used and whether
+they are cached or need pulling:
 
 ```
-ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}
+Runners
+  vllm              docker
+    ↳ llenergymeasure:vllm                              ← local build
+  pytorch           docker
+    ↳ ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0  ← registry
 ```
 
-For example:
-```
-ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0
-ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0
-```
+### Study-level image preparation
 
-**Auto-pull on first use.** When you run a backend for the first time, `llem` automatically
-pulls the correct image. No manual `docker pull` is needed.
+For multi-experiment studies, `llem` checks and pulls all required Docker images **once**
+before the first experiment runs, not per-experiment. This avoids redundant pulls when
+multiple experiments share the same backend image. The CLI shows this as a
+"Preparing Docker images" section with per-image status (cached vs pulled) and metadata
+(image ID, size, age, layers).
 
-**Pre-fetch an image** (optional, useful for offline environments):
+### Pre-fetch images manually
+
+For offline environments or to avoid pull latency during experiments:
 
 ```bash
+# Pull all registry images for your version
+make docker-pull
+
+# Or pull individually
 docker pull ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0
 docker pull ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0
+docker pull ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0
 ```
 
-Replace `0.9.0` with your installed `llenergymeasure` version (run `llem --version` to check).
+Replace `0.9.0` with your installed version (`llem --version`).
 
-**Future backends.** SGLang (M5) images will follow the same naming convention and auto-pull
+### Check current image resolution
+
+To see which images `llem` will use for each backend:
+
+```bash
+make docker-images
+```
+
+Output shows local vs registry source for each backend:
+
+```
+=== Image resolution ===
+  pytorch    -> llenergymeasure:pytorch  (local_build)
+  tensorrt   -> ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0  (registry)
+  vllm       -> llenergymeasure:vllm  (local_build)
+```
+
+### Building images locally
+
+Build images from source when you have modified the codebase or need images that reflect
+your local changes:
+
+```bash
+# Build all backends
+make docker-build-all
+
+# Build a specific backend
+make docker-build-pytorch
+make docker-build-vllm
+make docker-build-tensorrt
+```
+
+These targets use `docker compose build` under the hood. If `COMPOSE_BAKE=true` is set in
+your `.env`, builds use the GHCR registry cache for dramatically faster builds (see
+[Build Cache](installation.md#build-cache-recommended) for details).
+
+> **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
+> modify config models, backends, or the container entrypoint, rebuild for changes to take
+> effect inside containers. Local-runner experiments (PyTorch without Docker) use the
+> installed source directly and do not need a rebuild.
+
+### Override images in YAML
+
+```yaml
+runners:
+  pytorch: local                       # host execution, no Docker
+  vllm: docker                         # default resolution (local → registry)
+  tensorrt: "docker:my/custom:tag"     # explicit image override
+```
+
+### Future backends
+
+SGLang (M5) images will follow the same naming convention, resolution logic, and auto-pull
 behaviour. No additional setup is needed when SGLang ships.
 
 ---
