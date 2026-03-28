@@ -5,8 +5,7 @@
 #   llem config                   # Check environment
 #   docker compose build pytorch  # Build backend image
 #
-# Manual Usage:
-#   Build base first:  docker compose build base
+# Usage:
 #   PyTorch (default): docker compose run --rm pytorch llem --help
 #   vLLM:              docker compose run --rm vllm llem --help
 #   TensorRT:          docker compose run --rm tensorrt llem --help
@@ -25,6 +24,13 @@
 #   docker compose --profile dev run --rm pytorch-dev /bin/bash
 #   docker compose --profile dev run --rm vllm-dev /bin/bash
 #   docker compose --profile dev run --rm tensorrt-dev /bin/bash
+#
+# Build Cache (optional):
+#   To pull cached layers from GHCR for faster local builds:
+#     COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build \
+#       --build-arg BUILDKIT_INLINE_CACHE=1 pytorch
+#   Or add to your shell profile:
+#     export DOCKER_BUILDKIT=1
 
 # Shared configuration anchor
 x-common: &common
@@ -75,15 +81,6 @@ x-common: &common
 
 services:
   # ==========================================================================
-  # Base image - shared foundation (build this first)
-  # ==========================================================================
-  base:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.base
-    image: llenergymeasure-base:latest
-
-  # ==========================================================================
   # PyTorch Backend - HuggingFace Transformers + Accelerate
   # ==========================================================================
   pytorch:
@@ -100,12 +97,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.pytorch
       target: runtime
-      args:
-        BASE_IMAGE: llenergymeasure-base:latest
     image: llenergymeasure:pytorch
-    depends_on:
-      base:
-        condition: service_completed_successfully
 
   pytorch-dev:
     <<: *common
@@ -117,12 +109,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.pytorch
       target: dev
-      args:
-        BASE_IMAGE: llenergymeasure-base:latest
     image: llenergymeasure:pytorch-dev
-    depends_on:
-      base:
-        condition: service_completed_successfully
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
 
@@ -145,12 +132,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.vllm
       target: runtime
-      args:
-        BASE_IMAGE: llenergymeasure-base:latest
     image: llenergymeasure:vllm
-    depends_on:
-      base:
-        condition: service_completed_successfully
 
   vllm-dev:
     <<: *common
@@ -164,12 +146,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.vllm
       target: dev
-      args:
-        BASE_IMAGE: llenergymeasure-base:latest
     image: llenergymeasure:vllm-dev
-    depends_on:
-      base:
-        condition: service_completed_successfully
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
 
@@ -193,12 +170,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: runtime
-      args:
-        BASE_IMAGE: llenergymeasure-base:latest
     image: llenergymeasure:tensorrt
-    depends_on:
-      base:
-        condition: service_completed_successfully
 
   tensorrt-dev:
     <<: *common
@@ -213,12 +185,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: dev
-      args:
-        BASE_IMAGE: llenergymeasure-base:latest
     image: llenergymeasure:tensorrt-dev
-    depends_on:
-      base:
-        condition: service_completed_successfully
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
 

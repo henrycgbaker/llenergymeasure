@@ -8,7 +8,7 @@
     "HF_TOKEN": "${localEnv:HF_TOKEN}",
     "PYTHONUNBUFFERED": "1"
   },
-  "initializeCommand": "docker compose build base pytorch-dev 2>/dev/null || true",
+  "initializeCommand": "docker compose build pytorch-dev 2>/dev/null || true",
   "postCreateCommand": "pip install -e '.[pytorch,dev]' && pre-commit install || true",
   "customizations": {
     "vscode": {

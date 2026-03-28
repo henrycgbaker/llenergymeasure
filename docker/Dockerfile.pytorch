@@ -19,25 +19,29 @@ ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
 # FA3 = separate build from flash-attn repo's hopper/ directory; produces
 #        the flash_attn_interface top-level package that transformers checks.
 # SM 8.0 = A100 (Ampere), 9.0 = H100 (Hopper).
-# Set INSTALL_FA3=true to include FA3 (adds ~1 hour build time; Hopper kernels).
+# 9.0+PTX includes PTX IR for forward compatibility with future architectures.
+# Set INSTALL_FA3=false to skip FA3 (saves ~1 hour build time on cold builds).
 ARG FLASH_ATTN_VERSION=v2.8.3
-ARG INSTALL_FA3=false
+ARG INSTALL_FA3=true
 FROM pytorch/pytorch:${PYTORCH_DEVEL_VERSION} AS builder
 ARG FLASH_ATTN_VERSION
 ARG INSTALL_FA3
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-ENV TORCH_CUDA_ARCH_LIST="8.0;9.0"
+ENV TORCH_CUDA_ARCH_LIST="8.0;9.0+PTX"
 
-# FA2: install from PyPI
-RUN uv pip install --system --no-cache flash-attn --no-build-isolation
+# FA2: install from PyPI (cache mount persists compiled wheel across rebuilds)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system flash-attn --no-build-isolation
 
 # FA3: build hopper extensions from source (produces flash_attn_interface + flash_attn_3_cuda)
 # MAX_JOBS=2 limits parallel nvcc processes to avoid OOM during compilation.
 # Skipped when INSTALL_FA3=false (e.g. CI smoke tests).
-RUN if [ "$INSTALL_FA3" = "true" ]; then \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$INSTALL_FA3" = "true" ]; then \
         apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && \
         git clone --depth 1 --branch ${FLASH_ATTN_VERSION} https://github.com/Dao-AILab/flash-attention.git /tmp/flash-attention && \
-        MAX_JOBS=2 pip install --no-cache-dir /tmp/flash-attention/hopper --no-build-isolation; \
+        MAX_JOBS=2 pip install /tmp/flash-attention/hopper --no-build-isolation && \
+        rm -rf /tmp/flash-attention; \
     fi
 
 # Stage all flash-attn files for clean copy (version-agnostic)
@@ -60,6 +64,9 @@ FROM pytorch/pytorch:${PYTORCH_VERSION} AS runtime
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Suppress hardlink warnings when cache mount is on a different filesystem
+ENV UV_LINK_MODE=copy
+
 # Copy compiled flash-attn from builder (package dir + dist-info + CUDA extensions)
 COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages/
 
@@ -67,9 +74,14 @@ WORKDIR /app
 
 # Install llenergymeasure with pytorch extras from source (no PyPI yet).
 # sentencepiece needed for Llama/Qwen tokenisers.
-COPY pyproject.toml uv.lock README.md ./
+# Bind mounts: pyproject.toml/uv.lock/README.md are build-only (not needed at runtime).
+# Cache mount: uv reuses cached wheels across rebuilds without bloating the image.
 COPY src/ ./src/
-RUN uv pip install --system --no-cache ".[pytorch]" sentencepiece einops
+RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=/app/uv.lock \
+    --mount=type=bind,source=README.md,target=/app/README.md \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system ".[pytorch]" sentencepiece einops
 
 # HuggingFace cache — writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface
@@ -79,5 +91,6 @@ CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]
 
 # Dev stage — adds development tools for local iteration
 FROM runtime AS dev
-RUN uv pip install --system --no-cache ruff mypy pytest pytest-cov
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system ruff mypy pytest pytest-cov
 CMD ["/bin/bash"]

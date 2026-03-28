@@ -21,15 +21,23 @@ ENTRYPOINT []
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Suppress hardlink warnings when cache mount is on a different filesystem
+ENV UV_LINK_MODE=copy
+
 WORKDIR /app
 
 # Install llenergymeasure from source (no PyPI yet).
 # --no-deps on the package itself avoids re-installing vLLM/torch.
 # Then install remaining runtime deps that aren't in the vLLM image.
-COPY pyproject.toml uv.lock README.md ./
+# Bind mounts: pyproject.toml/uv.lock/README.md are build-only (not needed at runtime).
+# Cache mount: uv reuses cached wheels across rebuilds without bloating the image.
 COPY src/ ./src/
-RUN uv pip install --system --break-system-packages --no-cache --no-deps ".[vllm]" \
-    && uv pip install --system --break-system-packages --no-cache \
+RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=/app/uv.lock \
+    --mount=type=bind,source=README.md,target=/app/README.md \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --break-system-packages --no-deps ".[vllm]" \
+    && uv pip install --system --break-system-packages \
         pydantic typer pyyaml platformdirs nvidia-ml-py numpy \
         pyarrow tqdm codecarbon datasets python-dotenv
 
@@ -41,5 +49,6 @@ CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]
 
 # Dev stage — adds development tools for local iteration
 FROM runtime AS dev
-RUN uv pip install --system --break-system-packages --no-cache ruff mypy pytest pytest-cov
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --break-system-packages ruff mypy pytest pytest-cov
 CMD ["/bin/bash"]
