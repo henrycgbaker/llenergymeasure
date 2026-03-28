@@ -177,11 +177,19 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   vllm.engine.block_size: [8, 16, 32]
   vllm.engine.kv_cache_dtype: [auto]  # fp8 requires SM >= 8.9 (Ada Lovelace / Hopper); add fp8 if hardware supports it
   vllm.engine.quantization: [null]  # fp8 requires SM >= 8.9; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
-  vllm.engine.max_num_batched_tokens: [2048, 4096, 8192]
-  vllm.engine.max_model_len: [1024, 2048, 4096]
   vllm.attention.backend: [flash_attn, flashinfer]  # xformers legacy, deprecated
 
   # --- vLLM: dependent groups ─────────────────────────────────────
+
+  # vLLM requires max_num_batched_tokens >= max_model_len;
+  # independent axes would produce invalid combos (e.g. 2048 < 4096)
+  vllm.token_limits:
+    - vllm.engine.max_num_batched_tokens: 2048
+      vllm.engine.max_model_len: [1024, 2048]
+    - vllm.engine.max_num_batched_tokens: 4096
+      vllm.engine.max_model_len: [1024, 2048, 4096]
+    - vllm.engine.max_num_batched_tokens: 8192
+      vllm.engine.max_model_len: [1024, 2048, 4096]
 
   # beam_search and sampling sections are mutually exclusive;
   # beam search requires decoder.do_sample: false
