@@ -239,11 +239,10 @@ class LoRAConfig(BaseModel):
     Exactly one of adapter_id or adapter_path must be set.
 
     Backend support:
-        - pytorch: Full support via peft library (PeftModel.from_pretrained).
-          Supports both Hub adapters (adapter_id) and local paths (adapter_path).
-          merge_weights merges adapter into base model at load time.
-        - vllm: Dynamic per-request adapters via engine-level enable_lora.
-          Requires adapter weights to be locally accessible.
+        - pytorch: Full support via PEFT library (PeftModel.from_pretrained).
+          Supports merge_and_unload() for weight merging.
+        - vllm: Dynamic per-request adapters. Requires vllm.engine.enable_lora: true
+          and a local adapter path.
         - tensorrt: Not yet supported.
     """
 
@@ -273,12 +272,9 @@ class LoRAConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_revision_requires_adapter_id(self) -> LoRAConfig:
-        """revision is only valid with adapter_id (Hub loading), not adapter_path."""
+        """revision is only meaningful with adapter_id (Hub loading)."""
         if self.revision is not None and self.adapter_id is None:
-            raise ValueError(
-                "LoRAConfig.revision requires adapter_id (Hub loading). "
-                "revision is not applicable when using adapter_path (local loading)."
-            )
+            raise ValueError("revision requires adapter_id (Hub loading), not adapter_path")
         return self
 
 

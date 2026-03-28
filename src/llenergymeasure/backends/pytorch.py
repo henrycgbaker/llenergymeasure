@@ -83,12 +83,9 @@ class PyTorchBackend:
         if on_substep is not None:
             on_substep("model weights loaded", _time.perf_counter() - t0)
 
-        # Apply LoRA adapter (must be AFTER from_pretrained + eval, BEFORE torch.compile)
+        # Apply LoRA adapter (must be AFTER from_pretrained, BEFORE torch.compile)
         if config.lora is not None:
-            t0 = _time.perf_counter()
-            model = self._apply_lora_adapter(model, config.lora)
-            if on_substep is not None:
-                on_substep("LoRA adapter applied", _time.perf_counter() - t0)
+            model = self._apply_lora_adapter(model, config, on_substep)
 
         # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
         if config.pytorch is not None and config.pytorch.torch_compile:
@@ -282,32 +279,21 @@ class PyTorchBackend:
         logger.debug("Model cleanup complete")
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """Validate PyTorch-specific configuration requirements.
-
-        Checks:
-            - peft is importable when config.lora is set
-            - adapter_path exists on filesystem when using local path
-        """
+        """Validate PyTorch-specific configuration constraints."""
         errors: list[str] = []
-
         if config.lora is not None:
-            # Check peft is importable
             try:
                 import peft  # noqa: F401
             except ImportError:
                 errors.append(
-                    "LoRA adapter configured but 'peft' package is not installed. "
-                    "Install with: pip install 'llenergymeasure[pytorch]'"
+                    "LoRA adapter configured but 'peft' is not installed. "
+                    "Install with: pip install llenergymeasure[pytorch]"
                 )
-
-            # Check adapter_path exists on filesystem
             if config.lora.adapter_path is not None:
                 from pathlib import Path
 
-                adapter_path = Path(config.lora.adapter_path)
-                if not adapter_path.exists():
+                if not Path(config.lora.adapter_path).exists():
                     errors.append(f"LoRA adapter_path does not exist: {config.lora.adapter_path}")
-
         return errors
 
     # -------------------------------------------------------------------------
@@ -464,31 +450,46 @@ class PyTorchBackend:
             "bfloat16": torch.bfloat16,
         }[dtype]
 
+    # -------------------------------------------------------------------------
+    # Private: LoRA adapter support
+    # -------------------------------------------------------------------------
+
     @staticmethod
-    def _apply_lora_adapter(model: Any, lora: Any) -> Any:
-        """Apply a LoRA adapter to the model via peft.
+    def _apply_lora_adapter(
+        model: Any,
+        config: ExperimentConfig,
+        on_substep: Callable[[str, float], None] | None = None,
+    ) -> Any:
+        """Load a PEFT LoRA adapter onto the base model.
 
-        Args:
-            model: The base HuggingFace model (after from_pretrained + eval).
-            lora: LoRAConfig instance with adapter source and merge settings.
-
-        Returns:
-            Model with LoRA adapter applied (PeftModel or merged base model).
+        Called after from_pretrained() and model.eval(), before torch.compile.
+        Optionally merges adapter weights into the base model via merge_and_unload().
         """
+        import time as _time
+
         from peft import PeftModel
 
-        adapter_source = lora.adapter_id or lora.adapter_path
+        lora = config.lora
+        assert lora is not None
+
+        adapter_source = lora.adapter_id if lora.adapter_id is not None else lora.adapter_path
+
         peft_kwargs: dict[str, Any] = {}
-        if lora.revision:
+        if lora.revision is not None:
             peft_kwargs["revision"] = lora.revision
 
-        logger.info("Applying LoRA adapter from %r", adapter_source)
+        t0 = _time.perf_counter()
+        logger.info("Loading LoRA adapter from %r", adapter_source)
         model = PeftModel.from_pretrained(model, adapter_source, **peft_kwargs)
         model.eval()
 
         if lora.merge_weights:
             logger.info("Merging LoRA weights into base model")
             model = model.merge_and_unload()
+
+        if on_substep is not None:
+            label = "lora merged" if lora.merge_weights else "lora adapter loaded"
+            on_substep(label, _time.perf_counter() - t0)
 
         return model
 
