@@ -16,21 +16,24 @@ Key design decisions (locked in .product/decisions/experiment-isolation.md):
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import multiprocessing
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
 import threading
 import time
 import traceback
 from concurrent.futures import Future
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.config.ssot import DOCKER_PULL_TIMEOUT, RUNNER_DOCKER
 from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_DOCKER_RUN, STEPS_LOCAL
 from llenergymeasure.study.gaps import run_gap
 
@@ -581,8 +584,6 @@ class StudyRunner:
             self._env_snapshot_future = collect_environment_snapshot_async()
         return self._env_snapshot_future.result(timeout=10)
 
-    _PULL_TIMEOUT = 1800  # 30 min — generous for large images (TensorRT ~10 GB)
-
     def _prepare_images(self) -> None:
         """Check/pull Docker images for all Docker backends before experiments.
 
@@ -590,7 +591,6 @@ class StudyRunner:
         (or pulled) sequentially. On failure, raises so the study aborts early.
         Sets ``_images_prepared`` so per-experiment image_check is skipped.
         """
-        import subprocess
 
         if not self._runner_specs:
             return
@@ -636,7 +636,7 @@ class StudyRunner:
                 pull = subprocess.run(
                     ["docker", "pull", image],
                     capture_output=True,
-                    timeout=self._PULL_TIMEOUT,
+                    timeout=DOCKER_PULL_TIMEOUT,
                 )
             except subprocess.TimeoutExpired as exc:
                 if self._progress:
@@ -686,9 +686,6 @@ class StudyRunner:
     @staticmethod
     def _parse_image_metadata(inspect_stdout: bytes) -> dict[str, str] | None:
         """Extract human-readable metadata from docker image inspect JSON."""
-        import json
-        from datetime import datetime, timezone
-
         try:
             data = json.loads(inspect_stdout)
             if not data:

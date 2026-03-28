@@ -571,10 +571,8 @@ class StudyStepDisplay:
         # Image prep state (study-level Docker image preparation)
         self._image_prep_active: bool = False
         self._image_prep_total: int = 0
-        self._image_prep_done: list[
-            tuple[str, str, bool, float, dict[str, str] | None]
-        ] = []  # (backend, image, cached, elapsed, metadata)
-        self._image_prep_failed: tuple[str, str, str] | None = None  # (backend, image, error)
+        self._image_prep_done: list[tuple[str, str, bool, float, dict[str, str] | None]] = []
+        self._image_prep_failed: tuple[str, str, str] | None = None
 
     def start(self, *, print_header: bool = True) -> None:
         """Begin the display. Optionally prints study header and starts Rich Live if TTY.
