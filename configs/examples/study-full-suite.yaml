@@ -155,6 +155,26 @@ sweep:
   vllm.engine.kv_cache_dtype:
     - auto
     - fp8
+  vllm.engine.quantization:
+    - null                           # No quantisation (default, full precision)
+    - fp8                            # FP8 dynamic quantisation (works with any model)
+    # Model-specific quantisation (requires pre-quantised model checkpoint):
+    # - awq
+    # - gptq
+    # - marlin
+    # - bitsandbytes
+  vllm.engine.max_num_batched_tokens:
+    - 2048
+    - 4096
+    - 8192
+  vllm.engine.max_model_len:
+    - 1024
+    - 2048
+    - 4096
+  vllm.attention.backend:
+    - flash_attn
+    - flashinfer
+    # - xformers                     # Legacy, deprecated in newer vLLM versions
 
   # --- TensorRT parameter space ---
   tensorrt.max_batch_size:
@@ -173,9 +193,16 @@ sweep:
     # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
     # - FP8
   # Moved from explicit experiments: scheduling is an independent axis
+  tensorrt.max_input_len:
+    - 512
+    - 1024
   tensorrt.scheduler.capacity_scheduling_policy:
     - MAX_UTILIZATION
     - STATIC_BATCH
+  # tensorrt.tp_size:               # Tensor parallel (requires multi-GPU hardware)
+  #   - 1
+  #   - 2
+  #   - 4
 
 # =====================================================================
 # Explicit experiments (truly dependent or feature-specific params)
@@ -331,6 +358,68 @@ experiments:
       device_map: auto
       trust_remote_code: true
 
+  # -----------------------------------------------------------------
+  # Offloaded static KV cache (dependent: cache_implementation requires use_cache)
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
+    pytorch:
+      batch_size: 4
+      use_cache: true
+      cache_implementation: offloaded_static
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # Sliding window KV cache (dependent: cache_implementation requires use_cache)
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: pytorch
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
+    pytorch:
+      batch_size: 4
+      use_cache: true
+      cache_implementation: sliding_window
+      device_map: auto
+      trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # Tensor parallelism (requires multi-GPU; tp_plan and device_map are
+  # mutually exclusive, so this is a dependent experiment)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   pytorch:
+  #     batch_size: 4
+  #     tp_plan: auto
+  #     tp_size: 2
+  #     trust_remote_code: true
+
+  # -----------------------------------------------------------------
+  # Model loading with revision pin + memory limits
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   pytorch:
+  #     batch_size: 4
+  #     revision: main
+  #     max_memory:
+  #       0: "10GiB"
+  #       cpu: "50GiB"
+  #     device_map: auto
+  #     trust_remote_code: true
+
   # =================================================================
   # VLLM - dependent experiments
   # =================================================================
@@ -352,6 +441,7 @@ experiments:
         beam_width: 4
         early_stopping: true
         length_penalty: 1.0
+        max_tokens: 256              # Overrides universal max_output_tokens for beam search
 
   # -----------------------------------------------------------------
   # Sampling with penalties (mutually exclusive with beam_search section)
@@ -380,18 +470,147 @@ experiments:
     vllm:
       engine:
         tensor_parallel_size: 2
+        disable_custom_all_reduce: false  # Disable custom all-reduce for multi-GPU
         gpu_memory_utilization: 0.9
 
-  # vLLM speculative decoding (commented out - requires a real draft model)
+  # -----------------------------------------------------------------
+  # Attention backend fine-tuning (advanced: sub-fields of attention config)
+  # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: vllm
   #   dtype: bfloat16
-  #   dataset: { n_prompts: 50 }
+  #   dataset:
+  #     n_prompts: 50
+  #   vllm:
+  #     attention:
+  #       backend: flash_attn
+  #       flash_attn_version: 2            # Flash attention version (auto-detected)
+  #       flash_attn_max_num_splits_for_cuda_graph: 0  # Max splits for CUDA graph
+  #       use_prefill_decode_attention: true
+  #       use_prefill_query_quantization: false
+  #       use_cudnn_prefill: false
+  #       disable_flashinfer_prefill: false
+  #       disable_flashinfer_q_quantization: false
+  #       use_trtllm_attention: false      # Use TensorRT-LLM attention backend
+  #       use_trtllm_ragged_deepseek_prefill: false
+  #     engine:
+  #       enforce_eager: false
+
+  # -----------------------------------------------------------------
+  # Speculative decoding (dependent: speculative_model requires
+  # num_speculative_tokens; commented out - requires a real draft model)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
   #   vllm:
   #     engine:
   #       speculative_model: my-org/my-draft-model
   #       num_speculative_tokens: 5
   #       gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # Pipeline parallel (special: requires multi-GPU hardware)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   vllm:
+  #     engine:
+  #       pipeline_parallel_size: 2
+  #       gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # CPU offload (offloads model weight layers to CPU RAM)
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
+    vllm:
+      engine:
+        cpu_offload_gb: 4
+        gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # CPU offload fine-tuning (layer-level control over offloading)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   vllm:
+  #     engine:
+  #       cpu_offload_gb: 8
+  #       offload_group_size: 4          # Groups of layers for CPU offloading
+  #       offload_num_in_group: 2        # Layers offloaded per group
+  #       offload_prefetch_step: 1       # Prefetch steps ahead
+  #       # offload_params: ["lm_head"]  # Specific parameter names to offload
+  #       gpu_memory_utilization: 0.9
+
+  # -----------------------------------------------------------------
+  # Swap space for KV cache offloading
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
+    vllm:
+      engine:
+        swap_space: 8
+        gpu_memory_utilization: 0.85
+
+  # -----------------------------------------------------------------
+  # Sampling extensions (min_tokens, ignore_eos, multi-sequence)
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: vllm
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
+    decoder:
+      temperature: 0.8
+      do_sample: true
+    vllm:
+      sampling:
+        max_tokens: 256              # Overrides universal max_output_tokens for this experiment
+        min_tokens: 10
+        ignore_eos: false
+        n: 1
+
+  # -----------------------------------------------------------------
+  # Compilation config (advanced: full vLLM compilation passthrough)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   vllm:
+  #     engine:
+  #       compilation_config:
+  #         level: 3
+  #       enforce_eager: false
+
+  # -----------------------------------------------------------------
+  # Absolute KV cache memory (mutually exclusive with gpu_memory_utilization)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: vllm
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   vllm:
+  #     engine:
+  #       kv_cache_memory_bytes: 4294967296    # 4 GiB
+  #       enforce_eager: false
 
   # =================================================================
   # TENSORRT - dependent experiments
@@ -487,19 +706,86 @@ experiments:
       build_cache:
         max_cache_storage_gb: 256
 
-  # TRT-LLM sampling extensions (commented out)
+  # -----------------------------------------------------------------
+  # TRT-LLM sampling extensions (min_tokens, multi-sequence, perf metrics)
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      sampling:
+        min_tokens: 10
+        ignore_eos: false
+        return_perf_metrics: true
+        n: 1
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Tensor parallel (special: requires multi-GPU hardware)
+  # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   backend: tensorrt
   #   dtype: bfloat16
-  #   dataset: { n_prompts: 50 }
+  #   dataset:
+  #     n_prompts: 50
   #   tensorrt:
   #     max_batch_size: 8
   #     max_input_len: 1024
   #     max_seq_len: 2048
-  #     sampling:
-  #       min_tokens: 10
-  #       ignore_eos: false
-  #       return_perf_metrics: true
-  #       n: 1
+  #     tp_size: 2
   #     build_cache:
   #       max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Pre-compiled engine (skip compilation, load existing engine)
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: tensorrt
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   tensorrt:
+  #     engine_path: /path/to/precompiled/engine
+  #     max_batch_size: 8
+  #     max_seq_len: 2048
+
+  # -----------------------------------------------------------------
+  # KV cache with max_tokens limit
+  # -----------------------------------------------------------------
+  - model: Qwen/Qwen2.5-0.5B
+    backend: tensorrt
+    dtype: bfloat16
+    dataset:
+      n_prompts: 50
+    tensorrt:
+      max_batch_size: 8
+      max_input_len: 1024
+      max_seq_len: 2048
+      kv_cache:
+        max_tokens: 8192
+        free_gpu_memory_fraction: 0.85
+      build_cache:
+        max_cache_storage_gb: 256
+
+  # -----------------------------------------------------------------
+  # Build cache with custom root and record limits
+  # -----------------------------------------------------------------
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: tensorrt
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   tensorrt:
+  #     max_batch_size: 8
+  #     max_input_len: 1024
+  #     max_seq_len: 2048
+  #     build_cache:
+  #       cache_root: /tmp/trt_cache
+  #       max_records: 5
+  #       max_cache_storage_gb: 128
