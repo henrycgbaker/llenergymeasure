@@ -421,6 +421,8 @@ def _run_study_impl(
             skip_preflight=skip_preflight or dry_run,
             yaml_runners=study_config.runners,
             user_config=user_config.runners,
+            yaml_images=study_config.images,
+            user_config_images=user_config.images or None,
         )
     except Exception:
         runner_specs = None  # graceful: Docker unavailable, show YAML runners

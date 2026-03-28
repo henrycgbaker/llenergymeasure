@@ -235,6 +235,8 @@ def _run(
             skip_preflight=skip_preflight,
             yaml_runners=study.runners,
             user_config=user_config.runners,
+            yaml_images=study.images,
+            user_config_images=user_config.images or None,
         )
     except Exception:
         if progress:
@@ -272,8 +274,17 @@ def _run(
 
             config = study.experiments[0]
             spec = runner_specs.get(config.backend) if runner_specs else None
-            steps = list(STEPS_DOCKER if (spec and spec.mode == RUNNER_DOCKER) else STEPS_LOCAL)
-            study_cb.begin_experiment(1, format_experiment_header(config), steps)
+            is_docker = spec and spec.mode == RUNNER_DOCKER
+            steps = list(STEPS_DOCKER if is_docker else STEPS_LOCAL)
+            runner_info: dict[str, str | None] = {
+                "mode": spec.mode if spec else "local",
+                "source": spec.source if spec else "default",
+                "image": spec.image if spec else None,
+                "image_source": spec.image_source if spec else None,
+            }
+            study_cb.begin_experiment(
+                1, format_experiment_header(config), steps, runner_info=runner_info
+            )
 
         exp_start = time.monotonic()
         result_files, experiment_results, warnings = _run_in_process(

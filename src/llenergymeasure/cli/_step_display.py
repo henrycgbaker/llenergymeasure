@@ -101,6 +101,47 @@ def _render_substep_lines(
         lines.append("\n")
 
 
+_IMAGE_SOURCE_LABELS: dict[str, str] = {
+    "local_build": "LOCAL BUILD — current source tree (via docker compose build)",
+    "registry": "REGISTRY — versioned release image",
+    "env": "OVERRIDE — image set via environment variable",
+    "yaml": "OVERRIDE — image set in study YAML images: section",
+    "runner_override": "OVERRIDE — image set via docker:<image> in runners:",
+    "user_config": "OVERRIDE — image set in user config (~/.config/llenergymeasure/config.yaml)",
+}
+
+_RUNNER_SOURCE_LABELS: dict[str, str] = {
+    "env": "env var",
+    "yaml": "study YAML",
+    "user_config": "user config",
+    "auto_detected": "auto-detected",
+    "default": "default",
+    "multi_backend_elevation": "multi-backend auto-elevation",
+}
+
+
+def _render_runner_info(lines: Text, info: dict[str, str | None]) -> None:
+    """Render runner/image provenance lines below the experiment header."""
+    mode = info.get("mode", "unknown")
+    source = info.get("source", "")
+    image = info.get("image")
+    image_source = info.get("image_source")
+
+    source_label = _RUNNER_SOURCE_LABELS.get(source, source)
+
+    if mode == "local":
+        lines.append(f"       mode:    local ({source_label})\n", style="dim")
+        lines.append(
+            "               no container isolation — running directly on host\n", style="dim"
+        )
+    elif mode == "docker" and image:
+        lines.append(f"       mode:    docker ({source_label})\n", style="dim")
+        lines.append(f"       image:   {image}\n", style="dim")
+        if image_source:
+            detail = _IMAGE_SOURCE_LABELS.get(image_source, image_source)
+            lines.append(f"               {detail}\n", style="dim")
+
+
 def _phase_for_step(step: str) -> str:
     """Look up the phase for a step name, defaulting to Measurement."""
     return STEP_PHASES.get(step, PHASE_MEASUREMENT)
@@ -516,6 +557,7 @@ class StudyStepDisplay:
         self._inner_steps: list[str] = []
         self._inner_skipped: dict[str, str] = {}  # step -> reason
         self._inner_substeps: dict[str, list[tuple[str, float]]] = {}
+        self._runner_info: dict[str, str | None] | None = None
 
         # Per-experiment save paths: (index, host_path, container_path | None)
         self._saved_paths: list[tuple[int, str, str | None]] = []
@@ -552,7 +594,13 @@ class StudyStepDisplay:
             self._live.stop()
             self._live = None
 
-    def begin_experiment(self, index: int, header: str, steps: list[str]) -> None:
+    def begin_experiment(
+        self,
+        index: int,
+        header: str,
+        steps: list[str],
+        runner_info: dict[str, str | None] | None = None,
+    ) -> None:
         """Start tracking a new experiment within the study."""
         with self._lock:
             self._active_index = index
@@ -562,6 +610,7 @@ class StudyStepDisplay:
             self._inner_steps = steps
             self._inner_skipped = {}
             self._inner_substeps = {}
+            self._runner_info = runner_info
         self._refresh()
 
     def end_experiment_ok(
@@ -794,6 +843,10 @@ class StudyStepDisplay:
             return lines
 
         lines.append(f"\n  [{self._active_index}/{self._total}] {self._active_header}\n")
+
+        # Runner/image provenance lines
+        if self._runner_info:
+            _render_runner_info(lines, self._runner_info)
 
         inner_total = len(self._inner_steps) or (
             len(self._inner_completed) + len(self._inner_skipped) + (1 if self._inner_active else 0)

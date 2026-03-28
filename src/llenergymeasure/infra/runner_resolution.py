@@ -45,6 +45,27 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# .env file loading
+# ---------------------------------------------------------------------------
+
+
+def _load_dotenv() -> None:
+    """Load ``.env`` from the working directory if present.
+
+    Uses ``override=False`` so shell environment variables always win.
+    Idempotent — safe to call multiple times (python-dotenv skips vars
+    that already exist in ``os.environ``).
+    """
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(override=False)
+    except ImportError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Docker availability detection
 # ---------------------------------------------------------------------------
@@ -78,16 +99,20 @@ class RunnerSpec:
     """Resolved runner specification for a single experiment execution.
 
     Attributes:
-        mode:   Execution mode — "local" (in-process/subprocess) or "docker".
-        image:  Docker image to use. None for local mode or when the built-in
-                default image for the backend is used (resolved at dispatch time).
-        source: Which layer of the precedence chain produced this spec:
-                "env", "yaml", "user_config", "auto_detected", "default".
+        mode:         Execution mode — "local" or "docker".
+        image:        Docker image to use. None for local mode or when the
+                      default should be resolved at dispatch time.
+        source:       Which layer of the precedence chain produced this spec:
+                      "env", "yaml", "user_config", "auto_detected", "default".
+        image_source: Where the Docker image was resolved from:
+                      "env", "yaml", "runner_override", "user_config",
+                      "local_build", "registry", or None (local mode / unresolved).
     """
 
     mode: RunnerMode
     image: str | None
     source: str
+    image_source: str | None = None
     extra_mounts: list[tuple[str, str]] = field(default_factory=list)
 
 
@@ -127,6 +152,9 @@ def resolve_runner(
     Returns:
         RunnerSpec with mode, image, and source fields populated.
     """
+    # Load .env (idempotent, shell env wins via override=False)
+    _load_dotenv()
+
     # 1. Env var: LLEM_RUNNER_{BACKEND} (highest precedence)
     env_key = f"LLEM_RUNNER_{backend.upper()}"
     if env_val := os.environ.get(env_key):

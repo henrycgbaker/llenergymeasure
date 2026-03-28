@@ -567,6 +567,16 @@ class StudyConfig(BaseModel):
             "Runner is metadata — not part of the experiment config hash."
         ),
     )
+    images: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Per-backend Docker image overrides (orthogonal to runners). "
+            "Keys are backend names, values are image references "
+            "(e.g. 'ghcr.io/org/img:tag'). None = use smart default "
+            "(local build → registry fallback). "
+            "Image is metadata — not part of the experiment config hash."
+        ),
+    )
     study_design_hash: str | None = Field(
         default=None,
         description=(
