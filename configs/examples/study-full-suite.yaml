@@ -53,10 +53,8 @@ max_input_tokens: 256            # null = prompts keep natural length / model ge
 max_output_tokens: 256
 
 # --- Energy measurement ---
-energy: #TODO: change theis to energy_measurement.sampler 
-  backend: auto                  # auto | nvml | zeus | codecarbon | null (disables)
-  # TODO add energy.sampler.interval_seconds, energy.sampler.duration_seconds, etc. <- research what's needed
-  # TODO - validate these all work with all energy backends, or if some backends require specific config (e.g. nvml may need GPU sampling interval, zeus may need API keys or region config, codecarbon may need output dir, etc.) --> consider dotted notation within samplers??
+energy_sampler: auto               # auto | nvml | zeus | codecarbon | null (disables)
+gpu_telemetry: true                # Persist NVML power/thermal/memory timeseries to Parquet sidecar
 
 # --- Baseline power measurement ---
 baseline:
