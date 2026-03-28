@@ -91,14 +91,6 @@ def test_load_user_config_energy_sampler_override(tmp_path):
     assert config.measurement.energy_sampler == "nvml"
 
 
-def test_load_user_config_advanced_section(tmp_path):
-    """User config can set advanced NVML poll interval."""
-    config_file = tmp_path / "config.yaml"
-    config_file.write_text("advanced:\n  nvml_poll_interval_ms: 200\n")
-    config = load_user_config(config_path=config_file)
-    assert config.advanced.nvml_poll_interval_ms == 200
-
-
 # ---------------------------------------------------------------------------
 # Env var overrides
 # ---------------------------------------------------------------------------

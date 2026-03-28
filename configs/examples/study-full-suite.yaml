@@ -35,7 +35,7 @@ study_execution:
 # Apply globally to all experiment, unless overridden by sweep or explicit experiments.
 # Defacto treated as constant controls/defaults, but sweepable.
 # Add to sweep if you want to compare across different values of these fields:
-# (e.g. random_seed for sampling variability, or max_tokens to test throughput scaling, or max_tokens to test throughput scaling).
+# (e.g. random_seed for sampling variability, or max_tokens to test throughput scaling).
 
 random_seed: 42 # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset.order: shuffled)
 

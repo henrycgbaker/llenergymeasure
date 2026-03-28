@@ -372,7 +372,7 @@ def build_preflight_panel(
         _datasets.add(exp.dataset.source)
         _max_ins.add(exp.max_input_tokens)
         _max_outs.add(exp.max_output_tokens)
-        _energy.add(str(exp.energy_sampler))
+        _energy.add(str(exp.energy_sampler) if exp.energy_sampler is not None else "disabled")
         _telemetry.add(exp.gpu_telemetry)
     unique_backends = sorted(_backends)
     unique_models = sorted(_models)
@@ -445,7 +445,6 @@ def build_preflight_panel(
     if len(unique_datasets) == 1:
         constants.append(("Dataset", unique_datasets[0]))
     constants.append(("Energy sampler", energy_display))
-    # GPU telemetry — only show when non-default (i.e. any experiment disables it)
     if False in _telemetry:
         constants.append(("GPU telemetry", "off" if _telemetry == {False} else "mixed"))
 

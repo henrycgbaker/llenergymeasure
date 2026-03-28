@@ -21,6 +21,9 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+#: Valid energy sampler names for ``energy_sampler`` fields.
+EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
+
 if TYPE_CHECKING:
     from llenergymeasure.config.backend_configs import (
         PyTorchConfig,
@@ -338,7 +341,7 @@ class ExperimentConfig(BaseModel):
     baseline: BaselineConfig = Field(
         default_factory=BaselineConfig, description="Baseline power measurement configuration"
     )
-    energy_sampler: Literal["auto", "nvml", "zeus", "codecarbon"] | None = Field(
+    energy_sampler: EnergySamplerName | None = Field(
         default="auto",
         description=(
             "Energy measurement backend. "

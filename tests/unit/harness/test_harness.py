@@ -409,7 +409,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
         call_order.append("thermal_floor_wait")
         return 0.0
 
-    def fakeselect_energy_sampler(backend_name, *, gpu_indices=None):  # type: ignore[no-untyped-def]
+    def fake_select_energy_sampler(backend_name, *, gpu_indices=None):  # type: ignore[no-untyped-def]
         call_order.append("select_energy_sampler")
         return None  # No tracker; avoids MagicMock total_j > 0 comparison in _build_result
 
@@ -425,7 +425,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
         patch("llenergymeasure.harness.load_prompts", return_value=["test prompt"]),
         patch(
             "llenergymeasure.harness.select_energy_sampler",
-            side_effect=fakeselect_energy_sampler,
+            side_effect=fake_select_energy_sampler,
         ),
         patch(
             "llenergymeasure.harness.thermal_floor_wait",
