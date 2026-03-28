@@ -85,12 +85,16 @@ decoder:
   #TODO: validate this works + how incompataible params resolution is handled
   #TODO: consider moving this to sweep
 
-# --- LoRA adapter (optional, applies to all experiments) ---
-lora:
+# --- LoRA adapter (optional, per-experiment) ---
+# Currently wired for pytorch backend only (via peft library).
+# TODO: Design cross-backend LoRA strategy - backends handle adapters at
+#   fundamentally different levels (model-level vs per-request vs build-time).
+#   Needs a proper design doc before wiring vLLM/TRT-LLM runtime support.
+# lora:
 #   adapter_id: my-org/my-lora-adapter   # HuggingFace Hub adapter ID
 #   # adapter_path: /path/to/local/adapter  # OR local adapter weights
-#   merge_weights: false         # Merge adapter into base model at load time
-# TODO: VALUDATE that this works as intended - does this apply to all backends? if not, need to clarify in docs and potentially add backend-specific lora config using dotted notation (e.g. lora.pytorch.adapter_id, lora.vllm.adapter_id, etc.)
+#   merge_weights: false         # Merge adapter into base model (pytorch only)
+#   revision: null               # Hub revision for adapter_id (branch/tag/commit)
 
 # --- Passthrough kwargs ---
 passthrough_kwargs:
