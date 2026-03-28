@@ -474,10 +474,8 @@ def build_preflight_panel(
             # Show image resolution for Docker backends
             if spec.mode == "docker" and spec.image:
                 has_docker = True
-                src = _IMAGE_SOURCE_SHORT.get(spec.image_source or "", spec.image_source or "")
-                body.append(f"    {'':18}", style="dim")
-                body.append(f"\u21b3 {spec.image}", style="dim")
-                body.append(f"  ({src})\n", style="dim")
+                body.append("    ", style="dim")
+                body.append(f"\u21b3 {spec.image}\n", style="dim")
                 if spec.image_source == "registry":
                     needs_build = True
             elif spec.mode == "docker":
@@ -568,8 +566,9 @@ def build_preflight_panel(
 
 
 _IMAGE_SOURCE_SHORT: dict[str, str] = {
-    "local_build": "local build \u2713",
-    "registry": "registry \u2014 needs pull",
+    "local_build": "local build \u2713 cached",
+    "registry": "registry \u2014 not cached, will pull",
+    "registry_cached": "registry \u2713 cached locally",
     "env": "env var",
     "yaml": "study YAML",
     "runner_override": "runner override",

@@ -104,6 +104,7 @@ def _render_substep_lines(
 _IMAGE_SOURCE_LABELS: dict[str, str] = {
     "local_build": "LOCAL BUILD — current source tree (via docker compose build)",
     "registry": "REGISTRY — versioned release image",
+    "registry_cached": "REGISTRY — cached locally from prior pull",
     "env": "OVERRIDE — image set via environment variable",
     "yaml": "OVERRIDE — image set in study YAML images: section",
     "runner_override": "OVERRIDE — image set via docker:<image> in runners:",
@@ -562,6 +563,8 @@ class StudyStepDisplay:
         # Per-experiment save paths: (index, host_path, container_path | None)
         self._saved_paths: list[tuple[int, str, str | None]] = []
 
+        # (reserved for future section headers)
+
         self._live: Live | None = None
         self._total_start: float = 0.0
         self._gap_text: str = ""
@@ -803,7 +806,7 @@ class StudyStepDisplay:
             self._image_prep_active = True
             self._image_prep_total = len(backends)
         if not self._is_tty:
-            self._console.print("\n  Docker images", highlight=False)
+            self._console.print("\n  Preparing Docker images", highlight=False)
         self._refresh()
 
     def image_ready(
@@ -867,10 +870,10 @@ class StudyStepDisplay:
         lines = Text()
         if not self._image_prep_done and self._image_prep_failed is None:
             if self._image_prep_active:
-                lines.append("\n  Docker images\n", style="bold")
+                lines.append("\n  Preparing Docker images\n", style="bold")
             return lines
 
-        lines.append("\n  Docker images\n")
+        lines.append("\n  Preparing Docker images\n")
         total = self._image_prep_total
 
         for idx, (backend, image, cached, elapsed, metadata) in enumerate(self._image_prep_done, 1):
@@ -954,10 +957,6 @@ class StudyStepDisplay:
             return lines
 
         lines.append(f"\n  [{self._active_index}/{self._total}] {self._active_header}\n")
-
-        # Runner/image provenance lines
-        if self._runner_info:
-            _render_runner_info(lines, self._runner_info)
 
         inner_total = len(self._inner_steps) or (
             len(self._inner_completed) + len(self._inner_skipped) + (1 if self._inner_active else 0)

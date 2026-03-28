@@ -994,8 +994,8 @@ class StudyRunner:
                 steps,
                 runner_info=spec.to_runner_info(),
             )
-            # Host-side preflight doesn't run in Docker path — mark as skipped
-            self._progress.on_step_skip("preflight", "Docker path")
+            # Host-side preflight doesn't run in Docker path — checked inside container
+            self._progress.on_step_skip("preflight", "checked inside container")
 
         exp_start = time.monotonic()
 
