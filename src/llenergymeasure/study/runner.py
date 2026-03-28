@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
+    from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = [
     "StudyRunner",
