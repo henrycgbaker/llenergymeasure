@@ -121,6 +121,29 @@ and execution continues with the remaining experiments.
 
 ---
 
+### Container crashes with "context canceled" or ValidationError
+
+**Symptom:** Experiments using Docker runners fail immediately. The container log shows
+`context canceled` or a Pydantic `ValidationError` mentioning unknown fields (e.g.
+`dtype: Extra inputs are not permitted` or `dataset: Input should be a valid string`).
+
+**Cause:** The Docker image was built from an older version of the source code. The host
+sends config JSON using the current schema, but the container rejects it because its
+bundled code expects the old schema.
+
+**Fix:** Rebuild the Docker images from the current source:
+
+```bash
+docker build -f docker/Dockerfile.pytorch -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
+docker build -f docker/Dockerfile.vllm -t ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0 .
+```
+
+Replace `v0.9.0` with your installed version (`llem --version`). See
+[Installation - Building Docker Images](installation.md#building-docker-images-from-source)
+for full instructions.
+
+---
+
 ### Results look wrong / energy is 0
 
 **Symptom:** `inference_energy_joules` is 0.0, or energy values seem too low.
@@ -197,7 +220,7 @@ model, or package requirements.
 | Backend | Parameter | Limitation | Resolution |
 |---------|-----------|------------|------------|
 | pytorch | `pytorch.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
-| pytorch | `pytorch.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built | Install `flash_attn_3` from source, or use the Docker runner |
+| pytorch | `pytorch.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Not included in the Docker image by default (~1 hour build) | Rebuild PyTorch image with `--build-arg INSTALL_FA3=true`, or install locally from source. See [Installation - FA3](installation.md#flashattention-3-optional) |
 | vllm | `vllm.engine.kv_cache_dtype: fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use `kv_cache_dtype: auto` for automatic selection |
 | vllm | `vllm.engine.attention.backend: FLASHINFER` | FlashInfer requires JIT compilation on first use | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.attention.backend: TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use `attention.backend: auto` or `FLASH_ATTN` |

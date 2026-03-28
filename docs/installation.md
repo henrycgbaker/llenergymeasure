@@ -67,6 +67,75 @@ For vLLM or TensorRT-LLM backends, Docker with NVIDIA Container Toolkit is requi
 
 ---
 
+## Building Docker Images from Source
+
+The pre-built images from GHCR work for most users. If you need to rebuild images locally
+(e.g. after modifying the source code, or to include FlashAttention-3), build from the
+repository root:
+
+```bash
+# PyTorch image (includes FA2, excludes FA3 by default)
+docker build -f docker/Dockerfile.pytorch -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
+
+# vLLM image
+docker build -f docker/Dockerfile.vllm -t ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0 .
+
+# TensorRT-LLM image
+docker build -f docker/Dockerfile.tensorrt -t ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0 .
+```
+
+Replace `v0.9.0` with the version shown by `llem --version`. The tag must match the
+installed version so the tool finds the correct image.
+
+> **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
+> modify config models, backends, or the container entrypoint, you must rebuild for changes
+> to take effect inside containers. Local-runner experiments (PyTorch) use the installed
+> source directly and do not need a rebuild.
+
+### FlashAttention-3 (optional)
+
+The PyTorch Docker image ships with FlashAttention-2 (FA2) pre-built. FlashAttention-3 (FA3)
+is **not included by default** because it must be compiled from source, which adds
+approximately 1 hour to the image build.
+
+FA3 provides Hopper-optimised attention kernels. It is required if you want to use
+`pytorch.attn_implementation: flash_attention_3` in your experiment configs.
+
+**To build the PyTorch image with FA3:**
+
+```bash
+docker build -f docker/Dockerfile.pytorch \
+  --build-arg INSTALL_FA3=true \
+  -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
+```
+
+**Why FA3 takes so long:** FA3 has no pre-built PyPI wheel. It is compiled from the
+`hopper/` subdirectory of the [flash-attention](https://github.com/Dao-AILab/flash-attention)
+repository using `nvcc` for CUDA architectures SM 8.0 (A100) and SM 9.0 (H100). CUDA kernel
+compilation is inherently slow - each architecture target requires a separate compilation
+pass.
+
+**FA3 hardware requirements:**
+
+| GPU generation | SM | FA2 | FA3 |
+|----------------|-----|-----|-----|
+| Ampere (A100) | 8.0 | Yes | Yes |
+| Hopper (H100) | 9.0 | Yes | Yes (optimised) |
+| Ada Lovelace (L40S, RTX 4090) | 8.9 | Yes | Yes |
+| Turing or older | < 8.0 | No | No |
+
+**For local (non-Docker) installs**, FA3 must be built manually:
+
+```bash
+git clone --depth 1 https://github.com/Dao-AILab/flash-attention.git
+pip install flash-attention/hopper --no-build-isolation
+```
+
+This produces the `flash_attn_3` and `flash_attn_interface` packages that `transformers`
+checks for at runtime.
+
+---
+
 ## Verify Installation
 
 Run `llem config` to check your environment:

@@ -19,9 +19,9 @@ ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
 # FA3 = separate build from flash-attn repo's hopper/ directory; produces
 #        the flash_attn_interface top-level package that transformers checks.
 # SM 8.0 = A100 (Ampere), 9.0 = H100 (Hopper).
-# Set INSTALL_FA3=false to skip FA3 (saves ~1 hour build time for CI smoke tests).
+# Set INSTALL_FA3=true to include FA3 (adds ~1 hour build time; Hopper kernels).
 ARG FLASH_ATTN_VERSION=v2.8.3
-ARG INSTALL_FA3=true
+ARG INSTALL_FA3=false
 FROM pytorch/pytorch:${PYTORCH_DEVEL_VERSION} AS builder
 ARG FLASH_ATTN_VERSION
 ARG INSTALL_FA3
