@@ -13,7 +13,7 @@
 # ============================================================
 ARG TRTLLM_VERSION=0.21.0
 
-FROM nvcr.io/nvidia/tensorrt-llm/release:${TRTLLM_VERSION}
+FROM nvcr.io/nvidia/tensorrt-llm/release:${TRTLLM_VERSION} AS runtime
 
 # Reset upstream ENTRYPOINT - NGC container may set one
 # that conflicts with DockerRunner's command override pattern.
@@ -48,3 +48,8 @@ ENV TRT_ENGINE_CACHE=/app/.cache/tensorrt-engines
 RUN mkdir -p ${TRT_ENGINE_CACHE} && chmod 777 ${TRT_ENGINE_CACHE}
 
 CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]
+
+# Dev stage — adds development tools for local iteration
+FROM runtime AS dev
+RUN uv pip install --system --break-system-packages --no-cache ruff mypy pytest pytest-cov
+CMD ["/bin/bash"]
