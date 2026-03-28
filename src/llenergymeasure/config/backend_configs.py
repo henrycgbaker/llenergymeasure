@@ -433,6 +433,34 @@ class VLLMEngineConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
+    # LoRA adapters
+    # -------------------------------------------------------------------------
+
+    enable_lora: bool | None = Field(
+        default=None,
+        description="Enable LoRA adapter support (None -> False). Master switch for dynamic LoRA.",
+    )
+    max_lora_rank: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum LoRA rank supported (None -> 16).",
+    )
+    max_loras: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum number of LoRA adapters loaded concurrently (None -> 1).",
+    )
+    lora_extra_vocab_size: int | None = Field(
+        default=None,
+        ge=0,
+        description="Extra vocabulary size reserved for LoRA adapters (None -> 256).",
+    )
+    lora_dtype: Literal["float16", "bfloat16", "float32", "auto"] | None = Field(
+        default=None,
+        description="Data type for LoRA adapter weights (None -> auto).",
+    )
+
+    # -------------------------------------------------------------------------
     # Speculative decoding
     # -------------------------------------------------------------------------
 

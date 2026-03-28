@@ -30,6 +30,7 @@ pytorch = [
     "accelerate>=1.4",
     "bitsandbytes>=0.45",
     "calflops>=0.2",
+    "peft>=0.12",
 ]
 vllm = ["vllm>=0.6"]
 tensorrt = ["tensorrt-llm>=0.12"]

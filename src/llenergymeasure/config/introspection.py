@@ -823,9 +823,9 @@ def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
             "tensorrt": False,
         },
         "lora_adapters": {
-            "pytorch": True,  # Via peft library
-            "vllm": False,  # Not in v2.0 minimal VLLMConfig
-            "tensorrt": False,  # Not in v2.0 minimal TensorRTConfig
+            "pytorch": True,  # Via peft library (PeftModel.from_pretrained)
+            "vllm": "enable_lora" in vllm_fields,  # Dynamic per-request adapters
+            "tensorrt": False,  # Not yet supported
         },
         "torch_compile": {
             "pytorch": "torch_compile" in pytorch_fields,
