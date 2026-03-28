@@ -935,6 +935,6 @@ def test_harness_gpu_telemetry_true_writes_parquet(tmp_path):
         ) as mock_write_ts,
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        result = harness.run(backend, config)
+        harness.run(backend, config)
 
     mock_write_ts.assert_called_once()

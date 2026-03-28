@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.metrics import FlopsResult
     from llenergymeasure.domain.progress import ProgressCallback
-    from llenergymeasure.energy import EnergySampler
+    from llenergymeasure.energy import EnergySampler as EnergySampler
     from llenergymeasure.harness.baseline import BaselineCache
 
 logger = logging.getLogger(__name__)
