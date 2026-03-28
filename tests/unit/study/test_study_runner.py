@@ -1581,9 +1581,11 @@ class TestPrepareImages:
         pull_fail = MagicMock(spec=subprocess.CompletedProcess)
         pull_fail.returncode = 1
 
-        with patch("subprocess.run", side_effect=[inspect_fail, pull_fail]):
-            with pytest.raises(DockerImagePullError, match="Image not found"):
-                runner._prepare_images()
+        with (
+            patch("subprocess.run", side_effect=[inspect_fail, pull_fail]),
+            pytest.raises(DockerImagePullError, match="Image not found"),
+        ):
+            runner._prepare_images()
 
         assert not runner._images_prepared
         progress.image_failed.assert_called_once()
@@ -1608,10 +1610,13 @@ class TestPrepareImages:
         inspect_fail = MagicMock(spec=subprocess.CompletedProcess)
         inspect_fail.returncode = 1
 
-        with patch(
-            "subprocess.run",
-            side_effect=[inspect_fail, subprocess.TimeoutExpired("docker pull", 1800)],
-        ), pytest.raises(DockerImagePullError, match="timed out"):
+        with (
+            patch(
+                "subprocess.run",
+                side_effect=[inspect_fail, subprocess.TimeoutExpired("docker pull", 1800)],
+            ),
+            pytest.raises(DockerImagePullError, match="timed out"),
+        ):
             runner._prepare_images()
 
         assert not runner._images_prepared
