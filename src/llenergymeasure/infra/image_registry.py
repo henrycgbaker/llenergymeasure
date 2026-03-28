@@ -49,6 +49,7 @@ __all__ = [
     "get_cuda_major_version",
     "get_default_image",
     "parse_runner_value",
+    "show_image_resolution",
 ]
 
 # ---------------------------------------------------------------------------
@@ -187,6 +188,22 @@ def _image_exists_locally(image: str) -> bool:
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
+
+
+def show_image_resolution() -> None:
+    """Print which Docker image each backend will resolve to.
+
+    Shows local vs registry source for each backend.  Used by
+    ``make docker-images`` for quick diagnostics.
+    """
+
+    print("=== Image resolution ===")
+    for backend in _SUPPORTED_BACKENDS:
+        local = LOCAL_IMAGE_TEMPLATE.format(backend=backend)
+        has_local = _image_exists_locally(local)
+        resolved = get_default_image(backend)
+        source = "local" if has_local else "registry"
+        print(f"  {backend:10s} -> {resolved}  ({source})")
 
 
 def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:

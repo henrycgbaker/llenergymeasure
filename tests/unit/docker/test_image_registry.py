@@ -112,6 +112,44 @@ class TestGetDefaultImage:
 
 
 # ---------------------------------------------------------------------------
+# show_image_resolution
+# ---------------------------------------------------------------------------
+
+
+class TestShowImageResolution:
+    def test_prints_all_backends(self, capsys):
+        from llenergymeasure.infra.image_registry import show_image_resolution
+
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            show_image_resolution()
+
+        output = capsys.readouterr().out
+        assert "pytorch" in output
+        assert "vllm" in output
+        assert "tensorrt" in output
+
+    def test_shows_local_source(self, capsys):
+        from llenergymeasure.infra.image_registry import show_image_resolution
+
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            show_image_resolution()
+
+        output = capsys.readouterr().out
+        assert "(local)" in output
+
+    def test_shows_registry_source(self, capsys):
+        from llenergymeasure.infra.image_registry import show_image_resolution
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            show_image_resolution()
+
+        output = capsys.readouterr().out
+        assert "(registry)" in output
+
+
+# ---------------------------------------------------------------------------
 # get_cuda_major_version
 # ---------------------------------------------------------------------------
 
