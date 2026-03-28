@@ -782,8 +782,21 @@ def _is_group(value: object) -> bool:
 
     Disambiguation: a list of scalars is an independent axis (Cartesian product);
     a list of dicts (or containing ``{}``) is a dependent group (union of variants).
+
+    Raises ``ConfigError`` for mixed lists (some dicts, some scalars).
     """
-    return isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict)
+    if not isinstance(value, list) or len(value) == 0:
+        return False
+    has_dicts = any(isinstance(e, dict) for e in value)
+    if not has_dicts:
+        return False
+    all_dicts = all(isinstance(e, dict) for e in value)
+    if not all_dicts:
+        raise ConfigError(
+            "Sweep entry mixes dicts and scalars. Group entries must all be "
+            "dicts; independent axes must all be scalars."
+        )
+    return True
 
 
 def _group_backend_scope(group_key: str) -> str | None:
@@ -834,38 +847,50 @@ def _expand_group(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return variants
 
 
+def _route_key_value(
+    config_dict: dict[str, Any],
+    key: str,
+    value: Any,
+) -> dict[str, Any]:
+    """Route a single fully-qualified key into *config_dict*.
+
+    Routing rules:
+    - Backend-prefixed dotted key (``pytorch.batch_size``) → merge into backend section.
+    - Other dotted key (``decoder.do_sample``) → unflatten at top level.
+    - Simple key → direct assignment.
+
+    Returns the (possibly replaced) config_dict reference.
+    """
+    if "." in key:
+        prefix, param = key.split(".", 1)
+        if prefix in _BACKEND_SECTION_KEYS:
+            backend_dict = config_dict.get(prefix, {})
+            nested_update = _unflatten({param: value})
+            config_dict[prefix] = deep_merge(backend_dict, nested_update)
+        else:
+            nested_update = _unflatten({key: value})
+            config_dict = deep_merge(config_dict, nested_update)
+    else:
+        config_dict[key] = value
+    return config_dict
+
+
 def _apply_group_overlay(
     config_dict: dict[str, Any],
     overlay: dict[str, Any],
-    backend: str,
 ) -> dict[str, Any]:
-    """Apply a group variant's fully-qualified keys onto a config dict.
-
-    Uses the same routing logic as independent sweep axes: backend-prefixed
-    keys (``pytorch.batch_size``) route into the backend section; other dotted
-    keys (``decoder.do_sample``) unflatten at top level; simple keys set directly.
-    """
+    """Apply a group variant's fully-qualified keys onto a config dict."""
     for fq_key, value in overlay.items():
-        if "." in fq_key:
-            prefix, param = fq_key.split(".", 1)
-            if prefix in _BACKEND_SECTION_KEYS:
-                backend_dict = config_dict.get(prefix, {})
-                nested_update = _unflatten({param: value})
-                config_dict[prefix] = deep_merge(backend_dict, nested_update)
-            else:
-                nested_update = _unflatten({fq_key: value})
-                config_dict = deep_merge(config_dict, nested_update)
-        else:
-            config_dict[fq_key] = value
+        config_dict = _route_key_value(config_dict, fq_key, value)
     return config_dict
 
 
 def _validate_sweep_groups(
     groups: dict[str, list[dict[str, Any]]],
-    axes: dict[str, list[Any]],
+    axis_keys: set[str],
 ) -> None:
     """Raise ConfigError if a group name collides with an independent axis key."""
-    collisions = set(groups.keys()) & set(axes.keys())
+    collisions = set(groups.keys()) & axis_keys
     if collisions:
         raise ConfigError(
             f"Sweep group name(s) collide with independent axis key(s): "
@@ -902,8 +927,6 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     scoped_dims: dict[str, dict[str, list[Any]]] = {}  # {backend: {param: [values]}}
     groups: dict[str, list[dict[str, Any]]] = {}  # {group_name: [variant_dicts]}
 
-    all_axes: dict[str, list[Any]] = {}  # flat view for collision detection
-
     for key, values in sweep.items():
         if _is_group(values):
             groups[key] = _expand_group(values)
@@ -911,7 +934,6 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
 
         if not isinstance(values, list):
             values = [values]
-        all_axes[key] = values
 
         if "." in key:
             prefix, _param = key.split(".", 1)
@@ -922,7 +944,11 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
         else:
             universal_dims[key] = values
 
-    _validate_sweep_groups(groups, all_axes)
+    # Derive flat axis key set for collision detection
+    axis_keys = set(universal_dims.keys()) | {
+        f"{b}.{p}" for b, params in scoped_dims.items() for p in params
+    }
+    _validate_sweep_groups(groups, axis_keys)
 
     # ── Step 2: Separate groups by backend scope ──
     universal_groups: dict[str, list[dict[str, Any]]] = {}
@@ -953,50 +979,45 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
         applicable_groups: dict[str, list[dict[str, Any]]] = dict(universal_groups)
         applicable_groups.update(scoped_groups.get(backend, {}))
 
-        # Collect applicable axes
+        # Collect applicable axes — reconstruct fully-qualified keys for routing
         backend_scoped = scoped_dims.get(backend, {})
-        all_dim_keys = list(universal_dims.keys()) + list(backend_scoped.keys())
+        fq_dim_keys = list(universal_dims.keys()) + [f"{backend}.{p}" for p in backend_scoped]
         all_dim_values = list(universal_dims.values()) + list(backend_scoped.values())
 
-        # Cross all group variant lists with each other
+        # Cross all group variant lists with each other (lazy — iterated once)
         if applicable_groups:
             group_names = list(applicable_groups.keys())
             group_variant_lists = [applicable_groups[n] for n in group_names]
-            group_combos = list(itertools.product(*group_variant_lists))
+            group_combos = itertools.product(*group_variant_lists)
         else:
             group_combos = [()]  # single empty combo → no group overlays
 
-        if not all_dim_keys and not applicable_groups:
+        if not fq_dim_keys and not applicable_groups:
             # No dimensions or groups for this backend — produce one config
             config_dict: dict[str, Any] = _strip_other_backend_sections(dict(fixed), backend)
             config_dict["backend"] = backend
             results.append(config_dict)
             continue
 
-        # Cross axes with group combos
-        axis_combos = list(itertools.product(*all_dim_values)) if all_dim_keys else [()]
+        # Pre-compute stripped base config once per backend
+        base_config = _strip_other_backend_sections(dict(fixed), backend)
+        base_config["backend"] = backend
+
+        # axis_combos materialised — reused across group combos
+        axis_combos = list(itertools.product(*all_dim_values)) if fq_dim_keys else [()]
 
         for group_combo in group_combos:
             for axis_combo in axis_combos:
-                config_dict = _strip_other_backend_sections(dict(fixed), backend)
-                config_dict["backend"] = backend
+                config_dict = dict(base_config)
 
                 # Apply independent axis values
-                for dim_key, value in zip(all_dim_keys, axis_combo, strict=True):
-                    if dim_key in backend_scoped:
-                        backend_dict = config_dict.get(backend, {})
-                        nested_update = _unflatten({dim_key: value})
-                        config_dict[backend] = deep_merge(backend_dict, nested_update)
-                    elif "." in dim_key:
-                        nested_update = _unflatten({dim_key: value})
-                        config_dict = deep_merge(config_dict, nested_update)
-                    else:
-                        config_dict[dim_key] = value
+                for dim_key, value in zip(fq_dim_keys, axis_combo, strict=True):
+                    config_dict = _route_key_value(config_dict, dim_key, value)
 
                 # Apply group overlays (each group_combo entry is one variant dict)
                 for variant in group_combo:
                     if variant:  # skip empty dicts ({} = baseline, no overlay)
-                        config_dict = _apply_group_overlay(config_dict, variant, backend)
+                        config_dict = _apply_group_overlay(config_dict, variant)
 
                 results.append(config_dict)
 

@@ -18,6 +18,7 @@ from llenergymeasure.config.grid import (
     _expand_group_entry,
     _group_backend_scope,
     _is_group,
+    _route_key_value,
     _validate_sweep_groups,
     expand_grid,
 )
@@ -50,9 +51,10 @@ class TestIsGroup:
     def test_none_is_not_group(self):
         assert _is_group(None) is False
 
-    def test_mixed_list_starting_with_dict_is_group(self):
-        """First element determines group status."""
-        assert _is_group([{}, "scalar"]) is True
+    def test_mixed_list_raises_config_error(self):
+        """Mixed dicts and scalars should raise ConfigError."""
+        with pytest.raises(ConfigError, match="mixes dicts and scalars"):
+            _is_group([{}, "scalar"])
 
     def test_list_of_booleans_is_not_group(self):
         assert _is_group([True, False]) is False
@@ -153,10 +155,34 @@ class TestExpandGroup:
 # =============================================================================
 
 
+class TestRouteKeyValue:
+    def test_backend_scoped_key(self):
+        config = {"backend": "pytorch", "pytorch": {"batch_size": 4}}
+        result = _route_key_value(dict(config), "pytorch.torch_compile", True)
+        assert result["pytorch"]["torch_compile"] is True
+        assert result["pytorch"]["batch_size"] == 4  # preserved
+
+    def test_cross_section_key(self):
+        config = {"backend": "pytorch", "decoder": {"temperature": 1.0}}
+        result = _route_key_value(dict(config), "decoder.do_sample", False)
+        assert result["decoder"]["do_sample"] is False
+
+    def test_simple_top_level_key(self):
+        config = {"backend": "pytorch"}
+        result = _route_key_value(dict(config), "dtype", "float16")
+        assert result["dtype"] == "float16"
+
+    def test_deep_nested_key(self):
+        """Multi-level dotted backend keys like vllm.engine.block_size."""
+        config = {"backend": "vllm", "vllm": {}}
+        result = _route_key_value(dict(config), "vllm.engine.block_size", 16)
+        assert result["vllm"]["engine"]["block_size"] == 16
+
+
 class TestApplyGroupOverlay:
     def test_backend_scoped_key(self):
         config = {"backend": "pytorch", "pytorch": {"batch_size": 4}}
-        result = _apply_group_overlay(dict(config), {"pytorch.torch_compile": True}, "pytorch")
+        result = _apply_group_overlay(dict(config), {"pytorch.torch_compile": True})
         assert result["pytorch"]["torch_compile"] is True
         assert result["pytorch"]["batch_size"] == 4  # preserved
 
@@ -165,19 +191,18 @@ class TestApplyGroupOverlay:
         result = _apply_group_overlay(
             dict(config),
             {"decoder.do_sample": False, "decoder.temperature": 0.0},
-            "pytorch",
         )
         assert result["decoder"]["do_sample"] is False
         assert result["decoder"]["temperature"] == 0.0
 
     def test_simple_top_level_key(self):
         config = {"backend": "pytorch"}
-        result = _apply_group_overlay(dict(config), {"dtype": "float16"}, "pytorch")
+        result = _apply_group_overlay(dict(config), {"dtype": "float16"})
         assert result["dtype"] == "float16"
 
     def test_empty_overlay_no_change(self):
         config = {"backend": "pytorch", "pytorch": {"batch_size": 4}}
-        result = _apply_group_overlay(dict(config), {}, "pytorch")
+        result = _apply_group_overlay(dict(config), {})
         assert result == config
 
     def test_deep_nested_key(self):
@@ -186,7 +211,6 @@ class TestApplyGroupOverlay:
         result = _apply_group_overlay(
             dict(config),
             {"vllm.engine.block_size": 16},
-            "vllm",
         )
         assert result["vllm"]["engine"]["block_size"] == 16
 
@@ -199,14 +223,14 @@ class TestApplyGroupOverlay:
 class TestValidateSweepGroups:
     def test_no_collision_passes(self):
         groups = {"pytorch.compilation": [{}]}
-        axes = {"pytorch.batch_size": [1, 4]}
-        _validate_sweep_groups(groups, axes)  # should not raise
+        axis_keys = {"pytorch.batch_size"}
+        _validate_sweep_groups(groups, axis_keys)  # should not raise
 
     def test_collision_raises(self):
         groups = {"pytorch.batch_size": [{}]}
-        axes = {"pytorch.batch_size": [1, 4]}
+        axis_keys = {"pytorch.batch_size"}
         with pytest.raises(ConfigError, match="collide"):
-            _validate_sweep_groups(groups, axes)
+            _validate_sweep_groups(groups, axis_keys)
 
 
 # =============================================================================
@@ -380,14 +404,6 @@ class TestExpandGridSweepGroups:
             if c.pytorch is not None and c.pytorch.bnb_4bit_quant_type is not None
         ]
         assert set(quant_types) == {"nf4", "fp4"}
-
-    def test_group_name_collision_raises(self):
-        """Group name collision is caught by _validate_sweep_groups.
-
-        In YAML, duplicate keys resolve to the last one, so actual YAML
-        files can't produce collisions. The _validate_sweep_groups function
-        catches programmatic collisions (tested in TestValidateSweepGroups).
-        """
 
     def test_only_groups_no_axes(self):
         """Study with only groups and no independent axes."""
