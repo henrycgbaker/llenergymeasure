@@ -251,8 +251,12 @@ def _run(
             "consider running all backends in Docker."
         )
 
-    # Always create study dir + manifest
-    study_dir = create_study_dir(study.study_name, Path("results"))
+    # Resolve results_dir: study YAML > user config > built-in default
+    results_dir_str = study.output.results_dir
+    if results_dir_str == "./results":
+        # Study didn't override — check user config for a custom default
+        results_dir_str = user_config.output.results_dir
+    study_dir = create_study_dir(study.study_name, Path(results_dir_str))
     manifest = ManifestWriter(study, study_dir)
 
     wall_start = time.monotonic()
@@ -372,6 +376,8 @@ def _run_in_process(
 
     manifest.mark_running(config_hash, cycle)
 
+    save_ts = study.output.save_timeseries
+
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
         from llenergymeasure.infra.docker_runner import DockerRunner
@@ -388,7 +394,7 @@ def _run_in_process(
             extra_mounts=spec.extra_mounts,
         )
         try:
-            result = docker_runner.run(config, progress=progress)
+            result = docker_runner.run(config, progress=progress, save_timeseries=save_ts)
         except DockerError as exc:
             # Convert to failure dict — manifest marks failed, study continues
             error_payload: dict[str, Any] = {
@@ -402,6 +408,8 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
+        import tempfile
+
         from llenergymeasure.backends import get_backend
         from llenergymeasure.harness import MeasurementHarness
         from llenergymeasure.harness.preflight import run_preflight
@@ -413,10 +421,20 @@ def _run_in_process(
         if progress:
             progress.on_step_done("container_preflight", time.perf_counter() - t0)
 
+        # Create temp dir for timeseries parquet (if enabled)
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-")) if save_ts else None
+
         backend = get_backend(config.backend)
         harness = MeasurementHarness()
         gpu_indices = _resolve_gpu_indices(config)
-        result = harness.run(backend, config, gpu_indices=gpu_indices, progress=progress)
+        result = harness.run(
+            backend,
+            config,
+            gpu_indices=gpu_indices,
+            progress=progress,
+            output_dir=str(ts_tmpdir) if ts_tmpdir else None,
+            save_timeseries=save_ts,
+        )
 
     # Handle error payload returned from Docker container (exit 0 but wrote error JSON)
     if isinstance(result, dict) and "type" in result:
@@ -425,9 +443,33 @@ def _run_in_process(
         manifest.mark_failed(config_hash, cycle, error_type, error_message)
         return [], [None], [error_message]
 
+    # Resolve timeseries source dir for _save_and_record
+    ts_source: Path | None = None
+    if not isinstance(result, dict):
+        if spec is not None and spec.mode == RUNNER_DOCKER:
+            # Docker path: DockerRunner rescues parquet to a temp dir and writes
+            # the path into effective_config["output_dir"]
+            ts_dir_str = (
+                result.effective_config.get("output_dir")
+                if hasattr(result, "effective_config")
+                else None
+            )
+            if ts_dir_str and Path(ts_dir_str).exists():
+                ts_source = Path(ts_dir_str)
+        elif ts_tmpdir is not None:
+            ts_source = ts_tmpdir
+
     result_files: list[str] = []
     warnings: list[str] = []
-    _save_and_record(result, study_dir, manifest, config_hash, cycle, result_files)
+    _save_and_record(
+        result, study_dir, manifest, config_hash, cycle, result_files, ts_source_dir=ts_source
+    )
+
+    # Clean up temp dirs
+    if ts_source is not None and ts_source.exists():
+        import shutil
+
+        shutil.rmtree(ts_source, ignore_errors=True)
 
     return result_files, [result], warnings
 

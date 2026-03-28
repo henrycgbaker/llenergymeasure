@@ -100,6 +100,7 @@ def print_dry_run(
     vram: dict[str, float] | None,
     gpu_vram_gb: float | None,
     verbose: bool = False,
+    output_dir: str | None = None,
 ) -> None:
     """Print dry-run output to stdout.
 
@@ -112,7 +113,6 @@ def print_dry_run(
         "dtype": "bfloat16",
         "n": 100,
         "dataset": "aienergyscore",
-        "output_dir": None,
     }
 
     def _annotate(field: str, value: object) -> str:
@@ -141,8 +141,8 @@ def print_dry_run(
     dataset_str = f"{ds.source} ({ds.n_prompts} prompts)"
     print(f"  Dataset        {dataset_str}")
 
-    output_dir = config.output_dir or "results/ (default)"
-    print(f"  Output         {output_dir}")
+    output_display = output_dir or "results/ (default)"
+    print(f"  Output         {output_display}")
     print()
 
     # --- VRAM estimate ---

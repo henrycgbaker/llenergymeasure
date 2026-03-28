@@ -188,8 +188,6 @@ def _run_impl(
         cli_overrides["pytorch.batch_size"] = batch_size
     if dtype is not None:
         cli_overrides["dtype"] = dtype
-    if output is not None:
-        cli_overrides["output_dir"] = output
 
     # Validate we have enough information to resolve a config
     if config is None and model is None:
@@ -238,7 +236,7 @@ def _run_impl(
     if dry_run:
         vram = estimate_vram(experiment_config)
         gpu_vram_gb = get_gpu_vram_gb()
-        print_dry_run(experiment_config, vram, gpu_vram_gb, verbose=verbose)
+        print_dry_run(experiment_config, vram, gpu_vram_gb, verbose=verbose, output_dir=output)
         return
 
     # --- Run branch ---
@@ -280,17 +278,17 @@ def _run_impl(
 
     print_result_summary(result)
 
-    # Save output if output_dir specified
-    if experiment_config.output_dir:
+    # Save output if --output flag specified (runtime param, not config field)
+    if output:
         from llenergymeasure.api import save_result
 
-        output_dir = Path(experiment_config.output_dir)
-        ts_source = output_dir / result.timeseries if result.timeseries else None
-        save_result(result, output_dir, timeseries_source=ts_source)
+        output_path = Path(output)
+        ts_source = output_path / result.timeseries if result.timeseries else None
+        save_result(result, output_path, timeseries_source=ts_source)
         # Clean up stale flat timeseries file after copy into subdirectory
         if ts_source is not None:
             ts_source.unlink(missing_ok=True)
-        print(f"Saved: {experiment_config.output_dir}", file=sys.stderr)
+        print(f"Saved: {output}", file=sys.stderr)
 
 
 def _resolve_progress_mode(quiet: bool, verbose: bool) -> str:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExperimentConfig, OutputConfig
 from llenergymeasure.config.ssot import DTYPE_SUPPORT
 from tests.conftest import make_config
 
@@ -306,28 +306,20 @@ def test_energy_sampler_override() -> None:
 
 
 # ---------------------------------------------------------------------------
-# gpu_telemetry field tests (boolean on ExperimentConfig)
+# save_timeseries field tests (boolean on OutputConfig)
 # ---------------------------------------------------------------------------
 
 
-def test_gpu_telemetry_default_true() -> None:
-    """gpu_telemetry defaults to True."""
-    cfg = ExperimentConfig(model="gpt2")
-    assert cfg.gpu_telemetry is True
+def test_save_timeseries_default_true() -> None:
+    """save_timeseries defaults to True."""
+    cfg = OutputConfig()
+    assert cfg.save_timeseries is True
 
 
-def test_gpu_telemetry_false_disables_parquet() -> None:
-    """gpu_telemetry=False is accepted."""
-    cfg = ExperimentConfig(model="gpt2", gpu_telemetry=False)
-    assert cfg.gpu_telemetry is False
-
-
-def test_gpu_telemetry_coerces_common_values() -> None:
-    """gpu_telemetry coerces common truthy/falsy strings (Pydantic lax mode)."""
-    cfg_yes = ExperimentConfig(model="gpt2", gpu_telemetry="yes")  # type: ignore[arg-type]
-    assert cfg_yes.gpu_telemetry is True
-    cfg_no = ExperimentConfig(model="gpt2", gpu_telemetry="no")  # type: ignore[arg-type]
-    assert cfg_no.gpu_telemetry is False
+def test_save_timeseries_false_accepted() -> None:
+    """save_timeseries=False is accepted."""
+    cfg = OutputConfig(save_timeseries=False)
+    assert cfg.save_timeseries is False
 
 
 # ---------------------------------------------------------------------------

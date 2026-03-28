@@ -724,7 +724,15 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: resolved_specs)
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
-        lambda **kwargs: type("C", (), {"runners": None})(),
+        lambda **kwargs: type(
+            "C",
+            (),
+            {
+                "runners": None,
+                "output": type("O", (), {"results_dir": "./results"})(),
+                "ui": type("U", (), {"progress_mode": "quiet"})(),
+            },
+        )(),
     )
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -832,7 +840,15 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
-        lambda **kwargs: type("C", (), {"runners": None})(),
+        lambda **kwargs: type(
+            "C",
+            (),
+            {
+                "runners": None,
+                "output": type("O", (), {"results_dir": "./results"})(),
+                "ui": type("U", (), {"progress_mode": "quiet"})(),
+            },
+        )(),
     )
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -881,7 +897,15 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
-        lambda **kwargs: type("C", (), {"runners": None})(),
+        lambda **kwargs: type(
+            "C",
+            (),
+            {
+                "runners": None,
+                "output": type("O", (), {"results_dir": "./results"})(),
+                "ui": type("U", (), {"progress_mode": "quiet"})(),
+            },
+        )(),
     )
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",

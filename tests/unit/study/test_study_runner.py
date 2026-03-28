@@ -1269,17 +1269,18 @@ def test_grace_period_uses_killpg(study_config: StudyConfig) -> None:
 
 
 # =============================================================================
-# Timeseries parquet: output_dir set on config for local subprocess path
+# Timeseries parquet: output_dir passed as kwarg to local subprocess
 # =============================================================================
 
 
-def test_local_subprocess_sets_output_dir_on_config(
+def test_local_subprocess_passes_output_dir_as_kwarg(
     study_config: StudyConfig, basic_config: ExperimentConfig
 ) -> None:
-    """_run_one sets output_dir on the config so the harness writes timeseries parquet.
+    """_run_one passes output_dir and save_timeseries as Process kwargs.
 
-    The config passed to the subprocess target must have a non-None output_dir
-    pointing to a temp directory. After the experiment, the temp dir is cleaned up.
+    output_dir is no longer on ExperimentConfig; the runner creates a temp dir
+    and passes it as a keyword argument to the subprocess Process target.
+    The config itself must NOT contain output_dir.
     """
     manifest = MagicMock()
 
@@ -1295,19 +1296,32 @@ def test_local_subprocess_sets_output_dir_on_config(
         runner = StudyRunner(study_config, manifest, Path("/tmp/test-output-dir"))
         runner.run()
 
-    # Check the config passed to Process target has output_dir set
+    # Check Process was called with output_dir and save_timeseries as kwargs
     process_call = ctx.Process.call_args
     assert process_call is not None, "Process() was never called"
-    worker_config = process_call.kwargs.get(
-        "args", process_call.args[0] if process_call.args else None
+
+    process_kwargs = process_call.kwargs.get("kwargs", {})
+    assert "output_dir" in process_kwargs, (
+        f"output_dir must be passed as a Process kwarg, got kwargs: {process_kwargs}"
     )
-    if isinstance(worker_config, tuple):
-        worker_config = worker_config[0]
-    assert worker_config is not None
-    assert worker_config.output_dir is not None, "output_dir must be set on config for subprocess"
-    assert worker_config.output_dir.startswith("/tmp/llem-ts-"), (
-        f"output_dir should be a temp dir, got: {worker_config.output_dir}"
+    assert process_kwargs["output_dir"] is not None, "output_dir kwarg must not be None"
+    assert process_kwargs["output_dir"].startswith("/tmp/llem-ts-"), (
+        f"output_dir should be a temp dir, got: {process_kwargs['output_dir']}"
     )
+    assert "save_timeseries" in process_kwargs, (
+        f"save_timeseries must be passed as a Process kwarg, got kwargs: {process_kwargs}"
+    )
+    assert process_kwargs["save_timeseries"] is True
+
+    # The config passed as a positional arg must NOT contain output_dir
+    process_args = process_call.kwargs.get(
+        "args", process_call.args[0] if process_call.args else ()
+    )
+    if isinstance(process_args, tuple) and len(process_args) > 0:
+        worker_config = process_args[0]
+        assert not hasattr(worker_config, "output_dir"), (
+            "ExperimentConfig must not have output_dir; it is passed as a Process kwarg"
+        )
 
 
 # =============================================================================
@@ -1331,9 +1345,7 @@ def test_error_payload_persisted_to_failed_runs_subdir(
     runner_specs = {"pytorch": spec}
 
     config = study_config.experiments[0]
-    config_hash = compute_measurement_config_hash(
-        config.model_copy(update={"output_dir": "/run/llem"})
-    )
+    config_hash = compute_measurement_config_hash(config)
 
     # Simulate exchange dir with both container.log and error JSON
     exchange_dir = tmp_path / "llem-exchange"

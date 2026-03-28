@@ -54,7 +54,6 @@ max_output_tokens: 256
 
 # --- Energy measurement ---
 energy_sampler: auto               # auto | nvml | zeus | codecarbon | null (disables)
-gpu_telemetry: true                # Persist NVML power/thermal/memory timeseries to Parquet sidecar
 
 # --- Baseline power measurement ---
 baseline:
@@ -97,8 +96,16 @@ lora:
 passthrough_kwargs:
 #   use_safetensors: true 
 
-# --- Output ---
-output_dir: null               # Per-experiment output directory override - TODO: clatify if this is host path or Docker container path, and validate 
+# =====================================================================
+# Output configuration (study-level)
+# =====================================================================
+# Controls where results are written and what auxiliary artefacts are persisted.
+# These are operational concerns, not part of the scientific specification.
+
+output:
+  results_dir: ./results           # Base directory for study results (timestamped subdirectory created within)
+  format: json                     # json | parquet | csv
+  save_timeseries: true            # Persist GPU power/thermal/memory timeseries as Parquet sidecar
 
 # =====================================================================
 # Shared sweep axes (Cartesian product)

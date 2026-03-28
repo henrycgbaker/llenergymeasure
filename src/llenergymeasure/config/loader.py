@@ -25,7 +25,12 @@ from llenergymeasure.config.grid import (
     compute_study_design_hash,
     expand_grid,
 )
-from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import (
+    ExecutionConfig,
+    ExperimentConfig,
+    OutputConfig,
+    StudyConfig,
+)
 from llenergymeasure.utils.exceptions import ConfigError
 
 __all__ = ["deep_merge", "load_experiment_config", "load_study_config"]
@@ -157,6 +162,9 @@ def load_study_config(
     # None if not specified in YAML — caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
 
+    # Parse output block — Pydantic validates it
+    output = OutputConfig(**(raw.get("output") or {}))
+
     # Parse execution block — Pydantic validates it
     execution = ExecutionConfig(**(raw.get("study_execution") or {}))
 
@@ -195,6 +203,7 @@ def load_study_config(
     return StudyConfig(
         experiments=ordered,
         study_name=name,
+        output=output,
         study_execution=execution,
         runners=runners,
         study_design_hash=study_hash,

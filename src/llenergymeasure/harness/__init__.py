@@ -200,6 +200,8 @@ class MeasurementHarness:
         snapshot: EnvironmentSnapshot | None = None,
         gpu_indices: list[int] | None = None,
         progress: ProgressCallback | None = None,
+        output_dir: Path | str | None = None,
+        save_timeseries: bool = True,
     ) -> ExperimentResult:
         """Run a complete measurement using the given backend plugin.
 
@@ -212,6 +214,10 @@ class MeasurementHarness:
                          Defaults to [0] (single GPU, backward compatible) when None.
             progress: Optional callback for step-by-step progress reporting.
                       When None, no progress events are emitted (backward compatible).
+            output_dir: Directory for timeseries parquet output. None = no disk writes.
+                        Passed as runtime param by the study runner, not from config.
+            save_timeseries: Whether to persist GPU timeseries to Parquet sidecar.
+                             Controlled by OutputConfig.save_timeseries at study level.
 
         Returns:
             ExperimentResult with all measurement fields populated.
@@ -398,20 +404,21 @@ class MeasurementHarness:
             # Always release model from memory even on exception
             backend.cleanup(model)
 
-        # 14. Write timeseries Parquet sidecar (if output_dir set)
+        # 14. Write timeseries Parquet sidecar (if output_dir set and save_timeseries enabled)
+        resolved_output_dir = Path(output_dir) if output_dir is not None else None
         if _p:
             _p.on_step_start(
                 "save",
                 "Saving",
-                f"results to {config.output_dir}" if config.output_dir else "results",
+                f"results to {resolved_output_dir}" if resolved_output_dir else "results",
             )
             t0_save = time.perf_counter()
 
         timeseries_path: str | None = None
-        if config.gpu_telemetry and config.output_dir is not None and timeseries_samples:
+        if save_timeseries and resolved_output_dir is not None and timeseries_samples:
             ts_file = write_timeseries_parquet(
                 timeseries_samples,
-                Path(config.output_dir) / "timeseries.parquet",
+                resolved_output_dir / "timeseries.parquet",
             )
             timeseries_path = ts_file.name  # relative name in result JSON
             _substep("save", "timeseries parquet written")

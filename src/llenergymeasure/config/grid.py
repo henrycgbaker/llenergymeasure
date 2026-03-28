@@ -41,7 +41,16 @@ logger = logging.getLogger(__name__)
 # These are stripped from base: files and excluded from the fixed dict.
 # "runners" is study-level metadata (per-backend runner config) — not an experiment field.
 _STUDY_ONLY_KEYS = frozenset(
-    {"sweep", "experiments", "study_execution", "base", "study_name", "version", "runners"}
+    {
+        "sweep",
+        "experiments",
+        "study_execution",
+        "base",
+        "study_name",
+        "version",
+        "runners",
+        "output",
+    }
 )
 
 
@@ -364,7 +373,6 @@ def build_preflight_panel(
     _max_ins: set[int | None] = set()
     _max_outs: set[int | None] = set()
     _energy: set[str] = set()
-    _telemetry: set[bool] = set()
     for exp in study_config.experiments:
         _backends.add(exp.backend)
         _models.add(exp.model)
@@ -373,7 +381,6 @@ def build_preflight_panel(
         _max_ins.add(exp.max_input_tokens)
         _max_outs.add(exp.max_output_tokens)
         _energy.add(str(exp.energy_sampler) if exp.energy_sampler is not None else "disabled")
-        _telemetry.add(exp.gpu_telemetry)
     unique_backends = sorted(_backends)
     unique_models = sorted(_models)
     unique_n = sorted(_ns)
@@ -445,8 +452,8 @@ def build_preflight_panel(
     if len(unique_datasets) == 1:
         constants.append(("Dataset", unique_datasets[0]))
     constants.append(("Energy sampler", energy_display))
-    if False in _telemetry:
-        constants.append(("GPU telemetry", "off" if _telemetry == {False} else "mixed"))
+    if not study_config.output.save_timeseries:
+        constants.append(("Save timeseries", "off"))
 
     if constants:
         _section(body, "Constants")

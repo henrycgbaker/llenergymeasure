@@ -144,6 +144,10 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     # --- Create progress callback for streaming to host ---
     progress = StreamProgressCallback()
 
+    # --- Resolve output params from env vars (set by DockerRunner) ---
+    output_dir = os.environ.get("LLEM_OUTPUT_DIR")
+    save_timeseries = os.environ.get("LLEM_SAVE_TIMESERIES", "1") != "0"
+
     # --- Run experiment via library API (not CLI) ---
     progress.on_step_start("preflight", "Checking", "preflight, CUDA, model access")
     t0 = time.perf_counter()
@@ -153,7 +157,14 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     backend = get_backend(config.backend)
     harness = MeasurementHarness()
     gpu_indices = _resolve_gpu_indices(config)
-    result = harness.run(backend, config, gpu_indices=gpu_indices, progress=progress)
+    result = harness.run(
+        backend,
+        config,
+        gpu_indices=gpu_indices,
+        progress=progress,
+        output_dir=output_dir,
+        save_timeseries=save_timeseries,
+    )
 
     # --- Write result ---
     result_dir.mkdir(parents=True, exist_ok=True)
