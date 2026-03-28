@@ -51,12 +51,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+@functools.cache
 def _load_dotenv() -> None:
     """Load ``.env`` from the working directory if present.
 
     Uses ``override=False`` so shell environment variables always win.
-    Idempotent — safe to call multiple times (python-dotenv skips vars
-    that already exist in ``os.environ``).
+    Cached so the filesystem scan happens at most once per process.
     """
     try:
         from dotenv import load_dotenv
@@ -114,6 +114,15 @@ class RunnerSpec:
     source: str
     image_source: str | None = None
     extra_mounts: list[tuple[str, str]] = field(default_factory=list)
+
+    def to_runner_info(self) -> dict[str, str | None]:
+        """Build runner info dict for progress display callbacks."""
+        return {
+            "mode": self.mode,
+            "source": self.source,
+            "image": self.image,
+            "image_source": self.image_source,
+        }
 
 
 # ---------------------------------------------------------------------------

@@ -623,16 +623,12 @@ class StudyRunner:
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
-            # Build runner info for display — local path uses spec if available
             local_spec = self._runner_specs.get(config.backend) if self._runner_specs else None
-            runner_info: dict[str, str | None] = {
-                "mode": "local",
-                "source": local_spec.source if local_spec else "default",
-                "image": None,
-                "image_source": None,
-            }
             self._progress.begin_experiment(
-                index, format_experiment_header(config), list(STEPS_LOCAL), runner_info=runner_info
+                index,
+                format_experiment_header(config),
+                list(STEPS_LOCAL),
+                runner_info=local_spec.to_runner_info() if local_spec else None,
             )
 
         exp_start = time.monotonic()
@@ -833,17 +829,11 @@ class StudyRunner:
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
-            runner_info: dict[str, str | None] = {
-                "mode": "docker",
-                "source": spec.source,
-                "image": image,
-                "image_source": spec.image_source,
-            }
             self._progress.begin_experiment(
                 index,
                 format_experiment_header(config),
                 list(STEPS_DOCKER),
-                runner_info=runner_info,
+                runner_info=spec.to_runner_info(),
             )
             # Host-side preflight doesn't run in Docker path — mark as skipped
             self._progress.on_step_skip("preflight", "Docker path")

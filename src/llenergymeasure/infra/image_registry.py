@@ -179,6 +179,7 @@ def get_default_image(backend: str) -> str:
     return ghcr_image
 
 
+@lru_cache(maxsize=8)
 def _image_exists_locally(image: str) -> bool:
     """Check whether a Docker image tag exists in the local cache."""
     try:
@@ -253,18 +254,11 @@ def resolve_image(
         logger.info("Image for %s resolved from user config images: %s", backend, img)
         return (img, "user_config")
 
-    # 5. Smart default: local build → registry fallback
+    # 5. Smart default: delegate to get_default_image() (local build → registry)
+    image = get_default_image(backend)
     local_image = LOCAL_IMAGE_TEMPLATE.format(backend=backend)
-    if _image_exists_locally(local_image):
-        logger.info("Image for %s resolved to local build: %s", backend, local_image)
-        return (local_image, "local_build")
-
-    from llenergymeasure._version import __version__
-
-    version = __version__ if __version__ else "latest"
-    ghcr_image = DEFAULT_IMAGE_TEMPLATE.format(backend=backend, version=version)
-    logger.info("Image for %s resolved to registry: %s", backend, ghcr_image)
-    return (ghcr_image, "registry")
+    source = "local_build" if image == local_image else "registry"
+    return (image, source)
 
 
 def show_image_resolution() -> None:

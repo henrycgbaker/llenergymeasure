@@ -276,14 +276,11 @@ def _run(
             spec = runner_specs.get(config.backend) if runner_specs else None
             is_docker = spec and spec.mode == RUNNER_DOCKER
             steps = list(STEPS_DOCKER if is_docker else STEPS_LOCAL)
-            runner_info: dict[str, str | None] = {
-                "mode": spec.mode if spec else "local",
-                "source": spec.source if spec else "default",
-                "image": spec.image if spec else None,
-                "image_source": spec.image_source if spec else None,
-            }
             study_cb.begin_experiment(
-                1, format_experiment_header(config), steps, runner_info=runner_info
+                1,
+                format_experiment_header(config),
+                steps,
+                runner_info=spec.to_runner_info() if spec else None,
             )
 
         exp_start = time.monotonic()
