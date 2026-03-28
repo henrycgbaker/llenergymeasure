@@ -218,7 +218,9 @@ class DatasetConfig(BaseModel):
         min_length=1,
         description="Dataset source: built-in alias or .jsonl file path",
     )
-    n_prompts: int = Field(default=100, ge=1, description="Number of prompts to load or generate")
+    n_prompts: int = Field(
+        default=50, ge=1, description="Number of prompts to load or generate"
+    )  # TODO: restore default to 100 once sweep constraints filter invalid combos
     order: Literal["interleaved", "grouped", "shuffled"] = Field(
         default="interleaved",
         description=(
