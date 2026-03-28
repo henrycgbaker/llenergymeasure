@@ -69,9 +69,17 @@ def sig3(value: float) -> str:
     return formatted
 
 
-def model_short_name(full_model: str) -> str:
-    """Strip provider prefix from model name (e.g. ``Qwen/Qwen2.5-0.5B`` -> ``Qwen2.5-0.5B``)."""
-    return str(full_model).rsplit("/", 1)[-1]
+def short_name(ref: str) -> str:
+    """Strip prefix before the last ``/`` (e.g. ``ghcr.io/…/img:v1`` -> ``img:v1``).
+
+    Works for model names, Docker image references, and any ``/``-separated
+    identifier where only the final segment is meaningful for display.
+    """
+    return str(ref).rsplit("/", 1)[-1]
+
+
+# Convenience alias kept for call sites that read better with "model" in the name.
+model_short_name = short_name
 
 
 def compute_mj_per_tok(

@@ -119,7 +119,9 @@ class DockerRunner:
     @property
     def short_image(self) -> str:
         """Short image tag for display (e.g. 'pytorch:v0.9.0')."""
-        return self.image.rsplit("/", 1)[-1] if "/" in self.image else self.image
+        from llenergymeasure.utils.formatting import short_name
+
+        return short_name(self.image)
 
     # ------------------------------------------------------------------
     # Public API

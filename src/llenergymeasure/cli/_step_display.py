@@ -24,16 +24,11 @@ from rich.text import Text
 
 from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_LABELS, STEP_PHASES
 from llenergymeasure.utils.formatting import format_elapsed as _format_elapsed
+from llenergymeasure.utils.formatting import short_name as _short_image
 from llenergymeasure.utils.formatting import truncate_detail as _truncate_detail
 
 # Braille spinner frames (same as Docker BuildKit / ora)
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-
-
-def _short_image(image: str) -> str:
-    """Strip registry prefix from Docker image reference for display."""
-    return image.rsplit("/", 1)[-1] if "/" in image else image
-
 
 # Heartbeat interval for non-TTY mode (seconds)
 _HEARTBEAT_INTERVAL = 5.0

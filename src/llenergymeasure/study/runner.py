@@ -526,8 +526,6 @@ class StudyRunner:
 
         original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
 
-        # Study-level Docker image preparation: check/pull all images once
-        # before the experiment loop. Per-experiment image_check is then skipped.
         self._prepare_images()
 
         try:
@@ -583,6 +581,8 @@ class StudyRunner:
             self._env_snapshot_future = collect_environment_snapshot_async()
         return self._env_snapshot_future.result(timeout=10)
 
+    _PULL_TIMEOUT = 1800  # 30 min — generous for large images (TensorRT ~10 GB)
+
     def _prepare_images(self) -> None:
         """Check/pull Docker images for all Docker backends before experiments.
 
@@ -636,7 +636,7 @@ class StudyRunner:
                 pull = subprocess.run(
                     ["docker", "pull", image],
                     capture_output=True,
-                    timeout=1800,
+                    timeout=self._PULL_TIMEOUT,
                 )
             except subprocess.TimeoutExpired as exc:
                 if self._progress:
@@ -687,6 +687,7 @@ class StudyRunner:
     def _parse_image_metadata(inspect_stdout: bytes) -> dict[str, str] | None:
         """Extract human-readable metadata from docker image inspect JSON."""
         import json
+        from datetime import datetime, timezone
 
         try:
             data = json.loads(inspect_stdout)
@@ -710,8 +711,6 @@ class StudyRunner:
 
             created = info.get("Created", "")
             if created:
-                from datetime import datetime, timezone
-
                 try:
                     created_dt = datetime.fromisoformat(created[:26].rstrip("Z"))
                     created_dt = created_dt.replace(tzinfo=timezone.utc)

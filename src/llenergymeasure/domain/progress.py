@@ -295,20 +295,7 @@ STEPS_DOCKER = [
 ]
 
 # Docker per-experiment path: image_check/pull handled at study level.
-STEPS_DOCKER_RUN = [
-    STEP_PREFLIGHT,
-    STEP_CONTAINER_START,
-    STEP_CONTAINER_PREFLIGHT,
-    STEP_BASELINE,
-    STEP_MODEL,
-    STEP_PROMPTS,
-    STEP_WARMUP,
-    STEP_THERMAL_FLOOR,
-    STEP_ENERGY_SELECT,
-    STEP_MEASURE,
-    STEP_FLOPS,
-    STEP_SAVE,
-]
+STEPS_DOCKER_RUN = [s for s in STEPS_DOCKER if s not in {STEP_IMAGE_CHECK, STEP_PULL}]
 
 # Local path: no Docker steps, direct harness measurement.
 STEPS_LOCAL = [
