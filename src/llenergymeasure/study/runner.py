@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from llenergymeasure.domain.progress import StudyProgressCallback
     from llenergymeasure.infra.runner_resolution import RunnerSpec
     from llenergymeasure.study.manifest import ManifestWriter
+    from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = [
     "StudyRunner",
@@ -795,13 +796,22 @@ class StudyRunner:
             # Pass study progress as step callback — DockerRunner calls on_step_*
             result = docker_runner.run(config, progress=self._progress)
         except DockerError as exc:
-            result = {
-                "type": type(exc).__name__,
-                "message": str(exc),
-                "config_hash": config_hash,
-            }
-            # Persist container.log from exchange dir into the study results directory
-            self._persist_container_log(exc, config_hash, cycle, result)
+            # Use structured error payload from container entrypoint when available,
+            # falling back to the exception type/message for stderr-based errors.
+            payload = getattr(exc, "error_payload", None)
+            if payload:
+                result = {
+                    "type": payload.get("type", type(exc).__name__),
+                    "message": payload.get("message", str(exc)),
+                    "config_hash": config_hash,
+                }
+            else:
+                result = {
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                    "config_hash": config_hash,
+                }
+            self._persist_failure_artefacts(exc, config_hash, cycle, result)
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(result, config_hash, cycle, index, exp_elapsed)
@@ -815,33 +825,57 @@ class StudyRunner:
 
         return result
 
-    def _persist_container_log(
+    def _persist_failure_artefacts(
         self,
-        exc: Any,
+        exc: DockerError,
         config_hash: str,
         cycle: int,
         result: dict[str, Any],
     ) -> None:
-        """Copy container.log from the Docker exchange dir into the study results directory.
+        """Copy failure artefacts from the Docker exchange dir into ``failed-runs/``.
 
-        On success, adds a ``log_file`` key to the result dict (relative path
-        within the study directory) so the manifest records where to find it.
+        Copies ``container.log`` and any ``*_error.json`` from the exchange
+        directory. Adds a ``log_file`` key to *result* so the manifest records
+        where the log can be found.
         """
         exchange_dir_str = getattr(exc, "exchange_dir", None)
         if not exchange_dir_str:
             return
 
-        src = Path(exchange_dir_str) / "container.log"
-        if not src.exists():
-            return
-
-        # Build a descriptive filename: {config_hash[:8]}_cycle{N}_container.log
-        dest_name = f"{config_hash[:8]}_cycle{cycle}_container.log"
-        dest = self.study_dir / dest_name
+        exchange_dir = Path(exchange_dir_str)
+        failed_runs_dir = self.study_dir / "failed-runs"
+        prefix = f"{config_hash[:8]}_cycle{cycle}"
 
         try:
+            failed_runs_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as mkdir_exc:
+            logger.warning("Failed to create failed-runs/: %s", mkdir_exc)
+            return
+
+        # Copy container.log (Docker stderr capture)
+        log_file = self._copy_artefact(
+            exchange_dir / "container.log",
+            failed_runs_dir / f"{prefix}_container.log",
+        )
+        if log_file:
+            result["log_file"] = f"failed-runs/{log_file}"
+
+        # Copy error JSON (structured traceback from container entrypoint).
+        # The error JSON uses the Docker config hash (output_dir=/run/llem),
+        # which differs from the study-level config_hash, so glob for it.
+        for src in exchange_dir.glob("*_error.json"):
+            self._copy_artefact(src, failed_runs_dir / f"{prefix}_error.json")
+            break  # only one expected
+
+    @staticmethod
+    def _copy_artefact(src: Path, dest: Path) -> str | None:
+        """Copy a single file, returning the dest filename on success or None."""
+        if not src.exists():
+            return None
+        try:
             shutil.copy2(src, dest)
-            result["log_file"] = dest_name
-            logger.debug("Container log persisted to %s", dest)
+            logger.debug("Artefact persisted to %s", dest)
+            return dest.name
         except Exception as copy_exc:
-            logger.warning("Failed to persist container.log to %s: %s", dest, copy_exc)
+            logger.warning("Failed to persist %s to %s: %s", src.name, dest, copy_exc)
+            return None

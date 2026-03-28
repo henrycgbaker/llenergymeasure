@@ -1308,3 +1308,132 @@ def test_local_subprocess_sets_output_dir_on_config(
     assert worker_config.output_dir.startswith("/tmp/llem-ts-"), (
         f"output_dir should be a temp dir, got: {worker_config.output_dir}"
     )
+
+
+# =============================================================================
+# Error JSON persistence to failed-runs/ subdirectory
+# =============================================================================
+
+
+def test_error_payload_persisted_to_failed_runs_subdir(
+    study_config: StudyConfig,
+    tmp_path: Path,
+) -> None:
+    """DockerContainerError with error_payload copies artefacts to failed-runs/
+    and enriches the manifest with the structured error type/message."""
+    import json
+
+    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.infra.docker_errors import DockerContainerError
+
+    manifest = MagicMock()
+    spec = _make_docker_runner_spec()
+    runner_specs = {"pytorch": spec}
+
+    config = study_config.experiments[0]
+    config_hash = compute_measurement_config_hash(
+        config.model_copy(update={"output_dir": "/run/llem"})
+    )
+
+    # Simulate exchange dir with both container.log and error JSON
+    exchange_dir = tmp_path / "llem-exchange"
+    exchange_dir.mkdir()
+    (exchange_dir / "container.log").write_text("stderr output here", encoding="utf-8")
+    error_payload = {
+        "type": "RuntimeError",
+        "message": "CUDA OOM",
+        "traceback": "Traceback...",
+    }
+    (exchange_dir / f"{config_hash}_error.json").write_text(
+        json.dumps(error_payload), encoding="utf-8"
+    )
+
+    def raise_docker_error(config, **kwargs):
+        err = DockerContainerError(
+            message="RuntimeError: CUDA OOM",
+            fix_suggestion="Check the error traceback.",
+        )
+        err.error_payload = error_payload
+        err.exchange_dir = str(exchange_dir)
+        raise err
+
+    fake_ctx = MagicMock()
+
+    with (
+        patch("multiprocessing.get_context", return_value=fake_ctx),
+        patch(
+            "llenergymeasure.infra.docker_runner.DockerRunner.run",
+            side_effect=raise_docker_error,
+        ),
+        patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
+    ):
+        runner = StudyRunner(study_config, manifest, tmp_path, runner_specs=runner_specs)
+        results = runner.run()
+
+    assert len(results) == 1
+    result = results[0]
+
+    # Manifest receives the structured error type/message from the payload
+    assert result["type"] == "RuntimeError"
+    assert result["message"] == "CUDA OOM"
+
+    # Verify failed-runs/ directory was created
+    failed_runs = tmp_path / "failed-runs"
+    assert failed_runs.is_dir()
+
+    # Verify container.log was copied to failed-runs/
+    assert result.get("log_file", "").startswith("failed-runs/")
+    log_dest = tmp_path / result["log_file"]
+    assert log_dest.exists()
+    assert log_dest.read_text(encoding="utf-8") == "stderr output here"
+
+    # Manifest should record the failure
+    manifest.mark_failed.assert_called_once()
+
+
+def test_docker_error_persists_to_failed_runs_subdir(
+    study_config: StudyConfig,
+    tmp_path: Path,
+) -> None:
+    """DockerError exception path also persists container.log to failed-runs/ subdirectory."""
+    manifest = MagicMock()
+    spec = _make_docker_runner_spec()
+    runner_specs = {"pytorch": spec}
+
+    from llenergymeasure.utils.exceptions import DockerError
+
+    # Simulate an exchange dir with container.log
+    exchange_dir = tmp_path / "llem-exc-exchange"
+    exchange_dir.mkdir()
+    (exchange_dir / "container.log").write_text("error stderr", encoding="utf-8")
+
+    def raise_docker_error(config, **kwargs):
+        err = DockerError("Container failed")
+        err.exchange_dir = str(exchange_dir)
+        raise err
+
+    fake_ctx = MagicMock()
+
+    with (
+        patch("multiprocessing.get_context", return_value=fake_ctx),
+        patch(
+            "llenergymeasure.infra.docker_runner.DockerRunner.run",
+            side_effect=raise_docker_error,
+        ),
+        patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
+    ):
+        runner = StudyRunner(study_config, manifest, tmp_path, runner_specs=runner_specs)
+        results = runner.run()
+
+    assert len(results) == 1
+    result = results[0]
+
+    # Verify failed-runs/ directory was created and log is there
+    failed_runs = tmp_path / "failed-runs"
+    assert failed_runs.is_dir()
+    assert result.get("log_file", "").startswith("failed-runs/")
+    log_dest = tmp_path / result["log_file"]
+    assert log_dest.exists()
+    assert log_dest.read_text(encoding="utf-8") == "error stderr"
+
+    manifest.mark_failed.assert_called_once()

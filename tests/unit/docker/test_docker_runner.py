@@ -1158,3 +1158,82 @@ class TestTimeseriesParquetRescue:
         config_path = exchange_dir / f"{config_hash}_config.json"
         written_config = json.loads(config_path.read_text(encoding="utf-8"))
         assert written_config["output_dir"] == "/run/llem"
+
+
+# ---------------------------------------------------------------------------
+# Test 16: Error JSON on non-zero exit
+# ---------------------------------------------------------------------------
+
+
+class TestErrorJsonOnNonZeroExit:
+    def test_error_json_raises_with_payload(self, tmp_path):
+        """When container exits non-zero AND error JSON exists, raises DockerContainerError
+        with error_payload attribute containing the structured traceback."""
+        config = make_config()
+        exchange_dir = tmp_path / "llem-errorjson"
+        exchange_dir.mkdir()
+
+        config_hash = _docker_config_hash(config)
+        error_payload = {
+            "type": "RuntimeError",
+            "message": "CUDA out of memory inside container",
+            "traceback": "Traceback (most recent call last):\n  ...\nRuntimeError: CUDA OOM",
+        }
+
+        error_json_path = exchange_dir / f"{config_hash}_error.json"
+        error_json_path.write_text(json.dumps(error_payload), encoding="utf-8")
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(
+                    _make_proc(1, stderr="some docker stderr noise")
+                ),
+            ),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerContainerError) as exc_info:
+                runner.run(config)
+
+        exc = exc_info.value
+        # Structured payload attached to the exception
+        assert hasattr(exc, "error_payload")
+        assert exc.error_payload["type"] == "RuntimeError"
+        assert exc.error_payload["message"] == "CUDA out of memory inside container"
+        assert "traceback" in exc.error_payload
+        # Error message includes the Python exception info
+        assert "RuntimeError" in str(exc)
+        assert "CUDA out of memory" in str(exc)
+        # exchange_dir preserved for debugging
+        assert exc.exchange_dir == str(exchange_dir)
+        # container.log still written
+        assert (exchange_dir / "container.log").exists()
+        assert (exchange_dir / "container.log").read_text(encoding="utf-8") == (
+            "some docker stderr noise"
+        )
+
+    def test_stderr_fallback_when_no_error_json(self, tmp_path):
+        """When container exits non-zero and NO error JSON exists, DockerError is raised."""
+        config = make_config()
+        exchange_dir = tmp_path / "llem-noerrorjson"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(
+                    _make_proc(1, stderr="Error: container failed with unknown reason")
+                ),
+            ),
+        ):
+            runner = DockerRunner(image=IMAGE)
+            with pytest.raises(DockerContainerError):
+                runner.run(config)
