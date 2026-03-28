@@ -6,8 +6,7 @@ study_name: full-suite-all-backends
 # =====================================================================
 # Runner configuration
 # =====================================================================
-# Multi-backend runners auto-elevate to docker by default for better
-# isolation and consistency (auto-elevation is configurable but recommended).
+# Multi-backend runners auto-elevate to docker by default for better isolation and consistency (auto-elevation is configurable (TODO) but recommended).
 
 runners:
   pytorch: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
@@ -62,18 +61,18 @@ baseline:
 # --- Warmup ---
 warmup:
   enabled: true
-  n_warmup: 3                    # TODO: rename to n_warmup_prompts for clarity
+  n_warmup: 3 # number of warmup prompts to run before the main experiment? TODO: rename to n_warmup_prompts for clarity
   thermal_floor_seconds: 30.0    # Minimum 30s
-  # CV-based convergence detection (opt-in, additive to n_warmup):
-  # TODO: validate convergence_detection interaction with n_warmup and document
-  # convergence_detection: true
+  # CV-based convergence detection (opt-in, additive to n_warmup): TODO: use dot notation: warmup.convergence_detection.enabled, warmup.convergence_detection.cv_threshold, etc. for better organization and extensibility; validate that this works as intended (i.e. only runs if enabled: true) and clarify in docs how this interacts with n_warmup (e.g. does it run at least n_warmup prompts and then check for convergence after that until either convergence is reached or max_prompts is reached?)
+  # convergence_detection: true # TODO: this seems to run even if if this is commented out - need to validate that this is working as intended (i.e. only runs if enabled: true) / what is default? is this for all backends or just PyTorch? if convergence detection is enabled, how does this interact with n_warmup - does it run at least n_warmup prompts and then check for convergence after that until either convergence is reached or max_prompts is reached? need to clarify this in the docs and validate that it's working as intended
   # cv_threshold: 0.05
-  # max_prompts: 20
+  # max_prompts: 20              # Upper bound on warmup prompts TODO: how does this interact w/ n_warmup
   # window_size: 5
   # min_prompts: 5
 
 # --- Decoder / sampling (universal, shared across backends) ---
 decoder:
+  # preset: deterministic          # Presets override individual params below. Available: deterministic | standard | creative | factual
   temperature: 1.0               # 0.0 (greedy) to 2.0
   do_sample: true
   top_k: 50                      # 0 = disabled
@@ -81,11 +80,14 @@ decoder:
   repetition_penalty: 1.0        # 1.0 = no penalty
   min_p: null                    # Min probability filter (null = disabled)
   min_new_tokens: null            # Minimum output tokens (null = no minimum)
+  #TODO: validate this works + how incompataible params resolution is handled
+  #TODO: consider moving this to sweep
 
 # --- LoRA adapter (optional, applies to all experiments) ---
 # lora:
 #   adapter_id: my-org/my-lora-adapter
 #   merge_weights: false
+# TODO: VALUDATE that this works as intended - does this apply to all backends? if not, need to clarify in docs and potentially add backend-specific lora config using dotted notation (e.g. lora.pytorch.adapter_id, lora.vllm.adapter_id, etc.)
 
 # --- Passthrough kwargs ---
 # passthrough_kwargs:
@@ -109,7 +111,7 @@ output:
 # Each backend's scoped params are crossed only with each other and with
 # universal (non-dotted) axes.
 
-sweep:
+sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- Universal (applies to all three backends) ---
   dtype:
     - float32
@@ -129,7 +131,13 @@ sweep:
     - flash_attention_3
     - eager
 
+  #TODO add others - e.g. torch_compile, num_beams, quantisation, parallelisation, etc.
+
   # --- vLLM parameter space ---
+
+# TODO: maybe backend_sweep ? -> separation of concerns, rather than all under sweep?
+
+# TODO: add vllm batch size?
   vllm.engine.gpu_memory_utilization:
     - 0.7
     - 0.85
@@ -176,6 +184,8 @@ sweep:
     - flashinfer
     # - xformers                     # Legacy, deprecated in newer vLLM versions
 
+    #TODO add others - e.g. attention backend, speculative decoding, quantisation, parallelisation, etc.
+
   # --- TensorRT parameter space ---
   tensorrt.max_batch_size:
     - 1
@@ -186,7 +196,7 @@ sweep:
   tensorrt.max_seq_len:
     - 1536
     - 2048
-  tensorrt.quant.quant_algo:
+  tensorrt.quant.quant_algo: # TODO: is this not tensorrt.dtype??
     - int8
     - w4a16_awq
     - w8a16
@@ -203,6 +213,12 @@ sweep:
   #   - 1
   #   - 2
   #   - 4
+
+    # --- Shared TRT-LLM backend settings ---
+# Applied to all TensorRT sweep experiments. Explicit TRT experiments
+# override these where needed.
+tensorrt: #TODO - IM LEAVING THIS HERE AS REMINDER TO WORK OUT WHART THIS WAS AND WHY IT WAS HERE -> REMOVE AND ASSOCIATED PATHS WITHIN THE TOOL.
+  max_input_len: 1024
 
 # =====================================================================
 # Explicit experiments (truly dependent or feature-specific params)
@@ -226,8 +242,15 @@ experiments:
   # =================================================================
 
   # -----------------------------------------------------------------
-  # torch.compile modes (dependent: mode requires compile: true)
+  # torch.compile modes
   # -----------------------------------------------------------------
+  # torch_compile_mode requires torch_compile: true - can't be swept
+  # with torch_compile: false configs, so listed explicitly.
+  #TODO change this -> can we not add another dot hierarchy?
+  # depending on what the underlying pytorch field names are:
+  # pytorch.torch_compile: true/false? -> pytorch.torch_compile.mode (what is the name of the underlying field is it torch_compile_mode or just mode????? make sure to use native pytorch terminology)
+  # maybe e.g. pytorch.torch_compile.mode: default | reduce-overhead | max-autotune, and then have torch_compile: true/false as a separate axis? This way we could sweep torch_compile_mode with torch_compile: true, and also have torch_compile: false configs without needing to list them explicitly? Need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?) -> if this works as intended, we could remove the need for the explicit experiments below that test different torch_compile modes with torch_compile: true, and instead just have those as part of the sweep. The explicit experiments section would then only be needed for truly unique experiments that can't be easily captured in the sweep (e.g. specific quantisation configurations, beam search parameters, etc.) - need to validate this and potentially refactor to simplify the config and reduce the number of explicit experiments needed.
+  # OR have validate that these only work when torch_compile: true and automatically filter out invalid configs if torch_compile: false - this would allow us to keep the torch_compile_mode sweep separate from the torch_compile: true/false axis, which would be cleaner and more modular - need to validate if this works as intended and how incompatible params are resolved (e.g. if torch_compile: false and torch_compile_mode: default are swept together, does it automatically disable the torch_compile_mode sweep when torch_compile is false, or does it produce invalid configs that need to be filtered out?)
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     dtype: bfloat16
@@ -268,9 +291,10 @@ experiments:
       trust_remote_code: true
 
   # -----------------------------------------------------------------
-  # BitsAndBytes quantisation (dependent: 4bit/8bit mutually exclusive,
-  # bnb_4bit_* sub-params require load_in_4bit: true)
+  # BitsAndBytes quantization
   # -----------------------------------------------------------------
+  # 4-bit and 8-bit are mutually exclusive - cannot be swept together.
+  # TODO: why are these not in sweep logic, and just have being filtered out when incompatible with load_in_8bit or load_in_4bit? If this works as intended, we could move these into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     dtype: float16
@@ -310,8 +334,9 @@ experiments:
       trust_remote_code: true
 
   # -----------------------------------------------------------------
-  # Beam search (cross-section dep: requires decoder.do_sample: false)
+  # PyTorch beam search
   # -----------------------------------------------------------------
+  # TODO: as above: move this into sweep logic and validate that incompatible params are automatically filtered out (e.g. if beam search params are swept together with sampling params, does it automatically disable the sampling params when beam search is enabled, or does it produce invalid configs that need to be filtered out?) - if this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     dtype: bfloat16
@@ -330,8 +355,9 @@ experiments:
       trust_remote_code: true
 
   # -----------------------------------------------------------------
-  # Speculative decoding (axis override: requires batch_size: 1)
+  # PyTorch speculative decoding (prompt-lookup)
   # -----------------------------------------------------------------
+  # TODO: again as above: why is this not in sweep logic, and just have being filtered out when incompatible with do_sample: false? If this works as intended, we could move this into the sweep and remove the need for explicit experiments here, which would simplify the config and reduce the number of explicit experiments needed - need to validate this and potentially refactor.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     dtype: bfloat16
@@ -344,8 +370,9 @@ experiments:
       trust_remote_code: true
 
   # -----------------------------------------------------------------
-  # Static KV cache (dependent: cache_implementation requires use_cache)
+  # Static KV cache
   # -----------------------------------------------------------------
+  # TODO: again, as above: move this into sweep logic.
   - model: Qwen/Qwen2.5-0.5B
     backend: pytorch
     dtype: bfloat16
@@ -417,6 +444,20 @@ experiments:
   #     max_memory:
   #       0: "10GiB"
   #       cpu: "50GiB"
+  #     device_map: auto
+  #     trust_remote_code: true
+
+  # PyTorch LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
+  # - model: Qwen/Qwen2.5-0.5B
+  #   backend: pytorch
+  #   dtype: bfloat16
+  #   dataset:
+  #     n_prompts: 50
+  #   lora:
+  #     adapter_id: my-org/my-lora-adapter
+  #     merge_weights: false
+  #   pytorch:
+  #     batch_size: 4
   #     device_map: auto
   #     trust_remote_code: true
 
