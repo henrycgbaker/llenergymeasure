@@ -112,14 +112,14 @@ ci: check test check-docs
 # Docker Commands (Production)
 # =============================================================================
 
-# Build PyTorch backend (default, recommended for most users)
-docker-build-pytorch:
-	docker compose build base pytorch
 
 # Build all backends (pytorch, vllm, tensorrt) — local images
 docker-build-all:
 	docker compose build base pytorch vllm tensorrt
-
+	
+# Build PyTorch backend (default, recommended for most users)
+docker-build-pytorch:
+	docker compose build base pytorch
 # Build specific backends — local images
 docker-build-vllm:
 	docker compose build base vllm
@@ -136,25 +136,8 @@ docker-pull:
 	done
 
 # Show which images llem will use (local vs registry)
-define _DOCKER_IMAGES_PY
-from llenergymeasure.infra.image_registry import (
-    get_default_image, _image_exists_locally,
-    LOCAL_IMAGE_TEMPLATE, DEFAULT_IMAGE_TEMPLATE,
-)
-from llenergymeasure._version import __version__
-for b in ("pytorch", "vllm", "tensorrt"):
-    local = LOCAL_IMAGE_TEMPLATE.format(backend=b)
-    ghcr = DEFAULT_IMAGE_TEMPLATE.format(backend=b, version=__version__)
-    has_local = _image_exists_locally(local)
-    resolved = get_default_image(b)
-    source = "local" if has_local else "registry"
-    print(f"  {b:10s} -> {resolved}  ({source})")
-endef
-export _DOCKER_IMAGES_PY
-
 docker-images:
-	@echo "=== Image resolution ==="
-	@python3 -c "$$_DOCKER_IMAGES_PY"
+	@python3 -c "from llenergymeasure.infra.image_registry import show_image_resolution; show_image_resolution()"
 
 # Validate Docker setup
 docker-check:
