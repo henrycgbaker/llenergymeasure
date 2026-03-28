@@ -63,17 +63,31 @@ class TestParseRunnerValue:
 
 
 class TestGetDefaultImage:
-    def test_returns_well_formed_image_string(self):
+    def test_prefers_local_image_when_available(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        image = get_default_image("vllm")
+        with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
+            image = get_default_image("vllm")
+
+        assert image == "llenergymeasure:vllm"
+
+    def test_falls_back_to_ghcr_when_no_local_image(self):
+        from llenergymeasure.infra.image_registry import get_default_image
+
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            image = get_default_image("vllm")
 
         assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:v")
 
     def test_fallback_to_latest_when_version_empty(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        with patch("llenergymeasure._version.__version__", ""):
+        with (
+            patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=False),
+            patch("llenergymeasure._version.__version__", ""),
+        ):
             image = get_default_image("pytorch")
 
         assert image.endswith(":vlatest")
@@ -85,11 +99,14 @@ class TestGetDefaultImage:
             image = get_default_image(backend)
             assert backend in image, f"Expected backend {backend!r} in image {image!r}"
 
-    def test_package_version_included_in_image(self):
+    def test_ghcr_image_includes_package_version(self):
         from llenergymeasure import __version__
         from llenergymeasure.infra.image_registry import get_default_image
 
-        image = get_default_image("vllm")
+        with patch(
+            "llenergymeasure.infra.image_registry._image_exists_locally", return_value=False
+        ):
+            image = get_default_image("vllm")
 
         assert f"v{__version__}" in image
 

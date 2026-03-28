@@ -47,6 +47,9 @@ __all__ = [
 # {version} is filled at runtime; matches tags pushed by docker-publish.yml.
 DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}"
 
+# Local image tag produced by `docker compose build` (no registry prefix).
+LOCAL_IMAGE_TEMPLATE = "llenergymeasure:{backend}"
+
 # Backends that have a Docker image in the registry.
 _SUPPORTED_BACKENDS = frozenset({BACKEND_PYTORCH, BACKEND_VLLM, BACKEND_TENSORRT})
 
@@ -128,17 +131,23 @@ def _parse_cuda_major_from_nvcc(output: str) -> str | None:
 def get_default_image(backend: str) -> str:
     """Resolve the default Docker image for *backend*.
 
-    Uses the current package version to build a tag matching what
-    ``docker-publish.yml`` pushes (``v{version}``).
-    Falls back to ``"latest"`` if version detection fails.
+    Prefers a locally-built image (``llenergymeasure:{backend}``, produced by
+    ``docker compose build``) when one exists.  Falls back to the versioned
+    GHCR tag (``ghcr.io/…/{backend}:v{version}``) for CI and production.
 
     Args:
         backend: Backend name, e.g. ``"vllm"``, ``"pytorch"``, ``"tensorrt"``.
 
     Returns:
-        Full image reference string, e.g.
-        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"``.
+        Image reference string, e.g. ``"llenergymeasure:vllm"`` (local) or
+        ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0"`` (registry).
     """
+    # Prefer local image from docker compose build
+    local_image = LOCAL_IMAGE_TEMPLATE.format(backend=backend)
+    if _image_exists_locally(local_image):
+        return local_image
+
+    # Fall back to versioned GHCR tag
     from llenergymeasure._version import __version__
 
     version = __version__ if __version__ else "latest"
@@ -147,6 +156,19 @@ def get_default_image(backend: str) -> str:
         backend=backend,
         version=version,
     )
+
+
+def _image_exists_locally(image: str) -> bool:
+    """Check whether a Docker image tag exists in the local cache."""
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
 
 
 def parse_runner_value(value: str) -> tuple[RunnerMode, str | None]:
