@@ -46,7 +46,7 @@ def run_experiment(
     *,
     model: str,
     backend: str | None = None,
-    n_prompts: int = 100,
+    n_prompts: int = 50,
     dataset: str = "aienergyscore",
     skip_preflight: bool = ...,
     progress: ProgressCallback | None = ...,
@@ -59,7 +59,7 @@ def run_experiment(
     *,
     model: str | None = None,
     backend: str | None = None,
-    n_prompts: int = 100,
+    n_prompts: int = 50,
     dataset: str = "aienergyscore",
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
@@ -78,7 +78,7 @@ def run_experiment(
         config: YAML file path, ExperimentConfig object, or None (use kwargs).
         model: Model name/path (kwargs form only).
         backend: Inference backend (kwargs form only, defaults to ExperimentConfig default).
-        n_prompts: Number of prompts (kwargs form only, default 100).
+        n_prompts: Number of prompts (kwargs form only, default 50).
         dataset: Dataset source name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
         progress: Optional callback for step-by-step progress reporting.
@@ -159,7 +159,7 @@ def _to_study_config(
     *,
     model: str | None = None,
     backend: str | None = None,
-    n_prompts: int = 100,
+    n_prompts: int = 50,
     dataset: str = "aienergyscore",
     **kwargs: Any,
 ) -> StudyConfig:

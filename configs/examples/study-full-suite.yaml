@@ -2,8 +2,8 @@
 # Run: llem run configs/examples/study-full-suite.yaml
 #
 # Reference config - not intended for end-to-end execution.
-# Expands to ~152,455 experiments (PyTorch: 9,601 | vLLM: 139,972 | TensorRT: 2,882).
-# With n_cycles=3 that is ~457k total runs.
+# Experiment counts depend on sweep axes and groups; run `llem run --dry-run`
+# to see the exact expansion for your configuration.
 
 study_name: full-suite-all-backends
 
@@ -47,7 +47,7 @@ model: Qwen/Qwen2.5-0.5B
 # --- Dataset ---
 dataset:
   source: aienergyscore          # Built-in alias or .jsonl file path
-  n_prompts: 100                 # Number of prompts to load or generate
+  n_prompts: 50                  # Number of prompts to load or generate
   order: interleaved             # interleaved | grouped | shuffled
 
 # Token limits - for FLOPs/computational workload control
@@ -176,8 +176,8 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # Moved from explicit experiments: these are independent single-axis variations
   vllm.engine.enable_prefix_caching: [true, false]
   vllm.engine.block_size: [8, 16, 32]
-  vllm.engine.kv_cache_dtype: [auto, fp8]
-  vllm.engine.quantization: [null, fp8]  # null = full precision; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
+  vllm.engine.kv_cache_dtype: [auto]  # fp8 requires SM >= 8.9 (Ada Lovelace / Hopper); add fp8 if hardware supports it
+  vllm.engine.quantization: [null]  # fp8 requires SM >= 8.9; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
   vllm.engine.max_num_batched_tokens: [2048, 4096, 8192]
   vllm.engine.max_model_len: [1024, 2048, 4096]
   vllm.attention.backend: [flash_attn, flashinfer]  # xformers legacy, deprecated
@@ -188,12 +188,13 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # beam search requires decoder.do_sample: false
   vllm.decoding:
     - {}                                          # baseline: use shared decoder settings
-    - decoder.do_sample: false
-      decoder.temperature: 0.0
-      vllm.beam_search.beam_width: 4
-      vllm.beam_search.early_stopping: true
-      vllm.beam_search.length_penalty: 1.0
-      vllm.beam_search.max_tokens: 256
+    # beam_search requires vLLM >= 0.8; uncomment if installed version supports it:
+    # - decoder.do_sample: false
+    #   decoder.temperature: 0.0
+    #   vllm.beam_search.beam_width: 4
+    #   vllm.beam_search.early_stopping: true
+    #   vllm.beam_search.length_penalty: 1.0
+    #   vllm.beam_search.max_tokens: 256
     - vllm.sampling.presence_penalty: 0.6
       vllm.sampling.frequency_penalty: 0.6
 

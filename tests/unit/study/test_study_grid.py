@@ -452,7 +452,7 @@ class TestComputeStudyDesignHash:
 
     def test_different_experiments_different_hash(self):
         exps1 = [ExperimentConfig(model="gpt2")]
-        exps2 = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))]
+        exps2 = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=25))]
         assert compute_study_design_hash(exps1) != compute_study_design_hash(exps2)
 
     def test_stable_across_calls(self):
@@ -477,7 +477,7 @@ class TestApplyCycles:
     @pytest.fixture
     def two_experiments(self):
         a = ExperimentConfig(model="gpt2")
-        b = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
+        b = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=25))
         return [a, b]
 
     @pytest.fixture
@@ -488,10 +488,10 @@ class TestApplyCycles:
         """sequential with 3 cycles and [A, B] -> [A, A, A, B, B, B]."""
         result = apply_cycles(two_experiments, 3, ExperimentOrder.SEQUENTIAL, study_hash)
         assert len(result) == 6
-        # First 3 should be A (gpt2, n_prompts=100)
-        assert all(r.dataset.n_prompts == 100 for r in result[:3])
-        # Last 3 should be B (gpt2, n_prompts=50)
-        assert all(r.dataset.n_prompts == 50 for r in result[3:])
+        # First 3 should be A (gpt2, n_prompts=50 default)
+        assert all(r.dataset.n_prompts == 50 for r in result[:3])
+        # Last 3 should be B (gpt2, n_prompts=25)
+        assert all(r.dataset.n_prompts == 25 for r in result[3:])
 
     def test_interleaved_ordering(self, two_experiments, study_hash):
         """interleave with 3 cycles and [A, B] -> [A, B, A, B, A, B]."""
@@ -499,9 +499,9 @@ class TestApplyCycles:
         assert len(result) == 6
         # Alternating: A, B, A, B, A, B
         for i in range(0, 6, 2):
-            assert result[i].dataset.n_prompts == 100  # A
+            assert result[i].dataset.n_prompts == 50  # A
         for i in range(1, 6, 2):
-            assert result[i].dataset.n_prompts == 50  # B
+            assert result[i].dataset.n_prompts == 25  # B
 
     def test_shuffled_with_explicit_seed_deterministic(self, two_experiments, study_hash):
         """Shuffle with explicit seed produces deterministic reproducible order."""
@@ -544,7 +544,7 @@ class TestApplyCycles:
         # Check that each pair of 2 contains both experiments
         for i in range(0, 6, 2):
             pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
-            assert pair_ns == {100, 50}
+            assert pair_ns == {50, 25}
 
     # -- reverse mode --
 
@@ -553,12 +553,12 @@ class TestApplyCycles:
         result = apply_cycles(two_experiments, 4, ExperimentOrder.REVERSE, study_hash)
         assert len(result) == 8
         ns = [r.dataset.n_prompts for r in result]
-        assert ns == [100, 50, 50, 100, 100, 50, 50, 100]
+        assert ns == [50, 25, 25, 50, 50, 25, 25, 50]
 
     def test_reverse_single_cycle(self, two_experiments, study_hash):
         """reverse with 1 cycle = forward order (same as sequential for one cycle)."""
         result = apply_cycles(two_experiments, 1, ExperimentOrder.REVERSE, study_hash)
-        assert [r.dataset.n_prompts for r in result] == [100, 50]
+        assert [r.dataset.n_prompts for r in result] == [50, 25]
 
     def test_reverse_contains_all_experiments_each_cycle(self, two_experiments, study_hash):
         """Each cycle in reverse mode contains all experiments exactly once."""
@@ -566,7 +566,7 @@ class TestApplyCycles:
         assert len(result) == 6
         for i in range(0, 6, 2):
             pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
-            assert pair_ns == {100, 50}
+            assert pair_ns == {50, 25}
 
     # -- latin_square mode --
 
