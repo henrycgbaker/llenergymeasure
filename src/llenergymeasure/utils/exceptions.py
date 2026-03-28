@@ -39,6 +39,7 @@ class DockerError(LLEMError):
         self.fix_suggestion = fix_suggestion
         self.stderr_snippet = stderr_snippet
         self.exchange_dir = exchange_dir
+        self.error_payload: dict[str, str] | None = None
 
 
 class DockerPreFlightError(PreFlightError):

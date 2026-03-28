@@ -39,6 +39,7 @@ from llenergymeasure.infra.docker_errors import (
     capture_stderr_snippet,
     translate_docker_error,
 )
+from llenergymeasure.utils.exceptions import DockerError
 
 __all__ = ["DockerRunner"]
 
@@ -246,6 +247,7 @@ class DockerRunner:
                 # Prefer structured error JSON written by the container entrypoint
                 # over Docker's stderr, which can contain misleading daemon messages.
                 error_json_path = exchange_dir / f"{config_hash}_error.json"
+                error: DockerError
                 if error_json_path.exists():
                     payload = json.loads(error_json_path.read_text(encoding="utf-8"))
                     error = DockerContainerError(
