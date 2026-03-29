@@ -459,6 +459,7 @@ class StudyRunner:
         study_dir: Path,
         runner_specs: dict[str, RunnerSpec] | None = None,
         progress: StudyProgressCallback | None = None,
+        no_lock: bool = False,
     ) -> None:
         self.study = study
         self.manifest = manifest_writer
@@ -468,6 +469,8 @@ class StudyRunner:
         self._runner_specs = runner_specs
         # Live study progress display (None = no live output)
         self._progress = progress
+        # When True, skip GPU advisory lock acquisition
+        self._no_lock = no_lock
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -529,6 +532,21 @@ class StudyRunner:
 
         original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
 
+        # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
+        # Only activated for studies that use Docker runners.
+        original_sigterm: signal.Handlers | None = None
+        if self._runner_specs and any(s.mode == RUNNER_DOCKER for s in self._runner_specs.values()):
+            from llenergymeasure.study.container_lifecycle import (
+                install_sigterm_bridge,
+                reap_orphaned_containers,
+                register_container_cleanup,
+            )
+
+            study_id = self.study.study_design_hash or "unknown"
+            reap_orphaned_containers()
+            register_container_cleanup(study_id)
+            original_sigterm = install_sigterm_bridge()
+
         self._prepare_images()
 
         try:
@@ -559,6 +577,8 @@ class StudyRunner:
 
         finally:
             signal.signal(signal.SIGINT, original_sigint)
+            if original_sigterm is not None:
+                signal.signal(signal.SIGTERM, original_sigterm)
 
         if self._interrupt_event.is_set():
             completed = sum(1 for r in results if not isinstance(r, dict))
@@ -957,6 +977,10 @@ class StudyRunner:
         """
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
+        from llenergymeasure.study.container_lifecycle import (
+            generate_container_labels,
+            generate_container_name,
+        )
         from llenergymeasure.study.gpu_memory import check_gpu_memory_residual
         from llenergymeasure.utils.exceptions import DockerError
 
@@ -965,11 +989,17 @@ class StudyRunner:
         # outside the study path.
         image = spec.image if spec.image is not None else get_default_image(config.backend)
 
+        study_id = self.study.study_design_hash or "unknown"
+        container_name = generate_container_name(study_id, index)
+        labels = generate_container_labels(study_id)
+
         docker_runner = DockerRunner(
             image=image,
             timeout=_calculate_timeout(config),
             source=spec.source,
             extra_mounts=spec.extra_mounts,
+            container_name=container_name,
+            labels=labels,
         )
 
         # Pre-dispatch GPU memory residual check (same as local path)
