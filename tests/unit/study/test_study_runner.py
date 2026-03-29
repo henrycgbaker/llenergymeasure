@@ -1752,3 +1752,292 @@ class TestParseImageMetadata:
     def test_missing_fields_returns_none(self) -> None:
         data = b"[{}]"
         assert StudyRunner._parse_image_metadata(data) is None
+
+
+# =============================================================================
+# Circuit breaker, wall-clock timeout, mark_study_completed (Plan 03)
+# =============================================================================
+
+
+def _make_multi_experiment_study(n: int = 3) -> StudyConfig:
+    """Build an n-experiment study (all distinct configs, 1 cycle each)."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    experiments = [
+        ExperimentConfig(
+            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        )
+        for i in range(n)
+    ]
+    return StudyConfig(
+        experiments=experiments,
+        study_name="multi-exp-test",
+        study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
+        study_design_hash="aabbccdd11223344",
+    )
+
+
+def _make_ctx_with_results(results_sequence: list) -> MagicMock:
+    """Build a mock mp context where each Process returns results in sequence.
+
+    Each element of results_sequence is returned by parent_conn.recv() on the
+    corresponding experiment invocation. Elements may be dicts (failure) or
+    objects (success).
+    """
+    call_count = [0]
+
+    def make_process(**kwargs):
+        proc = MagicMock()
+        proc.pid = 9999
+        proc.is_alive.return_value = False
+        proc.exitcode = 0
+        proc.start.return_value = None
+        proc.join.return_value = None
+        return proc
+
+    def make_pipe(duplex=True):
+        idx = call_count[0]
+        call_count[0] += 1
+        result = results_sequence[min(idx, len(results_sequence) - 1)]
+
+        parent = MagicMock()
+        child = MagicMock()
+        parent.poll.return_value = True
+        parent.recv.return_value = result
+        return parent, child
+
+    ctx = MagicMock()
+    ctx.Process.side_effect = make_process
+    ctx.Pipe.side_effect = make_pipe
+    ctx.Queue.return_value = queue.SimpleQueue()
+    return ctx
+
+
+def test_mark_study_completed_called_on_success(study_config: StudyConfig) -> None:
+    """mark_study_completed() is called when all experiments succeed."""
+    manifest = MagicMock()
+
+    # Non-dict result triggers success path
+    fake_result = {"status": "ok"}
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/test-completed"), no_lock=True)
+        runner.run()
+
+    manifest.mark_study_completed.assert_called_once()
+    manifest.mark_interrupted.assert_not_called()
+
+
+def test_circuit_breaker_trips_and_marks_remaining_skipped() -> None:
+    """Circuit breaker trips after N consecutive failures; remaining experiments marked skipped."""
+    # 3 experiments; circuit breaker trips after 2 consecutive failures (max_consecutive_failures=2)
+    from llenergymeasure.config.models import DatasetConfig
+
+    experiments = [
+        ExperimentConfig(
+            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        )
+        for i in range(4)
+    ]
+    study = StudyConfig(
+        experiments=experiments,
+        study_name="breaker-test",
+        study_execution=ExecutionConfig(
+            n_cycles=1,
+            experiment_order="sequential",
+            max_consecutive_failures=2,
+            circuit_breaker_cooldown_seconds=0.0,  # no sleep in tests
+        ),
+        study_design_hash="aabbccdd11223344",
+    )
+    manifest = MagicMock()
+
+    # Results: fail, fail (trips), probe (abort) — 3 experiments dispatched
+    failure_dict = {"type": "RuntimeError", "message": "CUDA OOM"}
+    results_seq = [failure_dict, failure_dict, failure_dict, failure_dict]
+    ctx = _make_ctx_with_results(results_seq)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest, Path("/tmp/test-breaker"), no_lock=True)
+        runner.run()
+
+    # After probe fails -> abort -> mark_study_circuit_breaker
+    manifest.mark_study_circuit_breaker.assert_called_once()
+    # mark_skipped called for remaining (not-dispatched) experiments
+    assert manifest.mark_skipped.call_count >= 1
+
+
+def test_circuit_breaker_probe_success_resets_state() -> None:
+    """Probe success after trip resets circuit breaker and study completes normally."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    experiments = [
+        ExperimentConfig(
+            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        )
+        for i in range(4)
+    ]
+    study = StudyConfig(
+        experiments=experiments,
+        study_name="probe-success-test",
+        study_execution=ExecutionConfig(
+            n_cycles=1,
+            experiment_order="sequential",
+            max_consecutive_failures=2,
+            circuit_breaker_cooldown_seconds=0.0,
+        ),
+        study_design_hash="aabbccdd11223344",
+    )
+    manifest = MagicMock()
+
+    # fail, fail (trips), success (probe succeeds -> closed), success
+    failure_dict = {"type": "RuntimeError", "message": "fail"}
+    success_dict = {"status": "ok"}  # not a failure (no "type" key at top-level = error dict)
+    results_seq = [failure_dict, failure_dict, success_dict, success_dict]
+    ctx = _make_ctx_with_results(results_seq)
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest, Path("/tmp/test-probe-ok"), no_lock=True)
+        runner.run()
+
+    # No circuit breaker abort
+    manifest.mark_study_circuit_breaker.assert_not_called()
+    # Study completes normally
+    manifest.mark_study_completed.assert_called_once()
+
+
+def test_wall_clock_timeout_marks_remaining_skipped() -> None:
+    """Wall-clock timeout marks remaining experiments as skipped and sets timed_out status."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    experiments = [
+        ExperimentConfig(
+            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        )
+        for i in range(3)
+    ]
+    study = StudyConfig(
+        experiments=experiments,
+        study_name="timeout-test",
+        study_execution=ExecutionConfig(
+            n_cycles=1,
+            experiment_order="sequential",
+            wall_clock_timeout_hours=0.0001,  # very small: expires immediately
+        ),
+        study_design_hash="aabbccdd11223344",
+    )
+    manifest = MagicMock()
+
+    success_dict = {"status": "ok"}
+    ctx = _make_ctx_with_results([success_dict, success_dict, success_dict])
+
+    # Force time.monotonic() to report deadline exceeded on first check
+    import time
+
+    original_monotonic = time.monotonic
+    tick = [0]
+
+    def fast_monotonic():
+        tick[0] += 1
+        # First call (deadline computation) returns 0; subsequent calls return large value
+        return 0.0 if tick[0] == 1 else 1e9
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.runner.time.monotonic", side_effect=fast_monotonic),
+    ):
+        runner = StudyRunner(study, manifest, Path("/tmp/test-timeout"), no_lock=True)
+        runner.run()
+
+    manifest.mark_study_timed_out.assert_called_once()
+    # At least some experiments marked as skipped
+    assert manifest.mark_skipped.call_count >= 1
+    # mark_study_completed must NOT be called on timeout
+    manifest.mark_study_completed.assert_not_called()
+
+
+def test_fail_fast_aborts_after_first_failure() -> None:
+    """max_consecutive_failures=1 (fail-fast): study aborts after the first failure."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    experiments = [
+        ExperimentConfig(
+            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        )
+        for i in range(3)
+    ]
+    study = StudyConfig(
+        experiments=experiments,
+        study_name="fail-fast-test",
+        study_execution=ExecutionConfig(
+            n_cycles=1,
+            experiment_order="sequential",
+            max_consecutive_failures=1,
+            circuit_breaker_cooldown_seconds=0.0,
+        ),
+        study_design_hash="aabbccdd11223344",
+    )
+    manifest = MagicMock()
+
+    failure_dict = {"type": "RuntimeError", "message": "instant fail"}
+    ctx = _make_ctx_with_results([failure_dict, failure_dict, failure_dict])
+
+    with patch("multiprocessing.get_context", return_value=ctx):
+        runner = StudyRunner(study, manifest, Path("/tmp/test-fail-fast"), no_lock=True)
+        runner.run()
+
+    # First failure trips the breaker (max_failures=1).
+    # Probe experiment runs next; probe also fails -> abort.
+    manifest.mark_study_circuit_breaker.assert_called_once()
+
+
+def test_gpu_locks_acquired_and_released(study_config: StudyConfig, tmp_path: Path) -> None:
+    """GPU locks are acquired before image prep and released in finally block."""
+    manifest = MagicMock()
+
+    acquired_locks: list = []
+    released_locks: list = []
+
+    def fake_acquire(gpu_indices, lock_dir=None):
+        lock = MagicMock()
+        acquired_locks.append(lock)
+        return [lock]
+
+    def fake_release(locks):
+        released_locks.extend(locks)
+
+    fake_result = {"status": "ok"}
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks", side_effect=fake_acquire),
+        patch("llenergymeasure.study.gpu_locks.release_gpu_locks", side_effect=fake_release),
+        patch("llenergymeasure.device.gpu_info._resolve_gpu_indices", return_value=[0]),
+    ):
+        runner = StudyRunner(study_config, manifest, tmp_path, no_lock=False)
+        runner.run()
+
+    assert len(acquired_locks) == 1, "Expected exactly one acquire call"
+    assert len(released_locks) == 1, "Expected exactly one release call (in finally)"
+
+
+def test_no_lock_skips_gpu_lock_acquisition(study_config: StudyConfig) -> None:
+    """When no_lock=True, GPU locks are never acquired."""
+    manifest = MagicMock()
+
+    fake_result = {"status": "ok"}
+    proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
+    ctx = _make_mock_context(proc, pipe_data=fake_result)
+
+    with (
+        patch("multiprocessing.get_context", return_value=ctx),
+        patch("llenergymeasure.study.gpu_locks.acquire_gpu_locks") as mock_acquire,
+    ):
+        runner = StudyRunner(study_config, manifest, Path("/tmp/no-lock"), no_lock=True)
+        runner.run()
+
+    mock_acquire.assert_not_called()

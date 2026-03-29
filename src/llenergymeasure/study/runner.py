@@ -490,11 +490,19 @@ class StudyRunner:
         grace period expiry) sends SIGKILL. After the loop exits, if interrupted,
         calls manifest.mark_interrupted() and sys.exit(130).
 
+        Acquires per-GPU advisory file locks before image preparation (unless
+        no_lock=True). Releases locks in the finally block regardless of outcome.
+
+        Integrates circuit breaker (closed -> open -> half-open -> closed/abort) and
+        wall-clock timeout: both mark remaining experiments as skipped and update
+        the manifest status before returning.
+
         Note: study.experiments is already the fully-ordered execution sequence produced
         by apply_cycles() in load_study_config(). The runner must not call apply_cycles()
         again — doing so would multiply the count by n_cycles a second time.
         """
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        from llenergymeasure.study.circuit_breaker import CircuitBreaker
 
         # study.experiments is already cycled by load_study_config(); use as-is.
         ordered = self.study.experiments
@@ -532,6 +540,16 @@ class StudyRunner:
 
         original_sigint = signal.signal(signal.SIGINT, _sigint_handler)
 
+        # Acquire per-GPU advisory locks before image preparation.
+        # Sorted acquisition prevents deadlocks when multiple studies share GPUs.
+        gpu_locks: list[Any] = []
+        if not self._no_lock and ordered:
+            from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+            from llenergymeasure.study.gpu_locks import acquire_gpu_locks
+
+            gpu_indices = _resolve_gpu_indices(ordered[0])
+            gpu_locks = acquire_gpu_locks(gpu_indices)
+
         # Container lifecycle: reap orphaned containers, register cleanup, install SIGTERM bridge.
         # Only activated for studies that use Docker runners.
         original_sigterm: signal.Handlers | None = None
@@ -549,11 +567,38 @@ class StudyRunner:
 
         self._prepare_images()
 
+        # Circuit breaker: tracks consecutive failures, decides abort/probe.
+        breaker = CircuitBreaker(
+            max_failures=self.study.study_execution.max_consecutive_failures,
+            cooldown_seconds=self.study.study_execution.circuit_breaker_cooldown_seconds,
+        )
+
+        # Wall-clock deadline: computed once before the loop.
+        deadline: float | None = None
+        if self.study.study_execution.wall_clock_timeout_hours:
+            deadline = time.monotonic() + (
+                self.study.study_execution.wall_clock_timeout_hours * 3600
+            )
+
         try:
             results: list[Any] = []
+            # Track whether the loop was aborted by timeout or circuit breaker.
+            # Used to skip mark_study_completed() on non-clean exits.
+            _aborted = False
 
             for i, config in enumerate(ordered):
                 if self._interrupt_event.is_set():
+                    break
+
+                # Wall-clock timeout check: mark remaining experiments skipped.
+                if deadline is not None and time.monotonic() > deadline:
+                    self._mark_remaining_skipped(ordered, i, compute_measurement_config_hash)
+                    self.manifest.mark_study_timed_out()
+                    logger.warning(
+                        "Study timed out after %.1f hours",
+                        self.study.study_execution.wall_clock_timeout_hours,
+                    )
+                    _aborted = True
                     break
 
                 # Config gap: between every consecutive experiment pair
@@ -575,10 +620,48 @@ class StudyRunner:
                 result = self._run_one(config, mp_ctx, index=i + 1, total=len(ordered))
                 results.append(result)
 
+                # Circuit breaker integration: update state based on result.
+                if isinstance(result, dict) and "type" in result:
+                    error_type = result.get("type", "UnknownError")
+                    error_msg = result.get("message", "")
+                    action = breaker.record_failure(error_type, error_msg)
+
+                    if action == "tripped":
+                        for line in breaker.get_failure_summary():
+                            logger.warning("Circuit breaker: %s", line)
+                        if breaker.cooldown_seconds > 0:
+                            logger.info("Circuit breaker cooldown: %.0fs", breaker.cooldown_seconds)
+                            time.sleep(breaker.cooldown_seconds)
+                        breaker.start_probe()
+                        # Next loop iteration is the probe experiment.
+
+                    elif action == "abort":
+                        # Probe failed — abort the study immediately.
+                        self._mark_remaining_skipped(
+                            ordered, i + 1, compute_measurement_config_hash
+                        )
+                        self.manifest.mark_study_circuit_breaker()
+                        logger.error("Circuit breaker: probe experiment failed, aborting study")
+                        _aborted = True
+                        break
+
+                else:
+                    # Success path: reset circuit breaker (if not disabled).
+                    if not breaker.is_disabled:
+                        breaker.record_success()
+
+            # Mark study completed on clean exit (no interrupt, timeout, or circuit break).
+            if not self._interrupt_event.is_set() and not _aborted:
+                self.manifest.mark_study_completed()
+
         finally:
             signal.signal(signal.SIGINT, original_sigint)
             if original_sigterm is not None:
                 signal.signal(signal.SIGTERM, original_sigterm)
+            if gpu_locks:
+                from llenergymeasure.study.gpu_locks import release_gpu_locks
+
+                release_gpu_locks(gpu_locks)
 
         if self._interrupt_event.is_set():
             completed = sum(1 for r in results if not isinstance(r, dict))
@@ -591,6 +674,29 @@ class StudyRunner:
             sys.exit(130)
 
         return results
+
+    def _mark_remaining_skipped(
+        self,
+        ordered: list[Any],
+        start_index: int,
+        hash_fn: Any,
+    ) -> None:
+        """Mark all experiments from start_index onwards as skipped in the manifest.
+
+        Increments cycle counters to assign the correct cycle number for each
+        remaining experiment before marking it skipped.
+
+        Args:
+            ordered: Full ordered experiment list (study.experiments).
+            start_index: Index of the first experiment to mark as skipped.
+            hash_fn: compute_measurement_config_hash callable.
+        """
+        for j in range(start_index, len(ordered)):
+            cfg = ordered[j]
+            h = hash_fn(cfg)
+            c = self._cycle_counters.get(h, 0) + 1
+            self._cycle_counters[h] = c
+            self.manifest.mark_skipped(h, c)
 
     def _get_env_snapshot(self) -> EnvironmentSnapshot:
         """Return cached environment snapshot, collecting on first call.
