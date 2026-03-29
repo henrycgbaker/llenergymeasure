@@ -117,6 +117,9 @@ def run_study(
     *,
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
+    resume_dir: Path | None = None,
+    skip_set: set[tuple[str, int]] | None = None,
+    no_lock: bool = False,
 ) -> StudyResult:
     """Run a multi-experiment study.
 
@@ -129,6 +132,12 @@ def run_study(
         progress: Optional StudyProgressCallback for live per-experiment display.
             When provided, the study runner emits begin/end experiment events and
             forwards per-step progress from worker subprocesses.
+        resume_dir: Study directory to resume. When provided, reuses the existing study
+            directory instead of creating a new one. Manifest must already be reset by
+            prepare_resume_manifest() before calling run_study().
+        skip_set: Set of (config_hash, cycle) pairs to skip (already completed in a
+            previous run). Only meaningful when resume_dir is provided.
+        no_lock: Skip GPU advisory lock acquisition. Use with --no-lock CLI flag.
 
     Returns:
         StudyResult with experiments, result_files, measurement_protocol, summary.
@@ -146,7 +155,14 @@ def run_study(
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
-    return _run(study, skip_preflight=skip_preflight, progress=progress)
+    return _run(
+        study,
+        skip_preflight=skip_preflight,
+        progress=progress,
+        resume_dir=resume_dir,
+        skip_set=skip_set,
+        no_lock=no_lock,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +213,9 @@ def _run(
     study: StudyConfig,
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
+    resume_dir: Path | None = None,
+    skip_set: set[tuple[str, int]] | None = None,
+    no_lock: bool = False,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -253,10 +272,22 @@ def _run(
             "consider running all backends in Docker."
         )
 
-    # Resolve results_dir: study YAML > user config > built-in default
-    results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
-    study_dir = create_study_dir(study.study_name, Path(results_dir_str))
-    manifest = ManifestWriter(study, study_dir)
+    # Resolve results_dir: resume_dir takes priority, then YAML > user config > built-in default
+    if resume_dir is not None:
+        study_dir = resume_dir
+        # Resume: load the existing manifest written by prepare_resume_manifest().
+        # ManifestWriter.__new__ avoids re-writing over the prepared manifest.
+        manifest = ManifestWriter.__new__(ManifestWriter)
+        manifest._study_dir = study_dir
+        manifest.path = study_dir / "manifest.json"
+        from llenergymeasure.study.resume import load_resume_state
+
+        loaded_manifest, _ = load_resume_state(study_dir)
+        manifest.manifest = loaded_manifest
+    else:
+        results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
+        study_dir = create_study_dir(study.study_name, Path(results_dir_str))
+        manifest = ManifestWriter(study, study_dir)
 
     wall_start = time.monotonic()
     is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1
@@ -302,7 +333,13 @@ def _run(
                 study_cb.end_experiment_fail(1, exp_elapsed)
     else:
         result_files, experiment_results, warnings = _run_via_runner(
-            study, manifest, study_dir, runner_specs=runner_specs, progress=progress
+            study,
+            manifest,
+            study_dir,
+            runner_specs=runner_specs,
+            progress=progress,
+            skip_set=skip_set,
+            no_lock=no_lock,
         )
 
     wall_time = time.monotonic() - wall_start
@@ -479,6 +516,8 @@ def _run_via_runner(
     study_dir: Path,
     runner_specs: Any = None,
     progress: ProgressCallback | None = None,
+    skip_set: set[tuple[str, int]] | None = None,
+    no_lock: bool = False,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs."""
     from llenergymeasure.domain.progress import StudyProgressCallback
@@ -486,7 +525,13 @@ def _run_via_runner(
 
     study_progress = progress if isinstance(progress, StudyProgressCallback) else None
     runner = StudyRunner(
-        study, manifest, study_dir, runner_specs=runner_specs, progress=study_progress
+        study,
+        manifest,
+        study_dir,
+        runner_specs=runner_specs,
+        progress=study_progress,
+        no_lock=no_lock,
+        skip_set=skip_set,
     )
     raw_results = runner.run()
 

@@ -205,7 +205,7 @@ def test_load_resume_state_builds_correct_skip_set(tmp_path: Path) -> None:
     ]
     _write_manifest(study_dir, "interrupted", "2026-03-01T00:00:00+00:00", experiments)
 
-    manifest, skip_set = load_resume_state(study_dir)
+    _, skip_set = load_resume_state(study_dir)
 
     assert ("hash_a", 1) in skip_set
     assert ("hash_a", 2) in skip_set
@@ -233,7 +233,7 @@ def test_load_resume_state_raises_on_missing_manifest(tmp_path: Path) -> None:
     study_dir = tmp_path / "study_no_manifest"
     study_dir.mkdir()
 
-    with pytest.raises(StudyError, match="manifest.json not found"):
+    with pytest.raises(StudyError, match=r"manifest\.json not found"):
         load_resume_state(study_dir)
 
 
@@ -243,7 +243,7 @@ def test_load_resume_state_raises_on_corrupt_manifest(tmp_path: Path) -> None:
     study_dir.mkdir()
     (study_dir / "manifest.json").write_text("{invalid json}")
 
-    with pytest.raises(StudyError, match="failed to parse manifest.json"):
+    with pytest.raises(StudyError, match=r"failed to parse manifest\.json"):
         load_resume_state(study_dir)
 
 

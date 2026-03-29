@@ -104,6 +104,32 @@ def run(
             help="Skip Docker pre-flight checks (GPU visibility, CUDA/driver compatibility)",
         ),
     ] = False,
+    resume: Annotated[
+        bool,
+        typer.Option("--resume", help="Resume most recent interrupted study"),
+    ] = False,
+    resume_dir: Annotated[
+        Path | None,
+        typer.Option("--resume-dir", help="Resume a specific study directory"),
+    ] = None,
+    fail_fast: Annotated[
+        bool,
+        typer.Option(
+            "--fail-fast", help="Abort study on first failure (circuit breaker threshold=1)"
+        ),
+    ] = False,
+    no_circuit_breaker: Annotated[
+        bool,
+        typer.Option("--no-circuit-breaker", help="Disable circuit breaker entirely"),
+    ] = False,
+    timeout: Annotated[
+        float | None,
+        typer.Option("--timeout", help="Study wall-clock timeout in hours (e.g. 24, 1.5)"),
+    ] = None,
+    no_lock: Annotated[
+        bool,
+        typer.Option("--no-lock", help="Disable GPU lock files (advanced)"),
+    ] = False,
 ) -> None:
     """Run an LLM efficiency experiment."""
 
@@ -135,6 +161,12 @@ def run(
             order=order,
             no_gaps=no_gaps,
             skip_preflight=skip_preflight,
+            resume=resume,
+            resume_dir=resume_dir,
+            fail_fast=fail_fast,
+            no_circuit_breaker=no_circuit_breaker,
+            timeout=timeout,
+            no_lock=no_lock,
         )
     except ConfigError as e:
         print(format_error(e, verbose=verbose > 0), file=sys.stderr)
@@ -171,6 +203,12 @@ def _run_impl(
     order: str | None = None,
     no_gaps: bool = False,
     skip_preflight: bool = False,
+    resume: bool = False,
+    resume_dir: Path | None = None,
+    fail_fast: bool = False,
+    no_circuit_breaker: bool = False,
+    timeout: float | None = None,
+    no_lock: bool = False,
 ) -> None:
     """Core implementation — separated for clean error handling in run()."""
     # Build CLI overrides dict — only include flags the user explicitly passed
@@ -223,6 +261,13 @@ def _run_impl(
             verbose=verbose,
             skip_preflight=skip_preflight,
             dry_run=dry_run,
+            output=output,
+            resume=resume,
+            resume_dir=resume_dir,
+            fail_fast=fail_fast,
+            no_circuit_breaker=no_circuit_breaker,
+            timeout=timeout,
+            no_lock=no_lock,
         )
         return
 
@@ -360,6 +405,13 @@ def _run_study_impl(
     verbose: bool,
     skip_preflight: bool = False,
     dry_run: bool = False,
+    output: str | None = None,
+    resume: bool = False,
+    resume_dir: Path | None = None,
+    fail_fast: bool = False,
+    no_circuit_breaker: bool = False,
+    timeout: float | None = None,
+    no_lock: bool = False,
 ) -> None:
     """Study execution path — separated for clean error handling."""
     import yaml
@@ -390,6 +442,15 @@ def _run_study_impl(
     if no_gaps:
         exec_overrides["experiment_gap_seconds"] = 0
         exec_overrides["cycle_gap_seconds"] = 0
+
+    # Robustness overrides: circuit breaker, timeout
+    if fail_fast:
+        exec_overrides["max_consecutive_failures"] = 1
+        exec_overrides["circuit_breaker_cooldown_seconds"] = 0
+    if no_circuit_breaker:
+        exec_overrides["max_consecutive_failures"] = 0
+    if timeout is not None:
+        exec_overrides["wall_clock_timeout_hours"] = timeout
 
     # Build full CLI overrides dict
     study_cli_overrides: dict[str, Any] = {}
@@ -489,8 +550,41 @@ def _run_study_impl(
     # skip_preflight=True because we already ran preflight above.
     from llenergymeasure import run_study
 
+    # Resolve resume state: find/load the interrupted study and validate config drift.
+    _resume_dir: Path | None = None
+    _skip_set: set[tuple[str, int]] | None = None
+
+    if resume or resume_dir is not None:
+        from llenergymeasure.study.resume import (
+            find_resumable_study,
+            load_resume_state,
+            prepare_resume_manifest,
+            validate_config_drift,
+        )
+
+        if resume_dir is not None:
+            _resume_dir = resume_dir
+        else:
+            _output_dir = Path(output) if output else Path("results")
+            _resume_dir = find_resumable_study(_output_dir)
+            if _resume_dir is None:
+                from llenergymeasure.utils.exceptions import StudyError
+
+                raise StudyError("No resumable study found. Run a study first or use --resume-dir.")
+
+        old_manifest, _skip_set = load_resume_state(_resume_dir)
+        validate_config_drift(old_manifest, study_config)
+        prepare_resume_manifest(_resume_dir, old_manifest)
+
     try:
-        result = run_study(study_config, skip_preflight=True, progress=study_display)
+        result = run_study(
+            study_config,
+            skip_preflight=True,
+            progress=study_display,
+            resume_dir=_resume_dir,
+            skip_set=_skip_set,
+            no_lock=no_lock,
+        )
     finally:
         # Safety stop — ensures Rich Live is torn down even on exceptions
         if study_display is not None:

@@ -546,3 +546,216 @@ def test_run_backend_error_exits_1():
 
     assert result.exit_code == 1
     assert "BackendError" in result.output
+
+
+# ---------------------------------------------------------------------------
+# New robustness flag tests (Phase 40.2)
+# ---------------------------------------------------------------------------
+
+
+def _make_study_yaml(tmp_path, content: str | None = None) -> Path:
+    """Write a minimal study YAML to tmp_path and return its path."""
+
+    study_yaml = tmp_path / "study.yaml"
+    if content is None:
+        content = (
+            "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  dtype: [float32, float16]\n"
+        )
+    study_yaml.write_text(content)
+    return study_yaml
+
+
+def _make_mock_study_result():
+    """Return a minimal mock StudyResult."""
+    from tests.conftest import make_study_result
+
+    return make_study_result()
+
+
+def test_fail_fast_sets_max_consecutive_failures(tmp_path):
+    """--fail-fast sets max_consecutive_failures=1 in study_execution overrides."""
+    study_yaml = _make_study_yaml(tmp_path)
+    mock_study_result = _make_mock_study_result()
+    captured_overrides: list = []
+
+    def _capture_load(path, cli_overrides=None):
+        captured_overrides.append(cli_overrides)
+        return MagicMock()
+
+    with (
+        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.run_study", return_value=mock_study_result),
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+    ):
+        result = runner.invoke(app, ["run", str(study_yaml), "--fail-fast"])
+
+    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
+    overrides = captured_overrides[0]
+    assert overrides is not None
+    assert overrides["study_execution"]["max_consecutive_failures"] == 1
+    assert overrides["study_execution"]["circuit_breaker_cooldown_seconds"] == 0
+
+
+def test_no_circuit_breaker_sets_max_failures_zero(tmp_path):
+    """--no-circuit-breaker sets max_consecutive_failures=0 in study_execution overrides."""
+    study_yaml = _make_study_yaml(tmp_path)
+    mock_study_result = _make_mock_study_result()
+    captured_overrides: list = []
+
+    def _capture_load(path, cli_overrides=None):
+        captured_overrides.append(cli_overrides)
+        return MagicMock()
+
+    with (
+        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.run_study", return_value=mock_study_result),
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+    ):
+        result = runner.invoke(app, ["run", str(study_yaml), "--no-circuit-breaker"])
+
+    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
+    overrides = captured_overrides[0]
+    assert overrides is not None
+    assert overrides["study_execution"]["max_consecutive_failures"] == 0
+
+
+def test_timeout_flag_sets_wall_clock_timeout(tmp_path):
+    """--timeout 24 sets wall_clock_timeout_hours=24.0 in study_execution overrides."""
+    study_yaml = _make_study_yaml(tmp_path)
+    mock_study_result = _make_mock_study_result()
+    captured_overrides: list = []
+
+    def _capture_load(path, cli_overrides=None):
+        captured_overrides.append(cli_overrides)
+        return MagicMock()
+
+    with (
+        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.run_study", return_value=mock_study_result),
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+    ):
+        result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "24"])
+
+    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
+    overrides = captured_overrides[0]
+    assert overrides is not None
+    assert overrides["study_execution"]["wall_clock_timeout_hours"] == 24.0
+
+
+def test_timeout_flag_fractional(tmp_path):
+    """--timeout 1.5 sets wall_clock_timeout_hours=1.5."""
+    study_yaml = _make_study_yaml(tmp_path)
+    mock_study_result = _make_mock_study_result()
+    captured_overrides: list = []
+
+    def _capture_load(path, cli_overrides=None):
+        captured_overrides.append(cli_overrides)
+        return MagicMock()
+
+    with (
+        patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
+        patch("llenergymeasure.run_study", return_value=mock_study_result),
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+    ):
+        result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "1.5"])
+
+    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
+    overrides = captured_overrides[0]
+    assert overrides["study_execution"]["wall_clock_timeout_hours"] == 1.5
+
+
+def test_resume_flag_triggers_auto_detect(tmp_path):
+    """--resume flag triggers find_resumable_study auto-detect path."""
+    study_yaml = _make_study_yaml(tmp_path)
+    mock_study_result = _make_mock_study_result()
+    mock_study_config = MagicMock()
+    mock_study_config.study_design_hash = "abc123"
+    mock_study_config.skipped_configs = []
+    mock_study_config.experiments = [MagicMock()]
+    mock_study_config.study_name = "test"
+    mock_study_config.study_execution = MagicMock()
+    mock_study_config.study_execution.n_cycles = 3
+
+    mock_resume_dir = tmp_path / "results" / "study_2026-01-01T00-00-00"
+    mock_resume_dir.mkdir(parents=True)
+    mock_manifest = MagicMock()
+    mock_manifest.study_design_hash = "abc123"
+
+    with (
+        patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
+        patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch(
+            "llenergymeasure.study.resume.find_resumable_study", return_value=mock_resume_dir
+        ) as mock_find,
+        patch(
+            "llenergymeasure.study.resume.load_resume_state",
+            return_value=(mock_manifest, {("h1", 1)}),
+        ),
+        patch("llenergymeasure.study.resume.validate_config_drift"),
+        patch("llenergymeasure.study.resume.prepare_resume_manifest"),
+    ):
+        result = runner.invoke(app, ["run", str(study_yaml), "--resume"])
+
+    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
+    # Auto-detect was called
+    mock_find.assert_called_once()
+    # run_study received the resume_dir
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs["resume_dir"] == mock_resume_dir
+
+
+def test_resume_dir_flag_uses_explicit_path(tmp_path):
+    """--resume-dir uses the specified directory directly, skipping auto-detect."""
+    study_yaml = _make_study_yaml(tmp_path)
+    mock_study_result = _make_mock_study_result()
+    mock_study_config = MagicMock()
+    mock_study_config.study_design_hash = "abc123"
+    mock_study_config.skipped_configs = []
+    mock_study_config.experiments = [MagicMock()]
+    mock_study_config.study_name = "test"
+    mock_study_config.study_execution = MagicMock()
+    mock_study_config.study_execution.n_cycles = 3
+
+    explicit_dir = tmp_path / "my_study"
+    explicit_dir.mkdir()
+    mock_manifest = MagicMock()
+    mock_manifest.study_design_hash = "abc123"
+
+    with (
+        patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
+        patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
+        patch("llenergymeasure.config.grid.build_preflight_panel"),
+        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch("llenergymeasure.study.resume.find_resumable_study") as mock_find,
+        patch(
+            "llenergymeasure.study.resume.load_resume_state", return_value=(mock_manifest, set())
+        ),
+        patch("llenergymeasure.study.resume.validate_config_drift"),
+        patch("llenergymeasure.study.resume.prepare_resume_manifest"),
+    ):
+        result = runner.invoke(app, ["run", str(study_yaml), "--resume-dir", str(explicit_dir)])
+
+    assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
+    # Auto-detect was NOT called — explicit path used
+    mock_find.assert_not_called()
+    # run_study received the explicit directory
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs["resume_dir"] == explicit_dir
+
+
+def test_new_flags_visible_in_help():
+    """--resume, --fail-fast, --no-circuit-breaker, --timeout, --no-lock appear in --help."""
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+    plain = _strip_ansi(result.output)
+    assert "--resume" in plain
+    assert "--fail-fast" in plain
+    assert "--no-circuit-breaker" in plain
+    assert "--timeout" in plain
+    assert "--no-lock" in plain

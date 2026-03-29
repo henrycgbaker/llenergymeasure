@@ -460,6 +460,7 @@ class StudyRunner:
         runner_specs: dict[str, RunnerSpec] | None = None,
         progress: StudyProgressCallback | None = None,
         no_lock: bool = False,
+        skip_set: set[tuple[str, int]] | None = None,
     ) -> None:
         self.study = study
         self.manifest = manifest_writer
@@ -471,6 +472,8 @@ class StudyRunner:
         self._progress = progress
         # When True, skip GPU advisory lock acquisition
         self._no_lock = no_lock
+        # Set of (config_hash, cycle) pairs to skip (resume mode)
+        self._skip_set: set[tuple[str, int]] = skip_set or set()
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -589,6 +592,19 @@ class StudyRunner:
             for i, config in enumerate(ordered):
                 if self._interrupt_event.is_set():
                     break
+
+                # Resume skip-set: skip experiments that completed in a previous run.
+                if self._skip_set:
+                    config_hash_pre = compute_measurement_config_hash(config)
+                    next_cycle = self._cycle_counters.get(config_hash_pre, 0) + 1
+                    if (config_hash_pre, next_cycle) in self._skip_set:
+                        self._cycle_counters[config_hash_pre] = next_cycle
+                        logger.info(
+                            "Skipping completed experiment %d/%d (resumed)",
+                            i + 1,
+                            len(ordered),
+                        )
+                        continue
 
                 # Wall-clock timeout check: mark remaining experiments skipped.
                 if deadline is not None and time.monotonic() > deadline:
