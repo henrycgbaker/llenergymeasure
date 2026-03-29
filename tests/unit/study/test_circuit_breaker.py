@@ -1,6 +1,7 @@
 """Tests for CircuitBreaker 3-state machine."""
 
 import pytest
+
 from llenergymeasure.study.circuit_breaker import CircuitBreaker
 
 
@@ -204,13 +205,17 @@ class TestRecentFailures:
         assert len(cb.recent_failures) == 5
 
     def test_older_failures_not_stored_beyond_threshold(self):
-        cb = CircuitBreaker(max_failures=3)
+        # Record failures, then a success (resets), then more failures.
+        # After the second run of failures, the earlier "OldError" must not appear.
+        cb = CircuitBreaker(max_failures=5)
         cb.record_failure(error_type="OldError", error_message="old")
+        cb.record_success()  # resets list
         cb.record_failure(error_type="Err1", error_message="msg-1")
         cb.record_failure(error_type="Err2", error_message="msg-2")
-        # Only the last max_failures entries kept
         types = [f[0] for f in cb.recent_failures]
         assert "OldError" not in types
+        assert "Err1" in types
+        assert "Err2" in types
 
     def test_recent_failures_reset_on_success(self):
         cb = CircuitBreaker(max_failures=10)
