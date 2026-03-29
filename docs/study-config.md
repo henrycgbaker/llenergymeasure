@@ -470,6 +470,57 @@ study_execution:
 
 Override with `llem run study.yaml --cycles 5 --order interleave`.
 
+### Robustness Controls
+
+The `study_execution:` section also supports circuit breaker and timeout fields:
+
+```yaml
+study_execution:
+  max_consecutive_failures: 10      # 0 = disabled, 1 = fail-fast
+  circuit_breaker_cooldown_seconds: 60.0
+  wall_clock_timeout_hours: 24      # null = no limit
+```
+
+**`max_consecutive_failures`** - circuit breaker threshold. After N consecutive experiment
+failures, the study aborts and marks remaining experiments as skipped. The circuit breaker
+follows a 3-state pattern (closed/open/half-open): after tripping, it pauses for the
+cooldown period, then runs one probe experiment. If the probe succeeds, normal execution
+resumes; if it fails, the study aborts.
+
+- `0` disables the circuit breaker entirely (equivalent to `--no-circuit-breaker`)
+- `1` aborts on the first failure with no cooldown (equivalent to `--fail-fast`)
+- Default: `10`
+
+**`circuit_breaker_cooldown_seconds`** - pause duration before the half-open probe
+experiment. Allows transient issues (GPU thermal throttling, OOM recovery) to resolve
+before retrying. Default: `60.0`.
+
+**`wall_clock_timeout_hours`** - hard time limit for the entire study. When the timeout
+expires, remaining experiments are marked as `skipped` and the study status is set to
+`timed_out`. The manifest preserves all completed results. Default: `null` (no limit).
+
+CLI flags `--fail-fast`, `--no-circuit-breaker`, and `--timeout` override these settings.
+
+### GPU Lock Files
+
+Studies acquire advisory file locks on GPU devices to prevent concurrent studies from
+competing for the same GPUs. Locks are acquired atomically (all-or-none) and released
+automatically on process exit, including after SIGKILL. Disable with `--no-lock` if your
+environment handles GPU scheduling externally.
+
+### Study Resume
+
+Interrupted studies (Ctrl-C, timeout, circuit breaker) can be resumed:
+
+```bash
+llem run study.yaml --resume           # auto-detect most recent
+llem run study.yaml --resume-dir PATH  # specific study directory
+```
+
+Resume skips completed experiments and re-runs failed, skipped, pending, and interrupted
+ones. Config drift (changed sweep axes or model) raises a hard error to prevent mixing
+results from different configurations.
+
 ---
 
 ## Runner Configuration
