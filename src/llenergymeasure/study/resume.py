@@ -152,8 +152,6 @@ def prepare_resume_manifest(study_dir: Path, manifest: StudyManifest) -> Manifes
     Returns:
         A ManifestWriter whose internal manifest reflects the reset state.
     """
-    from datetime import timezone
-
     from llenergymeasure.study.manifest import ManifestWriter
 
     # Reset non-completed entries to pending
@@ -165,7 +163,6 @@ def prepare_resume_manifest(study_dir: Path, manifest: StudyManifest) -> Manifes
             reset_experiments.append(entry)
 
     # Reset overall study status to running; keep original started_at
-    now = datetime.now(timezone.utc)
     updated_manifest = manifest.model_copy(
         update={
             "status": "running",

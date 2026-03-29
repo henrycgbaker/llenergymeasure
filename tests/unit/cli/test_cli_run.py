@@ -10,6 +10,7 @@ Error messages printed to sys.stderr are captured in .output for assertions.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
