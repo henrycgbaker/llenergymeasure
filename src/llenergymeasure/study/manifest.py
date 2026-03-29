@@ -31,7 +31,7 @@ class ExperimentManifestEntry(BaseModel):
     config_hash: str
     config_summary: str
     cycle: int
-    status: Literal["pending", "running", "completed", "failed"]
+    status: Literal["pending", "running", "completed", "failed", "skipped", "interrupted"]
     result_file: str | None = None
     log_file: str | None = None
     error_type: str | None = None
@@ -55,14 +55,22 @@ class StudyManifest(BaseModel):
     llenergymeasure_version: str
     started_at: datetime
     completed_at: datetime | None = None
-    status: Literal["running", "completed", "interrupted", "failed"] = Field(
+    status: Literal[
+        "running", "completed", "interrupted", "failed", "circuit_breaker", "timed_out"
+    ] = Field(
         default="running",
-        description="Overall study status. 'interrupted' = user Ctrl+C (not an error).",
+        description=(
+            "Overall study status. 'interrupted' = user Ctrl+C, "
+            "'circuit_breaker' = consecutive failure threshold reached, "
+            "'timed_out' = wall-clock timeout exceeded."
+        ),
     )
     total_experiments: int
     completed: int = 0
     failed: int = 0
     pending: int
+    skipped: int = 0
+    interrupted: int = 0
     experiments: list[ExperimentManifestEntry]
 
 
@@ -191,8 +199,44 @@ class ManifestWriter:
         self._write()
 
     def mark_interrupted(self) -> None:
-        """Set manifest status to 'interrupted'. Called on SIGINT before sys.exit(130)."""
-        self.manifest = self.manifest.model_copy(update={"status": "interrupted"})
+        """Set manifest status to 'interrupted' and downgrade all running entries.
+
+        Called on SIGINT before sys.exit(130). Downgrades any in-flight
+        'running' entries to 'interrupted' so resume can identify them.
+        """
+        updated_experiments = []
+        for entry in self.manifest.experiments:
+            if entry.status == "running":
+                updated_experiments.append(entry.model_copy(update={"status": "interrupted"}))
+            else:
+                updated_experiments.append(entry)
+        self.manifest = self.manifest.model_copy(
+            update={"status": "interrupted", "experiments": updated_experiments}
+        )
+        self._recount()
+        self._write()
+
+    def mark_study_circuit_breaker(self) -> None:
+        """Set manifest status to 'circuit_breaker' when consecutive failure threshold is reached."""
+        self.manifest = self.manifest.model_copy(
+            update={"status": "circuit_breaker", "completed_at": datetime.now(timezone.utc)}
+        )
+        self._write()
+
+    def mark_study_timed_out(self) -> None:
+        """Set manifest status to 'timed_out' when wall-clock timeout is exceeded."""
+        self.manifest = self.manifest.model_copy(
+            update={"status": "timed_out", "completed_at": datetime.now(timezone.utc)}
+        )
+        self._write()
+
+    def mark_skipped(self, config_hash: str, cycle: int, reason: str = "") -> None:
+        """Mark an experiment as skipped (circuit breaker or timeout)."""
+        entry = self._find(config_hash, cycle)
+        entry.status = "skipped"
+        entry.error_message = reason or "skipped by circuit breaker or timeout"
+        entry.completed_at = datetime.now(timezone.utc)
+        self._recount()
         self._write()
 
     def mark_study_completed(self) -> None:
@@ -225,9 +269,17 @@ class ManifestWriter:
         """Recompute aggregate counters from entries."""
         completed = sum(1 for e in self.manifest.experiments if e.status == "completed")
         failed = sum(1 for e in self.manifest.experiments if e.status == "failed")
+        skipped = sum(1 for e in self.manifest.experiments if e.status == "skipped")
+        interrupted = sum(1 for e in self.manifest.experiments if e.status == "interrupted")
         pending = sum(1 for e in self.manifest.experiments if e.status in ("pending", "running"))
         self.manifest = self.manifest.model_copy(
-            update={"completed": completed, "failed": failed, "pending": pending}
+            update={
+                "completed": completed,
+                "failed": failed,
+                "pending": pending,
+                "skipped": skipped,
+                "interrupted": interrupted,
+            }
         )
 
     def _write(self) -> None:
