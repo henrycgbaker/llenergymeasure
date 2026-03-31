@@ -270,12 +270,10 @@ def print_study_dry_run(
     _stdout_console.print(panel)
 
     if study_config.skipped_configs:
-        skip_lines = [f"Skipping {len(study_config.skipped_configs)} config(s):"]
-        for s in study_config.skipped_configs:
-            label = s.get("short_label", "unknown")
-            reason = s.get("reason", "unknown error")
-            skip_lines.append(f"  - {label}: {reason}")
-        _stdout_console.print("\n".join(skip_lines))
+        n_skip = len(study_config.skipped_configs)
+        _stdout_console.print(
+            f"Skipped {n_skip} invalid config(s) — details in skipped_configs.log"
+        )
         _stdout_console.print()
 
     # Per-experiment list using the same header format as the live run
