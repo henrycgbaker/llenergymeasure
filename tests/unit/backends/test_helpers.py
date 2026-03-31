@@ -1,17 +1,17 @@
-"""Unit tests for backends/_helpers.py — warmup helpers and cleanup.
+"""Unit tests for backends/_helpers.py — shared backend utilities.
 
-All tests run GPU-free. create_warmup_inference_fn is tested without executing
-the inner _run closure (which needs torch). warmup_until_converged uses a fake
-inference callable that returns pre-canned latency values.
+All tests run GPU-free. warmup_until_converged is now in harness.warmup;
+this file tests the remaining helpers: compute_cv, warmup_single_token
+(interface), and cleanup/memory helpers (import-only, no GPU needed).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from llenergymeasure.backends._helpers import warmup_until_converged
 from llenergymeasure.config.models import WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
+from llenergymeasure.harness.warmup import warmup_until_converged
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -45,7 +45,7 @@ def _varying_latency_fn(latencies: list[float]) -> Callable[[], float]:
 def test_warmup_disabled_returns_converged_immediately():
     """When warmup.enabled=False, warmup_until_converged returns with 0 iterations."""
     config = WarmupConfig(enabled=False)
-    result = warmup_until_converged(_fixed_latency_fn(100.0), config, show_progress=False)
+    result = warmup_until_converged(_fixed_latency_fn(100.0), config)
 
     assert isinstance(result, WarmupResult)
     assert result.converged is True
@@ -66,7 +66,7 @@ def test_warmup_fixed_mode_runs_n_warmup_iterations():
         return 50.0
 
     config = WarmupConfig(n_warmup=3, convergence_detection=False, enabled=True)
-    result = warmup_until_converged(_counting_run, config, show_progress=False)
+    result = warmup_until_converged(_counting_run, config)
 
     assert result.iterations_completed == 3
     assert call_count[0] == 3
@@ -77,7 +77,7 @@ def test_warmup_fixed_mode_marks_converged():
     config = WarmupConfig(n_warmup=4, convergence_detection=False, enabled=True)
     # High variance latencies — would not converge in CV mode
     run_fn = _varying_latency_fn([10.0, 200.0, 10.0, 200.0])
-    result = warmup_until_converged(run_fn, config, show_progress=False)
+    result = warmup_until_converged(run_fn, config)
 
     assert result.converged is True
 
@@ -85,7 +85,7 @@ def test_warmup_fixed_mode_marks_converged():
 def test_warmup_fixed_mode_result_has_warmup_result_type():
     """warmup_until_converged always returns a WarmupResult."""
     config = WarmupConfig(n_warmup=2, convergence_detection=False, enabled=True)
-    result = warmup_until_converged(_fixed_latency_fn(75.0), config, show_progress=False)
+    result = warmup_until_converged(_fixed_latency_fn(75.0), config)
 
     assert isinstance(result, WarmupResult)
 
@@ -93,7 +93,7 @@ def test_warmup_fixed_mode_result_has_warmup_result_type():
 def test_warmup_fixed_mode_records_max_prompts():
     """WarmupResult.max_prompts matches the config value used."""
     config = WarmupConfig(n_warmup=5, convergence_detection=False, enabled=True)
-    result = warmup_until_converged(_fixed_latency_fn(50.0), config, show_progress=False)
+    result = warmup_until_converged(_fixed_latency_fn(50.0), config)
 
     # In fixed mode, max_prompts is not directly set but target_cv from config is
     assert result.target_cv == config.cv_threshold
@@ -116,7 +116,7 @@ def test_warmup_cv_mode_converges_on_stable_latency():
         min_prompts=3,
         enabled=True,
     )
-    result = warmup_until_converged(_fixed_latency_fn(50.0), config, show_progress=False)
+    result = warmup_until_converged(_fixed_latency_fn(50.0), config)
 
     assert result.converged is True
     assert result.final_cv < config.cv_threshold
@@ -136,7 +136,7 @@ def test_warmup_cv_mode_does_not_converge_with_high_variance():
     # Alternating latencies of 1 and 100 => very high CV, never converges
     alternating = [1.0, 100.0] * 10
     run_fn = _varying_latency_fn(alternating)
-    result = warmup_until_converged(run_fn, config, show_progress=False)
+    result = warmup_until_converged(run_fn, config)
 
     assert result.converged is False
 
@@ -159,7 +159,7 @@ def test_warmup_cv_mode_respects_max_prompts():
         # Alternating high variance so it never converges
         return 1.0 if call_count[0] % 2 == 0 else 100.0
 
-    warmup_until_converged(_run, config, show_progress=False)
+    warmup_until_converged(_run, config)
     assert call_count[0] <= config.max_prompts
 
 
@@ -180,26 +180,7 @@ def test_warmup_continues_after_inference_failure():
 
     config = WarmupConfig(n_warmup=4, convergence_detection=False, enabled=True)
     # Should not raise — failures are caught and logged inside warmup_until_converged
-    result = warmup_until_converged(_sometimes_fails, config, show_progress=False)
+    result = warmup_until_converged(_sometimes_fails, config)
 
     assert isinstance(result, WarmupResult)
     assert call_count[0] == 4  # all 4 attempted
-
-
-# ---------------------------------------------------------------------------
-# create_warmup_inference_fn — interface contract
-# ---------------------------------------------------------------------------
-
-
-def test_create_warmup_inference_fn_returns_callable():
-    """create_warmup_inference_fn returns a callable (not None, not an int)."""
-    from llenergymeasure.backends._helpers import create_warmup_inference_fn
-
-    # We can import the function and confirm it returns a callable without
-    # executing the inner torch-dependent _run. model/tokenizer are ignored
-    # until the returned callable is actually invoked.
-    fake_model = object()
-    fake_tokenizer = object()
-    fn = create_warmup_inference_fn(fake_model, fake_tokenizer, "warmup prompt")
-
-    assert callable(fn)

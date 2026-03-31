@@ -1,7 +1,8 @@
-"""Protocol conformance tests for EnergySampler.
+"""Protocol conformance tests for EnergySampler and BackendPlugin.
 
 Tests that FakeEnergySampler satisfies the runtime_checkable EnergySampler
-Protocol interface defined in llenergymeasure.energy.base.
+Protocol interface defined in llenergymeasure.energy.base, and that the
+BackendPlugin protocol has the expected methods.
 
 INF-10 compliance: no unittest.mock.patch on internal modules. Fakes are
 injected via constructor args and satisfy isinstance() checks at runtime.
@@ -9,6 +10,7 @@ injected via constructor args and satisfy isinstance() checks at runtime.
 
 from __future__ import annotations
 
+from llenergymeasure.backends.protocol import BackendPlugin
 from llenergymeasure.energy.base import EnergySampler
 from tests.fakes import FakeEnergySampler
 
@@ -52,3 +54,28 @@ def test_fake_energy_sampler_start_tracking_returns_handle():
     fake = FakeEnergySampler()
     tracker = fake.start_tracking()
     assert tracker is not None
+
+
+# ---------------------------------------------------------------------------
+# BackendPlugin protocol checks
+# ---------------------------------------------------------------------------
+
+
+def test_backend_plugin_has_run_warmup_prompt():
+    """BackendPlugin protocol includes run_warmup_prompt method."""
+    assert "run_warmup_prompt" in dir(BackendPlugin)
+
+
+def test_backend_plugin_protocol_methods():
+    """BackendPlugin protocol has all expected methods."""
+    expected_methods = [
+        "name",
+        "load_model",
+        "warmup",
+        "run_warmup_prompt",
+        "run_inference",
+        "cleanup",
+        "validate_config",
+    ]
+    for method in expected_methods:
+        assert method in dir(BackendPlugin), f"BackendPlugin missing: {method}"

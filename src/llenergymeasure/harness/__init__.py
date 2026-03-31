@@ -23,7 +23,7 @@ from llenergymeasure.domain.experiment import (
     compute_measurement_config_hash,
 )
 from llenergymeasure.energy import select_energy_sampler
-from llenergymeasure.harness.warmup import thermal_floor_wait
+from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
@@ -304,7 +304,33 @@ class MeasurementHarness:
                 )
                 t0_warmup = time.perf_counter()
 
-            warmup_result = backend.warmup(config, model, prompts)
+            # Use run_warmup_prompt() + warmup_until_converged() from harness.warmup.
+            # First call determines warmup strategy:
+            # - returns > 0.0: CV-based convergence (PyTorch) — harness owns the loop
+            # - returns 0.0: simple kernel warmup (vLLM/TRT-LLM) — already done
+            first_latency = backend.run_warmup_prompt(config, model, prompts[0])
+
+            if first_latency > 0.0 and config.warmup.enabled:
+                # CV-based warmup: harness owns the convergence loop
+                warmup_substep = (
+                    (lambda text, elapsed: _p.on_substep("warmup", text, elapsed)) if _p else None
+                )
+                warmup_result = warmup_until_converged(
+                    lambda: backend.run_warmup_prompt(config, model, prompts[0]),
+                    config.warmup,
+                    on_substep=warmup_substep,
+                )
+            else:
+                # Simple warmup: single-token kernel warmup already done via first call
+                from llenergymeasure.domain.metrics import WarmupResult
+
+                warmup_result = WarmupResult(
+                    converged=True,
+                    final_cv=0.0,
+                    iterations_completed=1 if config.warmup.enabled else 0,
+                    target_cv=config.warmup.cv_threshold,
+                    max_prompts=config.warmup.max_prompts,
+                )
 
             if _p:
                 iters = warmup_result.iterations_completed
@@ -386,6 +412,8 @@ class MeasurementHarness:
             energy_measurement = None
             if energy_sampler is not None and energy_tracker is not None:
                 energy_measurement = energy_sampler.stop_tracking(energy_tracker)
+                tracker_duration = energy_measurement.duration_sec if energy_measurement else 0.0
+                _substep("measure", f"energy tracker stopped  {tracker_duration:.1f}s")
             end_time = datetime.now()
 
             # 13. FLOPs estimation (warmup tokens excluded)
@@ -410,7 +438,7 @@ class MeasurementHarness:
             _p.on_step_start(
                 "save",
                 "Saving",
-                f"results to {resolved_output_dir}" if resolved_output_dir else "results",
+                "writing results",
             )
             t0_save = time.perf_counter()
 

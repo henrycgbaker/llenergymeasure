@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.backends._helpers import warmup_until_converged
 from llenergymeasure.config.models import WarmupConfig
 from llenergymeasure.domain.metrics import WarmupResult
+from llenergymeasure.harness.warmup import warmup_until_converged
 
 # =============================================================================
 # WarmupConfig defaults and constraints
@@ -104,7 +104,7 @@ def test_warmup_fixed_mode_returns_converged() -> None:
         return 100.0  # 100ms constant latency
 
     config = WarmupConfig(n_warmup=3, thermal_floor_seconds=30.0)
-    result = warmup_until_converged(mock_inference, config, show_progress=False)
+    result = warmup_until_converged(mock_inference, config)
 
     assert result.converged is True
     assert result.iterations_completed == 3
@@ -121,7 +121,7 @@ def test_warmup_fixed_mode_respects_n_warmup() -> None:
         return 50.0
 
     config = WarmupConfig(n_warmup=7, max_prompts=20, thermal_floor_seconds=30.0)
-    result = warmup_until_converged(mock_inference, config, show_progress=False)
+    result = warmup_until_converged(mock_inference, config)
 
     assert result.iterations_completed == 7
     assert call_count == 7
@@ -147,7 +147,7 @@ def test_warmup_cv_mode_converges() -> None:
     def stable_inference() -> float:
         return 10.0  # constant latency -> CV=0.0
 
-    result = warmup_until_converged(stable_inference, config, show_progress=False)
+    result = warmup_until_converged(stable_inference, config)
 
     assert result.converged is True
     assert result.iterations_completed <= config.max_prompts
@@ -163,11 +163,77 @@ def test_warmup_disabled_skips() -> None:
         return 100.0
 
     config = WarmupConfig(enabled=False, thermal_floor_seconds=30.0)
-    result = warmup_until_converged(mock_inference, config, show_progress=False)
+    result = warmup_until_converged(mock_inference, config)
 
     assert result.converged is True
     assert result.iterations_completed == 0
     assert call_count == 0
+
+
+# =============================================================================
+# warmup_until_converged — on_substep callback
+# =============================================================================
+
+
+def test_warmup_substep_callback() -> None:
+    """on_substep is called per iteration with CV info text."""
+    substep_calls: list[tuple[str, float]] = []
+
+    def on_substep(text: str, elapsed: float) -> None:
+        substep_calls.append((text, elapsed))
+
+    config = WarmupConfig(
+        n_warmup=3,
+        convergence_detection=True,
+        cv_threshold=0.1,
+        max_prompts=10,
+        window_size=3,
+        min_prompts=3,
+        thermal_floor_seconds=30.0,
+    )
+
+    def stable_inference() -> float:
+        return 10.0  # constant -> converges quickly
+
+    warmup_until_converged(stable_inference, config, on_substep=on_substep)
+
+    # on_substep should have been called at least once
+    assert len(substep_calls) >= 1
+    # Each call should contain CV info
+    for text, elapsed in substep_calls:
+        assert "CV:" in text
+        assert "Iteration" in text
+
+
+def test_warmup_disabled_returns_immediately() -> None:
+    """Disabled warmup returns immediately with converged=True and 0 iterations."""
+    call_count = 0
+    substep_calls: list[tuple[str, float]] = []
+
+    def mock_inference() -> float:
+        nonlocal call_count
+        call_count += 1
+        return 100.0
+
+    def on_substep(text: str, elapsed: float) -> None:
+        substep_calls.append((text, elapsed))
+
+    config = WarmupConfig(enabled=False, thermal_floor_seconds=30.0)
+    result = warmup_until_converged(mock_inference, config, on_substep=on_substep)
+
+    assert result.converged is True
+    assert result.iterations_completed == 0
+    assert call_count == 0
+    # No substeps should be emitted when warmup is disabled
+    assert len(substep_calls) == 0
+
+
+def test_warmup_substep_callback_no_progress_without_callback() -> None:
+    """warmup_until_converged runs correctly when on_substep is None."""
+    config = WarmupConfig(n_warmup=2, thermal_floor_seconds=30.0)
+    result = warmup_until_converged(lambda: 10.0, config, on_substep=None)
+    assert result.converged is True
+    assert result.iterations_completed == 2
 
 
 # =============================================================================
@@ -216,5 +282,5 @@ def test_warmup_result_thermal_floor_wait_non_negative() -> None:
 def test_warmup_until_converged_result_thermal_default() -> None:
     """warmup_until_converged() returns WarmupResult with thermal_floor_wait_s=0.0."""
     config = WarmupConfig(n_warmup=2, thermal_floor_seconds=30.0)
-    result = warmup_until_converged(lambda: 10.0, config, show_progress=False)
+    result = warmup_until_converged(lambda: 10.0, config)
     assert result.thermal_floor_wait_s == 0.0
