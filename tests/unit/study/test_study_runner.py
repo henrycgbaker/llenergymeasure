@@ -1719,6 +1719,10 @@ class TestPrepareImages:
                 return_value=Path("/tmp/r.json"),
             ),
             patch.object(runner, "_prepare_images"),
+            patch(
+                "llenergymeasure.study.gpu_locks.acquire_gpu_locks",
+                return_value=[],
+            ),
         ):
             runner.run()
 
