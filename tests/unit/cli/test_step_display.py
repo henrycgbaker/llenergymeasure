@@ -14,6 +14,8 @@ from llenergymeasure.cli._step_display import (
     StepDisplay,
     StudyStepDisplay,
     _format_elapsed,
+    _ImagePrepFailure,
+    _ImagePrepResult,
     _step_line,
 )
 
@@ -550,3 +552,40 @@ def test_viewport_hidden_indicator_absent_when_fits():
 
     assert "earlier results not shown" not in rendered
     display.finish(total_elapsed=10.0)
+
+
+# ---------------------------------------------------------------------------
+# _ImagePrepResult / _ImagePrepFailure NamedTuple access
+# ---------------------------------------------------------------------------
+
+
+def test_image_prep_result_named_fields():
+    """_ImagePrepResult supports both named field access and positional destructuring."""
+    r = _ImagePrepResult(
+        backend="pytorch",
+        image="llem-pytorch:latest",
+        cached=True,
+        elapsed=1.5,
+        metadata={"size": "2GB"},
+    )
+    # Named access
+    assert r.backend == "pytorch"
+    assert r.image == "llem-pytorch:latest"
+    assert r.cached is True
+    assert r.elapsed == 1.5
+    assert r.metadata == {"size": "2GB"}
+    # Positional destructuring (backward compatibility)
+    backend, image, cached, elapsed, metadata = r
+    assert backend == "pytorch"
+    assert cached is True
+
+
+def test_image_prep_failure_named_fields():
+    """_ImagePrepFailure supports both named field access and positional destructuring."""
+    f = _ImagePrepFailure(backend="vllm", image="llem-vllm:latest", error="pull failed")
+    assert f.backend == "vllm"
+    assert f.image == "llem-vllm:latest"
+    assert f.error == "pull failed"
+    # Positional destructuring (backward compatibility)
+    b, i, e = f
+    assert e == "pull failed"
