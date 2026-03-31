@@ -71,6 +71,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Suppress hardlink warnings when cache mount is on a different filesystem
 ENV UV_LINK_MODE=copy
 
+# Required for torch.compile (inductor JIT-compiles Triton kernels via C/C++ compiler)
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy compiled flash-attn from builder (package dir + dist-info + CUDA extensions)
 COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages/
 
