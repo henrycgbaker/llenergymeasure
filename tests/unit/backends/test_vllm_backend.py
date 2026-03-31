@@ -431,7 +431,7 @@ class TestEngineConfigFields:
                 enforce_eager=False,
                 enable_chunked_prefill=True,
                 max_num_seqs=64,
-                max_num_batched_tokens=2048,
+                max_num_batched_tokens=4096,
                 max_model_len=4096,
                 tensor_parallel_size=1,
                 pipeline_parallel_size=1,
@@ -449,7 +449,7 @@ class TestEngineConfigFields:
         assert kwargs["enforce_eager"] is False
         assert kwargs["enable_chunked_prefill"] is True
         assert kwargs["max_num_seqs"] == 64
-        assert kwargs["max_num_batched_tokens"] == 2048
+        assert kwargs["max_num_batched_tokens"] == 4096
         assert kwargs["max_model_len"] == 4096
         assert kwargs["tensor_parallel_size"] == 1
         assert kwargs["pipeline_parallel_size"] == 1
