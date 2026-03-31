@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import filelock
 import pytest
 from filelock import FileLock
 
@@ -33,7 +34,7 @@ def test_single_gpu_lock_acquired_and_released(tmp_path: Path) -> None:
 
     # Verify the lock is actually held (re-acquiring non-blocking should raise Timeout)
     held_lock = FileLock(str(_lock_path(tmp_path, 0)), timeout=0)
-    with pytest.raises(Exception):
+    with pytest.raises(filelock.Timeout):
         held_lock.acquire()
 
     release_gpu_locks(locks)
@@ -58,7 +59,7 @@ def test_contention_raises_study_error(tmp_path: Path) -> None:
     external_lock.acquire()
 
     try:
-        with pytest.raises(StudyError, match="GPU\\(s\\).*locked by another process"):
+        with pytest.raises(StudyError, match=r"GPU\(s\).*locked by another process"):
             acquire_gpu_locks([0], lock_dir=tmp_path)
     finally:
         external_lock.release()

@@ -199,9 +199,11 @@ class TestReapOrphanedContainers:
         ps_result = self._make_ps_result("abc123 99999999\n")
         stop_result = MagicMock(returncode=0)
 
-        with patch("subprocess.run", side_effect=[ps_result, stop_result]) as mock_run:
-            with patch("os.kill", side_effect=ProcessLookupError):
-                count = reap_orphaned_containers()
+        with (
+            patch("subprocess.run", side_effect=[ps_result, stop_result]) as mock_run,
+            patch("os.kill", side_effect=ProcessLookupError),
+        ):
+            count = reap_orphaned_containers()
 
         assert count == 1
         stop_calls = [c for c in mock_run.call_args_list if "stop" in c[0][0]]
@@ -211,9 +213,11 @@ class TestReapOrphanedContainers:
     def test_skips_container_with_alive_parent_pid(self) -> None:
         ps_result = self._make_ps_result(f"abc123 {os.getpid()}\n")
 
-        with patch("subprocess.run", return_value=ps_result) as mock_run:
-            with patch("os.kill", return_value=None):  # Process alive
-                count = reap_orphaned_containers()
+        with (
+            patch("subprocess.run", return_value=ps_result) as mock_run,
+            patch("os.kill", return_value=None),
+        ):
+            count = reap_orphaned_containers()
 
         assert count == 0
         stop_calls = [c for c in mock_run.call_args_list if "stop" in c[0][0]]
@@ -222,9 +226,11 @@ class TestReapOrphanedContainers:
     def test_skips_container_with_permission_error(self) -> None:
         ps_result = self._make_ps_result("abc123 1\n")
 
-        with patch("subprocess.run", return_value=ps_result) as mock_run:
-            with patch("os.kill", side_effect=PermissionError):
-                count = reap_orphaned_containers()
+        with (
+            patch("subprocess.run", return_value=ps_result) as mock_run,
+            patch("os.kill", side_effect=PermissionError),
+        ):
+            count = reap_orphaned_containers()
 
         assert count == 0
         stop_calls = [c for c in mock_run.call_args_list if "stop" in c[0][0]]
@@ -250,9 +256,11 @@ class TestReapOrphanedContainers:
                 raise ProcessLookupError
             # 22222222 is "alive"
 
-        with patch("subprocess.run", side_effect=[ps_result, stop_result]) as mock_run:
-            with patch("os.kill", side_effect=kill_side_effect):
-                count = reap_orphaned_containers()
+        with (
+            patch("subprocess.run", side_effect=[ps_result, stop_result]) as mock_run,
+            patch("os.kill", side_effect=kill_side_effect),
+        ):
+            count = reap_orphaned_containers()
 
         assert count == 1
         stop_calls = [c for c in mock_run.call_args_list if "stop" in c[0][0]]

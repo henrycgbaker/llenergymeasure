@@ -1934,9 +1934,7 @@ def test_wall_clock_timeout_marks_remaining_skipped() -> None:
     ctx = _make_ctx_with_results([success_dict, success_dict, success_dict])
 
     # Force time.monotonic() to report deadline exceeded on first check
-    import time
 
-    original_monotonic = time.monotonic
     tick = [0]
 
     def fast_monotonic():

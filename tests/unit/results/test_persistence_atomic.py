@@ -46,9 +46,11 @@ def test_atomic_write_cleans_up_tmp_on_failure(tmp_path: Path) -> None:
     """_atomic_write() removes the temp file when os.replace() raises."""
     target = tmp_path / "output.json"
 
-    with patch("llenergymeasure.results.persistence.os.replace", side_effect=OSError("disk full")):
-        with pytest.raises(OSError, match="disk full"):
-            _atomic_write("content", target)
+    with (
+        patch("llenergymeasure.results.persistence.os.replace", side_effect=OSError("disk full")),
+        pytest.raises(OSError, match="disk full"),
+    ):
+        _atomic_write("content", target)
 
     # No leftover .tmp files
     tmp_files = list(tmp_path.glob("*.tmp"))
