@@ -180,6 +180,15 @@ class ExperimentResult(BaseModel):
     total_inference_time_sec: float = Field(..., description="Total inference time")
     avg_tokens_per_second: float = Field(..., description="Average throughput")
     avg_energy_per_token_j: float = Field(..., description="Average energy per token")
+    mj_per_tok_adjusted: float | None = Field(
+        default=None,
+        description="Millijoules per token from adjusted (baseline-subtracted) energy. "
+        "None when no baseline measurement was taken.",
+    )
+    mj_per_tok_total: float | None = Field(
+        default=None,
+        description="Millijoules per token from total (unadjusted) energy.",
+    )
     total_flops: float = Field(..., description="Total FLOPs (reference metadata)")
 
     # FLOPs derived fields (computed from total_flops + token/time denominators)
@@ -252,6 +261,11 @@ class ExperimentResult(BaseModel):
         default_factory=dict,
         description="Full resolved config",
     )
+    declared_config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Config fields explicitly set by user (excludes system defaults). "
+        "Captured via model_dump(exclude_unset=True).",
+    )
 
     # Per-process breakdown (embedded, not separate files per CONTEXT.md)
     process_results: list[RawProcessResult] = Field(
@@ -291,24 +305,6 @@ class ExperimentResult(BaseModel):
         return 0.0
 
 
-class StudySummary(BaseModel):
-    """Aggregate summary statistics for a completed study."""
-
-    total_experiments: int = Field(..., description="Total experiments in the study")
-    completed: int = Field(default=0, description="Number of successfully completed experiments")
-    failed: int = Field(default=0, description="Number of failed experiments")
-    total_wall_time_s: float = Field(default=0.0, description="Total wall-clock time in seconds")
-    total_energy_j: float = Field(default=0.0, description="Total energy consumed in joules")
-    unique_configurations: int | None = Field(
-        default=None,
-        description="Number of distinct experiment configurations (total_experiments / n_cycles)",
-    )
-    warnings: list[str] = Field(
-        default_factory=list,
-        description="Runtime warnings (CLI narrowing, failures, etc.)",
-    )
-
-
 class StudyResult(BaseModel):
     """Final return value of a study run.
 
@@ -335,4 +331,21 @@ class StudyResult(BaseModel):
         default_factory=list,
         description="Paths to per-experiment result.json files (paths, not embedded)",
     )
-    summary: StudySummary | None = Field(default=None, description="Aggregate summary statistics")
+    # Study summary fields (formerly nested in StudySummary)
+    total_experiments: int = Field(default=0, description="Total experiments in the study")
+    completed: int = Field(default=0, description="Number of successfully completed experiments")
+    failed: int = Field(default=0, description="Number of failed experiments")
+    total_wall_time_s: float = Field(default=0.0, description="Total wall-clock time in seconds")
+    total_energy_j: float = Field(default=0.0, description="Total energy consumed in joules")
+    unique_configurations: int | None = Field(
+        default=None,
+        description="Number of distinct experiment configurations (total_experiments / n_cycles)",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Runtime warnings (CLI narrowing, failures, etc.)",
+    )
+    skipped_experiments: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Grid points skipped due to validation errors (raw_config + reason + errors)",
+    )

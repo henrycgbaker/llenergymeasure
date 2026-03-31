@@ -13,7 +13,6 @@ from llenergymeasure.domain.experiment import (
     ExperimentResult,
     RawProcessResult,
     StudyResult,
-    StudySummary,
     Timestamps,
 )
 from llenergymeasure.domain.metrics import (
@@ -75,13 +74,11 @@ def make_study_result(**overrides) -> StudyResult:
     defaults: dict = {
         "study_name": "test-study",
         "experiments": [one_result],
-        "summary": StudySummary(
-            total_experiments=1,
-            completed=1,
-            failed=0,
-            total_wall_time_s=5.0,
-            total_energy_j=10.0,
-        ),
+        "total_experiments": 1,
+        "completed": 1,
+        "failed": 0,
+        "total_wall_time_s": 5.0,
+        "total_energy_j": 10.0,
         "result_files": [],
     }
     defaults.update(overrides)
