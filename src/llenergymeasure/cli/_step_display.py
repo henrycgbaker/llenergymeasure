@@ -16,6 +16,7 @@ import contextlib
 import threading
 import time
 from collections.abc import Callable
+from typing import NamedTuple
 
 from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.live import Live
@@ -40,6 +41,24 @@ _HEARTBEAT_THRESHOLD = 3.0
 # Accounts for: study header (1), image prep block (~4), hidden indicator (1),
 # table header (1), active experiment block (~8), gap (1), completion line (1).
 _VIEWPORT_RESERVED_LINES = 12
+
+
+class _ImagePrepResult(NamedTuple):
+    """Result of a successfully prepared Docker image."""
+
+    backend: str
+    image: str
+    cached: bool
+    elapsed: float
+    metadata: dict[str, str] | None
+
+
+class _ImagePrepFailure(NamedTuple):
+    """Result of a failed Docker image preparation."""
+
+    backend: str
+    image: str
+    error: str
 
 
 class _DynamicRenderable:
@@ -576,8 +595,8 @@ class StudyStepDisplay:
         # Image prep state (study-level Docker image preparation)
         self._image_prep_active: bool = False
         self._image_prep_total: int = 0
-        self._image_prep_done: list[tuple[str, str, bool, float, dict[str, str] | None]] = []
-        self._image_prep_failed: tuple[str, str, str] | None = None
+        self._image_prep_done: list[_ImagePrepResult] = []
+        self._image_prep_failed: _ImagePrepFailure | None = None
 
     def start(self, *, print_header: bool = True) -> None:
         """Begin the display. Optionally prints study header and starts Rich Live if TTY.
@@ -820,7 +839,9 @@ class StudyStepDisplay:
     ) -> None:
         """Signal that a Docker image is ready."""
         with self._lock:
-            self._image_prep_done.append((backend, image, cached, elapsed, metadata))
+            self._image_prep_done.append(
+                _ImagePrepResult(backend, image, cached, elapsed, metadata)
+            )
         if not self._is_tty:
             idx = len(self._image_prep_done)
             total = self._image_prep_total
@@ -842,7 +863,7 @@ class StudyStepDisplay:
     def image_failed(self, backend: str, image: str, error: str) -> None:
         """Signal that a Docker image could not be prepared."""
         with self._lock:
-            self._image_prep_failed = (backend, image, error)
+            self._image_prep_failed = _ImagePrepFailure(backend, image, error)
         if not self._is_tty:
             idx = len(self._image_prep_done) + 1
             total = self._image_prep_total
