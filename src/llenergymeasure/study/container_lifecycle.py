@@ -118,7 +118,7 @@ def register_container_cleanup(study_id: str) -> None:
     atexit.register(cleanup_study_containers, study_id)
 
 
-def install_sigterm_bridge() -> signal.Handlers | None:
+def install_sigterm_bridge() -> Any:
     """Install a SIGTERM handler that calls sys.exit(0) to trigger atexit.
 
     Python's default SIGTERM disposition terminates the process without

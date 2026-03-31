@@ -550,39 +550,14 @@ def _run_study_impl(
     # skip_preflight=True because we already ran preflight above.
     from llenergymeasure import run_study
 
-    # Resolve resume state: find/load the interrupted study and validate config drift.
-    _resume_dir: Path | None = None
-    _skip_set: set[tuple[str, int]] | None = None
-
-    if resume or resume_dir is not None:
-        from llenergymeasure.study.resume import (
-            find_resumable_study,
-            load_resume_state,
-            prepare_resume_manifest,
-            validate_config_drift,
-        )
-
-        if resume_dir is not None:
-            _resume_dir = resume_dir
-        else:
-            _output_dir = Path(output) if output else Path("results")
-            _resume_dir = find_resumable_study(_output_dir)
-            if _resume_dir is None:
-                from llenergymeasure.utils.exceptions import StudyError
-
-                raise StudyError("No resumable study found. Run a study first or use --resume-dir.")
-
-        old_manifest, _skip_set = load_resume_state(_resume_dir)
-        validate_config_drift(old_manifest, study_config)
-        prepare_resume_manifest(_resume_dir, old_manifest)
-
     try:
         result = run_study(
             study_config,
             skip_preflight=True,
             progress=study_display,
-            resume_dir=_resume_dir,
-            skip_set=_skip_set,
+            resume=resume,
+            resume_dir=resume_dir,
+            output_dir=Path(output) if output else None,
             no_lock=no_lock,
         )
     finally:

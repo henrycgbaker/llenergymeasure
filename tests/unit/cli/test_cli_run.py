@@ -669,8 +669,8 @@ def test_timeout_flag_fractional(tmp_path):
     assert overrides["study_execution"]["wall_clock_timeout_hours"] == 1.5
 
 
-def test_resume_flag_triggers_auto_detect(tmp_path):
-    """--resume flag triggers find_resumable_study auto-detect path."""
+def test_resume_flag_passes_resume_to_api(tmp_path):
+    """--resume flag passes resume=True to run_study (API handles auto-detect)."""
     study_yaml = _make_study_yaml(tmp_path)
     mock_study_result = _make_mock_study_result()
     mock_study_config = MagicMock()
@@ -681,38 +681,21 @@ def test_resume_flag_triggers_auto_detect(tmp_path):
     mock_study_config.study_execution = MagicMock()
     mock_study_config.study_execution.n_cycles = 3
 
-    mock_resume_dir = tmp_path / "results" / "study_2026-01-01T00-00-00"
-    mock_resume_dir.mkdir(parents=True)
-    mock_manifest = MagicMock()
-    mock_manifest.study_design_hash = "abc123"
-
     with (
         patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
-        patch(
-            "llenergymeasure.study.resume.find_resumable_study", return_value=mock_resume_dir
-        ) as mock_find,
-        patch(
-            "llenergymeasure.study.resume.load_resume_state",
-            return_value=(mock_manifest, {("h1", 1)}),
-        ),
-        patch("llenergymeasure.study.resume.validate_config_drift"),
-        patch("llenergymeasure.study.resume.prepare_resume_manifest"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--resume"])
 
     assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    # Auto-detect was called
-    mock_find.assert_called_once()
-    # run_study received the resume_dir
     call_kwargs = mock_run.call_args.kwargs
-    assert call_kwargs["resume_dir"] == mock_resume_dir
+    assert call_kwargs["resume"] is True
 
 
-def test_resume_dir_flag_uses_explicit_path(tmp_path):
-    """--resume-dir uses the specified directory directly, skipping auto-detect."""
+def test_resume_dir_flag_passes_path_to_api(tmp_path):
+    """--resume-dir passes the explicit directory to run_study."""
     study_yaml = _make_study_yaml(tmp_path)
     mock_study_result = _make_mock_study_result()
     mock_study_config = MagicMock()
@@ -725,27 +708,16 @@ def test_resume_dir_flag_uses_explicit_path(tmp_path):
 
     explicit_dir = tmp_path / "my_study"
     explicit_dir.mkdir()
-    mock_manifest = MagicMock()
-    mock_manifest.study_design_hash = "abc123"
 
     with (
         patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
-        patch("llenergymeasure.study.resume.find_resumable_study") as mock_find,
-        patch(
-            "llenergymeasure.study.resume.load_resume_state", return_value=(mock_manifest, set())
-        ),
-        patch("llenergymeasure.study.resume.validate_config_drift"),
-        patch("llenergymeasure.study.resume.prepare_resume_manifest"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--resume-dir", str(explicit_dir)])
 
     assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    # Auto-detect was NOT called — explicit path used
-    mock_find.assert_not_called()
-    # run_study received the explicit directory
     call_kwargs = mock_run.call_args.kwargs
     assert call_kwargs["resume_dir"] == explicit_dir
 

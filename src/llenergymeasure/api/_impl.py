@@ -118,6 +118,8 @@ def run_study(
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
     resume_dir: Path | None = None,
+    resume: bool = False,
+    output_dir: Path | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
 ) -> StudyResult:
@@ -132,11 +134,14 @@ def run_study(
         progress: Optional StudyProgressCallback for live per-experiment display.
             When provided, the study runner emits begin/end experiment events and
             forwards per-step progress from worker subprocesses.
-        resume_dir: Study directory to resume. When provided, reuses the existing study
-            directory instead of creating a new one. Manifest must already be reset by
-            prepare_resume_manifest() before calling run_study().
+        resume_dir: Explicit study directory to resume. Overrides ``resume``.
+        resume: When True and resume_dir is None, auto-detect the most recent
+            resumable study in ``output_dir`` (default ``results/``).
+        output_dir: Base output directory used by auto-detect resume. Ignored when
+            ``resume_dir`` is given explicitly.
         skip_set: Set of (config_hash, cycle) pairs to skip (already completed in a
-            previous run). Only meaningful when resume_dir is provided.
+            previous run). Populated automatically when resuming; callers rarely
+            need to set this directly.
         no_lock: Skip GPU advisory lock acquisition. Use with --no-lock CLI flag.
 
     Returns:
@@ -145,6 +150,8 @@ def run_study(
     Raises:
         ConfigError: Invalid config path or parse error.
         PreFlightError: Multi-backend study without Docker.
+        StudyError: No resumable study found (when resume=True).
+        StudyError: Config drift detected (study_design_hash changed).
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     if isinstance(config, (str, Path)):
@@ -155,6 +162,27 @@ def run_study(
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
+
+    # Resolve resume state if requested.
+    if resume_dir is not None or resume:
+        from llenergymeasure.study.resume import (
+            find_resumable_study,
+            load_resume_state,
+            prepare_resume_manifest,
+            validate_config_drift,
+        )
+        from llenergymeasure.utils.exceptions import StudyError
+
+        if resume_dir is None:
+            _output = output_dir or Path("results")
+            resume_dir = find_resumable_study(_output)
+            if resume_dir is None:
+                raise StudyError("No resumable study found. Run a study first or use --resume-dir.")
+
+        old_manifest, skip_set = load_resume_state(resume_dir)
+        validate_config_drift(old_manifest, study)
+        prepare_resume_manifest(resume_dir, old_manifest)
+
     return _run(
         study,
         skip_preflight=skip_preflight,
