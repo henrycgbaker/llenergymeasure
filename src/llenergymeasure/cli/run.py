@@ -420,6 +420,23 @@ def _run_study_impl(
     from llenergymeasure.config.grid import build_preflight_panel
     from llenergymeasure.config.loader import load_study_config
 
+    # Fast-fail: verify resume target exists before expensive grid expansion.
+    if resume_dir is not None:
+        if not (resume_dir / "manifest.json").exists():
+            raise typer.BadParameter(
+                f"No manifest.json in {resume_dir} — not a valid study directory.",
+                param_hint="--resume-dir",
+            )
+    elif resume:
+        from llenergymeasure.study.resume import find_resumable_study
+
+        _output = Path(output or "./results")
+        if not find_resumable_study(_output):
+            raise typer.BadParameter(
+                f"No resumable study found in {_output}. Run a study first or use --resume-dir.",
+                param_hint="--resume",
+            )
+
     # Check what the YAML execution block specifies (to apply CLI effective defaults)
     raw = yaml.safe_load(config.read_text()) or {}
     yaml_execution = raw.get("study_execution", {}) or {}

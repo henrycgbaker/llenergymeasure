@@ -686,6 +686,10 @@ def test_resume_flag_passes_resume_to_api(tmp_path):
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
+        patch(
+            "llenergymeasure.study.resume.find_resumable_study",
+            return_value=tmp_path / "fake-study",
+        ),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--resume"])
 
@@ -708,6 +712,7 @@ def test_resume_dir_flag_passes_path_to_api(tmp_path):
 
     explicit_dir = tmp_path / "my_study"
     explicit_dir.mkdir()
+    (explicit_dir / "manifest.json").write_text("{}")
 
     with (
         patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
