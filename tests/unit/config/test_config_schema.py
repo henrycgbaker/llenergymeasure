@@ -395,7 +395,7 @@ def test_vllm_fp8_float32_rejected():
     """fp8 quantization with dtype=float32 raises ValidationError at parse time."""
     from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
 
-    with pytest.raises(ValidationError, match="fp8.*incompatible.*float32"):
+    with pytest.raises(ValidationError, match=r"fp8.*incompatible.*float32"):
         ExperimentConfig(
             model="gpt2",
             backend="vllm",
@@ -465,7 +465,7 @@ def test_vllm_batched_tokens_less_than_model_len_rejected():
     """max_num_batched_tokens < max_model_len raises ValidationError at parse time."""
     from llenergymeasure.config.backend_configs import VLLMEngineConfig
 
-    with pytest.raises(ValidationError, match="max_num_batched_tokens.*must be >="):
+    with pytest.raises(ValidationError, match=r"max_num_batched_tokens.*must be >="):
         VLLMEngineConfig(max_num_batched_tokens=512, max_model_len=1024)
 
 
@@ -504,7 +504,7 @@ def test_pytorch_flash_attn2_float32_rejected():
     """flash_attention_2 with dtype=float32 raises ValidationError at parse time."""
     from llenergymeasure.config.backend_configs import PyTorchConfig
 
-    with pytest.raises(ValidationError, match="flash_attention_2.*requires.*float16"):
+    with pytest.raises(ValidationError, match=r"flash_attention_2.*requires.*float16"):
         ExperimentConfig(
             model="gpt2",
             backend="pytorch",
@@ -517,7 +517,7 @@ def test_pytorch_flash_attn3_float32_rejected():
     """flash_attention_3 with dtype=float32 raises ValidationError at parse time."""
     from llenergymeasure.config.backend_configs import PyTorchConfig
 
-    with pytest.raises(ValidationError, match="flash_attention_3.*requires.*float16"):
+    with pytest.raises(ValidationError, match=r"flash_attention_3.*requires.*float16"):
         ExperimentConfig(
             model="gpt2",
             backend="pytorch",
