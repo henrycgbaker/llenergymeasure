@@ -347,7 +347,6 @@ def print_study_summary(result: StudyResult) -> None:
     print("-" * len(header))
 
     # Rolling viewport: show most recent rows that fit in terminal height.
-    # Reserve lines for: header (3), table header+separator (2), footer (5), paths (5).
     terminal_height = shutil.get_terminal_size().lines
     available_rows = max(10, terminal_height - 15)
     experiments = result.experiments

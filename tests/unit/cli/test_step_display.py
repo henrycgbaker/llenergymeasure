@@ -497,7 +497,7 @@ def test_viewport_limits_visible_rows():
     display = StudyStepDisplay(total_experiments=50, console=console)
     _add_rows(display, 50)
 
-    table = display._build_table()
+    table, _hidden = display._build_table()
 
     expected_max = height - _VIEWPORT_RESERVED_LINES
     assert table.row_count <= expected_max, (
@@ -513,9 +513,10 @@ def test_viewport_shows_all_rows_when_small():
     display = StudyStepDisplay(total_experiments=10, console=console)
     _add_rows(display, 10)
 
-    table = display._build_table()
+    table, hidden = display._build_table()
 
     assert table.row_count == 10
+    assert hidden == 0
 
 
 def test_viewport_hidden_indicator_shown():

@@ -17,7 +17,7 @@ v2.0 removals:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -379,6 +379,9 @@ class ExperimentConfig(BaseModel):
     # Cross-validators
     # -------------------------------------------------------------------------
 
+    _FP8_QUANTIZATIONS: ClassVar[set[str]] = {"fp8", "fp8_e5m2", "fp8_e4m3"}
+    _FLASH_ATTENTION_IMPLS: ClassVar[set[str]] = {"flash_attention_2", "flash_attention_3"}
+
     @model_validator(mode="after")
     def validate_backend_section_match(self) -> ExperimentConfig:
         """Backend section must match the backend field.
@@ -428,7 +431,7 @@ class ExperimentConfig(BaseModel):
             self.backend == "vllm"
             and self.vllm is not None
             and self.vllm.engine is not None
-            and self.vllm.engine.quantization in {"fp8", "fp8_e5m2", "fp8_e4m3"}
+            and self.vllm.engine.quantization in self._FP8_QUANTIZATIONS
             and self.dtype == "float32"
         ):
             raise ValueError(
@@ -443,7 +446,7 @@ class ExperimentConfig(BaseModel):
         if (
             self.backend == "pytorch"
             and self.pytorch is not None
-            and self.pytorch.attn_implementation in {"flash_attention_2", "flash_attention_3"}
+            and self.pytorch.attn_implementation in self._FLASH_ATTENTION_IMPLS
             and self.dtype == "float32"
         ):
             raise ValueError(

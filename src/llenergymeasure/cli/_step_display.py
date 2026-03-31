@@ -733,7 +733,7 @@ class StudyStepDisplay:
 
         # Only print table in post-hoc mode — Live already shows it on screen
         if not was_live and self._completed_rows:
-            table = self._build_table()
+            table, _hidden = self._build_table()
             self._console.print(table)
 
         # Print study results directory
@@ -926,12 +926,10 @@ class StudyStepDisplay:
         """Maximum number of completed rows visible in the terminal."""
         return max(5, self._console.size.height - _VIEWPORT_RESERVED_LINES)
 
-    def _build_table(self) -> Table:
-        """Build the Rich Table of completed experiments.
+    def _build_table(self) -> tuple[Table, int]:
+        """Build the Rich Table of completed experiments with viewport limiting.
 
-        Applies a rolling viewport so only the most recent rows that fit
-        the terminal height are rendered. The full history is preserved in
-        ``_completed_rows``; only the visible slice is added to the table.
+        Returns (table, hidden_count).
         """
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
         table.add_column("#", width=3, justify="right")
@@ -944,6 +942,7 @@ class StudyStepDisplay:
         table.add_column("mJ/tok", justify="right")
         rows = self._completed_rows
         available = self._viewport_size()
+        hidden = max(0, len(rows) - available)
         visible = rows[max(0, len(rows) - available) :]
         for (
             idx,
@@ -974,7 +973,7 @@ class StudyStepDisplay:
                 throughput_str,
                 mj_str,
             )
-        return table
+        return table, hidden
 
     def _render_active_steps(self) -> Text:
         """Render the active experiment's step progress.
@@ -1044,10 +1043,9 @@ class StudyStepDisplay:
         """Render image prep + hidden-row indicator + completed experiments table + active steps + gap."""
         with self._lock:
             image_prep = self._render_image_prep()
-            table = self._build_table()
+            table, hidden = self._build_table()
             step_text = self._render_active_steps()
             gap = Text(f"\n  {self._gap_text}", style="dim") if self._gap_text else Text("")
-            hidden = max(0, len(self._completed_rows) - self._viewport_size())
             if hidden > 0:
                 indicator = Text(f"  ({hidden} earlier results not shown)\n", style="dim")
             else:
