@@ -2494,11 +2494,13 @@ name = "llenergymeasure"
 version = "0.9.0"
 source = { editable = "." }
 dependencies = [
+    { name = "filelock" },
     { name = "numpy" },
     { name = "nvidia-ml-py" },
     { name = "platformdirs" },
     { name = "pyarrow" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "tqdm" },
@@ -2560,6 +2562,7 @@ requires-dist = [
     { name = "bitsandbytes", marker = "extra == 'pytorch'", specifier = ">=0.45" },
     { name = "calflops", marker = "extra == 'pytorch'", specifier = ">=0.2" },
     { name = "codecarbon", marker = "extra == 'codecarbon'", specifier = ">=2.8" },
+    { name = "filelock" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.9" },
     { name = "llenergymeasure", extras = ["pytorch"], marker = "extra == 'dev'" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
@@ -2572,6 +2575,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pytest-randomly", marker = "extra == 'dev'", specifier = ">=3.15" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
