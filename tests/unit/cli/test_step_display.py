@@ -575,7 +575,7 @@ def test_image_prep_result_named_fields():
     assert r.elapsed == 1.5
     assert r.metadata == {"size": "2GB"}
     # Positional destructuring (backward compatibility)
-    backend, image, cached, elapsed, metadata = r
+    backend, _image, cached, _elapsed, _metadata = r
     assert backend == "pytorch"
     assert cached is True
 
@@ -587,5 +587,5 @@ def test_image_prep_failure_named_fields():
     assert f.image == "llem-vllm:latest"
     assert f.error == "pull failed"
     # Positional destructuring (backward compatibility)
-    b, i, e = f
+    _b, _i, e = f
     assert e == "pull failed"
