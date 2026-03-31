@@ -563,3 +563,72 @@ def test_pytorch_no_attn_impl_float32_accepted():
         pytorch=PyTorchConfig(),
     )
     assert cfg.dtype == "float32"
+
+
+# ---------------------------------------------------------------------------
+# TRT FP8+float32 cross-validator
+# ---------------------------------------------------------------------------
+
+
+def test_trt_fp8_rejects_float32() -> None:
+    """FP8 quantization with dtype=float32 raises ValidationError at parse time."""
+    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+
+    with pytest.raises(ValidationError, match=r"FP8.*incompatible.*float32"):
+        ExperimentConfig(
+            model="gpt2",
+            backend="tensorrt",
+            dtype="float32",
+            tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
+        )
+
+
+def test_trt_fp8_accepts_float16() -> None:
+    """FP8 quantization with dtype=float16 is accepted."""
+    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="tensorrt",
+        dtype="float16",
+        tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
+    )
+    assert cfg.dtype == "float16"
+
+
+def test_trt_fp8_accepts_bfloat16() -> None:
+    """FP8 quantization with dtype=bfloat16 is accepted."""
+    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="tensorrt",
+        dtype="bfloat16",
+        tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
+    )
+    assert cfg.dtype == "bfloat16"
+
+
+def test_trt_non_fp8_accepts_float32() -> None:
+    """Non-FP8 quantization (INT8) with dtype=float32 is accepted (only FP8 is incompatible)."""
+    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="tensorrt",
+        dtype="float32",
+        tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8")),
+    )
+    assert cfg.dtype == "float32"
+
+
+# ---------------------------------------------------------------------------
+# n_prompts default
+# ---------------------------------------------------------------------------
+
+
+def test_n_prompts_default_is_100() -> None:
+    """DatasetConfig().n_prompts defaults to 100."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    assert DatasetConfig().n_prompts == 100
