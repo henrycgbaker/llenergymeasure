@@ -687,7 +687,7 @@ def test_resume_flag_passes_resume_to_api(tmp_path):
         patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
         patch(
-            "llenergymeasure.study.resume.find_resumable_study",
+            "llenergymeasure.api.find_resumable_study",
             return_value=tmp_path / "fake-study",
         ),
     ):
