@@ -428,7 +428,7 @@ def _run_study_impl(
                 param_hint="--resume-dir",
             )
     elif resume:
-        from llenergymeasure.study.resume import find_resumable_study
+        from llenergymeasure.api import find_resumable_study
 
         _output = Path(output or "./results")
         if not find_resumable_study(_output):
