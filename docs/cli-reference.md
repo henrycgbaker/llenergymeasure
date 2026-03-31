@@ -40,6 +40,12 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 | `--order` | | str | — | Cycle ordering: `sequential`, `interleave`, `shuffle` (study mode) |
 | `--no-gaps` | | flag | false | Disable thermal gaps between experiments (study mode) |
 | `--skip-preflight` | | flag | false | Skip Docker pre-flight checks (GPU visibility, CUDA/driver compatibility) |
+| `--resume` | | flag | false | Resume most recent interrupted study |
+| `--resume-dir` | | path | — | Resume a specific study directory |
+| `--fail-fast` | | flag | false | Abort study on first failure (circuit breaker threshold=1) |
+| `--no-circuit-breaker` | | flag | false | Disable circuit breaker entirely |
+| `--timeout` | | float | — | Study wall-clock timeout in hours (e.g. `24`, `1.5`) |
+| `--no-lock` | | flag | false | Disable GPU lock files (advanced) |
 
 **CLI effective defaults for study mode** (applied when neither the YAML `study_execution:` block nor a CLI flag specifies the value):
 
@@ -135,6 +141,29 @@ llem run study.yaml --no-gaps
 
 ```bash
 llem run study.yaml --skip-preflight
+```
+
+### Resume an interrupted study
+
+```bash
+# Auto-detect most recent resumable study
+llem run study.yaml --resume
+
+# Resume a specific study directory
+llem run study.yaml --resume-dir results/full-suite-all-backends_20260329_1716/
+```
+
+### Fail-fast mode (abort on first failure)
+
+```bash
+llem run study.yaml --fail-fast
+```
+
+### Set a wall-clock timeout
+
+```bash
+# Abort after 24 hours, mark remaining experiments as skipped
+llem run study.yaml --timeout 24
 ```
 
 ### Environment check

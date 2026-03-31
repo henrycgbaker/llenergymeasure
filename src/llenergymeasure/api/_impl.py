@@ -117,6 +117,11 @@ def run_study(
     *,
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
+    resume_dir: Path | None = None,
+    resume: bool = False,
+    output_dir: Path | None = None,
+    skip_set: set[tuple[str, int]] | None = None,
+    no_lock: bool = False,
 ) -> StudyResult:
     """Run a multi-experiment study.
 
@@ -129,6 +134,15 @@ def run_study(
         progress: Optional StudyProgressCallback for live per-experiment display.
             When provided, the study runner emits begin/end experiment events and
             forwards per-step progress from worker subprocesses.
+        resume_dir: Explicit study directory to resume. Overrides ``resume``.
+        resume: When True and resume_dir is None, auto-detect the most recent
+            resumable study in ``output_dir`` (default ``results/``).
+        output_dir: Base output directory used by auto-detect resume. Ignored when
+            ``resume_dir`` is given explicitly.
+        skip_set: Set of (config_hash, cycle) pairs to skip (already completed in a
+            previous run). Populated automatically when resuming; callers rarely
+            need to set this directly.
+        no_lock: Skip GPU advisory lock acquisition. Use with --no-lock CLI flag.
 
     Returns:
         StudyResult with experiments, result_files, measurement_protocol, summary.
@@ -136,6 +150,8 @@ def run_study(
     Raises:
         ConfigError: Invalid config path or parse error.
         PreFlightError: Multi-backend study without Docker.
+        StudyError: No resumable study found (when resume=True).
+        StudyError: Config drift detected (study_design_hash changed).
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     if isinstance(config, (str, Path)):
@@ -146,7 +162,35 @@ def run_study(
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
-    return _run(study, skip_preflight=skip_preflight, progress=progress)
+
+    # Resolve resume state if requested.
+    if resume_dir is not None or resume:
+        from llenergymeasure.study.resume import (
+            find_resumable_study,
+            load_resume_state,
+            prepare_resume_manifest,
+            validate_config_drift,
+        )
+        from llenergymeasure.utils.exceptions import StudyError
+
+        if resume_dir is None:
+            _output = output_dir or Path("results")
+            resume_dir = find_resumable_study(_output)
+            if resume_dir is None:
+                raise StudyError("No resumable study found. Run a study first or use --resume-dir.")
+
+        old_manifest, skip_set = load_resume_state(resume_dir)
+        validate_config_drift(old_manifest, study)
+        prepare_resume_manifest(resume_dir, old_manifest)
+
+    return _run(
+        study,
+        skip_preflight=skip_preflight,
+        progress=progress,
+        resume_dir=resume_dir,
+        skip_set=skip_set,
+        no_lock=no_lock,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +241,9 @@ def _run(
     study: StudyConfig,
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
+    resume_dir: Path | None = None,
+    skip_set: set[tuple[str, int]] | None = None,
+    no_lock: bool = False,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -253,10 +300,22 @@ def _run(
             "consider running all backends in Docker."
         )
 
-    # Resolve results_dir: study YAML > user config > built-in default
-    results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
-    study_dir = create_study_dir(study.study_name, Path(results_dir_str))
-    manifest = ManifestWriter(study, study_dir)
+    # Resolve results_dir: resume_dir takes priority, then YAML > user config > built-in default
+    if resume_dir is not None:
+        study_dir = resume_dir
+        # Resume: load the existing manifest written by prepare_resume_manifest().
+        # ManifestWriter.__new__ avoids re-writing over the prepared manifest.
+        manifest = ManifestWriter.__new__(ManifestWriter)
+        manifest._study_dir = study_dir
+        manifest.path = study_dir / "manifest.json"
+        from llenergymeasure.study.resume import load_resume_state
+
+        loaded_manifest, _ = load_resume_state(study_dir)
+        manifest.manifest = loaded_manifest
+    else:
+        results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
+        study_dir = create_study_dir(study.study_name, Path(results_dir_str))
+        manifest = ManifestWriter(study, study_dir)
 
     wall_start = time.monotonic()
     is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1
@@ -302,7 +361,13 @@ def _run(
                 study_cb.end_experiment_fail(1, exp_elapsed)
     else:
         result_files, experiment_results, warnings = _run_via_runner(
-            study, manifest, study_dir, runner_specs=runner_specs, progress=progress
+            study,
+            manifest,
+            study_dir,
+            runner_specs=runner_specs,
+            progress=progress,
+            skip_set=skip_set,
+            no_lock=no_lock,
         )
 
     wall_time = time.monotonic() - wall_start
@@ -479,6 +544,8 @@ def _run_via_runner(
     study_dir: Path,
     runner_specs: Any = None,
     progress: ProgressCallback | None = None,
+    skip_set: set[tuple[str, int]] | None = None,
+    no_lock: bool = False,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs."""
     from llenergymeasure.domain.progress import StudyProgressCallback
@@ -486,7 +553,13 @@ def _run_via_runner(
 
     study_progress = progress if isinstance(progress, StudyProgressCallback) else None
     runner = StudyRunner(
-        study, manifest, study_dir, runner_specs=runner_specs, progress=study_progress
+        study,
+        manifest,
+        study_dir,
+        runner_specs=runner_specs,
+        progress=study_progress,
+        no_lock=no_lock,
+        skip_set=skip_set,
     )
     raw_results = runner.run()
 

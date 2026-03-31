@@ -93,12 +93,15 @@ def _atomic_write(content: str, path: Path) -> None:
     """Write content to path atomically via temp file + os.replace().
 
     Uses POSIX rename semantics — atomic on same filesystem.
+    Calls fsync before replace to ensure durability on power loss.
     Cleans up temp file on failure.
     """
     tmp_fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp", prefix=path.stem)
     try:
         with os.fdopen(tmp_fd, "w") as f:
             f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp_path, path)
     except Exception:
         with contextlib.suppress(OSError):

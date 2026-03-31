@@ -481,3 +481,180 @@ def test_manifest_status_after_all_experiments_complete(tmp_path: Path) -> None:
     data = json.loads((tmp_path / "manifest.json").read_text())
     assert data["status"] == "completed"
     assert data["pending"] == 0
+
+
+# ---------------------------------------------------------------------------
+# New status literal tests (skipped, interrupted, circuit_breaker, timed_out)
+# ---------------------------------------------------------------------------
+
+
+def test_experiment_entry_accepts_skipped_status() -> None:
+    """ExperimentManifestEntry validates 'skipped' status."""
+    entry = ExperimentManifestEntry(
+        config_hash="abc123",
+        config_summary="pytorch / llama / bf16",
+        cycle=1,
+        status="skipped",
+    )
+    assert entry.status == "skipped"
+
+
+def test_experiment_entry_accepts_interrupted_status() -> None:
+    """ExperimentManifestEntry validates 'interrupted' status."""
+    entry = ExperimentManifestEntry(
+        config_hash="abc123",
+        config_summary="pytorch / llama / bf16",
+        cycle=1,
+        status="interrupted",
+    )
+    assert entry.status == "interrupted"
+
+
+def test_study_manifest_accepts_circuit_breaker_status() -> None:
+    """StudyManifest validates 'circuit_breaker' status."""
+    manifest = StudyManifest(
+        study_name="test",
+        study_design_hash="abc123",
+        llenergymeasure_version="0.9.0",
+        started_at=datetime.now(timezone.utc),
+        total_experiments=3,
+        pending=0,
+        status="circuit_breaker",
+        experiments=[],
+    )
+    assert manifest.status == "circuit_breaker"
+
+
+def test_study_manifest_accepts_timed_out_status() -> None:
+    """StudyManifest validates 'timed_out' status."""
+    manifest = StudyManifest(
+        study_name="test",
+        study_design_hash="abc123",
+        llenergymeasure_version="0.9.0",
+        started_at=datetime.now(timezone.utc),
+        total_experiments=3,
+        pending=0,
+        status="timed_out",
+        experiments=[],
+    )
+    assert manifest.status == "timed_out"
+
+
+def test_mark_interrupted_downgrades_running_entries(tmp_path: Path) -> None:
+    """mark_interrupted() downgrades 'running' entries to 'interrupted', leaves others unchanged."""
+    study = _make_study(n_experiments=3, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    entries = writer.manifest.experiments
+    first_hash = entries[0].config_hash
+    second_hash = entries[1].config_hash
+
+    # Put first entry in running, complete second, leave third pending
+    writer.mark_running(first_hash, cycle=1)
+    writer.mark_running(second_hash, cycle=1)
+    writer.mark_completed(second_hash, cycle=1, result_file="result.json")
+
+    writer.mark_interrupted()
+
+    # Study status set
+    assert writer.manifest.status == "interrupted"
+
+    # Running entry downgraded to interrupted
+    first = next(e for e in writer.manifest.experiments if e.config_hash == first_hash)
+    assert first.status == "interrupted"
+
+    # Completed entry left unchanged
+    second = next(e for e in writer.manifest.experiments if e.config_hash == second_hash)
+    assert second.status == "completed"
+
+    # Third entry stays pending
+    third_hash = entries[2].config_hash
+    third = next(e for e in writer.manifest.experiments if e.config_hash == third_hash)
+    assert third.status == "pending"
+
+    # interrupted counter incremented
+    assert writer.manifest.interrupted == 1
+
+
+def test_mark_skipped_sets_entry_status(tmp_path: Path) -> None:
+    """mark_skipped() sets entry status to 'skipped' with reason."""
+    study = _make_study(n_experiments=2, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    first_hash = writer.manifest.experiments[0].config_hash
+    writer.mark_skipped(first_hash, cycle=1, reason="circuit breaker tripped")
+
+    entry = writer._find(first_hash, cycle=1)
+    assert entry.status == "skipped"
+    assert entry.error_message == "circuit breaker tripped"
+    assert entry.completed_at is not None
+
+    # Counter incremented
+    assert writer.manifest.skipped == 1
+
+
+def test_mark_skipped_default_reason(tmp_path: Path) -> None:
+    """mark_skipped() uses default reason when none provided."""
+    study = _make_study(n_experiments=1, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    first_hash = writer.manifest.experiments[0].config_hash
+    writer.mark_skipped(first_hash, cycle=1)
+
+    entry = writer._find(first_hash, cycle=1)
+    assert entry.error_message == "skipped by circuit breaker or timeout"
+
+
+def test_mark_study_circuit_breaker(tmp_path: Path) -> None:
+    """mark_study_circuit_breaker() sets status and completed_at."""
+    study = _make_study(n_experiments=1, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    writer.mark_study_circuit_breaker()
+
+    assert writer.manifest.status == "circuit_breaker"
+    assert writer.manifest.completed_at is not None
+
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["status"] == "circuit_breaker"
+    assert data["completed_at"] is not None
+
+
+def test_mark_study_timed_out(tmp_path: Path) -> None:
+    """mark_study_timed_out() sets status and completed_at."""
+    study = _make_study(n_experiments=1, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    writer.mark_study_timed_out()
+
+    assert writer.manifest.status == "timed_out"
+    assert writer.manifest.completed_at is not None
+
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["status"] == "timed_out"
+    assert data["completed_at"] is not None
+
+
+def test_recount_counts_skipped_and_interrupted(tmp_path: Path) -> None:
+    """_recount() correctly tallies skipped and interrupted entries."""
+    study = _make_study(n_experiments=3, n_cycles=1)
+    writer = ManifestWriter(study=study, study_dir=tmp_path)
+
+    entries = writer.manifest.experiments
+    hashes = [e.config_hash for e in entries]
+
+    writer.mark_running(hashes[0], cycle=1)
+    writer.mark_completed(hashes[0], cycle=1, result_file="result.json")
+    writer.mark_skipped(hashes[1], cycle=1, reason="timeout")
+    writer.mark_running(hashes[2], cycle=1)
+    # Simulate interrupted via direct status change + _recount
+    for entry in writer.manifest.experiments:
+        if entry.config_hash == hashes[2]:
+            entry.status = "interrupted"
+    writer._recount()
+
+    assert writer.manifest.completed == 1
+    assert writer.manifest.skipped == 1
+    assert writer.manifest.interrupted == 1
+    assert writer.manifest.failed == 0
+    assert writer.manifest.pending == 0

@@ -110,11 +110,15 @@ class DockerRunner:
         timeout: int | None = None,
         source: str = "unknown",
         extra_mounts: list[tuple[str, str]] | None = None,
+        container_name: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> None:
         self.image = image
         self.timeout = timeout
         self.source = source
         self.extra_mounts = extra_mounts or []
+        self._container_name = container_name
+        self._labels = labels or {}
 
     @property
     def short_image(self) -> str:
@@ -596,6 +600,13 @@ class DockerRunner:
         # Extra volume mounts (engine cache, model cache, etc.)
         for host_path, container_path in self.extra_mounts:
             cmd.extend(["-v", f"{host_path}:{container_path}"])
+
+        # Container name and labels for lifecycle management (cleanup, reaper).
+        # These must appear before the image name in the docker run command.
+        if self._container_name:
+            cmd.extend(["--name", self._container_name])
+        for key, value in self._labels.items():
+            cmd.extend(["--label", f"{key}={value}"])
 
         # Determine TRT-LLM tensor parallel size for MPI injection
         tp_size = None

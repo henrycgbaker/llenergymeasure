@@ -532,6 +532,24 @@ class ExecutionConfig(BaseModel):
             "The --skip-preflight CLI flag always overrides this setting."
         ),
     )
+    max_consecutive_failures: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "Circuit breaker threshold: abort after N consecutive failures. "
+            "0 = disabled. 1 = fail-fast (no cooldown)."
+        ),
+    )
+    circuit_breaker_cooldown_seconds: float = Field(
+        default=60.0,
+        ge=0.0,
+        description="Cooldown pause before half-open probe experiment.",
+    )
+    wall_clock_timeout_hours: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="Study wall-clock timeout in hours. null = no limit.",
+    )
 
 
 class StudyConfig(BaseModel):

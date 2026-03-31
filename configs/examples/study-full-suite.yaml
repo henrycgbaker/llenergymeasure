@@ -27,9 +27,12 @@ study_execution:
   n_cycles: 3
   experiment_order: shuffle       # sequential | interleave | shuffle | reverse | latin_square
   shuffle_seed: null              # Explicit override for experiment shuffle order (null = derived from study_design_hash)
-  experiment_gap_seconds: 60.0    # Gap for thermal stabilisation
-  cycle_gap_seconds: 300.0
+  experiment_gap_seconds: 10.0    # Gap for thermal stabilisation
+  cycle_gap_seconds: 10.0
   skip_preflight: false           # Skip Docker pre-flight checks (not recommended)
+  max_consecutive_failures: 10    # Circuit breaker: 0=disabled, 1=fail-fast, N=threshold
+  circuit_breaker_cooldown_seconds: 60.0  # Pause before half-open probe
+  wall_clock_timeout_hours: null  # Hard time limit in hours (null = no limit)
 
 # =====================================================================
 # Shared fields (experiment-level)
