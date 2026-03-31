@@ -539,6 +539,21 @@ class VLLMEngineConfig(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_batched_tokens_vs_model_len(self) -> VLLMEngineConfig:
+        """max_num_batched_tokens must be >= max_model_len when both are set."""
+        if (
+            self.max_num_batched_tokens is not None
+            and self.max_model_len is not None
+            and self.max_num_batched_tokens < self.max_model_len
+        ):
+            raise ValueError(
+                f"max_num_batched_tokens ({self.max_num_batched_tokens}) must be >= "
+                f"max_model_len ({self.max_model_len}). "
+                "vLLM requires the batched token budget to accommodate at least one full sequence."
+            )
+        return self
+
 
 class VLLMSamplingConfig(BaseModel):
     """vLLM sampling-level configuration (vllm.SamplingParams extensions).

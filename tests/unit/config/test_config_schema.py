@@ -384,3 +384,182 @@ def test_pytorch_config_device_map_without_tp_plan_ok():
     cfg = PyTorchConfig(device_map="auto")
     assert cfg.device_map == "auto"
     assert cfg.tp_plan is None
+
+
+# ---------------------------------------------------------------------------
+# Bug 1.1 — fp8 quantization + float32 dtype (vLLM)
+# ---------------------------------------------------------------------------
+
+
+def test_vllm_fp8_float32_rejected():
+    """fp8 quantization with dtype=float32 raises ValidationError at parse time."""
+    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+
+    with pytest.raises(ValidationError, match=r"fp8.*incompatible.*float32"):
+        ExperimentConfig(
+            model="gpt2",
+            backend="vllm",
+            dtype="float32",
+            vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
+        )
+
+
+def test_vllm_fp8_float16_accepted():
+    """fp8 quantization with dtype=float16 is accepted."""
+    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="vllm",
+        dtype="float16",
+        vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
+    )
+    assert cfg.dtype == "float16"
+
+
+def test_vllm_fp8_bfloat16_accepted():
+    """fp8 quantization with dtype=bfloat16 is accepted."""
+    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="vllm",
+        dtype="bfloat16",
+        vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
+    )
+    assert cfg.dtype == "bfloat16"
+
+
+def test_vllm_non_fp8_float32_accepted():
+    """Non-fp8 quantization (awq) with dtype=float32 is accepted."""
+    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="vllm",
+        dtype="float32",
+        vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="awq")),
+    )
+    assert cfg.dtype == "float32"
+
+
+def test_vllm_no_quantization_float32_accepted():
+    """No quantization set with dtype=float32 is accepted."""
+    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="vllm",
+        dtype="float32",
+        vllm=VLLMConfig(engine=VLLMEngineConfig()),
+    )
+    assert cfg.dtype == "float32"
+
+
+# ---------------------------------------------------------------------------
+# Bug 1.2 — max_num_batched_tokens < max_model_len (vLLM engine)
+# ---------------------------------------------------------------------------
+
+
+def test_vllm_batched_tokens_less_than_model_len_rejected():
+    """max_num_batched_tokens < max_model_len raises ValidationError at parse time."""
+    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+
+    with pytest.raises(ValidationError, match=r"max_num_batched_tokens.*must be >="):
+        VLLMEngineConfig(max_num_batched_tokens=512, max_model_len=1024)
+
+
+def test_vllm_batched_tokens_equal_model_len_accepted():
+    """max_num_batched_tokens == max_model_len is accepted."""
+    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+
+    cfg = VLLMEngineConfig(max_num_batched_tokens=1024, max_model_len=1024)
+    assert cfg.max_num_batched_tokens == 1024
+    assert cfg.max_model_len == 1024
+
+
+def test_vllm_batched_tokens_greater_accepted():
+    """max_num_batched_tokens > max_model_len is accepted."""
+    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+
+    cfg = VLLMEngineConfig(max_num_batched_tokens=2048, max_model_len=1024)
+    assert cfg.max_num_batched_tokens == 2048
+
+
+def test_vllm_batched_tokens_one_none_accepted():
+    """Only one of max_num_batched_tokens / max_model_len set is accepted."""
+    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+
+    cfg = VLLMEngineConfig(max_num_batched_tokens=512)
+    assert cfg.max_num_batched_tokens == 512
+    assert cfg.max_model_len is None
+
+
+# ---------------------------------------------------------------------------
+# Bug 1.3 — flash_attention_2/3 + float32 dtype (PyTorch)
+# ---------------------------------------------------------------------------
+
+
+def test_pytorch_flash_attn2_float32_rejected():
+    """flash_attention_2 with dtype=float32 raises ValidationError at parse time."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    with pytest.raises(ValidationError, match=r"flash_attention_2.*requires.*float16"):
+        ExperimentConfig(
+            model="gpt2",
+            backend="pytorch",
+            dtype="float32",
+            pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+        )
+
+
+def test_pytorch_flash_attn3_float32_rejected():
+    """flash_attention_3 with dtype=float32 raises ValidationError at parse time."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    with pytest.raises(ValidationError, match=r"flash_attention_3.*requires.*float16"):
+        ExperimentConfig(
+            model="gpt2",
+            backend="pytorch",
+            dtype="float32",
+            pytorch=PyTorchConfig(attn_implementation="flash_attention_3"),
+        )
+
+
+def test_pytorch_flash_attn2_bfloat16_accepted():
+    """flash_attention_2 with dtype=bfloat16 is accepted."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="pytorch",
+        dtype="bfloat16",
+        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+    )
+    assert cfg.dtype == "bfloat16"
+
+
+def test_pytorch_eager_float32_accepted():
+    """attn_implementation=eager with dtype=float32 is accepted."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="pytorch",
+        dtype="float32",
+        pytorch=PyTorchConfig(attn_implementation="eager"),
+    )
+    assert cfg.dtype == "float32"
+
+
+def test_pytorch_no_attn_impl_float32_accepted():
+    """No attn_implementation set with dtype=float32 is accepted."""
+    from llenergymeasure.config.backend_configs import PyTorchConfig
+
+    cfg = ExperimentConfig(
+        model="gpt2",
+        backend="pytorch",
+        dtype="float32",
+        pytorch=PyTorchConfig(),
+    )
+    assert cfg.dtype == "float32"

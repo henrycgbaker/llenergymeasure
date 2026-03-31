@@ -456,7 +456,8 @@ class TestExpandGridSweepGroupsMultiBackend:
 class TestCombinatorialWarnings:
     def test_large_study_info_log(self, caplog):
         """Studies with >100 valid experiments log an info message."""
-        # 3 dtype x 5 batch x 3 attn x 3 compile = 135 experiments
+        # 3 dtype x 5 batch x 3 attn x 3 compile = 135 raw combos, minus 15
+        # invalid (flash_attention_2 + float32) = 120 valid experiments
         raw = {
             "model": "gpt2",
             "backend": "pytorch",
@@ -473,7 +474,7 @@ class TestCombinatorialWarnings:
         }
         with caplog.at_level(logging.INFO, logger="llenergymeasure.config.grid"):
             valid, _ = expand_grid(raw)
-        assert len(valid) == 135
+        assert len(valid) == 120
         assert any("Large study" in r.message for r in caplog.records)
 
 

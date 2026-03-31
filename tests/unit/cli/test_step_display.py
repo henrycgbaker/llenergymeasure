@@ -10,9 +10,12 @@ from io import StringIO
 from rich.console import Console
 
 from llenergymeasure.cli._step_display import (
+    _VIEWPORT_RESERVED_LINES,
     StepDisplay,
     StudyStepDisplay,
     _format_elapsed,
+    _ImagePrepFailure,
+    _ImagePrepResult,
     _step_line,
 )
 
@@ -469,4 +472,121 @@ def test_substep_non_tty_prints_immediately():
     assert "· energy tracker started" in mid_output
 
     display.on_step_done("measure", 10.0)
+
+
+# ---------------------------------------------------------------------------
+# Viewport behaviour
+# ---------------------------------------------------------------------------
+
+
+def _make_tty_console(height: int = 30, width: int = 120) -> Console:
+    """Create a TTY-mode console with fixed dimensions."""
+    return Console(width=width, height=height, force_terminal=True, no_color=True)
+
+
+def _add_rows(display: StudyStepDisplay, n: int) -> None:
+    """Directly append N completed rows to a StudyStepDisplay."""
+    for i in range(1, n + 1):
+        display._completed_rows.append((i, "OK", f"config-{i}", float(i), None, None, None, None))
+
+
+def test_viewport_limits_visible_rows():
+    """_build_table() shows only the most recent rows that fit the terminal height."""
+    height = 30
+    console = _make_tty_console(height=height)
+    display = StudyStepDisplay(total_experiments=50, console=console)
+    _add_rows(display, 50)
+
+    table, _hidden = display._build_table()
+
+    expected_max = height - _VIEWPORT_RESERVED_LINES
+    assert table.row_count <= expected_max, (
+        f"Expected at most {expected_max} rows, got {table.row_count}"
+    )
+    # Must not be zero
+    assert table.row_count >= 5
+
+
+def test_viewport_shows_all_rows_when_small():
+    """_build_table() shows all rows when count fits within the terminal height."""
+    console = _make_tty_console(height=80)
+    display = StudyStepDisplay(total_experiments=10, console=console)
+    _add_rows(display, 10)
+
+    table, hidden = display._build_table()
+
+    assert table.row_count == 10
+    assert hidden == 0
+
+
+def test_viewport_hidden_indicator_shown():
+    """_render() includes a hidden-rows indicator when rows overflow the terminal."""
+    buf = StringIO()
+    console = Console(file=buf, width=120, height=20, force_terminal=True, no_color=True)
+    display = StudyStepDisplay(total_experiments=50, console=console)
+    _add_rows(display, 50)
+
+    group = display._render()
+
+    # Serialise the Group via a separate render console
+    out_buf = StringIO()
+    render_console = Console(file=out_buf, width=120, force_terminal=True, no_color=True)
+    render_console.print(group)
+    rendered = out_buf.getvalue()
+
+    assert "earlier results not shown" in rendered
+
+
+def test_viewport_hidden_indicator_absent_when_fits():
+    """_render() omits the hidden-rows indicator when all rows fit."""
+    buf = StringIO()
+    console = Console(file=buf, width=120, height=80, force_terminal=True, no_color=True)
+    display = StudyStepDisplay(total_experiments=5, console=console)
+    _add_rows(display, 5)
+
+    group = display._render()
+
+    out_buf = StringIO()
+    render_console = Console(file=out_buf, width=120, force_terminal=True, no_color=True)
+    render_console.print(group)
+    rendered = out_buf.getvalue()
+
+    assert "earlier results not shown" not in rendered
     display.finish(total_elapsed=10.0)
+
+
+# ---------------------------------------------------------------------------
+# _ImagePrepResult / _ImagePrepFailure NamedTuple access
+# ---------------------------------------------------------------------------
+
+
+def test_image_prep_result_named_fields():
+    """_ImagePrepResult supports both named field access and positional destructuring."""
+    r = _ImagePrepResult(
+        backend="pytorch",
+        image="llem-pytorch:latest",
+        cached=True,
+        elapsed=1.5,
+        metadata={"size": "2GB"},
+    )
+    # Named access
+    assert r.backend == "pytorch"
+    assert r.image == "llem-pytorch:latest"
+    assert r.cached is True
+    assert r.elapsed == 1.5
+    assert r.metadata == {"size": "2GB"}
+    # Positional destructuring (backward compatibility)
+    backend, _image, cached, _elapsed, _metadata = r
+    assert backend == "pytorch"
+    assert cached is True
+
+
+def test_image_prep_failure_named_fields():
+    """_ImagePrepFailure supports both named field access and positional destructuring."""
+    f = _ImagePrepFailure(backend="vllm", image="llem-vllm:latest", error="pull failed")
+    assert f.backend == "vllm"
+    assert f.image == "llem-vllm:latest"
+    assert f.error == "pull failed"
+    # Positional destructuring (backward compatibility)
+    _b, _i, e = f
+    assert e == "pull failed"

@@ -7,6 +7,7 @@ Progress/header output goes to stderr (transient display area).
 from __future__ import annotations
 
 import difflib
+import shutil
 import sys
 import traceback
 from pathlib import Path
@@ -269,12 +270,10 @@ def print_study_dry_run(
     _stdout_console.print(panel)
 
     if study_config.skipped_configs:
-        skip_lines = [f"Skipping {len(study_config.skipped_configs)} config(s):"]
-        for s in study_config.skipped_configs:
-            label = s.get("short_label", "unknown")
-            reason = s.get("reason", "unknown error")
-            skip_lines.append(f"  - {label}: {reason}")
-        _stdout_console.print("\n".join(skip_lines))
+        n_skip = len(study_config.skipped_configs)
+        _stdout_console.print(
+            f"Skipped {n_skip} invalid config(s) — details in skipped_configs.log"
+        )
         _stdout_console.print()
 
     # Per-experiment list using the same header format as the live run
@@ -347,8 +346,18 @@ def print_study_summary(result: StudyResult) -> None:
     print(header)
     print("-" * len(header))
 
+    # Rolling viewport: show most recent rows that fit in terminal height.
+    terminal_height = shutil.get_terminal_size().lines
+    available_rows = max(10, terminal_height - 15)
+    experiments = result.experiments
+    hidden = max(0, len(experiments) - available_rows)
+    if hidden > 0:
+        print(f"  ({hidden} earlier results not shown)")
+        experiments = experiments[hidden:]
+    start_idx = hidden + 1
+
     # Table rows
-    for i, exp in enumerate(result.experiments, 1):
+    for i, exp in enumerate(experiments, start_idx):
         # Build compact config string: model_short / backend / non-default params
         model_raw = exp.effective_config.get("model", "unknown")
         model_short = model_short_name(model_raw)

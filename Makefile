@@ -4,7 +4,7 @@
 .PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
-.PHONY: setup docker-setup lem-clean lem-clean-all generate-docs check-docs
+.PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 export PUID := $(shell id -u)

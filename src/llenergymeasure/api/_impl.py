@@ -237,6 +237,19 @@ def _to_study_config(
     return StudyConfig(experiments=[experiment])
 
 
+def _write_skipped_configs_log(skipped_configs: list[dict[str, Any]], study_dir: Path) -> None:
+    """Write detailed skipped-config information to a log file in the study directory."""
+    log_path = study_dir / "skipped_configs.log"
+    lines = [f"Skipped {len(skipped_configs)} config(s) due to validation errors\n"]
+    for s in skipped_configs:
+        label = s.get("short_label", "unknown")
+        reason = s.get("reason", "unknown error")
+        lines.append(f"  {label}")
+        lines.append(f"    {reason}")
+        lines.append("")
+    log_path.write_text("\n".join(lines))
+
+
 def _run(
     study: StudyConfig,
     skip_preflight: bool = False,
@@ -316,6 +329,10 @@ def _run(
         results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
+
+    # Persist skipped config details to a log file in the study directory.
+    if study.skipped_configs:
+        _write_skipped_configs_log(study.skipped_configs, study_dir)
 
     wall_start = time.monotonic()
     is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1

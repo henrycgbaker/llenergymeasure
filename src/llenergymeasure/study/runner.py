@@ -1209,7 +1209,7 @@ class StudyRunner:
 
         exchange_dir = Path(exchange_dir_str)
         failed_runs_dir = self.study_dir / "failed-runs"
-        prefix = f"{config_hash[:8]}_cycle{cycle}"
+        prefix = f"{config_hash}_cycle{cycle}"
 
         try:
             failed_runs_dir.mkdir(parents=True, exist_ok=True)

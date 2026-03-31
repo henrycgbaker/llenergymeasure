@@ -16,6 +16,7 @@ import contextlib
 import threading
 import time
 from collections.abc import Callable
+from typing import NamedTuple
 
 from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.live import Live
@@ -35,6 +36,29 @@ _HEARTBEAT_INTERVAL = 5.0
 
 # Minimum step duration before heartbeat kicks in (seconds)
 _HEARTBEAT_THRESHOLD = 3.0
+
+# Lines to reserve when computing viewport height for the completed-rows table.
+# Accounts for: study header (1), image prep block (~4), hidden indicator (1),
+# table header (1), active experiment block (~8), gap (1), completion line (1).
+_VIEWPORT_RESERVED_LINES = 12
+
+
+class _ImagePrepResult(NamedTuple):
+    """Result of a successfully prepared Docker image."""
+
+    backend: str
+    image: str
+    cached: bool
+    elapsed: float
+    metadata: dict[str, str] | None
+
+
+class _ImagePrepFailure(NamedTuple):
+    """Result of a failed Docker image preparation."""
+
+    backend: str
+    image: str
+    error: str
 
 
 class _DynamicRenderable:
@@ -571,8 +595,8 @@ class StudyStepDisplay:
         # Image prep state (study-level Docker image preparation)
         self._image_prep_active: bool = False
         self._image_prep_total: int = 0
-        self._image_prep_done: list[tuple[str, str, bool, float, dict[str, str] | None]] = []
-        self._image_prep_failed: tuple[str, str, str] | None = None
+        self._image_prep_done: list[_ImagePrepResult] = []
+        self._image_prep_failed: _ImagePrepFailure | None = None
 
     def start(self, *, print_header: bool = True) -> None:
         """Begin the display. Optionally prints study header and starts Rich Live if TTY.
@@ -709,7 +733,7 @@ class StudyStepDisplay:
 
         # Only print table in post-hoc mode — Live already shows it on screen
         if not was_live and self._completed_rows:
-            table = self._build_table()
+            table, _hidden = self._build_table()
             self._console.print(table)
 
         # Print study results directory
@@ -815,7 +839,9 @@ class StudyStepDisplay:
     ) -> None:
         """Signal that a Docker image is ready."""
         with self._lock:
-            self._image_prep_done.append((backend, image, cached, elapsed, metadata))
+            self._image_prep_done.append(
+                _ImagePrepResult(backend, image, cached, elapsed, metadata)
+            )
         if not self._is_tty:
             idx = len(self._image_prep_done)
             total = self._image_prep_total
@@ -837,7 +863,7 @@ class StudyStepDisplay:
     def image_failed(self, backend: str, image: str, error: str) -> None:
         """Signal that a Docker image could not be prepared."""
         with self._lock:
-            self._image_prep_failed = (backend, image, error)
+            self._image_prep_failed = _ImagePrepFailure(backend, image, error)
         if not self._is_tty:
             idx = len(self._image_prep_done) + 1
             total = self._image_prep_total
@@ -896,8 +922,15 @@ class StudyStepDisplay:
 
     # -- Rendering --
 
-    def _build_table(self) -> Table:
-        """Build the Rich Table of completed experiments."""
+    def _viewport_size(self) -> int:
+        """Maximum number of completed rows visible in the terminal."""
+        return max(5, self._console.size.height - _VIEWPORT_RESERVED_LINES)
+
+    def _build_table(self) -> tuple[Table, int]:
+        """Build the Rich Table of completed experiments with viewport limiting.
+
+        Returns (table, hidden_count).
+        """
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
         table.add_column("#", width=3, justify="right")
         table.add_column("", width=2)
@@ -907,6 +940,10 @@ class StudyStepDisplay:
         table.add_column("Energy", justify="right")
         table.add_column("tok/s", justify="right")
         table.add_column("mJ/tok", justify="right")
+        rows = self._completed_rows
+        available = self._viewport_size()
+        hidden = max(0, len(rows) - available)
+        visible = rows[max(0, len(rows) - available) :]
         for (
             idx,
             status,
@@ -916,7 +953,7 @@ class StudyStepDisplay:
             energy,
             throughput,
             mj_tok,
-        ) in self._completed_rows:
+        ) in visible:
             status_text = (
                 Text("\u2713", style="bold green")
                 if status == "OK"
@@ -936,7 +973,7 @@ class StudyStepDisplay:
                 throughput_str,
                 mj_str,
             )
-        return table
+        return table, hidden
 
     def _render_active_steps(self) -> Text:
         """Render the active experiment's step progress.
@@ -1003,13 +1040,17 @@ class StudyStepDisplay:
         return lines
 
     def _render(self) -> Group:
-        """Render image prep + completed experiments table + active steps + gap."""
+        """Render image prep + hidden-row indicator + completed experiments table + active steps + gap."""
         with self._lock:
             image_prep = self._render_image_prep()
-            table = self._build_table()
+            table, hidden = self._build_table()
             step_text = self._render_active_steps()
             gap = Text(f"\n  {self._gap_text}", style="dim") if self._gap_text else Text("")
-        return Group(image_prep, table, step_text, gap)
+            if hidden > 0:
+                indicator = Text(f"  ({hidden} earlier results not shown)\n", style="dim")
+            else:
+                indicator = Text("")
+        return Group(image_prep, indicator, table, step_text, gap)
 
     def _refresh(self) -> None:
         """Trigger immediate Live repaint (auto-refresh handles animation)."""

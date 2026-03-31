@@ -196,6 +196,19 @@ def replay_results() -> list[ExperimentResult]:
 
 
 @pytest.fixture(autouse=True)
+def _mock_gpu_locks(monkeypatch):
+    """Prevent real GPU advisory locks from interfering with tests.
+
+    Tests that specifically exercise gpu_locks can override this by
+    importing and calling the real functions directly.
+    """
+    monkeypatch.setattr("llenergymeasure.study.gpu_locks.acquire_gpu_locks", lambda *_a, **_kw: [])
+    monkeypatch.setattr(
+        "llenergymeasure.study.gpu_locks.release_gpu_locks", lambda *_a, **_kw: None
+    )
+
+
+@pytest.fixture(autouse=True)
 def clear_baseline_cache():
     """Clear _baseline_cache before and after each test.
 

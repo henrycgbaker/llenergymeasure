@@ -17,7 +17,7 @@ v2.0 removals:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -379,6 +379,9 @@ class ExperimentConfig(BaseModel):
     # Cross-validators
     # -------------------------------------------------------------------------
 
+    _FP8_QUANTIZATIONS: ClassVar[set[str]] = {"fp8", "fp8_e5m2", "fp8_e4m3"}
+    _FLASH_ATTENTION_IMPLS: ClassVar[set[str]] = {"flash_attention_2", "flash_attention_3"}
+
     @model_validator(mode="after")
     def validate_backend_section_match(self) -> ExperimentConfig:
         """Backend section must match the backend field.
@@ -419,6 +422,38 @@ class ExperimentConfig(BaseModel):
                     f"passthrough_kwargs keys collide with ExperimentConfig fields: "
                     f"{sorted(collisions)}. Use the named fields instead."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_vllm_fp8_dtype_compat(self) -> ExperimentConfig:
+        """fp8 quantization requires float16 or bfloat16 dtype (not float32)."""
+        if (
+            self.backend == "vllm"
+            and self.vllm is not None
+            and self.vllm.engine is not None
+            and self.vllm.engine.quantization in self._FP8_QUANTIZATIONS
+            and self.dtype == "float32"
+        ):
+            raise ValueError(
+                "quantization='fp8' is incompatible with dtype='float32'. "
+                "Use dtype='float16' or dtype='bfloat16' for fp8 quantization."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_pytorch_flash_attn_dtype(self) -> ExperimentConfig:
+        """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32)."""
+        if (
+            self.backend == "pytorch"
+            and self.pytorch is not None
+            and self.pytorch.attn_implementation in self._FLASH_ATTENTION_IMPLS
+            and self.dtype == "float32"
+        ):
+            raise ValueError(
+                f"attn_implementation='{self.pytorch.attn_implementation}' requires "
+                "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
+                "float32 computation."
+            )
         return self
 
 
