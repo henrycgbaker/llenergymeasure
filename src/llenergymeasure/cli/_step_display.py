@@ -13,10 +13,20 @@ Non-TTY:     Phase headers + one line per completed/skipped step +
 from __future__ import annotations
 
 import contextlib
+import sys
 import threading
 import time
 from collections.abc import Callable
 from typing import NamedTuple
+
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from enum import Enum
+
+    class StrEnum(str, Enum):  # type: ignore[no-redef]
+        """Backport of StrEnum for Python < 3.11."""
+
 
 from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.live import Live
@@ -126,14 +136,26 @@ def _render_substep_lines(
         lines.append("\n")
 
 
-_IMAGE_SOURCE_LABELS: dict[str, str] = {
-    "local_build": "LOCAL BUILD — current source tree (via docker compose build)",
-    "registry": "REGISTRY — versioned release image",
-    "registry_cached": "REGISTRY — cached locally from prior pull",
-    "env": "OVERRIDE — image set via environment variable",
-    "yaml": "OVERRIDE — image set in study YAML images: section",
-    "runner_override": "OVERRIDE — image set via docker:<image> in runners:",
-    "user_config": "OVERRIDE — image set in user config (~/.config/llenergymeasure/config.yaml)",
+class ImageSource(StrEnum):
+    """Provenance values for Docker image selection."""
+
+    LOCAL_BUILD = "local_build"
+    REGISTRY = "registry"
+    REGISTRY_CACHED = "registry_cached"
+    ENV = "env"
+    YAML = "yaml"
+    RUNNER_OVERRIDE = "runner_override"
+    USER_CONFIG = "user_config"
+
+
+_IMAGE_SOURCE_LABELS: dict[ImageSource, str] = {
+    ImageSource.LOCAL_BUILD: "LOCAL BUILD — current source tree (via docker compose build)",
+    ImageSource.REGISTRY: "REGISTRY — versioned release image",
+    ImageSource.REGISTRY_CACHED: "REGISTRY — cached locally from prior pull",
+    ImageSource.ENV: "OVERRIDE — image set via environment variable",
+    ImageSource.YAML: "OVERRIDE — image set in study YAML images: section",
+    ImageSource.RUNNER_OVERRIDE: "OVERRIDE — image set via docker:<image> in runners:",
+    ImageSource.USER_CONFIG: "OVERRIDE — image set in user config (~/.config/llenergymeasure/config.yaml)",
 }
 
 _RUNNER_SOURCE_LABELS: dict[str, str] = {
@@ -164,7 +186,11 @@ def _render_runner_info(lines: Text, info: dict[str, str | None]) -> None:
         lines.append(f"       mode:    docker ({source_label})\n", style="dim")
         lines.append(f"       image:   {image}\n", style="dim")
         if image_source:
-            detail = _IMAGE_SOURCE_LABELS.get(image_source, image_source)
+            try:
+                key = ImageSource(image_source)
+                detail = _IMAGE_SOURCE_LABELS.get(key, image_source)
+            except ValueError:
+                detail = image_source
             lines.append(f"               {detail}\n", style="dim")
 
 

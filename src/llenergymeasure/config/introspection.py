@@ -31,6 +31,37 @@ from typing import Any, Literal, get_args, get_origin
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
+# =============================================================================
+# Field Metadata Helpers (SSOT display labels and roles)
+# =============================================================================
+
+
+def get_display_label(field_info: FieldInfo, field_name: str) -> str:
+    """Return display label from json_schema_extra, falling back to title-cased name."""
+    extra = field_info.json_schema_extra
+    if isinstance(extra, dict):
+        return extra.get("display_label", field_name.replace("_", " ").title())
+    return field_name.replace("_", " ").title()
+
+
+def get_field_role(field_info: FieldInfo) -> str | None:
+    """Return 'workload' or 'experimental', or None if not annotated."""
+    extra = field_info.json_schema_extra
+    if isinstance(extra, dict):
+        return extra.get("role")
+    return None
+
+
+def get_field_metadata(model_cls: type[BaseModel]) -> dict[str, dict[str, Any]]:
+    """Return {field_name: {"label": str, "role": str|None}} for all fields on model_cls."""
+    result: dict[str, dict[str, Any]] = {}
+    for name, fi in model_cls.model_fields.items():
+        result[name] = {
+            "label": get_display_label(fi, name),
+            "role": get_field_role(fi),
+        }
+    return result
+
 
 def _extract_param_metadata(
     field_name: str,

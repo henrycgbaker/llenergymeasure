@@ -137,9 +137,9 @@ def config_command(
         selected = None
 
     if selected:
-        print(f"  Energy: {selected}")
+        print(f"  Sampler: {selected}")
     else:
-        print("  Energy: none (install nvidia-ml-py for NVML)")
+        print("  Sampler: none (install nvidia-ml-py for NVML)")
 
     # --- User config ---
     print("Config")
