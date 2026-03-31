@@ -423,3 +423,39 @@ def test_n_prompts_default_matches_dataset_config():
     from llenergymeasure.config.models import DatasetConfig
 
     assert DatasetConfig.model_fields["n_prompts"].default == _N_PROMPTS_DEFAULT
+
+
+# ---------------------------------------------------------------------------
+# declared_config field on ExperimentResult
+# ---------------------------------------------------------------------------
+
+
+def test_declared_config_field_exists(make_result):
+    """declared_config is accessible and stores the provided dict."""
+    result = make_result(declared_config={"model": "gpt2"})
+    assert result.declared_config == {"model": "gpt2"}
+
+
+def test_declared_config_defaults_to_empty(make_result):
+    """declared_config defaults to {} when not supplied."""
+    result = make_result()
+    assert result.declared_config == {}
+
+
+# ---------------------------------------------------------------------------
+# mj_per_tok fields on ExperimentResult
+# ---------------------------------------------------------------------------
+
+
+def test_mj_per_tok_fields_exist(make_result):
+    """mj_per_tok_adjusted and mj_per_tok_total are accessible when set."""
+    result = make_result(mj_per_tok_adjusted=0.5, mj_per_tok_total=0.8)
+    assert result.mj_per_tok_adjusted == pytest.approx(0.5)
+    assert result.mj_per_tok_total == pytest.approx(0.8)
+
+
+def test_mj_per_tok_fields_default_to_none(make_result):
+    """mj_per_tok_adjusted and mj_per_tok_total default to None."""
+    result = make_result()
+    assert result.mj_per_tok_adjusted is None
+    assert result.mj_per_tok_total is None

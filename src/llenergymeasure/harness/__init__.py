@@ -667,6 +667,17 @@ class MeasurementHarness:
                     ),
                 )
 
+        # mJ/tok derived fields (energy in millijoules per token)
+        _mj_total = (
+            (total_energy_j / output.total_tokens * 1000.0) if output.total_tokens > 0 else None
+        )
+        energy_adjusted_j = energy_breakdown.adjusted_j if energy_breakdown else None
+        _mj_adjusted = (
+            (energy_adjusted_j / output.total_tokens * 1000.0)
+            if energy_adjusted_j is not None and output.total_tokens > 0
+            else None
+        )
+
         # FLOPs from PaLM formula (0.0 if estimation unavailable)
         total_flops = flops_result.value if flops_result is not None else 0.0
 
@@ -729,8 +740,11 @@ class MeasurementHarness:
             energy_breakdown=energy_breakdown,
             timeseries=timeseries_path,
             effective_config=config.model_dump(),
+            declared_config=config.model_dump(exclude_unset=True),
+            mj_per_tok_total=_mj_total,
+            mj_per_tok_adjusted=_mj_adjusted,
             baseline_power_w=energy_breakdown.baseline_power_w if energy_breakdown else None,
-            energy_adjusted_j=energy_breakdown.adjusted_j if energy_breakdown else None,
+            energy_adjusted_j=energy_adjusted_j,
             energy_per_device_j=energy_per_device_j,
             multi_gpu=multi_gpu,
             warmup_result=warmup_result,
