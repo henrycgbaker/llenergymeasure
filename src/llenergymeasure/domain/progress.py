@@ -129,6 +129,9 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         energy_j: float | None = None,
         throughput_tok_s: float | None = None,
         inference_time_sec: float | None = None,
+        adj_energy_j: float | None = None,
+        mj_per_tok_adjusted: float | None = None,
+        mj_per_tok_total: float | None = None,
     ) -> None:
         """Signal that an experiment completed successfully.
 
@@ -138,6 +141,9 @@ class StudyProgressCallback(ProgressCallback, Protocol):
             energy_j: Total energy in joules (None if unavailable).
             throughput_tok_s: Throughput in tokens/second (None if unavailable).
             inference_time_sec: Measurement window duration (None if unavailable).
+            adj_energy_j: Baseline-subtracted energy in joules (None if no baseline).
+            mj_per_tok_adjusted: mJ/tok from adjusted energy (None if unavailable).
+            mj_per_tok_total: mJ/tok from total energy (None if unavailable).
         """
         ...
 

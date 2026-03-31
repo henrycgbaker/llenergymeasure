@@ -372,12 +372,18 @@ def _run(
                 energy = r.total_energy_j if r.total_energy_j > 0 else None
                 tp = r.avg_tokens_per_second if r.avg_tokens_per_second > 0 else None
                 infer = r.total_inference_time_sec if r.total_inference_time_sec > 0 else None
+                adj_e = (
+                    r.energy_adjusted_j if r.energy_adjusted_j and r.energy_adjusted_j > 0 else None
+                )
                 study_cb.end_experiment_ok(
                     1,
                     exp_elapsed,
                     energy_j=energy,
                     throughput_tok_s=tp,
                     inference_time_sec=infer,
+                    adj_energy_j=adj_e,
+                    mj_per_tok_adjusted=r.mj_per_tok_adjusted,
+                    mj_per_tok_total=r.mj_per_tok_total,
                 )
             else:
                 study_cb.end_experiment_fail(1, exp_elapsed)

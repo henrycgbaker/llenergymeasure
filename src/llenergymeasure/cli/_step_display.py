@@ -587,9 +587,19 @@ class StudyStepDisplay:
         self._lock = threading.Lock()
 
         # Completed experiment rows:
-        # (index, status, config, elapsed, inference_sec, energy_j, throughput, mj_per_tok)
+        # (index, status, config, elapsed, inference_sec, energy_j, adj_energy_j, throughput, mj_per_tok)
         self._completed_rows: list[
-            tuple[int, str, str, float, float | None, float | None, float | None, float | None]
+            tuple[
+                int,
+                str,
+                str,
+                float,
+                float | None,
+                float | None,
+                float | None,
+                float | None,
+                float | None,
+            ]
         ] = []
 
         # Active experiment state
@@ -669,15 +679,25 @@ class StudyStepDisplay:
         energy_j: float | None = None,
         throughput_tok_s: float | None = None,
         inference_time_sec: float | None = None,
+        adj_energy_j: float | None = None,
+        mj_per_tok_adjusted: float | None = None,
+        mj_per_tok_total: float | None = None,
     ) -> None:
         """Mark experiment as successfully completed."""
         from llenergymeasure.utils.formatting import compute_mj_per_tok
 
-        mj_tok = (
-            compute_mj_per_tok(energy_j, throughput_tok_s, elapsed)
-            if energy_j is not None and throughput_tok_s is not None
-            else None
-        )
+        # Prefer mj_per_tok_adjusted (baseline-subtracted) when available,
+        # fall back to mj_per_tok_total, then compute from total energy.
+        if mj_per_tok_adjusted is not None:
+            mj_tok = mj_per_tok_adjusted
+        elif mj_per_tok_total is not None:
+            mj_tok = mj_per_tok_total
+        else:
+            mj_tok = (
+                compute_mj_per_tok(energy_j, throughput_tok_s, elapsed)
+                if energy_j is not None and throughput_tok_s is not None
+                else None
+            )
 
         with self._lock:
             self._inner_active = None
@@ -689,6 +709,7 @@ class StudyStepDisplay:
                     elapsed,
                     inference_time_sec,
                     energy_j,
+                    adj_energy_j,
                     throughput_tok_s,
                     mj_tok,
                 )
@@ -701,6 +722,7 @@ class StudyStepDisplay:
                 elapsed,
                 inference_time_sec,
                 energy_j,
+                adj_energy_j,
                 throughput_tok_s,
                 mj_tok,
             )
@@ -711,11 +733,11 @@ class StudyStepDisplay:
         with self._lock:
             self._inner_active = None
             self._completed_rows.append(
-                (index, "FAIL", self._active_header, elapsed, None, None, None, None)
+                (index, "FAIL", self._active_header, elapsed, None, None, None, None, None)
             )
         if not self._is_tty:
             self._print_completed_row(
-                index, "FAIL", self._active_header, elapsed, None, None, None, None
+                index, "FAIL", self._active_header, elapsed, None, None, None, None, None
             )
             if error:
                 self._console.print(f"         {error}", highlight=False)
@@ -951,10 +973,11 @@ class StudyStepDisplay:
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
         table.add_column("#", width=3, justify="right")
         table.add_column("", width=2)
-        table.add_column("Config")
+        table.add_column("Config", max_width=45, overflow="ellipsis", no_wrap=True)
         table.add_column("Total", justify="right")
         table.add_column("Infer", justify="right")
         table.add_column("Energy", justify="right")
+        table.add_column("Adj. E", justify="right")
         table.add_column("tok/s", justify="right")
         table.add_column("mJ/tok", justify="right")
         rows = self._completed_rows
@@ -968,6 +991,7 @@ class StudyStepDisplay:
             elapsed,
             infer_sec,
             energy,
+            adj_energy,
             throughput,
             mj_tok,
         ) in visible:
@@ -978,6 +1002,7 @@ class StudyStepDisplay:
             )
             infer_str = _format_elapsed(infer_sec) if infer_sec is not None else "-"
             energy_str = f"{energy:.1f} J" if energy is not None else "-"
+            adj_energy_str = f"{adj_energy:.1f} J" if adj_energy is not None else "-"
             throughput_str = f"{throughput:.1f}" if throughput is not None else "-"
             mj_str = f"{mj_tok:.1f}" if mj_tok is not None else "-"
             table.add_row(
@@ -987,6 +1012,7 @@ class StudyStepDisplay:
                 _format_elapsed(elapsed),
                 infer_str,
                 energy_str,
+                adj_energy_str,
                 throughput_str,
                 mj_str,
             )
@@ -1083,6 +1109,7 @@ class StudyStepDisplay:
         elapsed: float,
         inference_sec: float | None,
         energy: float | None,
+        adj_energy: float | None,
         throughput: float | None,
         mj_tok: float | None = None,
     ) -> None:
@@ -1090,10 +1117,12 @@ class StudyStepDisplay:
         status_icon = "\u2713" if status == "OK" else "\u2717"
         infer_str = f"  infer={_format_elapsed(inference_sec)}" if inference_sec is not None else ""
         energy_str = f"  {energy:.1f} J" if energy is not None else ""
+        adj_energy_str = f"  adj={adj_energy:.1f} J" if adj_energy is not None else ""
         throughput_str = f"  {throughput:.1f} tok/s" if throughput is not None else ""
         mj_str = f"  {mj_tok:.1f} mJ/tok" if mj_tok is not None else ""
         line = (
             f" [{index:>2d}/{self._total}]  {status_icon}  {config:<42s}"
-            f" {_format_elapsed(elapsed):>8s}{infer_str}{energy_str}{throughput_str}{mj_str}"
+            f" {_format_elapsed(elapsed):>8s}{infer_str}{energy_str}{adj_energy_str}"
+            f"{throughput_str}{mj_str}"
         )
         self._console.print(line, highlight=False)
