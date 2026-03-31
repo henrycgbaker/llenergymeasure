@@ -36,6 +36,11 @@ _HEARTBEAT_INTERVAL = 5.0
 # Minimum step duration before heartbeat kicks in (seconds)
 _HEARTBEAT_THRESHOLD = 3.0
 
+# Lines to reserve when computing viewport height for the completed-rows table.
+# Accounts for: study header (1), image prep block (~4), hidden indicator (1),
+# table header (1), active experiment block (~8), gap (1), completion line (1).
+_VIEWPORT_RESERVED_LINES = 12
+
 
 class _DynamicRenderable:
     """Proxy that calls a render function on every Rich auto-refresh.
@@ -896,8 +901,17 @@ class StudyStepDisplay:
 
     # -- Rendering --
 
+    def _viewport_size(self) -> int:
+        """Maximum number of completed rows visible in the terminal."""
+        return max(5, self._console.size.height - _VIEWPORT_RESERVED_LINES)
+
     def _build_table(self) -> Table:
-        """Build the Rich Table of completed experiments."""
+        """Build the Rich Table of completed experiments.
+
+        Applies a rolling viewport so only the most recent rows that fit
+        the terminal height are rendered. The full history is preserved in
+        ``_completed_rows``; only the visible slice is added to the table.
+        """
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
         table.add_column("#", width=3, justify="right")
         table.add_column("", width=2)
@@ -907,6 +921,9 @@ class StudyStepDisplay:
         table.add_column("Energy", justify="right")
         table.add_column("tok/s", justify="right")
         table.add_column("mJ/tok", justify="right")
+        rows = self._completed_rows
+        available = self._viewport_size()
+        visible = rows[max(0, len(rows) - available) :]
         for (
             idx,
             status,
@@ -916,7 +933,7 @@ class StudyStepDisplay:
             energy,
             throughput,
             mj_tok,
-        ) in self._completed_rows:
+        ) in visible:
             status_text = (
                 Text("\u2713", style="bold green")
                 if status == "OK"
@@ -1003,13 +1020,18 @@ class StudyStepDisplay:
         return lines
 
     def _render(self) -> Group:
-        """Render image prep + completed experiments table + active steps + gap."""
+        """Render image prep + hidden-row indicator + completed experiments table + active steps + gap."""
         with self._lock:
             image_prep = self._render_image_prep()
             table = self._build_table()
             step_text = self._render_active_steps()
             gap = Text(f"\n  {self._gap_text}", style="dim") if self._gap_text else Text("")
-        return Group(image_prep, table, step_text, gap)
+            hidden = max(0, len(self._completed_rows) - self._viewport_size())
+            if hidden > 0:
+                indicator = Text(f"  ({hidden} earlier results not shown)\n", style="dim")
+            else:
+                indicator = Text("")
+        return Group(image_prep, indicator, table, step_text, gap)
 
     def _refresh(self) -> None:
         """Trigger immediate Live repaint (auto-refresh handles animation)."""
