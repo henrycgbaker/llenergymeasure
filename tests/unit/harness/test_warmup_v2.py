@@ -200,7 +200,7 @@ def test_warmup_substep_callback() -> None:
     # on_substep should have been called at least once
     assert len(substep_calls) >= 1
     # Each call should contain CV info
-    for text, elapsed in substep_calls:
+    for text, _elapsed in substep_calls:
         assert "CV:" in text
         assert "Iteration" in text
 
