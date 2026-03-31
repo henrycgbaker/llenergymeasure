@@ -217,8 +217,14 @@ class DatasetConfig(BaseModel):
         default="aienergyscore",
         min_length=1,
         description="Dataset source: built-in alias or .jsonl file path",
+        json_schema_extra={"display_label": "Dataset Source", "role": "workload"},
     )
-    n_prompts: int = Field(default=100, ge=1, description="Number of prompts to load or generate")
+    n_prompts: int = Field(
+        default=100,
+        ge=1,
+        description="Number of prompts to load or generate",
+        json_schema_extra={"display_label": "Prompts", "role": "workload"},
+    )
     order: Literal["interleaved", "grouped", "shuffled"] = Field(
         default="interleaved",
         description=(
@@ -287,21 +293,38 @@ class ExperimentConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
     # Required
-    model: str = Field(..., min_length=1, description="HuggingFace model ID or local path")
+    model: str = Field(
+        ...,
+        min_length=1,
+        description="HuggingFace model ID or local path",
+        json_schema_extra={"display_label": "Model", "role": "workload"},
+    )
+
+    # Optional identifier — not sweepable, purely for display/naming
+    experiment_name: str | None = Field(
+        default=None,
+        description="Optional name for single experiments. Study experiments use auto-labels.",
+    )
 
     # Backend selection
     backend: Literal["pytorch", "vllm", "tensorrt"] = Field(
-        default="pytorch", description="Inference backend"
+        default="pytorch",
+        description="Inference backend",
+        json_schema_extra={"display_label": "Backend", "role": "experimental"},
     )
 
     # Dataset
     dataset: DatasetConfig = Field(
-        default_factory=DatasetConfig, description="Dataset configuration"
+        default_factory=DatasetConfig,
+        description="Dataset configuration",
+        json_schema_extra={"display_label": "Dataset", "role": "workload"},
     )
 
     # Hardware
     dtype: Literal["float32", "float16", "bfloat16"] = Field(
-        default="bfloat16", description="Model dtype for inference"
+        default="bfloat16",
+        description="Model dtype for inference",
+        json_schema_extra={"display_label": "Dtype", "role": "experimental"},
     )
     random_seed: int = Field(
         default=42,
@@ -321,6 +344,7 @@ class ExperimentConfig(BaseModel):
             "Max input token length for truncation. Keeps computation workload "
             "constant across experiments for fair comparison. None = no truncation."
         ),
+        json_schema_extra={"display_label": "Max Input Tokens", "role": "workload"},
     )
     max_output_tokens: int | None = Field(
         default=256,
@@ -329,6 +353,7 @@ class ExperimentConfig(BaseModel):
             "Max output tokens (max_new_tokens for generation). "
             "None = generate until EOS or model context limit."
         ),
+        json_schema_extra={"display_label": "Max Output Tokens", "role": "workload"},
     )
 
     # Sub-configs
@@ -347,6 +372,7 @@ class ExperimentConfig(BaseModel):
             "Energy measurement backend. "
             "auto=best available (Zeus>NVML>CodeCarbon). null disables energy measurement."
         ),
+        json_schema_extra={"display_label": "Sampler", "role": "workload"},
     )
     # Backend sections (None = use backend's own defaults)
     # All current backends (pytorch, vllm, tensorrt) are GPU-only; cpu backend is future scope.
