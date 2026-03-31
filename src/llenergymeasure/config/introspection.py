@@ -26,10 +26,13 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, Literal, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.models import ExperimentConfig
 
 # =============================================================================
 # Field Metadata Helpers (SSOT display labels and roles)
@@ -61,6 +64,47 @@ def get_field_metadata(model_cls: type[BaseModel]) -> dict[str, dict[str, Any]]:
             "role": get_field_role(fi),
         }
     return result
+
+
+def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
+    """Return dotted field paths that vary across experiments in a study.
+
+    Inspects the experiment list and identifies fields where values differ,
+    indicating they are sweep dimensions (independent variables).
+
+    Args:
+        experiments: List of resolved ExperimentConfig objects from a study.
+
+    Returns:
+        Set of dotted field paths (e.g. {"dtype", "pytorch.batch_size"}).
+    """
+    if len(experiments) <= 1:
+        return set()
+
+    # Dump all experiments to comparable dicts
+    dumps = [exp.model_dump() for exp in experiments]
+    swept: set[str] = set()
+
+    def _compare(path: str, values: list[Any]) -> None:
+        if len({str(v) for v in values}) > 1:
+            swept.add(path)
+
+    # Compare top-level fields and one level of sub-config nesting
+    for field_name in type(experiments[0]).model_fields:
+        values = [d.get(field_name) for d in dumps]
+        _compare(field_name, values)
+
+        # If the field value is a dict (sub-config), compare nested keys too
+        if isinstance(values[0], dict):
+            all_keys: set[str] = set()
+            for v in values:
+                if isinstance(v, dict):
+                    all_keys.update(v.keys())
+            for key in all_keys:
+                nested_values = [v.get(key) if isinstance(v, dict) else None for v in values]
+                _compare(f"{field_name}.{key}", nested_values)
+
+    return swept
 
 
 def _extract_param_metadata(

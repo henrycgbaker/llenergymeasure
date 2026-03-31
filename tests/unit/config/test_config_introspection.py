@@ -18,6 +18,7 @@ from llenergymeasure.config.introspection import (
     get_field_role,
     get_param_test_values,
     get_shared_params,
+    get_swept_field_paths,
     get_validation_rules,
     list_all_param_paths,
 )
@@ -332,3 +333,34 @@ def test_get_field_metadata_returns_correct_dict():
     assert meta["energy_sampler"]["label"] == "Sampler"
     # experiment_name has no role metadata
     assert meta["experiment_name"]["role"] is None
+
+
+# ---------------------------------------------------------------------------
+# get_swept_field_paths
+# ---------------------------------------------------------------------------
+
+
+def test_get_swept_field_paths_single_experiment():
+    """Single experiment yields an empty swept set."""
+    exp = ExperimentConfig(model="gpt2")
+    result = get_swept_field_paths([exp])
+    assert result == set()
+
+
+def test_get_swept_field_paths_dtype_swept():
+    """Two experiments with different dtypes yield {'dtype'} in swept paths."""
+    exp1 = ExperimentConfig(model="gpt2", dtype="float16")
+    exp2 = ExperimentConfig(model="gpt2", dtype="bfloat16")
+    result = get_swept_field_paths([exp1, exp2])
+    assert "dtype" in result
+
+
+def test_get_swept_field_paths_nested_field():
+    """Two experiments with different n_prompts yield dataset and dataset.n_prompts in swept."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    exp1 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=10))
+    exp2 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
+    result = get_swept_field_paths([exp1, exp2])
+    assert "dataset" in result
+    assert "dataset.n_prompts" in result
