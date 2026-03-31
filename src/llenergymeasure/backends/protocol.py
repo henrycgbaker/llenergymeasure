@@ -72,6 +72,22 @@ class BackendPlugin(Protocol):
         """
         ...
 
+    def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
+        """Run one warmup prompt and return latency in ms.
+
+        Returns 0.0 to signal the harness should skip CV-based convergence
+        (e.g. vLLM/TRT-LLM use single-token kernel warmup instead).
+
+        Args:
+            config: Experiment configuration.
+            model: Opaque model object from load_model().
+            prompt: Single warmup prompt text.
+
+        Returns:
+            Latency in milliseconds, or 0.0 to opt out of convergence loop.
+        """
+        ...
+
     def run_inference(
         self, config: ExperimentConfig, model: Any, prompts: list[str]
     ) -> InferenceOutput:

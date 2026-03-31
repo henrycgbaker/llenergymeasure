@@ -188,6 +188,28 @@ class TensorRTBackend:
     # BackendPlugin: warmup
     # -------------------------------------------------------------------------
 
+    def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
+        """Run one warmup prompt via single-token kernel warmup. Returns 0.0.
+
+        Returns 0.0 to signal the harness to skip CV-based convergence.
+        TRT-LLM uses a single-token kernel warmup rather than CV convergence.
+
+        Args:
+            config: Experiment configuration.
+            model: Tuple of (llm, sampling_params) from load_model().
+            prompt: Single warmup prompt text.
+
+        Returns:
+            0.0 (signals harness to skip convergence loop).
+        """
+        from tensorrt_llm import SamplingParams
+
+        from llenergymeasure.backends._helpers import warmup_single_token
+
+        llm, _sampling_params = model
+        warmup_single_token(llm, [prompt], SamplingParams, max_tokens=1)
+        return 0.0  # Signals harness to skip CV loop
+
     def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
         """Run minimal TRT-LLM warmup: 1 prompt, 1 token.
 
