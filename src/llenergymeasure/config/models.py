@@ -421,6 +421,38 @@ class ExperimentConfig(BaseModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def validate_vllm_fp8_dtype_compat(self) -> ExperimentConfig:
+        """fp8 quantization requires float16 or bfloat16 dtype (not float32)."""
+        if (
+            self.backend == "vllm"
+            and self.vllm is not None
+            and self.vllm.engine is not None
+            and self.vllm.engine.quantization in {"fp8", "fp8_e5m2", "fp8_e4m3"}
+            and self.dtype == "float32"
+        ):
+            raise ValueError(
+                "quantization='fp8' is incompatible with dtype='float32'. "
+                "Use dtype='float16' or dtype='bfloat16' for fp8 quantization."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_pytorch_flash_attn_dtype(self) -> ExperimentConfig:
+        """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32)."""
+        if (
+            self.backend == "pytorch"
+            and self.pytorch is not None
+            and self.pytorch.attn_implementation in {"flash_attention_2", "flash_attention_3"}
+            and self.dtype == "float32"
+        ):
+            raise ValueError(
+                f"attn_implementation='{self.pytorch.attn_implementation}' requires "
+                "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
+                "float32 computation."
+            )
+        return self
+
 
 # Rebuild to resolve forward references for backend configs
 def _rebuild_experiment_config() -> None:
