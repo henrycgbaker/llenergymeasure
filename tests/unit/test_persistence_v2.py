@@ -112,11 +112,11 @@ def test_save_creates_subdirectory(tmp_path: Path, minimal_result: ExperimentRes
 
 
 def test_save_directory_name_format(tmp_path: Path, minimal_result: ExperimentResult) -> None:
-    """Directory name matches {model_short}-{backend}[-params]_{timestamp} pattern."""
+    """Directory name matches c{cycle}_{model_short}-{backend}_{hash} pattern."""
     result_path = save_result(minimal_result, tmp_path)
     dir_name = result_path.parent.name
-    # Pattern: gpt2-pytorch[-key=val]_2026-02-26T14-00 (model_short-backend[-params]_timestamp)
-    pattern = re.compile(r"^[\w\.\-]+-[a-z]+[\w\.\-=]*_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}(_\d+)?$")
+    # Pattern: c1_gpt2-pytorch_abcdef01 (c{cycle}_{model_short}-{backend}_{hash[:8]})
+    pattern = re.compile(r"^c\d+_[\w\.\-]+-[a-z]+_[a-f0-9]{8,}(_\d+)?$")
     assert pattern.match(dir_name), f"Directory name '{dir_name}' does not match expected pattern"
 
 
@@ -125,7 +125,7 @@ def test_save_model_slug_normalisation(tmp_path: Path, hf_model_result: Experime
     result_path = save_result(hf_model_result, tmp_path)
     dir_name = result_path.parent.name
     # meta-llama/Llama-3.1-8B -> Llama-3.1-8B (short name, no org prefix)
-    assert dir_name.startswith("Llama-3.1-8B-pytorch_"), f"Slug normalisation failed: {dir_name}"
+    assert "Llama-3.1-8B-pytorch" in dir_name, f"Slug normalisation failed: {dir_name}"
 
 
 def test_save_returns_result_json_path(tmp_path: Path, minimal_result: ExperimentResult) -> None:
@@ -277,3 +277,69 @@ def test_from_json_missing_sidecar_loads_successfully(
     assert loaded.timeseries == "timeseries.parquet"
     # But the file itself is not there
     assert not (result_path.parent / "timeseries.parquet").exists()
+
+
+# ---------------------------------------------------------------------------
+# effective_config.json sidecar
+# ---------------------------------------------------------------------------
+
+
+def test_save_writes_effective_config_sidecar(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """save_result() writes effective_config.json alongside result.json."""
+    result_path = save_result(minimal_result, tmp_path)
+    sidecar = result_path.parent / "effective_config.json"
+    assert sidecar.exists(), "effective_config.json should be written as sidecar"
+
+
+def test_effective_config_sidecar_content(tmp_path: Path, minimal_result: ExperimentResult) -> None:
+    """effective_config.json sidecar contains the same config as the result."""
+    import json
+
+    result_path = save_result(minimal_result, tmp_path)
+    sidecar = result_path.parent / "effective_config.json"
+    config = json.loads(sidecar.read_text())
+    assert config == minimal_result.effective_config
+
+
+def test_save_with_empty_effective_config_no_sidecar(tmp_path: Path) -> None:
+    """save_result() with empty effective_config does not write sidecar."""
+    result = ExperimentResult(
+        experiment_id="no-config",
+        measurement_config_hash="0000000000000000",
+        measurement_methodology="total",
+        total_tokens=10,
+        total_energy_j=1.0,
+        total_inference_time_sec=1.0,
+        avg_tokens_per_second=10.0,
+        avg_energy_per_token_j=0.1,
+        total_flops=0.0,
+        start_time=datetime(2026, 1, 1),
+        end_time=datetime(2026, 1, 1, 0, 0, 1),
+        effective_config={},
+    )
+    result_path = save_result(result, tmp_path)
+    sidecar = result_path.parent / "effective_config.json"
+    assert not sidecar.exists()
+
+
+# ---------------------------------------------------------------------------
+# Cycle in directory name
+# ---------------------------------------------------------------------------
+
+
+def test_save_cycle_in_directory_name(tmp_path: Path, minimal_result: ExperimentResult) -> None:
+    """Directory name includes cycle number."""
+    result_path = save_result(minimal_result, tmp_path, cycle=2)
+    dir_name = result_path.parent.name
+    assert dir_name.startswith("c2_"), f"Expected 'c2_' prefix in '{dir_name}'"
+
+
+def test_save_experiment_index_in_directory_name(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """Directory name includes experiment index when provided."""
+    result_path = save_result(minimal_result, tmp_path, experiment_index=5, cycle=3)
+    dir_name = result_path.parent.name
+    assert dir_name.startswith("005_c3_"), f"Expected '005_c3_' prefix in '{dir_name}'"
