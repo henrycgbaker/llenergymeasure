@@ -162,7 +162,7 @@ class TestSuccessPath:
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE, source="yaml")
-            returned, _ts_dir = runner.run(config)
+            _returned, _ts_dir = runner.run(config)
 
         metadata = runner.get_runner_metadata()
         assert metadata["runner_type"] == "docker"
@@ -1044,7 +1044,7 @@ class TestTimeseriesParquetRescue:
             ts_path.write_bytes(b"PARQUET_CONTENT")
 
             runner = DockerRunner(image=IMAGE)
-            returned, ts_dir = runner.run(config)
+            _returned, ts_dir = runner.run(config)
 
         # ts_dir must point to the rescue dir containing the parquet sidecar
         assert ts_dir == rescue_dir
