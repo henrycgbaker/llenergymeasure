@@ -631,7 +631,6 @@ This creates 8 configs (4 batch sizes × 2 dtypes) in `./grid/`.
 |------|-----------|
 | (default) | Generate **all** configs, show warnings for invalid ones |
 | `--validate` | Only generate **valid** configs (skip invalid) |
-| `--strict` | **Fail** if any config would be invalid |
 
 **Usage:**
 ```bash
@@ -645,12 +644,6 @@ lem config generate-grid base.yaml \
     --vary decoder.temperature=0.0,1.0 \
     --vary decoder.top_k=50,100 \
     --validate
-
-# CI/automation: fail if any would be invalid
-lem config generate-grid base.yaml \
-    --vary decoder.temperature=0.0,1.0 \
-    --vary decoder.top_k=50,100 \
-    --strict
 ```
 
 **Common invalid combinations detected:**
