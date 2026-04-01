@@ -168,9 +168,10 @@ def load_effective_config(experiment_dir: Path) -> dict[str, object] | None:
     """
     path = experiment_dir / "effective_config.json"
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
+    return data
 
 
 def load_result(path: Path) -> ExperimentResult:
