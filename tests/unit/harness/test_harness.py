@@ -195,6 +195,43 @@ def test_harness_returns_experiment_result(minimal_config):
     assert result.backend == "fake"
 
 
+def test_harness_sets_llenergymeasure_version(minimal_config):
+    """harness.run() populates llenergymeasure_version from _version.__version__."""
+    from llenergymeasure._version import __version__
+
+    backend = FakeBackend()
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(backend, minimal_config)
+
+    assert result.llenergymeasure_version == __version__
+
+
+def test_harness_sets_backend_version_from_backend(minimal_config):
+    """harness.run() populates backend_version via getattr(backend, 'version')."""
+    backend = FakeBackend()
+    backend.version = "1.2.3"  # type: ignore[attr-defined]
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(backend, minimal_config)
+
+    assert result.backend_version == "1.2.3"
+
+
+def test_harness_backend_version_none_when_missing(minimal_config):
+    """backend_version is None when backend has no version property."""
+    backend = FakeBackend()
+    # FakeBackend has no .version attribute by default
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        result = harness.run(backend, minimal_config)
+
+    assert result.backend_version is None
+
+
 def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
     """thermal_floor_wait_s on WarmupResult must be set by harness (not by backend).
 

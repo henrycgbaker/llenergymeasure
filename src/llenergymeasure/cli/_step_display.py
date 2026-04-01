@@ -684,21 +684,15 @@ class StudyStepDisplay:
         mj_per_tok_total: float | None = None,
     ) -> None:
         """Mark experiment as successfully completed."""
-        from llenergymeasure.utils.formatting import compute_mj_per_tok
-
         # Prefer mj_per_tok_adjusted (baseline-subtracted) when available,
-        # fall back to mj_per_tok_total, then compute from total energy.
+        # fall back to mj_per_tok_total. No recomputation — show "-" if both null.
         mj_tok: float | None
         if mj_per_tok_adjusted is not None:
             mj_tok = mj_per_tok_adjusted
         elif mj_per_tok_total is not None:
             mj_tok = mj_per_tok_total
         else:
-            mj_tok = (
-                compute_mj_per_tok(energy_j, throughput_tok_s, elapsed)
-                if energy_j is not None and throughput_tok_s is not None
-                else None
-            )
+            mj_tok = None
 
         with self._lock:
             self._inner_active = None

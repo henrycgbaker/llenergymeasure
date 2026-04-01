@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.utils.exceptions import DockerError, LLEMError
-from llenergymeasure.utils.formatting import compute_mj_per_tok as _compute_mj_per_tok
 from llenergymeasure.utils.formatting import format_elapsed as _format_duration
 from llenergymeasure.utils.formatting import model_short_name
 from llenergymeasure.utils.formatting import sig3 as _sig3
@@ -45,12 +44,11 @@ def print_result_summary(result: ExperimentResult) -> None:
         print(f"  Baseline       {_sig3(result.baseline_power_w)} W")
     if result.energy_adjusted_j is not None:
         print(f"  Adjusted       {_sig3(result.energy_adjusted_j)} J")
-    # Per-token energy (mJ/tok)
-    mj_tok = _compute_mj_per_tok(
-        result.total_energy_j, result.avg_tokens_per_second, result.duration_sec
-    )
-    if mj_tok is not None:
-        print(f"  Per token      {_sig3(mj_tok)} mJ/tok")
+    # Per-token energy (mJ/tok) — prefer adjusted, fall back to total, no recomputation
+    if result.mj_per_tok_adjusted is not None:
+        print(f"  Per token      {_sig3(result.mj_per_tok_adjusted)} mJ/tok (adjusted)")
+    elif result.mj_per_tok_total is not None:
+        print(f"  Per token      {_sig3(result.mj_per_tok_total)} mJ/tok")
     print()
 
     # --- Performance ---
@@ -386,16 +384,14 @@ def print_study_summary(result: StudyResult) -> None:
         )
         toks_str = _sig3(exp.avg_tokens_per_second) if exp.avg_tokens_per_second else "-"
 
-        # mJ/tok: prefer adjusted (baseline-subtracted), fall back to total, then compute
+        # mJ/tok: prefer adjusted (baseline-subtracted), fall back to total.
+        # No recomputation — show "-" if both null.
         if exp.mj_per_tok_adjusted is not None:
             mj_str = _sig3(exp.mj_per_tok_adjusted)
         elif exp.mj_per_tok_total is not None:
             mj_str = _sig3(exp.mj_per_tok_total)
         else:
-            mj_tok = _compute_mj_per_tok(
-                exp.total_energy_j, exp.avg_tokens_per_second, exp.duration_sec
-            )
-            mj_str = _sig3(mj_tok) if mj_tok is not None else "-"
+            mj_str = "-"
 
         print(
             f"{i:>3}  {status_icon:>2}  {config_str:<40}  {total_str:>8}  {infer_str:>8}"

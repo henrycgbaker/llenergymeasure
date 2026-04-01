@@ -15,12 +15,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from llenergymeasure._version import __version__
 from llenergymeasure.backends.protocol import BackendPlugin, InferenceOutput
 from llenergymeasure.datasets import load_prompts
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
     compute_measurement_config_hash,
+    mj_per_token,
 )
 from llenergymeasure.energy import select_energy_sampler
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
@@ -455,8 +457,10 @@ class MeasurementHarness:
         measurement_warnings = self._collect_warnings(duration_sec, timeseries_samples, gpu_indices)
 
         # 16. Assemble ExperimentResult
+        backend_version = getattr(backend, "version", None)
         result = self._build_result(
             backend_name=backend.name,
+            backend_version=backend_version,
             config=config,
             output=output,
             model_memory_mb=model_memory_mb,
@@ -578,6 +582,7 @@ class MeasurementHarness:
     def _build_result(
         self,
         backend_name: str,
+        backend_version: str | None,
         config: ExperimentConfig,
         output: InferenceOutput,
         model_memory_mb: float,
@@ -600,6 +605,7 @@ class MeasurementHarness:
 
         Args:
             backend_name: Backend identifier string (from backend.name).
+            backend_version: Backend version string (from backend.version), or None.
             config: Experiment configuration.
             output: InferenceOutput from backend.run_inference().
             model_memory_mb: GPU memory after model load, before inference (MB).
@@ -668,13 +674,11 @@ class MeasurementHarness:
                 )
 
         # mJ/tok derived fields (energy in millijoules per token)
-        _mj_total = (
-            (total_energy_j / output.total_tokens * 1000.0) if output.total_tokens > 0 else None
-        )
+        _mj_total = mj_per_token(total_energy_j, output.total_tokens)
         energy_adjusted_j = energy_breakdown.adjusted_j if energy_breakdown else None
         _mj_adjusted = (
-            (energy_adjusted_j / output.total_tokens * 1000.0)
-            if energy_adjusted_j is not None and output.total_tokens > 0
+            mj_per_token(energy_adjusted_j, output.total_tokens)
+            if energy_adjusted_j is not None
             else None
         )
 
@@ -717,8 +721,10 @@ class MeasurementHarness:
         return ExperimentResult(
             experiment_id=experiment_id,
             measurement_config_hash=compute_measurement_config_hash(config),
+            llenergymeasure_version=__version__,
             measurement_methodology="total",
             backend=backend_name,
+            backend_version=backend_version,
             aggregation=AggregationMetadata(
                 method="single_process",
                 num_processes=1,

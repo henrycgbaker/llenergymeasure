@@ -1225,3 +1225,105 @@ class TestErrorJsonOnNonZeroExit:
             runner = DockerRunner(image=IMAGE)
             with pytest.raises(DockerContainerError):
                 runner.run(config)
+
+
+# ---------------------------------------------------------------------------
+# Version mismatch warning
+# ---------------------------------------------------------------------------
+
+
+class TestVersionMismatchWarning:
+    def test_warns_when_container_version_none(self, tmp_path, caplog):
+        """Warning emitted when container result has no llenergymeasure_version."""
+        import logging
+
+        config = make_config()
+        result = make_result()  # llenergymeasure_version defaults to None
+
+        exchange_dir = tmp_path / "llem-version-none"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
+        ):
+            config_hash = _docker_config_hash(config)
+            result_path = exchange_dir / f"{config_hash}_result.json"
+            result_path.write_text(result.model_dump_json(), encoding="utf-8")
+
+            runner = DockerRunner(image=IMAGE)
+            runner.run(config)
+
+        assert any("rebuild Docker images" in r.message for r in caplog.records)
+
+    def test_warns_when_container_version_differs(self, tmp_path, caplog):
+        """Warning emitted when container version differs from host version."""
+        import logging
+
+        config = make_config()
+        result = make_result(llenergymeasure_version="0.1.0")
+
+        exchange_dir = tmp_path / "llem-version-diff"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
+        ):
+            config_hash = _docker_config_hash(config)
+            result_path = exchange_dir / f"{config_hash}_result.json"
+            result_path.write_text(result.model_dump_json(), encoding="utf-8")
+
+            runner = DockerRunner(image=IMAGE)
+            runner.run(config)
+
+        assert any("rebuild Docker images" in r.message for r in caplog.records)
+
+    def test_no_warning_when_versions_match(self, tmp_path, caplog):
+        """No warning when container version matches host version."""
+        import logging
+
+        from llenergymeasure._version import __version__
+
+        config = make_config()
+        result = make_result(llenergymeasure_version=__version__)
+
+        exchange_dir = tmp_path / "llem-version-match"
+        exchange_dir.mkdir()
+
+        with (
+            patch(
+                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
+                return_value=str(exchange_dir),
+            ),
+            patch(
+                "llenergymeasure.infra.docker_runner.subprocess.run",
+                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
+            ),
+            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
+            caplog.at_level(logging.WARNING, logger="llenergymeasure.infra.docker_runner"),
+        ):
+            config_hash = _docker_config_hash(config)
+            result_path = exchange_dir / f"{config_hash}_result.json"
+            result_path.write_text(result.model_dump_json(), encoding="utf-8")
+
+            runner = DockerRunner(image=IMAGE)
+            runner.run(config)
+
+        assert not any("rebuild Docker images" in r.message for r in caplog.records)

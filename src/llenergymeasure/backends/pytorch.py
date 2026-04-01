@@ -35,6 +35,16 @@ class PyTorchBackend:
         """Backend identifier."""
         return "pytorch"
 
+    @property
+    def version(self) -> str:
+        """PyTorch version string."""
+        try:
+            import torch
+
+            return torch.__version__
+        except Exception:
+            return "unknown"
+
     # -------------------------------------------------------------------------
     # BackendPlugin: load_model
     # -------------------------------------------------------------------------
