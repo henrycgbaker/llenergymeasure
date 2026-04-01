@@ -864,6 +864,7 @@ def test_docker_runner_spec_dispatches_to_docker(
 
     fake_result = MagicMock(spec=ExperimentResult)
     fake_result.total_energy_j = 1.0
+    fake_result.experiment_id = "mock-docker-001"
 
     docker_run_calls: list = []
     subprocess_process_calls: list = []
@@ -1701,6 +1702,7 @@ class TestPrepareImages:
 
         fake_result = MagicMock(spec=ExperimentResult)
         fake_result.total_energy_j = 1.0
+        fake_result.experiment_id = "mock-docker-002"
 
         docker_run_kwargs: list[dict] = []
 
