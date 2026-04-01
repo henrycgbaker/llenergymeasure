@@ -26,10 +26,69 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, Literal, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
+
+if TYPE_CHECKING:
+    from llenergymeasure.config.models import ExperimentConfig
+
+# =============================================================================
+# Field Metadata Helpers (SSOT display labels and roles)
+# =============================================================================
+
+
+def get_display_label(field_info: FieldInfo, field_name: str) -> str:
+    """Return display label from json_schema_extra, falling back to title-cased name."""
+    extra = field_info.json_schema_extra
+    if isinstance(extra, dict):
+        label = extra.get("display_label")
+        return str(label) if label is not None else field_name.replace("_", " ").title()
+    return field_name.replace("_", " ").title()
+
+
+def get_field_role(field_info: FieldInfo) -> str | None:
+    """Return 'workload' or 'experimental', or None if not annotated."""
+    extra = field_info.json_schema_extra
+    if isinstance(extra, dict):
+        role = extra.get("role")
+        return str(role) if role is not None else None
+    return None
+
+
+def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
+    """Return dotted field paths that vary across experiments in a study.
+
+    Inspects the experiment list and identifies fields where values differ,
+    indicating they are sweep dimensions (independent variables).
+
+    Args:
+        experiments: List of resolved ExperimentConfig objects from a study.
+
+    Returns:
+        Set of dotted field paths (e.g. {"dtype", "dataset.n_prompts"}).
+    """
+    if len(experiments) <= 1:
+        return set()
+
+    first = experiments[0]
+    swept: set[str] = set()
+
+    for field_name in type(first).model_fields:
+        values = [getattr(exp, field_name) for exp in experiments]
+
+        # Sub-config: compare nested fields via getattr
+        if isinstance(values[0], BaseModel):
+            for sub_field in type(values[0]).model_fields:
+                sub_values = [str(getattr(v, sub_field)) for v in values]
+                if len(set(sub_values)) > 1:
+                    swept.add(f"{field_name}.{sub_field}")
+        else:
+            if len({str(v) for v in values}) > 1:
+                swept.add(field_name)
+
+    return swept
 
 
 def _extract_param_metadata(

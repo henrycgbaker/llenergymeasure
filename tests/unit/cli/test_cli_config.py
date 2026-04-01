@@ -174,11 +174,11 @@ def test_config_energy_samplers_zeus() -> None:
         result = runner.invoke(app, ["config"])
 
     assert result.exit_code == 0
-    assert "Energy: zeus" in result.output
+    assert "Sampler: zeus" in result.output
 
 
 def test_config_energy_samplers_none() -> None:
-    """When no energy samplers are installed, Energy section shows 'Energy: none'."""
+    """When no energy samplers are installed, Energy section shows 'Sampler: none'."""
 
     def fake_find_spec_none(name: str) -> None:
         return None
@@ -190,7 +190,7 @@ def test_config_energy_samplers_none() -> None:
         result = runner.invoke(app, ["config"])
 
     assert result.exit_code == 0
-    assert "Energy: none" in result.output
+    assert "Sampler: none" in result.output
 
 
 # ---------------------------------------------------------------------------

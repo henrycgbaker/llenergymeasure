@@ -12,12 +12,16 @@ import pytest
 from llenergymeasure.config.introspection import (
     get_all_params,
     get_backend_params,
+    get_display_label,
     get_experiment_config_schema,
+    get_field_role,
     get_param_test_values,
     get_shared_params,
+    get_swept_field_paths,
     get_validation_rules,
     list_all_param_paths,
 )
+from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import DTYPE_SUPPORT
 from tests.conftest import make_config
 
@@ -277,3 +281,71 @@ def test_get_validation_rules_contains_backend_section_mismatch_rule():
     rules = get_validation_rules()
     combinations = [r["combination"] for r in rules]
     assert any("mismatch" in c for c in combinations)
+
+
+# ---------------------------------------------------------------------------
+# Field metadata helpers (display_label / role)
+# ---------------------------------------------------------------------------
+
+
+def test_get_display_label_from_metadata():
+    """get_display_label() returns 'Model' for ExperimentConfig.model field."""
+    fi = ExperimentConfig.model_fields["model"]
+    label = get_display_label(fi, "model")
+    assert label == "Model"
+
+
+def test_get_display_label_fallback():
+    """get_display_label() falls back to title-cased name for fields without metadata."""
+    fi = ExperimentConfig.model_fields["random_seed"]
+    # random_seed has no json_schema_extra; expect title-cased fallback
+    label = get_display_label(fi, "random_seed")
+    assert label == "Random Seed"
+
+
+def test_get_field_role_workload():
+    """get_field_role() returns 'workload' for model field."""
+    fi = ExperimentConfig.model_fields["model"]
+    assert get_field_role(fi) == "workload"
+
+
+def test_get_field_role_experimental():
+    """get_field_role() returns 'experimental' for dtype field."""
+    fi = ExperimentConfig.model_fields["dtype"]
+    assert get_field_role(fi) == "experimental"
+
+
+def test_get_field_role_none_for_unannotated():
+    """get_field_role() returns None for fields without role metadata."""
+    fi = ExperimentConfig.model_fields["random_seed"]
+    assert get_field_role(fi) is None
+
+
+# ---------------------------------------------------------------------------
+# get_swept_field_paths
+# ---------------------------------------------------------------------------
+
+
+def test_get_swept_field_paths_single_experiment():
+    """Single experiment yields an empty swept set."""
+    exp = ExperimentConfig(model="gpt2")
+    result = get_swept_field_paths([exp])
+    assert result == set()
+
+
+def test_get_swept_field_paths_dtype_swept():
+    """Two experiments with different dtypes yield {'dtype'} in swept paths."""
+    exp1 = ExperimentConfig(model="gpt2", dtype="float16")
+    exp2 = ExperimentConfig(model="gpt2", dtype="bfloat16")
+    result = get_swept_field_paths([exp1, exp2])
+    assert "dtype" in result
+
+
+def test_get_swept_field_paths_nested_field():
+    """Two experiments with different n_prompts yield dataset.n_prompts in swept."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    exp1 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=10))
+    exp2 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
+    result = get_swept_field_paths([exp1, exp2])
+    assert "dataset.n_prompts" in result

@@ -851,10 +851,11 @@ class TestBuildPreflightPanel:
         assert "aienergyscore" in output
 
     def test_panel_metadata_energy(self):
-        """Panel shows energy sampler in Energy sampler row."""
+        """Panel shows energy sampler value in the Workload section."""
         sc = _make_panel_study_config()
         output = _render_panel(sc)
-        assert "Energy sampler" in output
+        # Label comes from json_schema_extra display_label ("Sampler") not hardcoded string
+        assert "Sampler" in output
 
     def test_panel_sweep_dimensions_model(self):
         """Sweep dimensions section contains model names when multiple models used."""
@@ -914,3 +915,47 @@ class TestBuildPreflightPanel:
         # Both backends appear
         assert "pytorch" in output
         assert "vllm" in output
+
+    def test_panel_has_workload_section(self):
+        """Panel contains 'Workload' section header."""
+        sc = _make_panel_study_config()
+        output = _render_panel(sc)
+        assert "Workload" in output
+
+    def test_panel_has_experimental_section(self):
+        """Panel contains 'Experimental' section header."""
+        sc = _make_panel_study_config()
+        output = _render_panel(sc)
+        assert "Experimental" in output
+
+    def test_panel_workload_shows_model(self):
+        """Workload section contains model value when model is constant."""
+        sc = _make_panel_study_config(models=["gpt2"])
+        output = _render_panel(sc)
+        assert "gpt2" in output
+
+    def test_panel_experimental_shows_dtype(self):
+        """Experimental section shows dtype (role=experimental)."""
+        sc = _make_panel_study_config(dtypes=["float16"])
+        output = _render_panel(sc)
+        # 'float16' appears in the panel
+        assert "float16" in output
+
+    def test_panel_swept_workload_annotated_with_dagger(self):
+        """A swept workload field (e.g. model) gets a dagger annotation in Experimental."""
+        sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"])
+        output = _render_panel(sc)
+        # Both model values appear
+        assert "gpt2" in output
+        # Dagger annotation appears because model is typically workload but is swept
+        assert "\u2020" in output
+
+    def test_panel_experimental_swept_dtype_bold_no_annotation(self):
+        """A swept experimental field (dtype) has no dagger annotation."""
+        sc = _make_panel_study_config(dtypes=["float16", "bfloat16"])
+        output = _render_panel(sc)
+        # Both dtype values appear
+        assert "float16" in output
+        assert "bfloat16" in output
+        # No dagger annotation for dtype (it is already experimental, not workload)
+        assert "\u2020" not in output

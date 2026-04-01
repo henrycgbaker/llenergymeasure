@@ -392,3 +392,34 @@ def test_json_round_trip(make_result):
     assert restored.timeseries == "timeseries.parquet"
     assert restored.measurement_warnings == ["Short duration detected."]
     assert restored.warmup_excluded_samples == 5
+
+
+# ---------------------------------------------------------------------------
+# experiment_name field on ExperimentConfig
+# ---------------------------------------------------------------------------
+
+
+def test_experiment_name_field_exists():
+    """ExperimentConfig has experiment_name defaulting to None."""
+    config = ExperimentConfig(model="gpt2")
+    assert hasattr(config, "experiment_name")
+    assert config.experiment_name is None
+
+
+def test_experiment_name_can_be_set():
+    """experiment_name can be set to a string value."""
+    config = ExperimentConfig(model="gpt2", experiment_name="my-run")
+    assert config.experiment_name == "my-run"
+
+
+# ---------------------------------------------------------------------------
+# DRY n_prompts default
+# ---------------------------------------------------------------------------
+
+
+def test_n_prompts_default_matches_dataset_config():
+    """_N_PROMPTS_DEFAULT in api/_impl.py equals DatasetConfig field default."""
+    from llenergymeasure.api._impl import _N_PROMPTS_DEFAULT
+    from llenergymeasure.config.models import DatasetConfig
+
+    assert DatasetConfig.model_fields["n_prompts"].default == _N_PROMPTS_DEFAULT

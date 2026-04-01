@@ -7,7 +7,6 @@ import itertools
 import json
 import logging
 import random
-import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,7 +18,12 @@ from rich.panel import Panel
 from rich.text import Text
 
 from llenergymeasure.config._dict_utils import _unflatten, deep_merge
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.introspection import (
+    get_display_label,
+    get_field_role,
+    get_swept_field_paths,
+)
+from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 from llenergymeasure.config.ssot import SOURCE_MULTI_BACKEND_ELEVATION
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -27,14 +31,7 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        """Backport of StrEnum for Python < 3.11."""
-
+from llenergymeasure.utils.compat import StrEnum
 
 logger = logging.getLogger(__name__)
 
@@ -367,9 +364,14 @@ def build_preflight_panel(
     - Border title: "Study: <name>"
     - Execution Controls: experiments, cycle order, gaps, shuffle seed, skip preflight
     - Runners: per-backend runner mode with auto-elevation annotation
-    - Study-wide constants: model, n, dataset, energy sampler (when not swept)
-    - Sweep dimensions: varying fields with nested sub-config grouping
+    - Workload: constant workload fields (model, prompts, dataset, sampler, token limits)
+    - Experimental: experimental variables (dtype, backend) plus swept workload fields
+    - Sweep Dimensions: backend-specific swept params (sub-config level)
     - Dimmed design hash at the bottom
+
+    Field labels come from json_schema_extra display_label metadata (SSOT).
+    Declared values display normally; defaulted values are dimmed.
+    Swept workload fields appear in Experimental section with a dagger annotation.
 
     When ``runner_specs`` is provided (resolved by pre-flight), the panel shows
     effective runner modes. Otherwise falls back to YAML-declared runners.
@@ -382,6 +384,7 @@ def build_preflight_panel(
     n_runs = len(study_config.experiments)
     n_configs = n_runs // n_cycles if n_cycles > 0 else n_runs
     hash_display = study_config.study_design_hash or "unknown"
+    experiments = study_config.experiments
 
     # --- Pluralisation helper ---
     def _pl(n: int, singular: str, plural: str | None = None) -> str:
@@ -395,40 +398,30 @@ def build_preflight_panel(
         body.append(title, style="bold")
         body.append("\n")
 
-    def _line(body: Text, label: str, value: str, indent: int = 4) -> None:
-        body.append(f"{' ' * indent}{label:<18}")
-        body.append(f"{value}\n")
+    def _line(
+        body: Text,
+        label: str,
+        value: str,
+        indent: int = 4,
+        value_style: str = "",
+    ) -> None:
+        body.append(f"{' ' * indent}")
+        body.append(f"{label:<18}")
+        if value_style:
+            body.append(f"{value}\n", style=value_style)
+        else:
+            body.append(f"{value}\n")
 
-    # --- Unique values across experiments (single pass) ---
-    _backends: set[str] = set()
-    _models: set[str] = set()
-    _ns: set[int] = set()
-    _datasets: set[str] = set()
-    _max_ins: set[int | None] = set()
-    _max_outs: set[int | None] = set()
-    _energy: set[str] = set()
-    for exp in study_config.experiments:
-        _backends.add(exp.backend)
-        _models.add(exp.model)
-        _ns.add(exp.dataset.n_prompts)
-        _datasets.add(exp.dataset.source)
-        _max_ins.add(exp.max_input_tokens)
-        _max_outs.add(exp.max_output_tokens)
-        _energy.add(str(exp.energy_sampler) if exp.energy_sampler is not None else "disabled")
-    unique_backends = sorted(_backends)
-    unique_models = sorted(_models)
-    unique_n = sorted(_ns)
-    unique_datasets = sorted(_datasets)
-    unique_max_in = sorted(v for v in _max_ins if v is not None)
-    unique_max_out = sorted(v for v in _max_outs if v is not None)
-    unique_energy = sorted(_energy)
-
-    experiments_line = (
-        f"{_pl(n_configs, 'config')} x {_pl(n_cycles, 'cycle')} = {_pl(n_runs, 'run')}"
-    )
+    # --- Unique backends (for Runners section) ---
+    unique_backends = sorted({exp.backend for exp in experiments})
 
     # --- Resolve energy sampler display ---
-    # Skip host probe when all runners are Docker (container has different samplers).
+    unique_energy = sorted(
+        {
+            str(exp.energy_sampler) if exp.energy_sampler is not None else "disabled"
+            for exp in experiments
+        }
+    )
     all_docker = runner_specs is not None and all(
         spec.mode == "docker" for spec in runner_specs.values()
     )
@@ -436,11 +429,17 @@ def build_preflight_panel(
         unique_energy, probed_sampler=probed_energy_sampler, skip_probe=all_docker
     )
 
-    # --- Sweep dimensions ---
-    sweep_dimensions = _collect_sweep_dimensions(study_config.experiments)
+    # --- Swept field paths (for section routing) ---
+    swept_paths = get_swept_field_paths(experiments)
+
+    # --- Sweep dimensions (backend-scoped) ---
+    sweep_dimensions = _collect_sweep_dimensions(experiments)
 
     # --- Assemble body ---
     body = Text()
+    experiments_line = (
+        f"{_pl(n_configs, 'config')} x {_pl(n_cycles, 'cycle')} = {_pl(n_runs, 'run')}"
+    )
 
     # -- Execution Controls --
     _section(body, "Execution Controls")
@@ -477,28 +476,105 @@ def build_preflight_panel(
             mode_str = str(yaml_runners.get(b, "local"))
             _line(body, b, mode_str)
 
-    # -- Study-wide constants (shown when NOT varying across experiments) --
-    constants: list[tuple[str, str]] = []
-    if len(unique_models) == 1:
-        constants.append(("Model", unique_models[0]))
-    if len(unique_n) == 1:
-        constants.append(("n_prompts", str(unique_n[0])))
-    if len(unique_max_in) == 1:
-        constants.append(("max_input_tokens", str(unique_max_in[0])))
-    if len(unique_max_out) == 1:
-        constants.append(("max_output_tokens", str(unique_max_out[0])))
-    if len(unique_datasets) == 1:
-        constants.append(("Dataset", unique_datasets[0]))
-    constants.append(("Energy sampler", energy_display))
-    if not study_config.output.save_timeseries:
-        constants.append(("Save timeseries", "off"))
+    # -- Workload section --
+    # Top-level ExperimentConfig fields with role="workload" that are NOT swept.
+    # DatasetConfig fields with role="workload" are included as dataset.field_name.
+    # Each field is displayed dim when it was not explicitly declared (defaulted).
+    workload_rows: list[tuple[str, str, bool]] = []  # (label, value, is_declared)
 
-    if constants:
-        _section(body, "Constants")
-        for label, value in constants:
-            _line(body, label, value)
+    first_exp = experiments[0]
+    # Determine declared fields from the first experiment's __fields_set__
+    # (constant workload fields are the same across all experiments, so first suffices)
+    declared_fields = first_exp.model_fields_set
 
-    # -- Split sweep dimensions into shared (universal) and backend-scoped --
+    for field_name, fi in ExperimentConfig.model_fields.items():
+        role = get_field_role(fi)
+        if role != "workload":
+            continue
+
+        # Special handling for dataset sub-config: show dataset.* fields directly
+        if field_name == "dataset":
+            dataset_first = first_exp.dataset
+            dataset_declared = dataset_first.model_fields_set
+            for ds_field, ds_fi in DatasetConfig.model_fields.items():
+                ds_role = get_field_role(ds_fi)
+                if ds_role != "workload":
+                    continue
+                ds_path = f"dataset.{ds_field}"
+                if ds_path in swept_paths:
+                    continue  # goes to Experimental section
+                unique_vals = {str(getattr(exp.dataset, ds_field)) for exp in experiments}
+                val_str = ", ".join(sorted(unique_vals))
+                is_decl = ds_field in dataset_declared
+                label = get_display_label(ds_fi, ds_field)
+                workload_rows.append((label, val_str, is_decl))
+            continue
+
+        # Skip fields swept across experiments (they go to Experimental section)
+        if field_name in swept_paths:
+            continue
+
+        # Build the display value (all experiments constant here)
+        if field_name == "energy_sampler":
+            val_str = energy_display
+        else:
+            unique_vals = {str(getattr(exp, field_name)) for exp in experiments}
+            val_str = ", ".join(sorted(unique_vals))
+
+        label = get_display_label(fi, field_name)
+        is_decl = field_name in declared_fields
+        workload_rows.append((label, val_str, is_decl))
+
+    if workload_rows:
+        _section(body, "Workload")
+        for label, val_str, is_decl in workload_rows:
+            _line(body, label, val_str, value_style="" if is_decl else "dim")
+
+    # -- Experimental section --
+    # Fields with role="experimental" (always shown here).
+    # Plus workload fields that ARE swept (annotated with dagger).
+    experimental_rows: list[
+        tuple[str, str, bool, bool]
+    ] = []  # (label, value, is_swept_workload, is_swept)
+
+    for field_name, fi in ExperimentConfig.model_fields.items():
+        role = get_field_role(fi)
+        if role is None:
+            continue
+
+        is_swept = field_name in swept_paths
+        is_workload = role == "workload"
+        is_experimental = role == "experimental"
+
+        # dataset sub-config: handle swept dataset.* fields
+        if field_name == "dataset" and is_workload:
+            for ds_field, ds_fi in DatasetConfig.model_fields.items():
+                ds_role = get_field_role(ds_fi)
+                if ds_role != "workload":
+                    continue
+                ds_path = f"dataset.{ds_field}"
+                if ds_path not in swept_paths:
+                    continue  # already shown in Workload
+                ds_unique = sorted({str(getattr(exp.dataset, ds_field)) for exp in experiments})
+                val_str = ", ".join(ds_unique)
+                label = get_display_label(ds_fi, ds_field)
+                experimental_rows.append((label, val_str, True, True))
+            continue
+
+        if is_experimental or (is_workload and is_swept):
+            exp_unique = sorted({str(getattr(exp, field_name)) for exp in experiments})
+            val_str = ", ".join(exp_unique)
+            label = get_display_label(fi, field_name)
+            experimental_rows.append((label, val_str, is_workload and is_swept, is_swept))
+
+    if experimental_rows:
+        _section(body, "Experimental")
+        for label, val_str, is_swept_workload, is_swept in experimental_rows:
+            annotation = " \u2020" if is_swept_workload else ""
+            value_style = "bold" if is_swept else ""
+            _line(body, label, f"{val_str}{annotation}", value_style=value_style)
+
+    # -- Backend sweep dimensions (sub-config level swept params) --
     shared_dims: list[tuple[str, str, int]] = []
     backend_dims: list[tuple[str, str, int]] = []
 
