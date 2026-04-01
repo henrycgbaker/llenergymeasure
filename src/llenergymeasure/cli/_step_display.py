@@ -688,6 +688,7 @@ class StudyStepDisplay:
 
         # Prefer mj_per_tok_adjusted (baseline-subtracted) when available,
         # fall back to mj_per_tok_total, then compute from total energy.
+        mj_tok: float | None
         if mj_per_tok_adjusted is not None:
             mj_tok = mj_per_tok_adjusted
         elif mj_per_tok_total is not None:
