@@ -13,20 +13,10 @@ Non-TTY:     Phase headers + one line per completed/skipped step +
 from __future__ import annotations
 
 import contextlib
-import sys
 import threading
 import time
 from collections.abc import Callable
 from typing import NamedTuple
-
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from enum import Enum
-
-    class StrEnum(str, Enum):  # type: ignore[no-redef]
-        """Backport of StrEnum for Python < 3.11."""
-
 
 from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.live import Live
@@ -34,6 +24,7 @@ from rich.table import Table
 from rich.text import Text
 
 from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_LABELS, STEP_PHASES
+from llenergymeasure.utils.compat import StrEnum
 from llenergymeasure.utils.formatting import format_elapsed as _format_elapsed
 from llenergymeasure.utils.formatting import short_name as _short_image
 from llenergymeasure.utils.formatting import truncate_detail as _truncate_detail

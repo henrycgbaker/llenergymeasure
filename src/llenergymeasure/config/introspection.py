@@ -55,17 +55,6 @@ def get_field_role(field_info: FieldInfo) -> str | None:
     return None
 
 
-def get_field_metadata(model_cls: type[BaseModel]) -> dict[str, dict[str, Any]]:
-    """Return {field_name: {"label": str, "role": str|None}} for all fields on model_cls."""
-    result: dict[str, dict[str, Any]] = {}
-    for name, fi in model_cls.model_fields.items():
-        result[name] = {
-            "label": get_display_label(fi, name),
-            "role": get_field_role(fi),
-        }
-    return result
-
-
 def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
     """Return dotted field paths that vary across experiments in a study.
 
@@ -76,33 +65,26 @@ def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
         experiments: List of resolved ExperimentConfig objects from a study.
 
     Returns:
-        Set of dotted field paths (e.g. {"dtype", "pytorch.batch_size"}).
+        Set of dotted field paths (e.g. {"dtype", "dataset.n_prompts"}).
     """
     if len(experiments) <= 1:
         return set()
 
-    # Dump all experiments to comparable dicts
-    dumps = [exp.model_dump() for exp in experiments]
+    first = experiments[0]
     swept: set[str] = set()
 
-    def _compare(path: str, values: list[Any]) -> None:
-        if len({str(v) for v in values}) > 1:
-            swept.add(path)
+    for field_name in type(first).model_fields:
+        values = [getattr(exp, field_name) for exp in experiments]
 
-    # Compare top-level fields and one level of sub-config nesting
-    for field_name in type(experiments[0]).model_fields:
-        values = [d.get(field_name) for d in dumps]
-        _compare(field_name, values)
-
-        # If the field value is a dict (sub-config), compare nested keys too
-        if isinstance(values[0], dict):
-            all_keys: set[str] = set()
-            for v in values:
-                if isinstance(v, dict):
-                    all_keys.update(v.keys())
-            for key in all_keys:
-                nested_values = [v.get(key) if isinstance(v, dict) else None for v in values]
-                _compare(f"{field_name}.{key}", nested_values)
+        # Sub-config: compare nested fields via getattr
+        if isinstance(values[0], BaseModel):
+            for sub_field in type(values[0]).model_fields:
+                sub_values = [str(getattr(v, sub_field)) for v in values]
+                if len(set(sub_values)) > 1:
+                    swept.add(f"{field_name}.{sub_field}")
+        else:
+            if len({str(v) for v in values}) > 1:
+                swept.add(field_name)
 
     return swept
 

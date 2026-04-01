@@ -7,7 +7,6 @@ import itertools
 import json
 import logging
 import random
-import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,7 +23,7 @@ from llenergymeasure.config.introspection import (
     get_field_role,
     get_swept_field_paths,
 )
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 from llenergymeasure.config.ssot import SOURCE_MULTI_BACKEND_ELEVATION
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -32,14 +31,7 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import StudyConfig
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        """Backport of StrEnum for Python < 3.11."""
-
+from llenergymeasure.utils.compat import StrEnum
 
 logger = logging.getLogger(__name__)
 
@@ -412,10 +404,9 @@ def build_preflight_panel(
         value: str,
         indent: int = 4,
         value_style: str = "",
-        label_style: str = "",
     ) -> None:
         body.append(f"{' ' * indent}")
-        body.append(f"{label:<18}", style=label_style)
+        body.append(f"{label:<18}")
         if value_style:
             body.append(f"{value}\n", style=value_style)
         else:
@@ -503,8 +494,6 @@ def build_preflight_panel(
 
         # Special handling for dataset sub-config: show dataset.* fields directly
         if field_name == "dataset":
-            from llenergymeasure.config.models import DatasetConfig
-
             dataset_first = first_exp.dataset
             dataset_declared = dataset_first.model_fields_set
             for ds_field, ds_fi in DatasetConfig.model_fields.items():
@@ -559,8 +548,6 @@ def build_preflight_panel(
 
         # dataset sub-config: handle swept dataset.* fields
         if field_name == "dataset" and is_workload:
-            from llenergymeasure.config.models import DatasetConfig
-
             for ds_field, ds_fi in DatasetConfig.model_fields.items():
                 ds_role = get_field_role(ds_fi)
                 if ds_role != "workload":

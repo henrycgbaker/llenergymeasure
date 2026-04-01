@@ -14,7 +14,6 @@ from llenergymeasure.config.introspection import (
     get_backend_params,
     get_display_label,
     get_experiment_config_schema,
-    get_field_metadata,
     get_field_role,
     get_param_test_values,
     get_shared_params,
@@ -322,19 +321,6 @@ def test_get_field_role_none_for_unannotated():
     assert get_field_role(fi) is None
 
 
-def test_get_field_metadata_returns_correct_dict():
-    """get_field_metadata(ExperimentConfig) returns correct dict for key fields."""
-    meta = get_field_metadata(ExperimentConfig)
-    assert isinstance(meta, dict)
-    assert meta["model"]["label"] == "Model"
-    assert meta["model"]["role"] == "workload"
-    assert meta["dtype"]["label"] == "Dtype"
-    assert meta["dtype"]["role"] == "experimental"
-    assert meta["energy_sampler"]["label"] == "Sampler"
-    # experiment_name has no role metadata
-    assert meta["experiment_name"]["role"] is None
-
-
 # ---------------------------------------------------------------------------
 # get_swept_field_paths
 # ---------------------------------------------------------------------------
@@ -356,11 +342,10 @@ def test_get_swept_field_paths_dtype_swept():
 
 
 def test_get_swept_field_paths_nested_field():
-    """Two experiments with different n_prompts yield dataset and dataset.n_prompts in swept."""
+    """Two experiments with different n_prompts yield dataset.n_prompts in swept."""
     from llenergymeasure.config.models import DatasetConfig
 
     exp1 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=10))
     exp2 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
     result = get_swept_field_paths([exp1, exp2])
-    assert "dataset" in result
     assert "dataset.n_prompts" in result
