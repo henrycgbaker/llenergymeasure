@@ -359,16 +359,12 @@ def print_study_summary(result: StudyResult) -> None:
 
     # Table rows
     for i, exp in enumerate(experiments, start_idx):
-        # Build compact config string: model_short / backend / non-default params
-        model_raw = exp.effective_config.get("model", "unknown")
-        model_short = model_short_name(model_raw)
+        # Build compact config string: model_short / backend
+        model_short = model_short_name(exp.model_name)
         if len(model_short) > 20:
             model_short = "..." + model_short[-17:]
         backend = exp.backend
-        dtype_val = (
-            exp.effective_config.get("dtype", "?") if hasattr(exp, "effective_config") else "?"
-        )
-        config_str = f"{model_short} / {backend} / {dtype_val}"
+        config_str = f"{model_short} / {backend}"
         if len(config_str) > 40:
             config_str = config_str[:37] + "..."
 

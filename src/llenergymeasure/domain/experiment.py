@@ -172,6 +172,7 @@ class ExperimentResult(BaseModel):
     backend_version: str | None = Field(
         default=None, description="Backend version string for reproducibility"
     )
+    model_name: str = Field(default="unknown", description="Model name/path used")
 
     # Methodology
     measurement_methodology: Literal["total", "steady_state", "windowed"] = Field(
@@ -263,17 +264,6 @@ class ExperimentResult(BaseModel):
     # Timestamps
     start_time: datetime = Field(..., description="Earliest process start time")
     end_time: datetime = Field(..., description="Latest process end time")
-
-    # Effective configuration (for reproducibility)
-    effective_config: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Full resolved config",
-    )
-    declared_config: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Config fields explicitly set by user (excludes system defaults). "
-        "Captured via model_dump(exclude_unset=True).",
-    )
 
     # Per-process breakdown (embedded, not separate files per CONTEXT.md)
     process_results: list[RawProcessResult] = Field(

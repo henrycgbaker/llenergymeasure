@@ -84,10 +84,16 @@ def test_multi_backend_auto_elevates_local_to_docker(monkeypatch):
             ExperimentConfig(model="m2", backend="vllm"),
         ]
     )
-    specs = run_study_preflight(study, yaml_runners={"pytorch": "local", "vllm": "docker"})
+    specs, overrides = run_study_preflight(
+        study, yaml_runners={"pytorch": "local", "vllm": "docker"}
+    )
     assert specs["pytorch"].mode == "docker"
     assert specs["pytorch"].source == "multi_backend_elevation"
     assert specs["vllm"].mode == "docker"
+    # System overrides should capture the auto-elevation
+    assert "runner.pytorch" in overrides
+    assert overrides["runner.pytorch"]["declared"] == "local"
+    assert overrides["runner.pytorch"]["effective"] == "docker"
 
 
 def test_preflight_forwards_runner_context(monkeypatch):

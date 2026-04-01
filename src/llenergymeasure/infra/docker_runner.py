@@ -137,7 +137,7 @@ class DockerRunner:
         progress: ProgressCallback | None = None,
         save_timeseries: bool = True,
         skip_image_check: bool = False,
-    ) -> Any:
+    ) -> tuple[Any, Path | None]:
         """Run an experiment inside an ephemeral Docker container.
 
         When a progress callback is provided, streams container stdout line by
@@ -150,8 +150,11 @@ class DockerRunner:
             progress: Optional ProgressCallback for step-by-step progress reporting.
 
         Returns:
-            ExperimentResult on success, or a dict error payload if the container
-            wrote an error JSON (same format as StudyRunner worker errors).
+            Tuple of (result, ts_tmpdir):
+            - result: ExperimentResult on success, or a dict error payload if the
+              container wrote an error JSON.
+            - ts_tmpdir: Path to temp dir containing rescued timeseries.parquet,
+              or None. Caller is responsible for cleanup.
 
         Raises:
             DockerTimeoutError:    Container exceeded ``self.timeout`` seconds.
@@ -289,8 +292,7 @@ class DockerRunner:
             # --- Rescue timeseries parquet before cleanup ---
             # The harness inside the container wrote timeseries.parquet to
             # /run/llem (= exchange_dir on host). Move it to a temp dir so
-            # _save_and_record can find it via effective_config["output_dir"]
-            # after the exchange dir is deleted.
+            # the caller can copy it into the study directory.
             ts_parquet = exchange_dir / "timeseries.parquet"
             ts_tmpdir: Path | None = None
             if ts_parquet.exists() and not isinstance(result, dict):
@@ -301,21 +303,11 @@ class DockerRunner:
             self._cleanup_exchange_dir(exchange_dir)
             exchange_dir = None  # type: ignore[assignment]
 
-            # Error payload dicts ({type, message, traceback}) are returned as-is —
-            # they have no effective_config to annotate with runner metadata.
+            # Error payload dicts ({type, message, traceback}) are returned as-is.
             if isinstance(result, dict):
-                return result
+                return result, None
 
-            result = self._inject_runner_metadata(result)
-
-            # Rewrite output_dir to point at the host-side temp dir (not the
-            # now-deleted /run/llem container path) so _save_and_record can
-            # resolve the parquet sidecar.
-            if ts_tmpdir is not None:
-                updated_ec = {**result.effective_config, "output_dir": str(ts_tmpdir)}
-                result = result.model_copy(update={"effective_config": updated_ec})
-
-            return result
+            return result, ts_tmpdir
 
         finally:
             # Exchange dir is set to None when we've handed off or already cleaned up.
@@ -691,22 +683,10 @@ class DockerRunner:
         except Exception as exc:
             logger.warning("Could not remove exchange dir %s: %s", exchange_dir, exc)
 
-    def _inject_runner_metadata(self, result: Any) -> Any:
-        """Inject runner metadata into the result's effective_config.
-
-        Since ExperimentResult is frozen, this creates a copy via model_copy().
-
-        Args:
-            result: ExperimentResult to annotate.
-
-        Returns:
-            A new ExperimentResult with runner_type, runner_image, and
-            runner_source added to effective_config.
-        """
-        runner_metadata = {
+    def get_runner_metadata(self) -> dict[str, str]:
+        """Return runner metadata dict for inclusion in effective_config sidecar."""
+        return {
             "runner_type": "docker",
             "runner_image": self.image,
             "runner_source": self.source,
         }
-        updated_effective_config = {**result.effective_config, **runner_metadata}
-        return result.model_copy(update={"effective_config": updated_effective_config})

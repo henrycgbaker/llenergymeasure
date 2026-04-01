@@ -555,10 +555,7 @@ def test_harness_build_result_populates_effective_config() -> None:
 
     result = harness._build_result(**kwargs)
 
-    assert result.effective_config != {}, "effective_config should not be empty"
-    assert result.effective_config.get("model") == "gpt2", (
-        "effective_config['model'] should be 'gpt2' (the configured model name)"
-    )
+    assert result.model_name == "gpt2", "model_name should be 'gpt2' (the configured model name)"
 
 
 def test_harness_build_result_propagates_baseline_fields() -> None:

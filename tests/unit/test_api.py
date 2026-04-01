@@ -332,11 +332,12 @@ class _MockBackend:
 
 
 def _mock_preflight_return(study, **kw):
-    """Mock preflight that returns a local RunnerSpec for each backend in the study."""
+    """Mock preflight that returns (runner_specs, system_overrides) tuple."""
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
     backends = {exp.backend for exp in study.experiments}
-    return {b: RunnerSpec(mode="local", image=None, source="test") for b in backends}
+    specs = {b: RunnerSpec(mode="local", image=None, source="test") for b in backends}
+    return specs, {}
 
 
 def _patch_harness(monkeypatch, result: ExperimentResult) -> None:
@@ -722,7 +723,9 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
         captured_runner_specs.append(runner_specs)
         return original_run_via_runner(study, manifest, study_dir, runner_specs=runner_specs)
 
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: resolved_specs)
+    monkeypatch.setattr(
+        study_pf_module, "run_study_preflight", lambda study, **kw: (resolved_specs, {})
+    )
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
         lambda **kwargs: make_user_config(),
@@ -827,7 +830,9 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     mock_result = _make_experiment_result()
     mock_backend = _MockBackend(mock_result)
 
-    monkeypatch.setattr(study_pf_module, "run_study_preflight", lambda study, **kw: mixed_specs)
+    monkeypatch.setattr(
+        study_pf_module, "run_study_preflight", lambda study, **kw: (mixed_specs, {})
+    )
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
     _patch_harness(monkeypatch, mock_result)

@@ -388,7 +388,7 @@ def test_print_study_summary_basic():
     # Use model_construct to bypass Pydantic validation for the container —
     # experiments list contains a MagicMock, which is not a valid ExperimentResult.
     exp = MagicMock()
-    exp.effective_config = {"model": "test/model", "dtype": "float16"}
+    exp.model_name = "test/model"
     exp.backend = "pytorch"
     exp.duration_sec = 45.2
     exp.total_energy_j = 123.4

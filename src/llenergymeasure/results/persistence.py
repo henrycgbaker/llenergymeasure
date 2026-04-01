@@ -41,8 +41,7 @@ def _experiment_dir_name(
     """
     from llenergymeasure.utils.formatting import model_short_name
 
-    raw_model = result.effective_config.get("model", "unknown")
-    model_short = model_short_name(raw_model)
+    model_short = model_short_name(result.model_name)
     backend = result.backend
     config_hash = result.measurement_config_hash[:8]
 
@@ -115,11 +114,12 @@ def save_result(
     timeseries_source: Path | None = None,
     experiment_index: int | None = None,
     cycle: int = 1,
+    effective_config: dict[str, object] | None = None,
 ) -> Path:
     """Save ExperimentResult to a collision-safe subdirectory of output_dir.
 
     Creates: ``{output_dir}/[{index}_]c{cycle}_{model}-{backend}_{hash}/result.json``
-    Also writes ``effective_config.json`` sidecar from ``result.effective_config``.
+    Also writes ``effective_config.json`` sidecar when ``effective_config`` is provided.
     If timeseries_source provided: copies to ``{dir}/timeseries.parquet``.
 
     Args:
@@ -129,6 +129,8 @@ def save_result(
         experiment_index: Optional 1-based experiment index for directory prefix
             (used in study context for natural sort ordering).
         cycle: Cycle number (1-based). Embedded in directory name.
+        effective_config: Fully resolved experiment config dict to write as
+            a sidecar file. Passed separately from the result (not embedded).
 
     Returns:
         Path to the result.json file (usable with load_result() directly).
@@ -145,8 +147,8 @@ def save_result(
     logger.debug("Saved result to %s", result_path)
 
     # Write effective_config.json sidecar
-    if result.effective_config:
-        save_effective_config(target_dir, result.effective_config)
+    if effective_config:
+        save_effective_config(target_dir, effective_config)
 
     if timeseries_source is not None:
         timeseries_source = Path(timeseries_source)
@@ -193,13 +195,6 @@ def load_result(path: Path) -> ExperimentResult:
     path = Path(path)
     content = path.read_text(encoding="utf-8")
     result = ExperimentResult.model_validate_json(content)
-
-    # Auto-discover effective_config.json sidecar (backward compat: result.json
-    # still embeds effective_config, so the sidecar is informational for now)
-    if not result.effective_config:
-        sidecar_config = load_effective_config(path.parent)
-        if sidecar_config is not None:
-            result.effective_config = sidecar_config
 
     sidecar = path.parent / "timeseries.parquet"
     if result.timeseries is not None and not sidecar.exists():

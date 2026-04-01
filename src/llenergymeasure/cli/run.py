@@ -505,7 +505,7 @@ def _run_study_impl(
 
     user_config = load_user_config()
     try:
-        runner_specs = run_study_preflight(
+        runner_specs, _system_overrides = run_study_preflight(
             study_config,
             # Dry-run: skip Docker binary checks (just resolve runner modes).
             skip_preflight=skip_preflight or dry_run,

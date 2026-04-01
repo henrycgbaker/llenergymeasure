@@ -92,7 +92,7 @@ class TestSuccessPath:
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE)
-            returned = runner.run(config)
+            returned, _ts = runner.run(config)
 
         assert returned.experiment_id == result.experiment_id
         # Exchange dir should be cleaned up on success
@@ -134,7 +134,7 @@ class TestSuccessPath:
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE)
-            returned = runner.run(config)
+            returned, _ts = runner.run(config)
 
         assert returned.experiment_id == result.experiment_id
 
@@ -162,11 +162,12 @@ class TestSuccessPath:
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE, source="yaml")
-            returned = runner.run(config)
+            _returned, _ts_dir = runner.run(config)
 
-        assert returned.effective_config["runner_type"] == "docker"
-        assert returned.effective_config["runner_image"] == IMAGE
-        assert returned.effective_config["runner_source"] == "yaml"
+        metadata = runner.get_runner_metadata()
+        assert metadata["runner_type"] == "docker"
+        assert metadata["runner_image"] == IMAGE
+        assert metadata["runner_source"] == "yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +391,7 @@ class TestErrorPayloadFromContainer:
             result_path.write_text(json.dumps(error_payload), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE)
-            returned = runner.run(config)
+            returned, _ts = runner.run(config)
 
         # Error payloads are returned as dicts, not ExperimentResult
         assert isinstance(returned, dict)
@@ -533,41 +534,19 @@ class TestHFTokenPropagation:
 
 
 class TestRunnerMetadata:
-    def test_effective_config_has_runner_keys(self, tmp_path):
-        """Result effective_config contains runner_type, runner_image, runner_source."""
+    def test_get_runner_metadata_returns_correct_keys(self):
+        """get_runner_metadata() returns runner_type, runner_image, runner_source."""
+        runner = DockerRunner(image=IMAGE, source="auto_detected")
+        metadata = runner.get_runner_metadata()
+        assert metadata["runner_type"] == "docker"
+        assert metadata["runner_image"] == IMAGE
+        assert metadata["runner_source"] == "auto_detected"
+
+    def test_run_returns_tuple(self, tmp_path):
+        """DockerRunner.run() returns (result, ts_tmpdir) tuple."""
         config = make_config()
         result = make_result()
-        exchange_dir = tmp_path / "llem-runnerkeys"
-        exchange_dir.mkdir()
-
-        with (
-            patch(
-                "llenergymeasure.infra.docker_runner.tempfile.mkdtemp",
-                return_value=str(exchange_dir),
-            ),
-            patch(
-                "llenergymeasure.infra.docker_runner.subprocess.run",
-                side_effect=_subprocess_run_with_image_cached(_make_proc(0)),
-            ),
-            patch("llenergymeasure.infra.docker_runner.shutil.rmtree"),
-        ):
-            config_hash = _docker_config_hash(config)
-            result_path = exchange_dir / f"{config_hash}_result.json"
-            result_path.write_text(result.model_dump_json(), encoding="utf-8")
-
-            runner = DockerRunner(image=IMAGE, source="auto_detected")
-            returned = runner.run(config)
-
-        ec = returned.effective_config
-        assert ec["runner_type"] == "docker"
-        assert ec["runner_image"] == IMAGE
-        assert ec["runner_source"] == "auto_detected"
-
-    def test_existing_effective_config_preserved(self, tmp_path):
-        """Runner metadata does not overwrite existing effective_config keys."""
-        config = make_config()
-        result = make_result(effective_config={"model_dtype": "float16", "batch_size": 8})
-        exchange_dir = tmp_path / "llem-preserve-ec"
+        exchange_dir = tmp_path / "llem-tuple"
         exchange_dir.mkdir()
 
         with (
@@ -586,12 +565,10 @@ class TestRunnerMetadata:
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE, source="yaml")
-            returned = runner.run(config)
+            returned, ts_dir = runner.run(config)
 
-        ec = returned.effective_config
-        assert ec["model_dtype"] == "float16"
-        assert ec["batch_size"] == 8
-        assert ec["runner_type"] == "docker"
+        assert returned.experiment_id == result.experiment_id
+        assert ts_dir is None  # no timeseries.parquet in exchange dir
 
 
 # ---------------------------------------------------------------------------
@@ -630,7 +607,7 @@ class TestCleanupWarning:
 
             runner = DockerRunner(image=IMAGE)
             # Should NOT raise even though rmtree fails
-            returned = runner.run(config)
+            returned, _ts = runner.run(config)
 
         # Still returns a valid result
         assert returned.experiment_id == result.experiment_id
@@ -1034,10 +1011,7 @@ class TestTimeseriesParquetRescue:
         config = make_config()
         result = make_result(
             timeseries="timeseries.parquet",
-            effective_config={
-                "model": "gpt2",
-                "backend": "pytorch",
-            },
+            model_name="gpt2",
         )
 
         exchange_dir = tmp_path / "llem-ts-rescue"
@@ -1070,12 +1044,10 @@ class TestTimeseriesParquetRescue:
             ts_path.write_bytes(b"PARQUET_CONTENT")
 
             runner = DockerRunner(image=IMAGE)
-            returned = runner.run(config)
+            _returned, ts_dir = runner.run(config)
 
-        # output_dir in effective_config must point to the rescue dir so
-        # _save_and_record can find the parquet sidecar
-        output_dir = returned.effective_config.get("output_dir")
-        assert output_dir == str(rescue_dir)
+        # ts_dir must point to the rescue dir containing the parquet sidecar
+        assert ts_dir == rescue_dir
         assert (rescue_dir / "timeseries.parquet").exists()
         assert (rescue_dir / "timeseries.parquet").read_bytes() == b"PARQUET_CONTENT"
 
@@ -1083,14 +1055,9 @@ class TestTimeseriesParquetRescue:
         mock_rmtree.assert_called_once()
 
     def test_no_parquet_no_rescue(self, tmp_path):
-        """When no timeseries.parquet exists, result is returned without output_dir rewrite."""
+        """When no timeseries.parquet exists, ts_dir is None."""
         config = make_config()
-        result = make_result(
-            effective_config={
-                "model": "gpt2",
-                "backend": "pytorch",
-            },
-        )
+        result = make_result()
 
         exchange_dir = tmp_path / "llem-no-ts"
         exchange_dir.mkdir()
@@ -1111,10 +1078,10 @@ class TestTimeseriesParquetRescue:
             result_path.write_text(result.model_dump_json(), encoding="utf-8")
 
             runner = DockerRunner(image=IMAGE)
-            returned = runner.run(config)
+            _returned, ts_dir = runner.run(config)
 
-        # No parquet rescue means no output_dir injected into effective_config
-        assert "output_dir" not in returned.effective_config
+        # No parquet rescue means ts_dir is None
+        assert ts_dir is None
 
     def test_config_serialised_without_output_dir(self, tmp_path):
         """Config JSON written to exchange dir must not contain output_dir (passed via env)."""
