@@ -47,7 +47,7 @@ class VLLMBackend:
         try:
             import vllm
 
-            return vllm.__version__
+            return str(vllm.__version__)
         except Exception:
             return "unknown"
 

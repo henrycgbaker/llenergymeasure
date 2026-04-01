@@ -104,7 +104,7 @@ class TensorRTBackend:
         try:
             import tensorrt_llm
 
-            return tensorrt_llm.__version__
+            return str(tensorrt_llm.__version__)
         except Exception:
             return "unknown"
 
