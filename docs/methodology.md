@@ -298,3 +298,14 @@ Everything else passes through without translation:
 - **Sub-configs** (`warmup`, `baseline`, `energy`) are consumed by the measurement harness,
   not by backends.
 - **`lora`** is defined in config but not yet implemented in any backend.
+
+---
+
+## Known Limitations
+
+### NVML thermal throttle subsampling
+
+NVML samples power and thermal state at ~1s intervals. Thermal throttle events shorter
+than ~100ms may not be detected. The `throttle_detected` field in results reflects what
+NVML observed, not the complete throttle history. This is an inherent limitation of
+NVML's polling API and cannot be resolved without kernel-level instrumentation.

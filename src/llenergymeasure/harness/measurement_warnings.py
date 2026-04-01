@@ -1,6 +1,6 @@
 """Measurement quality warnings for energy experiments.
 
-Five warning flags, all purely informational (never block experiments).
+Four warning flags, all purely informational (never block experiments).
 Each includes actionable remediation advice per CONTEXT.md.
 """
 
@@ -18,7 +18,7 @@ def collect_measurement_warnings(
 ) -> list[str]:
     """Collect measurement quality warnings for a completed experiment.
 
-    All five warnings are purely informational — they never block experiments.
+    All four warnings are purely informational — they never block experiments.
     Each includes actionable remediation advice.
 
     Args:
@@ -66,14 +66,6 @@ def collect_measurement_warnings(
         warnings.append(
             "nvml_low_sample_count: fewer than 10 NVML power samples collected; "
             "energy integration may be inaccurate."
-        )
-
-    # 5. Sub-100ms thermal throttle blind spot (NVML sampling limitation)
-    if nvml_sample_count > 0:
-        warnings.append(
-            "thermal_throttle_subsampling: NVML samples at ~1s intervals; thermal throttle events "
-            "shorter than 100ms are not detected. Methodology limitation: brief throttles may not "
-            "appear in throttle_detected flag."
         )
 
     return warnings

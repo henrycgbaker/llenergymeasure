@@ -1,7 +1,7 @@
 """Unit tests for collect_measurement_warnings().
 
-Tests all five warning flags: short duration, persistence mode off, thermal drift,
-low NVML sample count, and sub-100ms thermal throttle blind spot.
+Tests all four warning flags: short duration, persistence mode off, thermal drift,
+and low NVML sample count.
 """
 
 from __future__ import annotations
@@ -89,67 +89,22 @@ def test_low_nvml_sample_warning_absent_at_10():
 
 
 # ---------------------------------------------------------------------------
-# Warning 5: Sub-100ms thermal throttle blind spot (M4)
-# ---------------------------------------------------------------------------
-
-
-def test_throttle_subsampling_warning_present_when_nvml_active():
-    """Warning fires when nvml_sample_count > 0 (NVML is active)."""
-    warnings = collect_measurement_warnings(30.0, True, 40.0, 42.0, 50)
-    assert any("thermal_throttle_subsampling" in w for w in warnings)
-
-
-def test_throttle_subsampling_warning_absent_when_nvml_inactive():
-    """Warning is absent when nvml_sample_count == 0 (NVML not active)."""
-    warnings = collect_measurement_warnings(30.0, True, 40.0, 42.0, 0)
-    assert not any("thermal_throttle_subsampling" in w for w in warnings)
-
-
-def test_throttle_subsampling_warning_present_with_sample_count_1():
-    """Warning fires even with a single NVML sample."""
-    warnings = collect_measurement_warnings(30.0, True, 40.0, 42.0, 1)
-    assert any("thermal_throttle_subsampling" in w for w in warnings)
-
-
-def test_throttle_subsampling_warning_present_regardless_of_persistence_mode():
-    """Warning fires with nvml_sample_count > 0 even when persistence mode is off."""
-    warnings = collect_measurement_warnings(30.0, False, 40.0, 42.0, 50)
-    assert any("thermal_throttle_subsampling" in w for w in warnings)
-
-
-def test_throttle_subsampling_warning_contains_methodology_note():
-    """Warning text mentions 100ms and methodology limitation."""
-    warnings = collect_measurement_warnings(30.0, True, 40.0, 42.0, 50)
-    throttle_warnings = [w for w in warnings if "thermal_throttle_subsampling" in w]
-    assert len(throttle_warnings) == 1
-    assert "100ms" in throttle_warnings[0]
-    assert "Methodology limitation" in throttle_warnings[0]
-
-
-# ---------------------------------------------------------------------------
 # Warning interactions
 # ---------------------------------------------------------------------------
 
 
 def test_no_warnings_when_nvml_inactive_and_all_conditions_good():
-    """With nvml_sample_count=0 and good conditions, only the low-sample warning fires.
-
-    Note: nvml_sample_count=0 triggers nvml_low_sample_count (0 < 10) but NOT
-    thermal_throttle_subsampling (nvml_sample_count is not > 0). There is no
-    combination that produces zero warnings once we accept that NVML always either
-    gives a low-count warning (inactive) or a throttle-blind-spot warning (active).
-    """
+    """With nvml_sample_count=0 and good conditions, only the low-sample warning fires."""
     warnings = collect_measurement_warnings(30.0, True, 40.0, 42.0, 0)
     # Only low sample count fires (nvml_sample_count=0 < 10)
     assert len(warnings) == 1
     assert "nvml_low_sample_count" in warnings[0]
 
 
-def test_with_nvml_active_and_good_conditions_only_throttle_warning():
-    """With NVML active (>=10 samples) and all other conditions good, only throttle warning fires."""
+def test_no_warnings_when_all_conditions_good():
+    """With NVML active (>=10 samples) and all other conditions good, no warnings fire."""
     warnings = collect_measurement_warnings(30.0, True, 40.0, 42.0, 50)
-    assert len(warnings) == 1
-    assert "thermal_throttle_subsampling" in warnings[0]
+    assert len(warnings) == 0
 
 
 # ---------------------------------------------------------------------------
