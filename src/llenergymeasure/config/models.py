@@ -686,3 +686,11 @@ class StudyConfig(BaseModel):
             "Persisted for post-hoc review and pre-flight display."
         ),
     )
+    source_path: str | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Original YAML file path (set by loader for config copy to results dir). "
+            "Not part of study design hash. Excluded from serialisation."
+        ),
+    )

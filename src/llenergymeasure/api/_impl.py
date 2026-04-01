@@ -161,7 +161,9 @@ def run_study(
     if isinstance(config, (str, Path)):
         from llenergymeasure.config.loader import load_study_config
 
-        study = load_study_config(path=Path(config))
+        config_path = Path(config).resolve()
+        study = load_study_config(path=config_path)
+        study = study.model_copy(update={"source_path": str(config_path)})
     elif isinstance(config, StudyConfig):
         study = config
     else:
@@ -330,6 +332,15 @@ def _run(
         results_dir_str = study.output.results_dir or user_config.output.results_dir or "./results"
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
+
+    # Copy original YAML config to study results directory for reproducibility.
+    if study.source_path is not None:
+        import shutil as _shutil
+
+        src_yaml = Path(study.source_path)
+        if src_yaml.exists():
+            _shutil.copy2(src_yaml, study_dir / "config.yaml")
+            _api_logger.info("Config YAML copied to %s", study_dir / "config.yaml")
 
     # Persist skipped config details to a log file in the study directory.
     if study.skipped_configs:
