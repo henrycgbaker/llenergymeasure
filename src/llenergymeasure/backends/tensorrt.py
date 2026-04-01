@@ -28,7 +28,6 @@ from typing import Any
 
 from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.metrics import WarmupResult
 from llenergymeasure.utils.exceptions import BackendError, ConfigError
 
 logger = logging.getLogger(__name__)
@@ -188,38 +187,27 @@ class TensorRTBackend:
     # BackendPlugin: warmup
     # -------------------------------------------------------------------------
 
-    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
-        """Run minimal TRT-LLM warmup: 1 prompt, 1 token.
+    def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
+        """Run one warmup prompt via single-token kernel warmup. Returns 0.0.
 
-        thermal_floor_wait_s is NOT set here — MeasurementHarness sets it after
-        this method returns.
+        Returns 0.0 to signal the harness to skip CV-based convergence.
+        TRT-LLM uses a single-token kernel warmup rather than CV convergence.
 
         Args:
             config: Experiment configuration.
             model: Tuple of (llm, sampling_params) from load_model().
-            prompts: Pre-loaded prompts (loaded by harness before measurement window).
+            prompt: Single warmup prompt text.
 
         Returns:
-            WarmupResult. thermal_floor_wait_s is left at default 0.0 (set by harness).
+            0.0 (signals harness to skip convergence loop).
         """
+        from tensorrt_llm import SamplingParams
+
+        from llenergymeasure.backends._helpers import warmup_single_token
+
         llm, _sampling_params = model
-
-        if config.warmup.enabled:
-            logger.debug("Running TRT-LLM warmup (1 prompt, 1 token)...")
-            from tensorrt_llm import SamplingParams as _SP
-
-            from llenergymeasure.backends._helpers import warmup_single_token
-
-            warmup_single_token(llm, prompts, _SP, max_new_tokens=1)
-            logger.debug("TRT-LLM warmup complete")
-
-        return WarmupResult(
-            converged=True,
-            final_cv=0.0,
-            iterations_completed=1 if config.warmup.enabled else 0,
-            target_cv=config.warmup.cv_threshold,
-            max_prompts=config.warmup.max_prompts,
-        )
+        warmup_single_token(llm, [prompt], SamplingParams, max_tokens=1)
+        return 0.0  # Signals harness to skip CV loop
 
     # -------------------------------------------------------------------------
     # BackendPlugin: run_inference

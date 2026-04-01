@@ -503,7 +503,7 @@ def test_backend_plugin_protocol_has_required_methods():
     obj = PyTorchBackend()
     assert hasattr(obj, "name")
     assert hasattr(obj, "load_model")
-    assert hasattr(obj, "warmup")
+    assert hasattr(obj, "run_warmup_prompt")
     assert hasattr(obj, "run_inference")
     assert hasattr(obj, "cleanup")
     assert hasattr(obj, "validate_config")

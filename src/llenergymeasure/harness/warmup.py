@@ -1,17 +1,21 @@
-"""Thermal stabilisation utilities for MeasurementHarness.
+"""Thermal stabilisation and warmup convergence utilities for MeasurementHarness.
 
-Provides thermal_floor_wait() for use by MeasurementHarness after warmup.
+Provides:
+- thermal_floor_wait(): sleep after warmup for thermal stabilisation
+- warmup_until_converged(): convergence loop with per-iteration on_substep callbacks
 
-Note: warmup_until_converged() and create_warmup_inference_fn() live in
-backends/_helpers.py (the canonical location imported by all backends).
+Backends implement run_warmup_prompt() as a thin inference primitive.
+The harness owns the convergence detection loop (CV thresholds, iteration limits).
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 
-from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
+from llenergymeasure.domain.metrics import WarmupResult
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +24,7 @@ def thermal_floor_wait(config: ExperimentConfig) -> float:
     """Sleep for thermal_floor_seconds after warmup. Returns actual wait time in seconds.
 
     Returns 0.0 immediately if warmup is disabled or thermal_floor_seconds <= 0.
-    Called by MeasurementHarness after backend.warmup(), before energy tracking starts.
+    Called by MeasurementHarness after warmup, before energy tracking starts.
 
     Args:
         config: Experiment configuration (reads warmup.enabled and warmup.thermal_floor_seconds).
@@ -37,3 +41,106 @@ def thermal_floor_wait(config: ExperimentConfig) -> float:
     t0 = time.monotonic()
     time.sleep(config.warmup.thermal_floor_seconds)
     return time.monotonic() - t0
+
+
+def warmup_until_converged(
+    run_single_inference: Callable[[], float],
+    config: WarmupConfig,
+    *,
+    on_substep: Callable[[str, float], None] | None = None,
+) -> WarmupResult:
+    """Run warmup prompts until latency CV stabilises below threshold.
+
+    Owns the convergence detection loop (CV thresholds, iteration limits).
+    Backends provide run_warmup_prompt() as a thin inference primitive.
+
+    Args:
+        run_single_inference: Callable that runs one warmup prompt and
+            returns latency in milliseconds. Decouples warmup from
+            specific inference implementation.
+        config: WarmupConfig controlling convergence parameters.
+        on_substep: Optional callback ``(text, elapsed_sec)`` for reporting
+            per-iteration CV progress. Called after each iteration with CV info.
+
+    Returns:
+        WarmupResult with convergence status and metrics.
+    """
+    # Early return if warmup is disabled
+    if not config.enabled:
+        logger.debug("Warmup disabled, skipping")
+        return WarmupResult(
+            converged=True,
+            final_cv=0.0,
+            iterations_completed=0,
+            target_cv=config.cv_threshold,
+            max_prompts=config.max_prompts,
+        )
+
+    from llenergymeasure.backends._helpers import compute_cv
+
+    latencies: list[float] = []
+    converged = False
+    final_cv = 1.0
+
+    # Fixed mode: run exactly n_warmup prompts without convergence checking.
+    # CV mode: run up to max_prompts with convergence checking after min_prompts.
+    fixed_mode = not config.convergence_detection
+    iteration_limit = config.n_warmup if fixed_mode else config.max_prompts
+
+    for i in range(iteration_limit):
+        try:
+            latency_ms = run_single_inference()
+        except Exception as exc:
+            logger.warning("Warmup prompt %d failed: %s", i + 1, exc)
+            continue
+
+        latencies.append(latency_ms)
+
+        if not fixed_mode and len(latencies) >= max(config.min_prompts, config.window_size):
+            recent = latencies[-config.window_size :]
+            final_cv = compute_cv(recent)
+
+            if final_cv < config.cv_threshold:
+                converged = True
+
+        if on_substep:
+            target_info = f"  (target: {config.cv_threshold:.3f})" if not fixed_mode else ""
+            on_substep(f"Iteration {i + 1}/{iteration_limit}  CV: {final_cv:.3f}{target_info}", 0.0)
+
+        if converged:
+            break
+
+    # In fixed mode, mark as converged (user chose fixed iterations)
+    if fixed_mode:
+        converged = True
+        if latencies and len(latencies) >= config.window_size:
+            final_cv = compute_cv(latencies[-config.window_size :])
+
+    # Log result
+    if converged and not fixed_mode:
+        logger.info(
+            "Warmup converged after %d prompts (CV=%.3f < %.3f)",
+            len(latencies),
+            final_cv,
+            config.cv_threshold,
+        )
+    elif fixed_mode:
+        logger.info(
+            "Warmup completed %d fixed iterations (final CV=%.3f)", len(latencies), final_cv
+        )
+    else:
+        logger.warning(
+            "Warmup did not converge after %d prompts (final CV=%.3f, target=%.3f)",
+            iteration_limit,
+            final_cv,
+            config.cv_threshold,
+        )
+
+    return WarmupResult(
+        converged=converged,
+        final_cv=final_cv,
+        iterations_completed=len(latencies),
+        target_cv=config.cv_threshold,
+        max_prompts=config.max_prompts,
+        latencies_ms=latencies,
+    )

@@ -16,7 +16,6 @@ from typing import Any
 
 from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.metrics import WarmupResult
 
 logger = logging.getLogger(__name__)
 
@@ -105,53 +104,29 @@ class PyTorchBackend:
     # BackendPlugin: warmup
     # -------------------------------------------------------------------------
 
-    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
-        """Run warmup using warmup_until_converged() and return WarmupResult.
-
-        thermal_floor_wait_s is NOT set here — MeasurementHarness sets it after
-        this method returns.
+    def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
+        """Run one warmup prompt and return latency in ms.
 
         Args:
             config: Experiment configuration.
             model: Tuple of (model, tokenizer) from load_model().
-            prompts: Pre-loaded prompts (unused — PyTorch warmup uses synthetic prompt).
+            prompt: Single warmup prompt text.
 
         Returns:
-            WarmupResult with convergence status and iteration count.
-            thermal_floor_wait_s is left at default 0.0 (set by harness).
+            Latency in milliseconds.
         """
-        from llenergymeasure.backends._helpers import (
-            create_warmup_inference_fn,
-            warmup_until_converged,
-        )
+        import time
+
+        import torch
 
         hf_model, tokenizer = model
-
-        if not config.warmup.enabled:
-            logger.debug("Warmup disabled, skipping")
-            return WarmupResult(
-                converged=True,
-                final_cv=0.0,
-                iterations_completed=0,
-                target_cv=config.warmup.cv_threshold,
-                max_prompts=config.warmup.max_prompts,
-            )
-
-        # Use first prompt from the standard prompt list for warmup
-        words_per_prompt = max(1, (config.max_input_tokens or 512) // 4)
-        warmup_prompt = ("Hello, " * words_per_prompt).strip()
-
-        logger.debug(
-            "Running warmup: %d fixed iterations (convergence_detection=%s)",
-            config.warmup.n_warmup,
-            config.warmup.convergence_detection,
-        )
-
-        max_tokens = config.max_output_tokens if config.max_output_tokens is not None else 32
-        inference_fn = create_warmup_inference_fn(hf_model, tokenizer, warmup_prompt, max_tokens)
-        result = warmup_until_converged(inference_fn, config.warmup, show_progress=False)
-        logger.debug("Warmup complete: %d iterations", result.iterations_completed)
-        return result
+        start = time.perf_counter()
+        inputs = tokenizer(prompt, return_tensors="pt")
+        if torch.cuda.is_available():
+            inputs = {k: v.to(hf_model.device) for k, v in inputs.items()}
+        with torch.no_grad():
+            hf_model.generate(**inputs, max_new_tokens=min(config.max_output_tokens or 32, 32))
+        return (time.perf_counter() - start) * 1000.0
 
     # -------------------------------------------------------------------------
     # BackendPlugin: run_inference

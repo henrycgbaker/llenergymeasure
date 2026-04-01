@@ -147,7 +147,7 @@ class TestProtocolCompliance:
         backend = TensorRTBackend()
         assert hasattr(backend, "name")
         assert hasattr(backend, "load_model")
-        assert hasattr(backend, "warmup")
+        assert hasattr(backend, "run_warmup_prompt")
         assert hasattr(backend, "run_inference")
         assert hasattr(backend, "cleanup")
         assert hasattr(backend, "validate_config")

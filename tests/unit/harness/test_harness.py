@@ -52,6 +52,11 @@ class FakeBackend:
             max_prompts=10,
         )
 
+    def run_warmup_prompt(self, config: Any, model: Any, prompt: str) -> float:
+        self.call_log.append("run_warmup_prompt")
+        # Return 0.0 = simple kernel warmup (no CV convergence loop needed in tests)
+        return 0.0
+
     def run_inference(self, config: Any, model: Any, prompts: list[str]) -> InferenceOutput:
         self.call_log.append("run_inference")
         if self.fail_on_run_inference:
@@ -142,14 +147,26 @@ def _apply_patches():
 
 
 def test_harness_calls_backend_lifecycle_in_order(minimal_config):
-    """load_model, warmup, run_inference, cleanup must be called in that exact order."""
+    """load_model, run_warmup_prompt, run_inference, cleanup must be called in that order.
+
+    The harness now calls run_warmup_prompt() directly (not warmup()). The warmup
+    convergence loop is owned by the harness via warmup_until_converged().
+    """
     backend = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
         harness.run(backend, minimal_config)
 
-    assert backend.call_log == ["load_model", "warmup", "run_inference", "cleanup"]
+    assert "load_model" in backend.call_log
+    assert "run_warmup_prompt" in backend.call_log
+    assert "run_inference" in backend.call_log
+    assert "cleanup" in backend.call_log
+    # Order: load_model before run_warmup_prompt, run_warmup_prompt before run_inference
+    lm_idx = backend.call_log.index("load_model")
+    wp_idx = backend.call_log.index("run_warmup_prompt")
+    ri_idx = backend.call_log.index("run_inference")
+    assert lm_idx < wp_idx < ri_idx
 
 
 def test_harness_cleanup_called_on_inference_error(minimal_config):
@@ -179,7 +196,10 @@ def test_harness_returns_experiment_result(minimal_config):
 
 
 def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
-    """thermal_floor_wait_s on WarmupResult must be set by harness (not by backend.warmup)."""
+    """thermal_floor_wait_s on WarmupResult must be set by harness (not by backend).
+
+    The harness creates WarmupResult and sets thermal_floor_wait_s from thermal_floor_wait().
+    """
     backend = FakeBackend()
     harness = MeasurementHarness()
 
@@ -190,28 +210,20 @@ def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
             return_value=30.0,
         ),
     ):
-        harness.run(backend, minimal_config)
+        result = harness.run(backend, minimal_config)
 
-    # The WarmupResult returned by backend.warmup() starts with thermal_floor_wait_s=0.0
-    # The harness must have set it to 30.0. We verify this indirectly by checking the
-    # harness called thermal_floor_wait (which is patched) — the lifecycle test covers order.
-    # Backend's warmup result should have been mutated by harness.
-    assert backend.call_log == ["load_model", "warmup", "run_inference", "cleanup"]
+    # thermal_floor_wait_s must be set in the result's warmup_result
+    assert result.warmup_result is not None
+    assert result.warmup_result.thermal_floor_wait_s == pytest.approx(30.0)
 
 
 def test_harness_sets_warmup_result_thermal_floor(minimal_config):
-    """WarmupResult.thermal_floor_wait_s must reflect the actual wait time from harness."""
-    captured_warmup: list[WarmupResult] = []
+    """WarmupResult.thermal_floor_wait_s must reflect the actual wait time from harness.
 
-    class TrackingBackend(FakeBackend):
-        def warmup(self, config: Any, model: Any, prompts: list[str]) -> WarmupResult:
-            result = super().warmup(config, model, prompts)
-            # thermal_floor_wait_s starts at 0 from warmup_until_converged
-            assert result.thermal_floor_wait_s == 0.0
-            captured_warmup.append(result)
-            return result
-
-    backend = TrackingBackend()
+    The harness creates WarmupResult after calling run_warmup_prompt(), then sets
+    thermal_floor_wait_s from the return value of thermal_floor_wait().
+    """
+    backend = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -221,12 +233,11 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
             return_value=45.0,
         ),
     ):
-        harness.run(backend, minimal_config)
+        result = harness.run(backend, minimal_config)
 
-    # After harness.run(), the WarmupResult captured by warmup() should have been
-    # mutated by harness to reflect thermal_floor_wait_s = 45.0
-    assert len(captured_warmup) == 1
-    assert captured_warmup[0].thermal_floor_wait_s == 45.0
+    # The harness must set thermal_floor_wait_s on the WarmupResult
+    assert result.warmup_result is not None
+    assert result.warmup_result.thermal_floor_wait_s == pytest.approx(45.0)
 
 
 # ---------------------------------------------------------------------------
@@ -621,19 +632,12 @@ def test_datetime_still_used_for_wall_clock(minimal_config):
 
 
 def test_harness_warmup_result_wired_to_experiment_result(minimal_config):
-    """warmup_result from backend.warmup() must reach ExperimentResult.warmup_result."""
+    """WarmupResult must reach ExperimentResult.warmup_result with thermal_floor_wait_s set.
 
-    class WarmupTrackingBackend(FakeBackend):
-        def warmup(self, config: Any, model: Any, prompts: list[str]) -> WarmupResult:
-            return WarmupResult(
-                converged=True,
-                final_cv=0.05,
-                iterations_completed=3,
-                target_cv=0.01,
-                max_prompts=10,
-            )
-
-    backend = WarmupTrackingBackend()
+    The harness owns warmup result creation (via run_warmup_prompt + warmup_until_converged)
+    and sets thermal_floor_wait_s from thermal_floor_wait().
+    """
+    backend = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -647,7 +651,6 @@ def test_harness_warmup_result_wired_to_experiment_result(minimal_config):
 
     assert result.warmup_result is not None
     assert result.warmup_result.converged is True
-    assert result.warmup_result.final_cv == pytest.approx(0.05)
     assert result.warmup_result.thermal_floor_wait_s == pytest.approx(15.0)
 
 

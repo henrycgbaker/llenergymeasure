@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.metrics import WarmupResult
 
 
 @dataclass
@@ -59,16 +58,19 @@ class BackendPlugin(Protocol):
         """
         ...
 
-    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
-        """Run warmup iterations.
+    def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
+        """Run one warmup prompt and return latency in ms.
+
+        Returns 0.0 to signal the harness should skip CV-based convergence
+        (e.g. vLLM/TRT-LLM use single-token kernel warmup instead).
 
         Args:
             config: Experiment configuration.
             model: Opaque model object from load_model().
-            prompts: Pre-loaded prompts (loaded by harness before measurement window).
+            prompt: Single warmup prompt text.
 
         Returns:
-            WarmupResult (thermal_floor_wait_s set by harness).
+            Latency in milliseconds, or 0.0 to opt out of convergence loop.
         """
         ...
 
