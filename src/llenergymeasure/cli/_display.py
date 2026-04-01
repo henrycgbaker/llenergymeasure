@@ -241,6 +241,8 @@ def print_study_dry_run(
     verbose: bool = False,
     runner_specs: dict[str, RunnerSpec] | None = None,
     study_dir: Path | None = None,
+    sweep_axes: int | None = None,
+    sweep_groups: int | None = None,
 ) -> None:
     """Print dry-run output for a study to stdout.
 
@@ -264,6 +266,8 @@ def print_study_dry_run(
         runner_specs=runner_specs,
         study_dir=study_dir,
         probed_energy_sampler=probe_energy_sampler(),
+        sweep_axes=sweep_axes,
+        sweep_groups=sweep_groups,
     )
     _stdout_console.print(panel)
 
