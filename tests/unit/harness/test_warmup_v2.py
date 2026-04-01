@@ -75,8 +75,8 @@ def test_warmup_config_enabled_default_true() -> None:
 
 
 def test_warmup_config_window_size_default() -> None:
-    """window_size defaults to 5."""
-    assert WarmupConfig().window_size == 5
+    """window_size defaults to 3."""
+    assert WarmupConfig().window_size == 3
 
 
 def test_warmup_config_min_prompts_default() -> None:
@@ -199,10 +199,12 @@ def test_warmup_substep_callback() -> None:
 
     # on_substep should have been called at least once
     assert len(substep_calls) >= 1
-    # Each call should contain CV info
+    # Each call should contain iteration info; CV appears once enough samples exist
     for text, _elapsed in substep_calls:
-        assert "CV:" in text
         assert "Iteration" in text
+    # With window_size=3, CV should appear from iteration 3 onward
+    cv_calls = [text for text, _ in substep_calls if "CV:" in text]
+    assert len(cv_calls) >= 1, "CV should appear once enough samples are collected"
 
 
 def test_warmup_disabled_returns_immediately() -> None:

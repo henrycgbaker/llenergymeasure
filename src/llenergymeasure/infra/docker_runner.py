@@ -650,6 +650,15 @@ class DockerRunner:
         if isinstance(raw, dict) and "type" in raw and "traceback" in raw:
             return raw
 
+        # Strip fields unknown to the host schema (container may run an older/newer
+        # version that produces fields the host model doesn't expect).
+        known_fields = set(ExperimentResult.model_fields)
+        extra_keys = set(raw.keys()) - known_fields
+        if extra_keys:
+            for key in extra_keys:
+                raw.pop(key)
+            logger.debug("Stripped unknown fields from container result: %s", extra_keys)
+
         result = ExperimentResult.model_validate(raw)
 
         # Warn if the container ran a different package version than the host.
@@ -659,7 +668,7 @@ class DockerRunner:
         container_version = result.llenergymeasure_version
         if container_version is None or container_version != __version__:
             logger.warning(
-                "Container result version %s differs from host %s — rebuild Docker images",
+                "Container result version %s differs from host %s - rebuild Docker images",
                 container_version,
                 __version__,
             )
