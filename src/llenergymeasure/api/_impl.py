@@ -159,9 +159,7 @@ def run_study(
     if isinstance(config, (str, Path)):
         from llenergymeasure.config.loader import load_study_config
 
-        config_path = Path(config).resolve()
-        study = load_study_config(path=config_path)
-        study = study.model_copy(update={"source_path": str(config_path)})
+        study = load_study_config(path=Path(config))
     elif isinstance(config, StudyConfig):
         study = config
     else:
@@ -331,15 +329,6 @@ def _run(
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
 
-    # Copy original YAML config to study results directory for reproducibility.
-    if study.source_path is not None:
-        import shutil as _shutil
-
-        src_yaml = Path(study.source_path)
-        if src_yaml.exists():
-            _shutil.copy2(src_yaml, study_dir / "config.yaml")
-            _api_logger.info("Config YAML copied to %s", study_dir / "config.yaml")
-
     # Persist skipped config details to a log file in the study directory.
     if study.skipped_configs:
         _write_skipped_configs_log(study.skipped_configs, study_dir)
@@ -381,18 +370,12 @@ def _run(
                 energy = r.total_energy_j if r.total_energy_j > 0 else None
                 tp = r.avg_tokens_per_second if r.avg_tokens_per_second > 0 else None
                 infer = r.total_inference_time_sec if r.total_inference_time_sec > 0 else None
-                adj_e = (
-                    r.energy_adjusted_j if r.energy_adjusted_j and r.energy_adjusted_j > 0 else None
-                )
                 study_cb.end_experiment_ok(
                     1,
                     exp_elapsed,
                     energy_j=energy,
                     throughput_tok_s=tp,
                     inference_time_sec=infer,
-                    adj_energy_j=adj_e,
-                    mj_per_tok_adjusted=r.mj_per_tok_adjusted,
-                    mj_per_tok_total=r.mj_per_tok_total,
                 )
             else:
                 study_cb.end_experiment_fail(1, exp_elapsed)
