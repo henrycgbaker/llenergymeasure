@@ -60,7 +60,7 @@ def _make_mock_config() -> MagicMock:
     config.dtype = "bfloat16"
     config.dataset = MagicMock()
     config.dataset.source = "aienergyscore"
-    config.dataset.n_prompts = 50
+    config.dataset.n_prompts = 100
     config.dataset.order = "interleaved"
     config.max_input_tokens = 256
     config.max_output_tokens = 256
@@ -83,7 +83,7 @@ def test_build_header_strips_hf_org_prefix():
     config.model = "meta-llama/Llama-3.2-1B-Instruct"
     config.backend = "vllm"
     config.dtype = "bfloat16"
-    config.dataset.n_prompts = 50
+    config.dataset.n_prompts = 100
 
     header = _build_header(config, runner_tag="docker")
     assert "Llama-3.2-1B-Instruct" in header
@@ -99,7 +99,7 @@ def test_build_header_default_dtype_omitted():
     config.model = "gpt2"
     config.backend = "pytorch"
     config.dtype = "bfloat16"  # default — should not appear
-    config.dataset.n_prompts = 50
+    config.dataset.n_prompts = 100
 
     header = _build_header(config, runner_tag="local")
     assert "bfloat16" not in header
@@ -114,11 +114,11 @@ def test_build_header_nondefault_fields_shown():
     config.model = "gpt2"
     config.backend = "pytorch"
     config.dtype = "float16"
-    config.dataset.n_prompts = 100
+    config.dataset.n_prompts = 50  # non-default — should appear
 
     header = _build_header(config, runner_tag="local")
     assert "float16" in header
-    assert "n_prompts=100" in header
+    assert "n_prompts=50" in header
 
 
 # ---------------------------------------------------------------------------

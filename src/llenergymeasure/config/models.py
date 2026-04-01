@@ -218,9 +218,7 @@ class DatasetConfig(BaseModel):
         min_length=1,
         description="Dataset source: built-in alias or .jsonl file path",
     )
-    n_prompts: int = Field(
-        default=50, ge=1, description="Number of prompts to load or generate"
-    )  # TODO: restore default to 100 once sweep constraints filter invalid combos
+    n_prompts: int = Field(default=100, ge=1, description="Number of prompts to load or generate")
     order: Literal["interleaved", "grouped", "shuffled"] = Field(
         default="interleaved",
         description=(
@@ -437,6 +435,22 @@ class ExperimentConfig(BaseModel):
             raise ValueError(
                 "quantization='fp8' is incompatible with dtype='float32'. "
                 "Use dtype='float16' or dtype='bfloat16' for fp8 quantization."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_trt_fp8_dtype_compat(self) -> ExperimentConfig:
+        """FP8 quantization on TensorRT requires float16 or bfloat16 dtype (not float32)."""
+        if (
+            self.backend == "tensorrt"
+            and self.tensorrt is not None
+            and self.tensorrt.quant is not None
+            and self.tensorrt.quant.quant_algo == "FP8"
+            and self.dtype == "float32"
+        ):
+            raise ValueError(
+                "quantization='FP8' is incompatible with dtype='float32'. "
+                "Use dtype='float16' or dtype='bfloat16' for FP8 quantization."
             )
         return self
 

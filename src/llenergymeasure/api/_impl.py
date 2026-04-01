@@ -10,12 +10,16 @@ from pathlib import Path
 from typing import Any, overload
 
 from llenergymeasure.config.loader import load_experiment_config
-from llenergymeasure.config.models import ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import DatasetConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
 from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.utils.exceptions import ConfigError
+
+# Single source of truth for n_prompts default — derived from DatasetConfig field default
+# so run_experiment() kwargs and DatasetConfig always agree.
+_N_PROMPTS_DEFAULT: int = DatasetConfig.model_fields["n_prompts"].default
 
 # ---------------------------------------------------------------------------
 # run_experiment — three overloaded forms
@@ -46,7 +50,7 @@ def run_experiment(
     *,
     model: str,
     backend: str | None = None,
-    n_prompts: int = 50,
+    n_prompts: int = _N_PROMPTS_DEFAULT,
     dataset: str = "aienergyscore",
     skip_preflight: bool = ...,
     progress: ProgressCallback | None = ...,
@@ -59,7 +63,7 @@ def run_experiment(
     *,
     model: str | None = None,
     backend: str | None = None,
-    n_prompts: int = 50,
+    n_prompts: int = _N_PROMPTS_DEFAULT,
     dataset: str = "aienergyscore",
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
@@ -78,7 +82,7 @@ def run_experiment(
         config: YAML file path, ExperimentConfig object, or None (use kwargs).
         model: Model name/path (kwargs form only).
         backend: Inference backend (kwargs form only, defaults to ExperimentConfig default).
-        n_prompts: Number of prompts (kwargs form only, default 50).
+        n_prompts: Number of prompts (kwargs form only, default 100).
         dataset: Dataset source name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
         progress: Optional callback for step-by-step progress reporting.
@@ -203,12 +207,11 @@ def _to_study_config(
     *,
     model: str | None = None,
     backend: str | None = None,
-    n_prompts: int = 50,
+    n_prompts: int = _N_PROMPTS_DEFAULT,
     dataset: str = "aienergyscore",
     **kwargs: Any,
 ) -> StudyConfig:
     """Convert any run_experiment() input form to a degenerate StudyConfig."""
-    from llenergymeasure.config.models import DatasetConfig
 
     if isinstance(config, ExperimentConfig):
         experiment = config
