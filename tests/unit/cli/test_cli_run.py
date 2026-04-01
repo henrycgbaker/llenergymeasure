@@ -83,7 +83,7 @@ def test_build_header_strips_hf_org_prefix():
     config.model = "meta-llama/Llama-3.2-1B-Instruct"
     config.backend = "vllm"
     config.dtype = "bfloat16"
-    config.dataset.n_prompts = 100
+    config.dataset.n_prompts = 100  # default — should not appear
 
     header = _build_header(config, runner_tag="docker")
     assert "Llama-3.2-1B-Instruct" in header
@@ -99,7 +99,7 @@ def test_build_header_default_dtype_omitted():
     config.model = "gpt2"
     config.backend = "pytorch"
     config.dtype = "bfloat16"  # default — should not appear
-    config.dataset.n_prompts = 100
+    config.dataset.n_prompts = 100  # default — should not appear
 
     header = _build_header(config, runner_tag="local")
     assert "bfloat16" not in header
@@ -376,18 +376,13 @@ def test_print_study_summary_basic():
     exp.avg_tokens_per_second = 42.5
     exp.total_inference_time_sec = 40.0
 
-    summary = StudySummary(
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=50.0,
-        total_energy_j=123.4,
-    )
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="test-study",
         study_design_hash="abcd1234",
-        summary=summary,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=50.0, total_energy_j=123.4
+        ),
         result_files=["results/exp1/result.json"],
         measurement_protocol={},
     )

@@ -559,18 +559,13 @@ def test_print_study_summary_table_structure(capsys):
     exp.avg_tokens_per_second = 100.0
     exp.total_inference_time_sec = 8.0
 
-    summary = StudySummary(
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=12.0,
-        total_energy_j=50.0,
-    )
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="my-study",
         study_design_hash="deadbeef",
-        summary=summary,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=12.0, total_energy_j=50.0
+        ),
         result_files=[],
         measurement_protocol={},
     )
@@ -598,17 +593,12 @@ def test_print_study_summary_failed_experiments(capsys):
     exp.avg_tokens_per_second = 50.0
     exp.total_inference_time_sec = 4.0
 
-    summary = StudySummary(
-        total_experiments=2,
-        completed=1,
-        failed=1,
-        total_wall_time_s=10.0,
-        total_energy_j=20.0,
-    )
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="failing-study",
-        summary=summary,
+        summary=StudySummary(
+            total_experiments=2, completed=1, failed=1, total_wall_time_s=10.0, total_energy_j=20.0
+        ),
         result_files=[],
         measurement_protocol={},
     )
@@ -618,11 +608,11 @@ def test_print_study_summary_failed_experiments(capsys):
     assert "Failed: 1" in out
 
 
-def test_print_study_summary_no_summary(capsys):
-    """Study summary without a summary object still prints table without crashing."""
+def test_print_study_summary_no_total_experiments(capsys):
+    """Study summary with total_experiments=0 skips footer without crashing."""
     from unittest.mock import MagicMock
 
-    from llenergymeasure.domain.experiment import StudyResult
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
     exp.effective_config = {"model": "gpt2", "dtype": "float16"}
@@ -634,8 +624,8 @@ def test_print_study_summary_no_summary(capsys):
 
     result = StudyResult.model_construct(
         experiments=[exp],
-        name=None,
-        summary=None,
+        study_name=None,
+        summary=StudySummary(),
         result_files=[],
         measurement_protocol={},
     )
@@ -660,17 +650,12 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     exp.avg_tokens_per_second = 50.0
     exp.total_inference_time_sec = 4.0
 
-    summary = StudySummary(
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=5.0,
-        total_energy_j=20.0,
-    )
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="truncation-test",
-        summary=summary,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=5.0, total_energy_j=20.0
+        ),
         result_files=[],
         measurement_protocol={},
     )
@@ -694,17 +679,12 @@ def test_print_study_summary_with_result_files(capsys):
     exp.avg_tokens_per_second = 50.0
     exp.total_inference_time_sec = 4.0
 
-    summary = StudySummary(
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=5.0,
-        total_energy_j=20.0,
-    )
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="file-test",
-        summary=summary,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=5.0, total_energy_j=20.0
+        ),
         result_files=["results/exp1/result.json", "results/exp2/result.json"],
         measurement_protocol={},
     )

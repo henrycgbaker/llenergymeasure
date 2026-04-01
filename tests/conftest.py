@@ -13,7 +13,6 @@ from llenergymeasure.domain.experiment import (
     ExperimentResult,
     RawProcessResult,
     StudyResult,
-    StudySummary,
     Timestamps,
 )
 from llenergymeasure.domain.metrics import (
@@ -71,6 +70,8 @@ def make_study_result(**overrides) -> StudyResult:
     Needed by CLI tests (Plan 03) and E2E tests (Plan 04).
     Tests override only what they care about.
     """
+    from llenergymeasure.domain.experiment import StudySummary
+
     one_result = make_result()
     defaults: dict = {
         "study_name": "test-study",

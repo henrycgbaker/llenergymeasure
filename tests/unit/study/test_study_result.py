@@ -29,7 +29,6 @@ def test_study_result_has_full_schema():
     assert result.study_design_hash == "abcdef0123456789"
     assert result.measurement_protocol["n_cycles"] == 3
     assert len(result.result_files) == 2
-    assert result.summary is not None
     assert result.summary.total_experiments == 4
     assert result.summary.failed == 1
     assert result.summary.warnings == ["1 experiment failed"]
@@ -41,7 +40,9 @@ def test_study_result_backwards_compat():
     assert result.study_design_hash is None
     assert result.measurement_protocol == {}
     assert result.result_files == []
-    assert result.summary is None
+    assert result.summary.total_experiments == 0
+    assert result.summary.warnings == []
+    assert result.skipped_experiments == []
 
 
 def test_study_summary_defaults():
@@ -52,6 +53,21 @@ def test_study_summary_defaults():
     assert summary.total_wall_time_s == 0.0
     assert summary.total_energy_j == 0.0
     assert summary.warnings == []
+
+
+def test_study_result_skipped_experiments_default():
+    """StudyResult.skipped_experiments defaults to empty list."""
+    result = StudyResult(experiments=[])
+    assert result.skipped_experiments == []
+
+
+def test_study_result_skipped_experiments_populated():
+    """StudyResult.skipped_experiments can be populated with skipped grid points."""
+    result = StudyResult(
+        experiments=[],
+        skipped_experiments=[{"raw_config": {"model": "x"}, "reason": "invalid", "errors": []}],
+    )
+    assert len(result.skipped_experiments) == 1
 
 
 def test_result_files_are_paths_not_embedded():
