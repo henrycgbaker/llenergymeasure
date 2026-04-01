@@ -75,8 +75,8 @@ def test_warmup_config_enabled_default_true() -> None:
 
 
 def test_warmup_config_window_size_default() -> None:
-    """window_size defaults to 5."""
-    assert WarmupConfig().window_size == 5
+    """window_size defaults to 3."""
+    assert WarmupConfig().window_size == 3
 
 
 def test_warmup_config_min_prompts_default() -> None:
