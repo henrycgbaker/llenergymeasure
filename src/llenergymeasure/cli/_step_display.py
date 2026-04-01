@@ -647,6 +647,42 @@ class StudyStepDisplay:
             )
             self._live.start()
 
+    def add_historical_rows(
+        self,
+        rows: list[
+            tuple[
+                int,
+                str,
+                str,
+                float,
+                float | None,
+                float | None,
+                float | None,
+                float | None,
+                float | None,
+            ]
+        ],
+    ) -> None:
+        """Pre-populate the completed table with rows from a previous run.
+
+        Used by --resume to show previously completed experiments in the same
+        table format as live results. Must be called before start().
+
+        Historical rows use status "PREV_OK" / "PREV_FAIL" to render dimmed
+        with a distinct marker, visually separating them from live results.
+
+        Args:
+            rows: List of (index, status, config_summary, elapsed_seconds,
+                  inference_sec, energy_j, adj_energy_j, throughput, mj_tok).
+                  status is "OK" or "FAIL".
+        """
+        with self._lock:
+            for idx, status, config, elapsed, infer, energy, adj_e, tput, mj in rows:
+                hist_status = f"PREV_{status}"
+                self._completed_rows.append(
+                    (idx, hist_status, config, elapsed, infer, energy, adj_e, tput, mj)
+                )
+
     def stop(self) -> None:
         """Stop Rich Live."""
         if self._live is not None:
@@ -815,12 +851,7 @@ class StudyStepDisplay:
         self._refresh()
 
     def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
-        """Record a completed sub-operation within the active step.
-
-        Implemented for protocol compliance and single-process study paths.
-        In multi-process study runs, the progress_queue only carries
-        started/completed/failed events, so this will not receive events.
-        """
+        """Record a completed sub-operation within the active step."""
         with self._lock:
             if step not in self._inner_substeps:
                 self._inner_substeps[step] = []
@@ -957,7 +988,18 @@ class StudyStepDisplay:
     # -- Rendering --
 
     def _viewport_size(self) -> int:
-        """Maximum number of completed rows visible in the terminal."""
+        """Maximum number of completed rows visible in the terminal.
+
+        Respects LLEM_TABLE_ROWS env var if set (overrides terminal height calc).
+        """
+        import os
+
+        env_rows = os.environ.get("LLEM_TABLE_ROWS")
+        if env_rows:
+            try:
+                return max(3, int(env_rows))
+            except ValueError:
+                pass
         return max(5, self._console.size.height - _VIEWPORT_RESERVED_LINES)
 
     def _build_table(self) -> tuple[Table, int]:
@@ -990,11 +1032,16 @@ class StudyStepDisplay:
             throughput,
             mj_tok,
         ) in visible:
-            status_text = (
-                Text("\u2713", style="bold green")
-                if status == "OK"
-                else Text("\u2717", style="bold red")
-            )
+            is_historical = status.startswith("PREV_")
+            if status == "OK":
+                status_text = Text("\u2713", style="bold green")
+            elif status == "PREV_OK":
+                status_text = Text("\u2713", style="dim green")
+            elif status == "PREV_FAIL":
+                status_text = Text("\u2717", style="dim red")
+            else:
+                status_text = Text("\u2717", style="bold red")
+            row_style = "dim" if is_historical else None
             infer_str = _format_elapsed(infer_sec) if infer_sec is not None else "-"
             energy_str = f"{energy:.1f} J" if energy is not None else "-"
             adj_energy_str = f"{adj_energy:.1f} J" if adj_energy is not None else "-"
@@ -1010,6 +1057,7 @@ class StudyStepDisplay:
                 adj_energy_str,
                 throughput_str,
                 mj_str,
+                style=row_style,
             )
         return table, hidden
 
