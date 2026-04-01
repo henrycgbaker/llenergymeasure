@@ -300,12 +300,6 @@ class ExperimentConfig(BaseModel):
         json_schema_extra={"display_label": "Model", "role": "workload"},
     )
 
-    # Optional identifier — not sweepable, purely for display/naming
-    experiment_name: str | None = Field(
-        default=None,
-        description="Optional name for single experiments. Study experiments use auto-labels.",
-    )
-
     # Backend selection
     backend: Literal["pytorch", "vllm", "tensorrt"] = Field(
         default="pytorch",

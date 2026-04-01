@@ -587,8 +587,11 @@ def _run_in_process(
         manifest.mark_failed(config_hash, cycle, error_type, error_message)
         return [], [None], [error_message]
 
-    # Build effective_config for sidecar: experiment config + runner metadata (Docker only)
-    effective_config_dict: dict[str, Any] = config.model_dump()
+    # Build effective_config for sidecar: experiment config + experiment_id + runner metadata
+    effective_config_dict: dict[str, Any] = {
+        "experiment_id": result.experiment_id,
+        **config.model_dump(),
+    }
     if spec is not None and spec.mode == RUNNER_DOCKER:
         effective_config_dict = {**effective_config_dict, **docker_runner.get_runner_metadata()}
 

@@ -981,6 +981,11 @@ class StudyRunner:
         result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
 
+        # Build effective_config: experiment_id from result + resolved config
+        effective_config: dict[str, Any] | None = None
+        if not isinstance(result, dict):
+            effective_config = {"experiment_id": result.experiment_id, **config.model_dump()}
+
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(
             result,
@@ -989,7 +994,7 @@ class StudyRunner:
             index,
             exp_elapsed,
             ts_source_dir=ts_tmpdir,
-            effective_config=config.model_dump(),
+            effective_config=effective_config,
         )
 
         # Clean up the temp dir created for timeseries parquet output.
@@ -1176,10 +1181,11 @@ class StudyRunner:
                 }
             self._persist_failure_artefacts(exc, config_hash, cycle, result)
 
-        # Build effective_config for the sidecar: experiment config + runner metadata
-        effective_config: dict[str, Any] | None = None
+        # Build effective_config: experiment_id from result + config + runner metadata
+        effective_config_docker: dict[str, Any] | None = None
         if not isinstance(result, dict):
-            effective_config = {
+            effective_config_docker = {
+                "experiment_id": result.experiment_id,
                 **config.model_dump(),
                 **docker_runner.get_runner_metadata(),
             }
@@ -1192,7 +1198,7 @@ class StudyRunner:
             index,
             exp_elapsed,
             ts_source_dir=docker_ts_dir,
-            effective_config=effective_config,
+            effective_config=effective_config_docker,
         )
 
         # Clean up the temp dir after _save_and_record has copied the parquet.
