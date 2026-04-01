@@ -13,7 +13,7 @@ from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import DatasetConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
+from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -103,7 +103,9 @@ def run_experiment(
         from llenergymeasure.utils.exceptions import ExperimentError
 
         error_msg = (
-            study_result.warnings[0] if study_result.warnings else "Experiment produced no results"
+            study_result.summary.warnings[0]
+            if study_result.summary.warnings
+            else "Experiment produced no results"
         )
         raise ExperimentError(error_msg)
     return study_result.experiments[0]
@@ -412,12 +414,7 @@ def _run(
         "shuffle_seed": study.study_execution.shuffle_seed,
     }
 
-    return StudyResult(
-        experiments=[r for r in experiment_results if r is not None],
-        study_name=study.study_name,
-        study_design_hash=study.study_design_hash,
-        measurement_protocol=measurement_protocol,
-        result_files=result_files,
+    summary = StudySummary(
         total_experiments=len(study.experiments),
         completed=completed,
         failed=failed,
@@ -425,6 +422,15 @@ def _run(
         total_energy_j=total_energy,
         unique_configurations=unique_configs,
         warnings=warnings,
+    )
+
+    return StudyResult(
+        experiments=[r for r in experiment_results if r is not None],
+        study_name=study.study_name,
+        study_design_hash=study.study_design_hash,
+        measurement_protocol=measurement_protocol,
+        result_files=result_files,
+        summary=summary,
         skipped_experiments=study.skipped_configs,
     )
 

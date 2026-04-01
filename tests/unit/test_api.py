@@ -32,7 +32,7 @@ from llenergymeasure import (
     run_experiment,
     run_study,
 )
-from llenergymeasure.domain.experiment import AggregationMetadata
+from llenergymeasure.domain.experiment import AggregationMetadata, StudySummary
 from llenergymeasure.utils.exceptions import BackendError, PreFlightError
 from tests.conftest import make_config, make_user_config
 
@@ -599,8 +599,8 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     result = run_study(study)
 
     assert isinstance(result, StudyResult)
-    assert result.completed == 1
-    assert result.failed == 0
+    assert result.summary.completed == 1
+    assert result.summary.failed == 0
 
 
 def test_run_study_accepts_path(tmp_path, monkeypatch):
@@ -911,12 +911,12 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
 
     study_result = api_module._run(study)
 
-    assert study_result.total_experiments == 6, (
-        f"Expected 6 (cycle-expanded count), got {study_result.total_experiments} "
+    assert study_result.summary.total_experiments == 6, (
+        f"Expected 6 (cycle-expanded count), got {study_result.summary.total_experiments} "
         f"(pre-fix bug would give 18 = 6 x 3)"
     )
-    assert study_result.unique_configurations == 2, (
-        f"Expected 2 unique configurations (6 / 3), got {study_result.unique_configurations}"
+    assert study_result.summary.unique_configurations == 2, (
+        f"Expected 2 unique configurations (6 / 3), got {study_result.summary.unique_configurations}"
     )
 
 
@@ -1122,13 +1122,15 @@ def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
 
     empty_study_result = StudyResult(
         experiments=[],
-        total_experiments=1,
-        completed=0,
-        failed=1,
-        total_wall_time_s=0.1,
-        total_energy_j=0.0,
-        unique_configurations=1,
-        warnings=["Docker container failed: image not found"],
+        summary=StudySummary(
+            total_experiments=1,
+            completed=0,
+            failed=1,
+            total_wall_time_s=0.1,
+            total_energy_j=0.0,
+            unique_configurations=1,
+            warnings=["Docker container failed: image not found"],
+        ),
     )
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
@@ -1147,13 +1149,14 @@ def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
 
     empty_study_result = StudyResult(
         experiments=[],
-        total_experiments=1,
-        completed=0,
-        failed=1,
-        total_wall_time_s=0.1,
-        total_energy_j=0.0,
-        unique_configurations=1,
-        warnings=[],
+        summary=StudySummary(
+            total_experiments=1,
+            completed=0,
+            failed=1,
+            total_wall_time_s=0.1,
+            total_energy_j=0.0,
+            unique_configurations=1,
+        ),
     )
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
@@ -1176,13 +1179,15 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
 
     partial_study_result = StudyResult(
         experiments=[successful_result],  # 1 succeeded, 1 was filtered (None)
-        total_experiments=2,
-        completed=1,
-        failed=1,
-        total_wall_time_s=5.0,
-        total_energy_j=100.0,
-        unique_configurations=2,
-        warnings=["Docker container failed for experiment 2"],
+        summary=StudySummary(
+            total_experiments=2,
+            completed=1,
+            failed=1,
+            total_wall_time_s=5.0,
+            total_energy_j=100.0,
+            unique_configurations=2,
+            warnings=["Docker container failed for experiment 2"],
+        ),
     )
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: partial_study_result)
@@ -1199,5 +1204,5 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
     assert isinstance(result, StudyResult)
     assert len(result.experiments) == 1
     assert result.experiments[0].experiment_id == "partial-ok"
-    assert result.completed == 1
-    assert result.failed == 1
+    assert result.summary.completed == 1
+    assert result.summary.failed == 1

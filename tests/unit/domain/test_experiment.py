@@ -1,4 +1,4 @@
-"""Unit tests for domain/experiment.py — RawProcessResult, hashing, edge cases."""
+"""Unit tests for domain/experiment.py — RawProcessResult, hashing, StudySummary, edge cases."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
+    StudySummary,
     compute_measurement_config_hash,
 )
 from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
@@ -86,6 +87,23 @@ class TestAggregationMetadata:
         )
         assert am.temporal_overlap_verified is True
         assert am.gpu_attribution_verified is True
+
+
+# ---------------------------------------------------------------------------
+# TestStudySummary
+# ---------------------------------------------------------------------------
+
+
+class TestStudySummary:
+    """StudySummary optional fields and defaults."""
+
+    def test_unique_configurations_default_none(self):
+        ss = StudySummary(total_experiments=5)
+        assert ss.unique_configurations is None
+
+    def test_warnings_default_empty(self):
+        ss = StudySummary(total_experiments=3)
+        assert ss.warnings == []
 
 
 # ---------------------------------------------------------------------------

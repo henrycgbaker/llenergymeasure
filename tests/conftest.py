@@ -70,15 +70,19 @@ def make_study_result(**overrides) -> StudyResult:
     Needed by CLI tests (Plan 03) and E2E tests (Plan 04).
     Tests override only what they care about.
     """
+    from llenergymeasure.domain.experiment import StudySummary
+
     one_result = make_result()
     defaults: dict = {
         "study_name": "test-study",
         "experiments": [one_result],
-        "total_experiments": 1,
-        "completed": 1,
-        "failed": 0,
-        "total_wall_time_s": 5.0,
-        "total_energy_j": 10.0,
+        "summary": StudySummary(
+            total_experiments=1,
+            completed=1,
+            failed=0,
+            total_wall_time_s=5.0,
+            total_energy_j=10.0,
+        ),
         "result_files": [],
     }
     defaults.update(overrides)

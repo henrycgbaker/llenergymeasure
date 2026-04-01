@@ -305,6 +305,24 @@ class ExperimentResult(BaseModel):
         return 0.0
 
 
+class StudySummary(BaseModel):
+    """Computed aggregate statistics for a study run."""
+
+    total_experiments: int = Field(default=0, description="Total experiments in the study")
+    completed: int = Field(default=0, description="Number of successfully completed experiments")
+    failed: int = Field(default=0, description="Number of failed experiments")
+    total_wall_time_s: float = Field(default=0.0, description="Total wall-clock time in seconds")
+    total_energy_j: float = Field(default=0.0, description="Total energy consumed in joules")
+    unique_configurations: int | None = Field(
+        default=None,
+        description="Number of distinct experiment configurations (total_experiments / n_cycles)",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Runtime warnings (CLI narrowing, failures, etc.)",
+    )
+
+
 class StudyResult(BaseModel):
     """Final return value of a study run.
 
@@ -331,19 +349,9 @@ class StudyResult(BaseModel):
         default_factory=list,
         description="Paths to per-experiment result.json files (paths, not embedded)",
     )
-    # Study summary fields (formerly nested in StudySummary)
-    total_experiments: int = Field(default=0, description="Total experiments in the study")
-    completed: int = Field(default=0, description="Number of successfully completed experiments")
-    failed: int = Field(default=0, description="Number of failed experiments")
-    total_wall_time_s: float = Field(default=0.0, description="Total wall-clock time in seconds")
-    total_energy_j: float = Field(default=0.0, description="Total energy consumed in joules")
-    unique_configurations: int | None = Field(
-        default=None,
-        description="Number of distinct experiment configurations (total_experiments / n_cycles)",
-    )
-    warnings: list[str] = Field(
-        default_factory=list,
-        description="Runtime warnings (CLI narrowing, failures, etc.)",
+    summary: StudySummary = Field(
+        default_factory=StudySummary,
+        description="Computed aggregate statistics (counts, totals, warnings)",
     )
     skipped_experiments: list[dict[str, Any]] = Field(
         default_factory=list,

@@ -549,7 +549,7 @@ def test_print_study_summary_table_structure(capsys):
     """Study summary prints table header, rows, and separator."""
     from unittest.mock import MagicMock
 
-    from llenergymeasure.domain.experiment import StudyResult
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
     exp.effective_config = {"model": "gpt2", "dtype": "float16"}
@@ -563,11 +563,9 @@ def test_print_study_summary_table_structure(capsys):
         experiments=[exp],
         study_name="my-study",
         study_design_hash="deadbeef",
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=12.0,
-        total_energy_j=50.0,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=12.0, total_energy_j=50.0
+        ),
         result_files=[],
         measurement_protocol={},
     )
@@ -585,7 +583,7 @@ def test_print_study_summary_failed_experiments(capsys):
     """Study summary with failed experiments shows 'Failed:' footer line."""
     from unittest.mock import MagicMock
 
-    from llenergymeasure.domain.experiment import StudyResult
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
     exp.effective_config = {"model": "gpt2", "dtype": "float16"}
@@ -598,11 +596,9 @@ def test_print_study_summary_failed_experiments(capsys):
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="failing-study",
-        total_experiments=2,
-        completed=1,
-        failed=1,
-        total_wall_time_s=10.0,
-        total_energy_j=20.0,
+        summary=StudySummary(
+            total_experiments=2, completed=1, failed=1, total_wall_time_s=10.0, total_energy_j=20.0
+        ),
         result_files=[],
         measurement_protocol={},
     )
@@ -616,7 +612,7 @@ def test_print_study_summary_no_total_experiments(capsys):
     """Study summary with total_experiments=0 skips footer without crashing."""
     from unittest.mock import MagicMock
 
-    from llenergymeasure.domain.experiment import StudyResult
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
     exp.effective_config = {"model": "gpt2", "dtype": "float16"}
@@ -629,12 +625,7 @@ def test_print_study_summary_no_total_experiments(capsys):
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name=None,
-        total_experiments=0,
-        completed=0,
-        failed=0,
-        total_wall_time_s=0.0,
-        total_energy_j=0.0,
-        warnings=[],
+        summary=StudySummary(),
         result_files=[],
         measurement_protocol={},
     )
@@ -648,7 +639,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     """Models with names > 20 chars are truncated with '...' prefix."""
     from unittest.mock import MagicMock
 
-    from llenergymeasure.domain.experiment import StudyResult
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     long_model = "organization/very-long-model-name-that-exceeds-twenty-chars"
     exp = MagicMock()
@@ -662,11 +653,9 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="truncation-test",
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=5.0,
-        total_energy_j=20.0,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=5.0, total_energy_j=20.0
+        ),
         result_files=[],
         measurement_protocol={},
     )
@@ -680,7 +669,7 @@ def test_print_study_summary_with_result_files(capsys):
     """Study summary with result_files shows 'Results saved:' line."""
     from unittest.mock import MagicMock
 
-    from llenergymeasure.domain.experiment import StudyResult
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
     exp.effective_config = {"model": "gpt2", "dtype": "float16"}
@@ -693,11 +682,9 @@ def test_print_study_summary_with_result_files(capsys):
     result = StudyResult.model_construct(
         experiments=[exp],
         study_name="file-test",
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=5.0,
-        total_energy_j=20.0,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=5.0, total_energy_j=20.0
+        ),
         result_files=["results/exp1/result.json", "results/exp2/result.json"],
         measurement_protocol={},
     )

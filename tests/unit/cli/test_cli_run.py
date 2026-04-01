@@ -364,7 +364,7 @@ def test_print_study_summary_basic():
     from unittest.mock import MagicMock, patch
 
     from llenergymeasure.cli._display import print_study_summary
-    from llenergymeasure.domain.experiment import StudyResult
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     # Use model_construct to bypass Pydantic validation for the container —
     # experiments list contains a MagicMock, which is not a valid ExperimentResult.
@@ -380,11 +380,9 @@ def test_print_study_summary_basic():
         experiments=[exp],
         study_name="test-study",
         study_design_hash="abcd1234",
-        total_experiments=1,
-        completed=1,
-        failed=0,
-        total_wall_time_s=50.0,
-        total_energy_j=123.4,
+        summary=StudySummary(
+            total_experiments=1, completed=1, failed=0, total_wall_time_s=50.0, total_energy_j=123.4
+        ),
         result_files=["results/exp1/result.json"],
         measurement_protocol={},
     )

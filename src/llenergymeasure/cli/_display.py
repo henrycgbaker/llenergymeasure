@@ -397,16 +397,17 @@ def print_study_summary(result: StudyResult) -> None:
     print("-" * len(header))
 
     # Footer with totals
-    if result.total_experiments > 0:
+    s = result.summary
+    if s.total_experiments > 0:
         print(
-            f"Total: {result.completed}/{result.total_experiments} completed"
-            f"  |  {_format_duration(result.total_wall_time_s)}"
-            f"  |  {_sig3(result.total_energy_j)} J"
+            f"Total: {s.completed}/{s.total_experiments} completed"
+            f"  |  {_format_duration(s.total_wall_time_s)}"
+            f"  |  {_sig3(s.total_energy_j)} J"
         )
-        if result.failed > 0:
-            print(f"Failed: {result.failed} experiment(s)")
-        if result.warnings:
-            for w in result.warnings:
+        if s.failed > 0:
+            print(f"Failed: {s.failed} experiment(s)")
+        if s.warnings:
+            for w in s.warnings:
                 print(f"  Warning: {w}")
     print()
 
