@@ -207,8 +207,7 @@ def test_warnings_clean_measurement() -> None:
     """With nvml_sample_count > 0, only the throttle-subsampling methodology warning fires.
 
     The throttle-subsampling warning is always present when NVML is active — it is an
-    unconditional methodology note, not a data-quality failure. With all other conditions
-    optimal and nvml_sample_count=600, exactly one warning fires.
+    all other conditions optimal and nvml_sample_count=600, no warnings fire.
     """
     warnings = collect_measurement_warnings(
         duration_sec=60.0,
@@ -218,27 +217,25 @@ def test_warnings_clean_measurement() -> None:
         nvml_sample_count=600,
         thermal_drift_threshold_c=10.0,
     )
-    assert len(warnings) == 1
-    assert "thermal_throttle_subsampling" in warnings[0]
+    assert len(warnings) == 0
 
 
-def test_warnings_all_five_triggered() -> None:
-    """All five warning conditions triggered simultaneously."""
+def test_warnings_all_four_triggered() -> None:
+    """All four warning conditions triggered simultaneously."""
     warnings = collect_measurement_warnings(
         duration_sec=5.0,  # < 10s
         gpu_persistence_mode=False,  # off
         temp_start_c=30.0,  # 15C drift
         temp_end_c=45.0,
-        nvml_sample_count=5,  # < 10 samples but > 0 (throttle warning also fires)
+        nvml_sample_count=5,  # < 10 samples
         thermal_drift_threshold_c=10.0,
     )
-    assert len(warnings) == 5
+    assert len(warnings) == 4
     warning_str = " ".join(warnings)
     assert "short_measurement_duration" in warning_str
     assert "gpu_persistence_mode_off" in warning_str
     assert "thermal_drift_detected" in warning_str
     assert "nvml_low_sample_count" in warning_str
-    assert "thermal_throttle_subsampling" in warning_str
 
 
 def test_warnings_none_temps_no_drift_warning() -> None:
