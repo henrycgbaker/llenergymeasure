@@ -102,9 +102,12 @@ def warmup_until_converged(
             recent = latencies[-config.window_size :]
             final_cv = compute_cv(recent)
 
-            if not fixed_mode and len(latencies) >= config.min_prompts:
-                if final_cv < config.cv_threshold:
-                    converged = True
+            if (
+                not fixed_mode
+                and len(latencies) >= config.min_prompts
+                and final_cv < config.cv_threshold
+            ):
+                converged = True
 
         if on_substep:
             cv_str = f"  CV: {final_cv:.3f}" if final_cv is not None else ""
