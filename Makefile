@@ -139,17 +139,17 @@ docker-builder-rm:
 
 # Build all backends (pytorch, vllm, tensorrt) — local images
 docker-build-all:
-	docker compose build base pytorch vllm tensorrt
-	
+	docker compose build pytorch vllm tensorrt
+
 # Build PyTorch backend (default, recommended for most users)
 docker-build-pytorch:
-	docker compose build base pytorch
+	docker compose build pytorch
 # Build specific backends — local images
 docker-build-vllm:
-	docker compose build base vllm
+	docker compose build vllm
 
 docker-build-tensorrt:
-	docker compose build base tensorrt
+	docker compose build tensorrt
 
 # Pull versioned registry images (ghcr.io) instead of building locally
 docker-pull:
@@ -205,7 +205,7 @@ docker-shell:
 
 # Build the dev Docker image
 docker-build-dev:
-	docker compose --profile dev build base pytorch-dev
+	docker compose --profile dev build pytorch-dev
 
 # Interactive dev shell with source mounted
 docker-dev:
