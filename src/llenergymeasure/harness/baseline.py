@@ -14,7 +14,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from llenergymeasure.device.gpu_info import nvml_context
@@ -32,6 +32,7 @@ class BaselineCache:
     gpu_indices: list[int]
     sample_count: int
     duration_sec: float
+    from_cache: bool = False
 
 
 # Module-level cache keyed by sorted tuple of gpu_indices
@@ -84,7 +85,7 @@ def measure_baseline_power(
             cached.power_w,
             time.time() - cached.timestamp,
         )
-        return cached
+        return replace(cached, from_cache=True)
 
     # Measure fresh baseline
     if importlib.util.find_spec("pynvml") is None:
@@ -233,7 +234,7 @@ def create_energy_breakdown(
             raw_j=total_energy_j,
             adjusted_j=adjusted_j,
             baseline_power_w=baseline.power_w,
-            baseline_method="cached" if cache_age > 1.0 else "fresh",
+            baseline_method="cached" if baseline.from_cache else "fresh",
             baseline_timestamp=datetime.fromtimestamp(baseline.timestamp, tz=timezone.utc),
             baseline_cache_age_sec=cache_age,
         )
