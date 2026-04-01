@@ -555,15 +555,15 @@ def build_preflight_panel(
                 ds_path = f"dataset.{ds_field}"
                 if ds_path not in swept_paths:
                     continue  # already shown in Workload
-                unique_vals = sorted({str(getattr(exp.dataset, ds_field)) for exp in experiments})
-                val_str = ", ".join(unique_vals)
+                ds_unique = sorted({str(getattr(exp.dataset, ds_field)) for exp in experiments})
+                val_str = ", ".join(ds_unique)
                 label = get_display_label(ds_fi, ds_field)
                 experimental_rows.append((label, val_str, True, True))
             continue
 
         if is_experimental or (is_workload and is_swept):
-            unique_vals = sorted({str(getattr(exp, field_name)) for exp in experiments})
-            val_str = ", ".join(unique_vals)
+            exp_unique = sorted({str(getattr(exp, field_name)) for exp in experiments})
+            val_str = ", ".join(exp_unique)
             label = get_display_label(fi, field_name)
             experimental_rows.append((label, val_str, is_workload and is_swept, is_swept))
 

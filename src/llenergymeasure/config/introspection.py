@@ -43,7 +43,8 @@ def get_display_label(field_info: FieldInfo, field_name: str) -> str:
     """Return display label from json_schema_extra, falling back to title-cased name."""
     extra = field_info.json_schema_extra
     if isinstance(extra, dict):
-        return extra.get("display_label", field_name.replace("_", " ").title())
+        label = extra.get("display_label")
+        return str(label) if label is not None else field_name.replace("_", " ").title()
     return field_name.replace("_", " ").title()
 
 
@@ -51,7 +52,8 @@ def get_field_role(field_info: FieldInfo) -> str | None:
     """Return 'workload' or 'experimental', or None if not annotated."""
     extra = field_info.json_schema_extra
     if isinstance(extra, dict):
-        return extra.get("role")
+        role = extra.get("role")
+        return str(role) if role is not None else None
     return None
 
 
