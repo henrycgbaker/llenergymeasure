@@ -5,6 +5,7 @@ This module is internal (underscore prefix). Import via llenergymeasure.__init__
 
 from __future__ import annotations
 
+import shutil
 import time
 from pathlib import Path
 from typing import Any, overload
@@ -163,8 +164,8 @@ def run_study(
 
         config_path = Path(config).resolve()
         study = load_study_config(path=config_path)
-        study = study.model_copy(update={"source_path": str(config_path)})
     elif isinstance(config, StudyConfig):
+        config_path = None
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
@@ -196,6 +197,7 @@ def run_study(
         resume_dir=resume_dir,
         skip_set=skip_set,
         no_lock=no_lock,
+        config_path=config_path,
     )
 
 
@@ -261,6 +263,7 @@ def _run(
     resume_dir: Path | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
+    config_path: Path | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -334,13 +337,12 @@ def _run(
         manifest = ManifestWriter(study, study_dir)
 
     # Copy original YAML config to study results directory for reproducibility.
-    if study.source_path is not None:
-        import shutil as _shutil
-
-        src_yaml = Path(study.source_path)
-        if src_yaml.exists():
-            _shutil.copy2(src_yaml, study_dir / "config.yaml")
+    if config_path is not None:
+        try:
+            shutil.copy2(config_path, study_dir / "config.yaml")
             _api_logger.info("Config YAML copied to %s", study_dir / "config.yaml")
+        except FileNotFoundError:
+            _api_logger.warning("Config YAML %s not found, skipping copy", config_path)
 
     # Persist skipped config details to a log file in the study directory.
     if study.skipped_configs:
@@ -519,7 +521,6 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
-        import shutil
         import tempfile
 
         from llenergymeasure.backends import get_backend
@@ -571,8 +572,6 @@ def _run_in_process(
 
     # Clean up temp dirs
     if ts_source is not None and ts_source.exists():
-        import shutil
-
         shutil.rmtree(ts_source, ignore_errors=True)
 
     return result_files, [result], warnings

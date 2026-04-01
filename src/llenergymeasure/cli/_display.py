@@ -338,7 +338,6 @@ def print_study_summary(result: StudyResult) -> None:
         print(f"Hash:  {result.study_design_hash}")
     print()
 
-    # Table header (9 columns)
     header = (
         f"{'#':>3}  {'':>2}  {'Config':<40}  {'Total':>8}  {'Infer':>8}"
         f"  {'Energy':>10}  {'Adj. E':>10}  {'tok/s':>8}  {'mJ/tok':>8}"
