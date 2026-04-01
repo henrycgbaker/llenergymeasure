@@ -375,6 +375,9 @@ def test_print_study_summary_basic():
     exp.total_energy_j = 123.4
     exp.avg_tokens_per_second = 42.5
     exp.total_inference_time_sec = 40.0
+    exp.energy_adjusted_j = None
+    exp.mj_per_tok_adjusted = None
+    exp.mj_per_tok_total = None
 
     result = StudyResult.model_construct(
         experiments=[exp],
