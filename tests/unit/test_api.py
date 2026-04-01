@@ -599,9 +599,8 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     result = run_study(study)
 
     assert isinstance(result, StudyResult)
-    assert result.summary is not None
-    assert result.summary.completed == 1
-    assert result.summary.failed == 0
+    assert result.completed == 1
+    assert result.failed == 0
 
 
 def test_run_study_accepts_path(tmp_path, monkeypatch):
@@ -912,13 +911,12 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
 
     study_result = api_module._run(study)
 
-    assert study_result.summary is not None
-    assert study_result.summary.total_experiments == 6, (
-        f"Expected 6 (cycle-expanded count), got {study_result.summary.total_experiments} "
+    assert study_result.total_experiments == 6, (
+        f"Expected 6 (cycle-expanded count), got {study_result.total_experiments} "
         f"(pre-fix bug would give 18 = 6 x 3)"
     )
-    assert study_result.summary.unique_configurations == 2, (
-        f"Expected 2 unique configurations (6 / 3), got {study_result.summary.unique_configurations}"
+    assert study_result.unique_configurations == 2, (
+        f"Expected 2 unique configurations (6 / 3), got {study_result.unique_configurations}"
     )
 
 
@@ -1120,20 +1118,17 @@ class TestResolveGpuIndicesTensorrt:
 def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
     """run_experiment raises ExperimentError (not IndexError) when _run returns empty experiments."""
     import llenergymeasure.api._impl as api_module
-    from llenergymeasure.domain.experiment import StudySummary
     from llenergymeasure.utils.exceptions import ExperimentError
 
     empty_study_result = StudyResult(
         experiments=[],
-        summary=StudySummary(
-            total_experiments=1,
-            completed=0,
-            failed=1,
-            total_wall_time_s=0.1,
-            total_energy_j=0.0,
-            unique_configurations=1,
-            warnings=["Docker container failed: image not found"],
-        ),
+        total_experiments=1,
+        completed=0,
+        failed=1,
+        total_wall_time_s=0.1,
+        total_energy_j=0.0,
+        unique_configurations=1,
+        warnings=["Docker container failed: image not found"],
     )
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
@@ -1148,20 +1143,17 @@ def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
 def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
     """run_experiment raises ExperimentError with fallback message when warnings list is empty."""
     import llenergymeasure.api._impl as api_module
-    from llenergymeasure.domain.experiment import StudySummary
     from llenergymeasure.utils.exceptions import ExperimentError
 
     empty_study_result = StudyResult(
         experiments=[],
-        summary=StudySummary(
-            total_experiments=1,
-            completed=0,
-            failed=1,
-            total_wall_time_s=0.1,
-            total_energy_j=0.0,
-            unique_configurations=1,
-            warnings=[],
-        ),
+        total_experiments=1,
+        completed=0,
+        failed=1,
+        total_wall_time_s=0.1,
+        total_energy_j=0.0,
+        unique_configurations=1,
+        warnings=[],
     )
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
@@ -1179,21 +1171,18 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
     experiments and a summary showing the failure count.
     """
     import llenergymeasure.api._impl as api_module
-    from llenergymeasure.domain.experiment import StudySummary
 
     successful_result = _make_experiment_result(experiment_id="partial-ok")
 
     partial_study_result = StudyResult(
         experiments=[successful_result],  # 1 succeeded, 1 was filtered (None)
-        summary=StudySummary(
-            total_experiments=2,
-            completed=1,
-            failed=1,
-            total_wall_time_s=5.0,
-            total_energy_j=100.0,
-            unique_configurations=2,
-            warnings=["Docker container failed for experiment 2"],
-        ),
+        total_experiments=2,
+        completed=1,
+        failed=1,
+        total_wall_time_s=5.0,
+        total_energy_j=100.0,
+        unique_configurations=2,
+        warnings=["Docker container failed for experiment 2"],
     )
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: partial_study_result)
@@ -1210,5 +1199,5 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
     assert isinstance(result, StudyResult)
     assert len(result.experiments) == 1
     assert result.experiments[0].experiment_id == "partial-ok"
-    assert result.summary.completed == 1
-    assert result.summary.failed == 1
+    assert result.completed == 1
+    assert result.failed == 1
