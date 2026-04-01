@@ -187,6 +187,7 @@ def _run_experiment_worker(
     snapshot: EnvironmentSnapshot | None = None,
     output_dir: str | None = None,
     save_timeseries: bool = True,
+    baseline: Any = None,  # BaselineCache | None (avoids import at module level)
 ) -> None:
     """Entry point for the child process. Runs one experiment and returns result via Pipe.
 
@@ -203,6 +204,7 @@ def _run_experiment_worker(
     Args:
         output_dir: Directory for timeseries parquet output. Passed through to harness.
         save_timeseries: Whether to persist GPU timeseries. Passed through to harness.
+        baseline: Pre-measured baseline power from parent process (study-level cache).
     """
     # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
     # share this PGID. The parent can then kill the whole group via os.killpg().
@@ -245,6 +247,7 @@ def _run_experiment_worker(
             progress=progress_cb,
             output_dir=output_dir,
             save_timeseries=save_timeseries,
+            baseline=baseline,
         )
 
         # Send result back to parent via Pipe
@@ -466,6 +469,8 @@ class StudyRunner:
         self._cycle_counters: dict[str, int] = {}
         # Study-level environment snapshot cache — collected once, reused across experiments
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
+        # Study-level baseline power cache — measured once, shared across experiments
+        self._baseline: Any = None  # BaselineCache | None (lazy import)
         # Study-level image preparation: True after _prepare_images() succeeds
         self._images_prepared: bool = False
 
@@ -710,6 +715,33 @@ class StudyRunner:
             self._env_snapshot_future = collect_environment_snapshot_async()
         return self._env_snapshot_future.result(timeout=10)
 
+    def _get_baseline(self, config: ExperimentConfig) -> Any:
+        """Return cached baseline power, measuring on first call.
+
+        Measures idle GPU baseline once using the given experiment's settings,
+        then reuses the result for all subsequent experiments in the study.
+        All experiments in a study share the same GPU set, so a single
+        measurement is sufficient.
+
+        Args:
+            config: Experiment config providing baseline duration and GPU indices.
+
+        Returns:
+            BaselineCache or None if measurement failed or baseline is disabled.
+        """
+        if self._baseline is not None:
+            return self._baseline
+
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+        from llenergymeasure.harness.baseline import measure_baseline_power
+
+        gpu_indices = _resolve_gpu_indices(config)
+        self._baseline = measure_baseline_power(
+            duration_sec=config.baseline.duration_seconds,
+            gpu_indices=gpu_indices,
+        )
+        return self._baseline
+
     def _prepare_images(self) -> None:
         """Check/pull Docker images for all Docker backends before experiments.
 
@@ -920,6 +952,9 @@ class StudyRunner:
         # Resolve cached snapshot in parent — serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
 
+        # Resolve cached baseline in parent — avoids 30s re-measurement per subprocess
+        baseline = self._get_baseline(config) if config.baseline.enabled else None
+
         parent_conn, child_conn = mp_ctx.Pipe(duplex=False)
         progress_queue = mp_ctx.Queue()
 
@@ -929,6 +964,7 @@ class StudyRunner:
             kwargs={
                 "output_dir": str(ts_tmpdir) if ts_tmpdir else None,
                 "save_timeseries": save_ts,
+                "baseline": baseline,
             },
             daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
         )

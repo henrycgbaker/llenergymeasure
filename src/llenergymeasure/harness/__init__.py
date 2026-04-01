@@ -204,6 +204,7 @@ class MeasurementHarness:
         progress: ProgressCallback | None = None,
         output_dir: Path | str | None = None,
         save_timeseries: bool = True,
+        baseline: BaselineCache | None = None,
     ) -> ExperimentResult:
         """Run a complete measurement using the given backend plugin.
 
@@ -220,6 +221,9 @@ class MeasurementHarness:
                         Passed as runtime param by the study runner, not from config.
             save_timeseries: Whether to persist GPU timeseries to Parquet sidecar.
                              Controlled by OutputConfig.save_timeseries at study level.
+            baseline: Pre-measured baseline power (study-level cache). When provided
+                      and config.baseline.enabled, skips fresh measurement and reuses
+                      this value (marked as cached in the energy breakdown).
 
         Returns:
             ExperimentResult with all measurement fields populated.
@@ -242,8 +246,26 @@ class MeasurementHarness:
             snapshot_future = collect_environment_snapshot_async()
 
         # 2. Baseline power measurement (before model load)
-        baseline = None
-        if config.baseline.enabled:
+        if baseline is not None and config.baseline.enabled:
+            # Study-level cache: reuse pre-measured baseline from parent process
+            from dataclasses import replace as _dc_replace
+
+            baseline = _dc_replace(baseline, from_cache=True)
+            logger.debug(
+                "Using study-level baseline cache: %.1fW (%d samples)",
+                baseline.power_w,
+                baseline.sample_count,
+            )
+            if _p:
+                _p.on_step_start("baseline", "Measuring", "baseline idle power")
+                _p.on_step_update("baseline", f"cached baseline {baseline.power_w:.1f}W")
+            _substep(
+                "baseline",
+                f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples, study-level cache)",
+            )
+            if _p:
+                _p.on_step_done("baseline", 0.0)
+        elif config.baseline.enabled:
             dur = config.baseline.duration_seconds
             logger.debug("Measuring baseline power (%.0fs)...", dur)
             if _p:
@@ -251,10 +273,14 @@ class MeasurementHarness:
                 t0 = time.perf_counter()
             baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
             if baseline is not None:
+                cache_label = " (cached)" if baseline.from_cache else ""
                 _substep(
                     "baseline",
-                    f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples)",
+                    f"baseline: {baseline.power_w:.1f}W"
+                    f" ({baseline.sample_count} samples{cache_label})",
                 )
+                if _p and baseline.from_cache:
+                    _p.on_step_update("baseline", f"cached baseline {baseline.power_w:.1f}W")
             if _p:
                 _p.on_step_done("baseline", time.perf_counter() - t0)
         elif _p:
