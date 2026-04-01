@@ -868,20 +868,15 @@ def test_harness_energy_none_still_produces_valid_result(minimal_config):
     assert result.energy_breakdown is None or result.energy_breakdown.raw_j == 0.0
 
 
-def test_build_result_includes_declared_config(minimal_config):
-    """_build_result() populates declared_config from config.model_dump(exclude_unset=True).
-
-    model is a required field (always user-set), so it must appear in declared_config.
-    """
+def test_build_result_includes_model_name(minimal_config):
+    """_build_result() populates model_name from config.model."""
     backend = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
         result = harness.run(backend, minimal_config)
 
-    assert isinstance(result.declared_config, dict)
-    assert len(result.declared_config) > 0
-    assert "model" in result.declared_config
+    assert result.model_name == minimal_config.model
 
 
 def test_build_result_populates_mj_per_tok(minimal_config):

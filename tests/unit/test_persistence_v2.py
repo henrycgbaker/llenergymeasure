@@ -42,7 +42,7 @@ def minimal_result() -> ExperimentResult:
         total_flops=1e11,
         start_time=datetime(2026, 2, 26, 14, 0, 0),
         end_time=datetime(2026, 2, 26, 14, 0, 5),
-        effective_config={"model": "gpt2", "backend": "pytorch"},
+        model_name="gpt2",
     )
 
 
@@ -62,7 +62,7 @@ def hf_model_result() -> ExperimentResult:
         total_flops=2e11,
         start_time=datetime(2026, 2, 26, 14, 0, 0),
         end_time=datetime(2026, 2, 26, 14, 0, 10),
-        effective_config={"model": "meta-llama/Llama-3.1-8B", "backend": "pytorch"},
+        model_name="meta-llama/Llama-3.1-8B",
     )
 
 
@@ -82,7 +82,7 @@ def result_with_timeseries() -> ExperimentResult:
         timeseries="timeseries.parquet",
         start_time=datetime(2026, 2, 26, 15, 0, 0),
         end_time=datetime(2026, 2, 26, 15, 0, 2, 500000),
-        effective_config={"model": "gpt2", "backend": "pytorch"},
+        model_name="gpt2",
     )
 
 
@@ -209,11 +209,11 @@ def test_from_json_round_trip(tmp_path: Path, minimal_result: ExperimentResult) 
     assert original_json == loaded_json
 
 
-def test_effective_config_round_trips(tmp_path: Path, minimal_result: ExperimentResult) -> None:
-    """effective_config dict survives save/load unchanged."""
+def test_model_name_round_trips(tmp_path: Path, minimal_result: ExperimentResult) -> None:
+    """model_name field survives save/load unchanged."""
     result_path = save_result(minimal_result, tmp_path)
     loaded = load_result(result_path)
-    assert loaded.effective_config == minimal_result.effective_config
+    assert loaded.model_name == minimal_result.model_name
 
 
 def test_steady_state_window_round_trips(tmp_path: Path, hf_model_result: ExperimentResult) -> None:
@@ -287,39 +287,29 @@ def test_from_json_missing_sidecar_loads_successfully(
 def test_save_writes_effective_config_sidecar(
     tmp_path: Path, minimal_result: ExperimentResult
 ) -> None:
-    """save_result() writes effective_config.json alongside result.json."""
-    result_path = save_result(minimal_result, tmp_path)
+    """save_result() writes effective_config.json sidecar when config param provided."""
+    ec = {"model": "gpt2", "backend": "pytorch"}
+    result_path = save_result(minimal_result, tmp_path, effective_config=ec)
     sidecar = result_path.parent / "effective_config.json"
     assert sidecar.exists(), "effective_config.json should be written as sidecar"
 
 
 def test_effective_config_sidecar_content(tmp_path: Path, minimal_result: ExperimentResult) -> None:
-    """effective_config.json sidecar contains the same config as the result."""
+    """effective_config.json sidecar contains the provided config dict."""
     import json
 
-    result_path = save_result(minimal_result, tmp_path)
+    ec = {"model": "gpt2", "backend": "pytorch"}
+    result_path = save_result(minimal_result, tmp_path, effective_config=ec)
     sidecar = result_path.parent / "effective_config.json"
     config = json.loads(sidecar.read_text())
-    assert config == minimal_result.effective_config
+    assert config == ec
 
 
-def test_save_with_empty_effective_config_no_sidecar(tmp_path: Path) -> None:
-    """save_result() with empty effective_config does not write sidecar."""
-    result = ExperimentResult(
-        experiment_id="no-config",
-        measurement_config_hash="0000000000000000",
-        measurement_methodology="total",
-        total_tokens=10,
-        total_energy_j=1.0,
-        total_inference_time_sec=1.0,
-        avg_tokens_per_second=10.0,
-        avg_energy_per_token_j=0.1,
-        total_flops=0.0,
-        start_time=datetime(2026, 1, 1),
-        end_time=datetime(2026, 1, 1, 0, 0, 1),
-        effective_config={},
-    )
-    result_path = save_result(result, tmp_path)
+def test_save_without_effective_config_no_sidecar(
+    tmp_path: Path, minimal_result: ExperimentResult
+) -> None:
+    """save_result() without effective_config param does not write sidecar."""
+    result_path = save_result(minimal_result, tmp_path)
     sidecar = result_path.parent / "effective_config.json"
     assert not sidecar.exists()
 

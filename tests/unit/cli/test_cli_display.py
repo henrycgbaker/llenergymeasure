@@ -553,7 +553,7 @@ def test_print_study_summary_table_structure(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.model_name = "gpt2"
     exp.backend = "pytorch"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
@@ -591,7 +591,7 @@ def test_print_study_summary_failed_experiments(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.model_name = "gpt2"
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
@@ -623,7 +623,7 @@ def test_print_study_summary_no_total_experiments(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.model_name = "gpt2"
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
@@ -654,7 +654,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
 
     long_model = "organization/very-long-model-name-that-exceeds-twenty-chars"
     exp = MagicMock()
-    exp.effective_config = {"model": long_model, "dtype": "float16"}
+    exp.model_name = long_model
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
@@ -686,7 +686,7 @@ def test_print_study_summary_with_result_files(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.model_name = "gpt2"
     exp.backend = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
@@ -719,7 +719,7 @@ def test_print_study_summary_shows_adj_energy(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.model_name = "gpt2"
     exp.backend = "pytorch"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
@@ -756,7 +756,7 @@ def test_print_study_summary_mj_tok_prefers_adjusted(capsys):
     from llenergymeasure.domain.experiment import StudyResult, StudySummary
 
     exp = MagicMock()
-    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.model_name = "gpt2"
     exp.backend = "pytorch"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0

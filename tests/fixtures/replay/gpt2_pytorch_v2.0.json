@@ -4,6 +4,7 @@
   "measurement_config_hash": "9944baab4dabe390",
   "backend": "pytorch",
   "backend_version": null,
+  "model_name": "gpt2",
   "measurement_methodology": "total",
   "steady_state_window": null,
   "total_tokens": 1920,
@@ -219,51 +220,6 @@
   "timeseries": "timeseries.parquet",
   "start_time": "2026-03-13T14:21:11.145237",
   "end_time": "2026-03-13T14:21:15.570627",
-  "effective_config": {
-    "model": "gpt2",
-    "backend": "pytorch",
-    "dataset": {
-      "source": "aienergyscore",
-      "n_prompts": 5,
-      "order": "interleaved"
-    },
-    "dtype": "bfloat16",
-    "random_seed": 42,
-    "max_input_tokens": 512,
-    "max_output_tokens": 128,
-    "decoder": {
-      "temperature": 1.0,
-      "do_sample": true,
-      "top_k": 50,
-      "top_p": 1.0,
-      "repetition_penalty": 1.0,
-      "min_p": null,
-      "min_new_tokens": null,
-      "preset": null
-    },
-    "warmup": {
-      "enabled": true,
-      "n_warmup": 5,
-      "thermal_floor_seconds": 60.0,
-      "convergence_detection": false,
-      "cv_threshold": 0.05,
-      "max_prompts": 20,
-      "window_size": 5,
-      "min_prompts": 5
-    },
-    "baseline": {
-      "enabled": true,
-      "duration_seconds": 30.0
-    },
-    "energy_sampler": "auto",
-    "gpu_telemetry": true,
-    "pytorch": null,
-    "vllm": null,
-    "tensorrt": null,
-    "lora": null,
-    "passthrough_kwargs": null,
-    "output_dir": "/tmp/pytest-of-root/pytest-0/test_run_experiment_gpt2_pytor0"
-  },
   "process_results": [],
   "aggregation": {
     "method": "single_process",

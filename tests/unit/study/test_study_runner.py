@@ -870,7 +870,7 @@ def test_docker_runner_spec_dispatches_to_docker(
 
     def fake_docker_run(config, **kwargs):
         docker_run_calls.append(config)
-        return fake_result
+        return fake_result, None
 
     fake_ctx = MagicMock()
     fake_ctx.Process.side_effect = lambda **kwargs: (
@@ -1706,7 +1706,7 @@ class TestPrepareImages:
 
         def capture_docker_run(config, **kwargs):
             docker_run_kwargs.append(kwargs)
-            return fake_result
+            return fake_result, None
 
         with (
             patch(

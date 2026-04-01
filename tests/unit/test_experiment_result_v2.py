@@ -426,20 +426,20 @@ def test_n_prompts_default_matches_dataset_config():
 
 
 # ---------------------------------------------------------------------------
-# declared_config field on ExperimentResult
+# model_name field on ExperimentResult
 # ---------------------------------------------------------------------------
 
 
-def test_declared_config_field_exists(make_result):
-    """declared_config is accessible and stores the provided dict."""
-    result = make_result(declared_config={"model": "gpt2"})
-    assert result.declared_config == {"model": "gpt2"}
+def test_model_name_field_exists(make_result):
+    """model_name is accessible and stores the provided value."""
+    result = make_result(model_name="gpt2")
+    assert result.model_name == "gpt2"
 
 
-def test_declared_config_defaults_to_empty(make_result):
-    """declared_config defaults to {} when not supplied."""
+def test_model_name_defaults_to_unknown(make_result):
+    """model_name defaults to 'unknown' when not supplied."""
     result = make_result()
-    assert result.declared_config == {}
+    assert result.model_name == "unknown"
 
 
 # ---------------------------------------------------------------------------

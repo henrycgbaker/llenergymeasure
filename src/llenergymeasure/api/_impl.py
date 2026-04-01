@@ -5,6 +5,7 @@ This module is internal (underscore prefix). Import via llenergymeasure.__init__
 
 from __future__ import annotations
 
+import json
 import shutil
 import time
 from pathlib import Path
@@ -303,7 +304,7 @@ def _run(
         progress.on_step_start("preflight", "Checking", "environment and Docker")
         t0_pf = time.perf_counter()
     try:
-        runner_specs = run_study_preflight(
+        runner_specs, system_overrides = run_study_preflight(
             study,
             skip_preflight=skip_preflight,
             yaml_runners=study.runners,
@@ -358,6 +359,15 @@ def _run(
     # Persist skipped config details to study-artefacts/.
     if study.skipped_configs:
         _write_skipped_configs_log(study.skipped_configs, artefacts_dir)
+
+    # Persist system overrides to study-artefacts/ (runner auto-elevation, etc.)
+    if system_overrides:
+        overrides_path = artefacts_dir / "system_overrides.json"
+        try:
+            overrides_path.write_text(json.dumps(system_overrides, indent=2), encoding="utf-8")
+            _api_logger.info("System overrides written to %s", overrides_path)
+        except OSError as exc:
+            _api_logger.warning("Failed to write system_overrides.json: %s", exc)
 
     wall_start = time.monotonic()
     is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1
@@ -482,7 +492,7 @@ def _run_in_process(
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
-    from llenergymeasure.study.runner import _resolve_ts_source_dir, _save_and_record
+    from llenergymeasure.study.runner import _save_and_record
 
     config = study.experiments[0]
     config_hash = compute_measurement_config_hash(config)
@@ -517,8 +527,11 @@ def _run_in_process(
             source=spec.source,
             extra_mounts=spec.extra_mounts,
         )
+        docker_ts_dir: Path | None = None
         try:
-            result = docker_runner.run(config, progress=progress, save_timeseries=save_ts)
+            result, docker_ts_dir = docker_runner.run(
+                config, progress=progress, save_timeseries=save_ts
+            )
         except DockerError as exc:
             # Convert to failure dict — manifest marks failed, study continues
             error_payload: dict[str, Any] = {
@@ -530,6 +543,8 @@ def _run_in_process(
                 config_hash, cycle, error_payload["type"], error_payload["message"]
             )
             return [], [None], [error_payload["message"]]
+        # Docker path: ts_tmpdir comes from DockerRunner
+        ts_tmpdir = docker_ts_dir
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
         import tempfile
@@ -572,18 +587,27 @@ def _run_in_process(
         manifest.mark_failed(config_hash, cycle, error_type, error_message)
         return [], [None], [error_message]
 
-    # Resolve timeseries source dir for _save_and_record
-    ts_source: Path | None = _resolve_ts_source_dir(result, spec, ts_tmpdir)
+    # Build effective_config for sidecar: experiment config + runner metadata (Docker only)
+    effective_config_dict: dict[str, Any] = config.model_dump()
+    if spec is not None and spec.mode == RUNNER_DOCKER:
+        effective_config_dict = {**effective_config_dict, **docker_runner.get_runner_metadata()}
 
     result_files: list[str] = []
     warnings: list[str] = []
     _save_and_record(
-        result, study_dir, manifest, config_hash, cycle, result_files, ts_source_dir=ts_source
+        result,
+        study_dir,
+        manifest,
+        config_hash,
+        cycle,
+        result_files,
+        ts_source_dir=ts_tmpdir,
+        effective_config=effective_config_dict,
     )
 
     # Clean up temp dirs
-    if ts_source is not None and ts_source.exists():
-        shutil.rmtree(ts_source, ignore_errors=True)
+    if ts_tmpdir is not None and ts_tmpdir.exists():
+        shutil.rmtree(ts_tmpdir, ignore_errors=True)
 
     return result_files, [result], warnings
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -161,9 +161,8 @@ class AggregationContext:
     strict: bool = True
     allow_mixed_backends: bool = False
 
-    # -- Timeseries + config ---------------------------------------------
+    # -- Timeseries + warnings ---------------------------------------------
     timeseries: str | None = None
-    effective_config: dict[str, Any] | None = None
     measurement_warnings: list[str] | None = None
 
 
@@ -321,12 +320,10 @@ def aggregate_results(
         latency_stats=latency_stats,
     )
 
-    # Resolve effective_config and backend from first result if not provided
-    resolved_effective_config: dict[str, Any] = ctx.effective_config or (
-        raw_results[0].effective_config if raw_results else {}
-    )
+    # Resolve backend and model_name from first result if not provided
     backend = raw_results[0].backend if raw_results else "pytorch"
     backend_version: str | None = raw_results[0].backend_version if raw_results else None
+    model_name = raw_results[0].model_name if raw_results else "unknown"
 
     # Energy breakdown: sum raw_j and adjusted_j across processes (if not provided)
     energy_breakdown = ctx.energy_breakdown
@@ -385,6 +382,7 @@ def aggregate_results(
         llenergymeasure_version=__version__,
         backend=backend,
         backend_version=backend_version,
+        model_name=model_name,
         measurement_methodology=ctx.measurement_methodology,
         steady_state_window=ctx.steady_state_window,
         total_tokens=total_tokens,
@@ -409,7 +407,6 @@ def aggregate_results(
         timeseries=ctx.timeseries,
         start_time=start_time,
         end_time=end_time,
-        effective_config=resolved_effective_config,
         process_results=raw_results,
         aggregation=metadata,
         thermal_throttle=thermal_throttle,

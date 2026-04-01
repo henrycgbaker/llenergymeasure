@@ -26,15 +26,11 @@ def _make_result(
     with_timeseries: bool = True,
 ) -> ExperimentResult:
     """Construct a minimal ExperimentResult for testing _save_and_record."""
-    effective_config: dict = {
-        "model": "gpt2",
-        "backend": "pytorch",
-    }
-
     return ExperimentResult(
         experiment_id="test-save-record-001",
         measurement_config_hash="aabb1122ccdd3344",
         measurement_methodology="total",
+        model_name="gpt2",
         total_tokens=256,
         total_energy_j=10.0,
         total_inference_time_sec=2.0,
@@ -44,7 +40,6 @@ def _make_result(
         timeseries="timeseries.parquet" if with_timeseries else None,
         start_time=datetime(2026, 3, 25, 10, 0, 0),
         end_time=datetime(2026, 3, 25, 10, 0, 2),
-        effective_config=effective_config,
     )
 
 

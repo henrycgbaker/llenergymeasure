@@ -27,7 +27,7 @@ def run_study_preflight(
     user_config: UserRunnersConfig | None = None,
     yaml_images: dict[str, str] | None = None,
     user_config_images: dict[str, str] | None = None,
-) -> dict[str, RunnerSpec]:
+) -> tuple[dict[str, RunnerSpec], dict[str, dict[str, str]]]:
     """Pre-flight checks for a study configuration.
 
     Single-backend studies pass through — per-experiment pre-flight runs later
@@ -56,8 +56,12 @@ def run_study_preflight(
             section.
 
     Returns:
-        Resolved runner specs dict (backend -> RunnerSpec) for reuse by caller.
-        Docker runner specs have ``image`` and ``image_source`` populated.
+        Tuple of (runner_specs, system_overrides):
+        - runner_specs: Resolved runner specs dict (backend -> RunnerSpec).
+          Docker runner specs have ``image`` and ``image_source`` populated.
+        - system_overrides: Dict of overrides applied during preflight, keyed
+          by override target (e.g. ``"runner.pytorch"``). Each value has
+          ``declared``, ``effective``, and ``reason`` keys.
 
     Raises:
         PreFlightError: Multi-backend study and Docker is not available.
@@ -71,6 +75,7 @@ def run_study_preflight(
 
     backends = {exp.backend for exp in study.experiments}
     is_multi_backend = len(backends) > 1
+    system_overrides: dict[str, dict[str, str]] = {}
 
     if is_multi_backend:
         backend_list = ", ".join(sorted(backends))
@@ -102,6 +107,11 @@ def run_study_preflight(
                     backend,
                     spec.mode,
                 )
+                system_overrides[f"runner.{backend}"] = {
+                    "declared": spec.mode,
+                    "effective": RUNNER_DOCKER,
+                    "reason": "auto-elevated (multi-backend study)",
+                }
                 runner_specs[backend] = RunnerSpec(
                     mode=RUNNER_DOCKER, image=spec.image, source=SOURCE_MULTI_BACKEND_ELEVATION
                 )
@@ -133,4 +143,4 @@ def run_study_preflight(
 
         run_docker_preflight(skip=effective_skip)
 
-    return runner_specs
+    return runner_specs, system_overrides
