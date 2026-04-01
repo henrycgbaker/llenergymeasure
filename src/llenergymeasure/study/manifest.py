@@ -39,6 +39,14 @@ class ExperimentManifestEntry(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
+    # Summary metrics (populated on completion for resume display)
+    elapsed_seconds: float | None = None
+    inference_seconds: float | None = None
+    energy_joules: float | None = None
+    adj_energy_joules: float | None = None
+    throughput_tok_s: float | None = None
+    mj_per_tok: float | None = None
+
 
 class StudyManifest(BaseModel):
     """In-progress checkpoint written after every experiment state transition.
@@ -171,12 +179,30 @@ class ManifestWriter:
         self._recount()
         self._write()
 
-    def mark_completed(self, config_hash: str, cycle: int, result_file: str) -> None:
-        """Mark a running experiment as completed."""
+    def mark_completed(
+        self,
+        config_hash: str,
+        cycle: int,
+        result_file: str,
+        *,
+        elapsed_seconds: float | None = None,
+        inference_seconds: float | None = None,
+        energy_joules: float | None = None,
+        adj_energy_joules: float | None = None,
+        throughput_tok_s: float | None = None,
+        mj_per_tok: float | None = None,
+    ) -> None:
+        """Mark a running experiment as completed with optional summary metrics."""
         entry = self._find(config_hash, cycle)
         entry.status = "completed"
         entry.result_file = result_file
         entry.completed_at = datetime.now(timezone.utc)
+        entry.elapsed_seconds = elapsed_seconds
+        entry.inference_seconds = inference_seconds
+        entry.energy_joules = energy_joules
+        entry.adj_energy_joules = adj_energy_joules
+        entry.throughput_tok_s = throughput_tok_s
+        entry.mj_per_tok = mj_per_tok
         self._recount()
         self._write()
 

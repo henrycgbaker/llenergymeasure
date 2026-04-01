@@ -11,22 +11,62 @@ first-run measurements. The first few inferences with a freshly loaded model are
 consistently slower and higher-energy than subsequent inferences. Warmup discards
 these initial measurements.
 
-Configure via the `warmup:` section:
+### Two warmup modes
+
+llenergymeasure has two warmup modes, controlled by `convergence_detection` (default: `false`):
+
+#### Fixed mode (default)
+
+Runs exactly `n_warmup` prompts (default 5). The coefficient of variation (CV) is
+computed for informational purposes but does not affect iteration count. Always reports
+`converged: true`. Simple, predictable, and sufficient for most use cases.
 
 ```yaml
 warmup:
-  enabled: true            # default: true
-  n_warmup: 5              # default: 5
-  thermal_floor_seconds: 60.0   # default: 60.0
+  enabled: true                    # default: true
+  n_warmup: 5                     # default: 5
+  thermal_floor_seconds: 60.0     # default: 60.0
 ```
 
-**What happens:**
-1. `n_warmup` inference passes are run with full-length prompts from the dataset.
-2. Results from these passes are discarded — they do not appear in output metrics.
-3. After warmup passes complete, llenergymeasure waits `thermal_floor_seconds` for GPU
-   temperature to stabilise before beginning measurement.
+#### CV convergence mode (opt-in)
 
-**Default values are calibrated for publication quality:**
+Runs warmup prompts until the **coefficient of variation** (CV = std_dev / mean) of
+recent latencies drops below `cv_threshold`. This mode replaces fixed iteration
+count - `n_warmup` is ignored when convergence detection is active.
+
+```yaml
+warmup:
+  enabled: true
+  convergence_detection: true      # enable CV-based warmup
+  cv_threshold: 0.05              # stop when CV < 5% (default: 0.05)
+  window_size: 3                  # sliding window for CV calc (default: 3)
+  min_prompts: 5                  # minimum prompts before checking CV (default: 5)
+  max_prompts: 20                 # safety cap (default: 20)
+```
+
+CV convergence mode checks `len(latencies) >= max(min_prompts, window_size)` before
+evaluating the threshold. The safety cap (`max_prompts`) prevents infinite loops if
+the system never stabilises.
+
+### Execution order
+
+1. **Warmup prompts** - heat the GPU to steady state (fixed or CV mode).
+2. **Thermal floor wait** - sleep `thermal_floor_seconds` (default 60s) for GPU
+   temperature to plateau after warmup.
+3. **Measurement** - energy tracking begins.
+
+The thermal floor wait occurs *after* warmup, not before. This ensures the GPU has
+reached operating temperature from warmup but has stabilised before measurement starts.
+
+### Backend-specific behaviour
+
+For **vLLM** and **TRT-LLM** backends, warmup is a single kernel warmup call that
+returns `first_latency=0.0`. These engines perform their own internal warmup during
+server startup (CUDA graph capture, kernel compilation). The warmup phase for these
+backends confirms the engine is ready, rather than iterating multiple inference passes.
+
+### Default values
+
 - `n_warmup: 5` is consistent with DeepSpeed, Zeus, and AI Energy Score benchmarks
   (which use 5-10 warmup rounds)
 - `thermal_floor_seconds: 60.0` meets the MLPerf Power minimum (60s mandatory)
@@ -40,24 +80,6 @@ warmup:
 
 This significantly reduces total experiment time at the cost of measurement quality.
 Do not use `enabled: false` for published results.
-
-### Convergence Detection (opt-in)
-
-llenergymeasure supports CV-based adaptive warmup as an alternative to fixed iteration
-count. When `convergence_detection: true`, warmup continues until latency coefficient of
-variation (CV) drops below `cv_threshold`, up to `max_prompts` total passes.
-
-```yaml
-warmup:
-  enabled: true
-  convergence_detection: true
-  cv_threshold: 0.05    # stop when CV < 5%
-  max_prompts: 20       # safety cap
-  window_size: 5        # rolling window for CV calculation
-```
-
-CV detection is additive to `n_warmup` — it adds passes after the fixed warmup phase if
-CV has not converged. For most models and GPUs, fixed warmup is sufficient.
 
 ---
 

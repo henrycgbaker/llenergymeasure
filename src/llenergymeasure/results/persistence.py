@@ -115,11 +115,13 @@ def save_result(
     experiment_index: int | None = None,
     cycle: int = 1,
     effective_config: dict[str, object] | None = None,
+    resolution_log: dict[str, object] | None = None,
 ) -> Path:
     """Save ExperimentResult to a collision-safe subdirectory of output_dir.
 
     Creates: ``{output_dir}/[{index}_]c{cycle}_{model}-{backend}_{hash}/result.json``
     Also writes ``effective_config.json`` sidecar when ``effective_config`` is provided.
+    Also writes ``_resolution.json`` sidecar when ``resolution_log`` is provided.
     If timeseries_source provided: copies to ``{dir}/timeseries.parquet``.
 
     Args:
@@ -131,6 +133,8 @@ def save_result(
         cycle: Cycle number (1-based). Embedded in directory name.
         effective_config: Fully resolved experiment config dict to write as
             a sidecar file. Passed separately from the result (not embedded).
+        resolution_log: Per-experiment config resolution log showing which fields
+            were overridden and why (CLI flag, sweep, YAML).
 
     Returns:
         Path to the result.json file (usable with load_result() directly).
@@ -149,6 +153,12 @@ def save_result(
     # Write effective_config.json sidecar
     if effective_config:
         save_effective_config(target_dir, effective_config)
+
+    # Write _resolution.json sidecar
+    if resolution_log:
+        res_path = target_dir / "_resolution.json"
+        _atomic_write(json.dumps(resolution_log, indent=2, default=str), res_path)
+        logger.debug("Saved resolution log to %s", res_path)
 
     if timeseries_source is not None:
         timeseries_source = Path(timeseries_source)

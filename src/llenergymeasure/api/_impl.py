@@ -128,6 +128,8 @@ def run_study(
     output_dir: Path | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
+    config_path: Path | None = None,
+    cli_overrides: dict[str, Any] | None = None,
 ) -> StudyResult:
     """Run a multi-experiment study.
 
@@ -149,6 +151,12 @@ def run_study(
             previous run). Populated automatically when resuming; callers rarely
             need to set this directly.
         no_lock: Skip GPU advisory lock acquisition. Use with --no-lock CLI flag.
+        config_path: Original YAML config file path for copying to study artefacts.
+            When config is a StudyConfig object, callers should pass the original
+            path separately so the YAML is preserved for reproducibility.
+        cli_overrides: Flat dict of CLI flag overrides (e.g. {"model": "gpt2"}).
+            Used to build per-experiment ``_resolution.json`` sidecars showing
+            which fields were overridden by CLI flags vs YAML vs sweep.
 
     Returns:
         StudyResult with experiments, result_files, measurement_protocol, and inline summary fields.
@@ -163,10 +171,10 @@ def run_study(
     if isinstance(config, (str, Path)):
         from llenergymeasure.config.loader import load_study_config
 
-        config_path = Path(config).resolve()
+        config_path = config_path or Path(config).resolve()
         study = load_study_config(path=config_path)
     elif isinstance(config, StudyConfig):
-        config_path = None
+        # config_path may have been passed by caller (e.g. CLI pre-loads config)
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
@@ -199,6 +207,7 @@ def run_study(
         skip_set=skip_set,
         no_lock=no_lock,
         config_path=config_path,
+        cli_overrides=cli_overrides,
     )
 
 
@@ -245,14 +254,14 @@ def _to_study_config(
 
 
 def _ensure_study_artefacts_dir(study_dir: Path) -> Path:
-    """Create and return the study-artefacts/ subdirectory."""
-    artefacts_dir = study_dir / "study-artefacts"
+    """Create and return the _study-artefacts/ subdirectory."""
+    artefacts_dir = study_dir / "_study-artefacts"
     artefacts_dir.mkdir(exist_ok=True)
     return artefacts_dir
 
 
 def _write_skipped_configs_log(skipped_configs: list[dict[str, Any]], artefacts_dir: Path) -> None:
-    """Write detailed skipped-config information to the study-artefacts directory."""
+    """Write detailed skipped-config information to the _study-artefacts directory."""
     log_path = artefacts_dir / "skipped_configs.log"
     lines = [f"Skipped {len(skipped_configs)} config(s) due to validation errors\n"]
     for s in skipped_configs:
@@ -272,6 +281,7 @@ def _run(
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
     config_path: Path | None = None,
+    cli_overrides: dict[str, Any] | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -344,10 +354,10 @@ def _run(
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
 
-    # Create study-artefacts/ once for config copy and skipped log.
+    # Create _study-artefacts/ once for config copy and skipped log.
     artefacts_dir = _ensure_study_artefacts_dir(study_dir)
 
-    # Copy original YAML config to study-artefacts/ for reproducibility.
+    # Copy original YAML config to _study-artefacts/ for reproducibility.
     if config_path is not None:
         dest = artefacts_dir / "declared_study_config.yaml"
         try:
@@ -356,11 +366,11 @@ def _run(
         except FileNotFoundError:
             _api_logger.warning("Config YAML %s not found, skipping copy", config_path)
 
-    # Persist skipped config details to study-artefacts/.
+    # Persist skipped config details to _study-artefacts/.
     if study.skipped_configs:
         _write_skipped_configs_log(study.skipped_configs, artefacts_dir)
 
-    # Persist system overrides to study-artefacts/ (runner auto-elevation, etc.)
+    # Persist system overrides to _study-artefacts/ (runner auto-elevation, etc.)
     if system_overrides:
         overrides_path = artefacts_dir / "system_overrides.json"
         try:
@@ -368,6 +378,29 @@ def _run(
             _api_logger.info("System overrides written to %s", overrides_path)
         except OSError as exc:
             _api_logger.warning("Failed to write system_overrides.json: %s", exc)
+
+    # Build per-experiment resolution logs (config_hash -> resolution dict).
+    # Computed once here so runners don't need to know about resolution logic.
+    resolution_logs: dict[str, dict[str, Any]] = {}
+    try:
+        from llenergymeasure.config.introspection import get_swept_field_paths
+        from llenergymeasure.config.resolution import build_resolution_log
+        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+
+        swept_fields = get_swept_field_paths(study.experiments)
+        seen_hashes: set[str] = set()
+        for exp in study.experiments:
+            h = compute_measurement_config_hash(exp)
+            if h in seen_hashes:
+                continue
+            seen_hashes.add(h)
+            resolution_logs[h] = build_resolution_log(
+                exp.model_dump(),
+                cli_overrides=cli_overrides,
+                swept_fields=swept_fields,
+            )
+    except Exception as exc:
+        _api_logger.debug("Failed to build resolution logs: %s", exc)
 
     wall_start = time.monotonic()
     is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1
@@ -396,7 +429,12 @@ def _run(
 
         exp_start = time.monotonic()
         result_files, experiment_results, warnings = _run_in_process(
-            study, manifest, study_dir, runner_specs=runner_specs, progress=progress
+            study,
+            manifest,
+            study_dir,
+            runner_specs=runner_specs,
+            progress=progress,
+            resolution_logs=resolution_logs,
         )
         exp_elapsed = time.monotonic() - exp_start
 
@@ -430,6 +468,7 @@ def _run(
             progress=progress,
             skip_set=skip_set,
             no_lock=no_lock,
+            resolution_logs=resolution_logs,
         )
 
     wall_time = time.monotonic() - wall_start
@@ -481,6 +520,7 @@ def _run_in_process(
     study_dir: Path,
     runner_specs: Any = None,
     progress: ProgressCallback | None = None,
+    resolution_logs: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Run a single experiment in-process or via DockerRunner directly.
 
@@ -603,6 +643,7 @@ def _run_in_process(
         result_files,
         ts_source_dir=ts_tmpdir,
         effective_config=effective_config_dict,
+        resolution_log=(resolution_logs or {}).get(config_hash),
     )
 
     # Clean up temp dirs
@@ -620,6 +661,7 @@ def _run_via_runner(
     progress: ProgressCallback | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
+    resolution_logs: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Delegate to StudyRunner for multi-experiment / multi-cycle runs."""
     from llenergymeasure.domain.progress import StudyProgressCallback
@@ -634,6 +676,7 @@ def _run_via_runner(
         progress=study_progress,
         no_lock=no_lock,
         skip_set=skip_set,
+        resolution_logs=resolution_logs,
     )
     raw_results = runner.run()
 

@@ -359,6 +359,7 @@ def build_preflight_panel(
     probed_energy_sampler: str | None = None,
     sweep_axes: int | None = None,
     sweep_groups: int | None = None,
+    n_explicit: int = 0,
 ) -> Panel:
     """Return a Rich Panel with study preflight summary.
 
@@ -528,18 +529,28 @@ def build_preflight_panel(
     # -- Sweep summary (only when multiple configs) --
     if n_configs > 1:
         _section(body, "Sweep")
-        if sweep_axes is not None and sweep_groups is not None:
+        n_from_sweep = n_configs - n_explicit
+        has_both = n_from_sweep > 0 and n_explicit > 0
+        # Sweep-generated line
+        if n_from_sweep > 0 and sweep_axes is not None and sweep_groups is not None:
             if sweep_groups > 0:
                 sweep_line = (
                     f"{sweep_axes} axes . {sweep_groups} groups "
-                    f"-> {_pl(n_configs, 'unique config')}"
+                    f"-> {_pl(n_from_sweep, 'config')} from sweep"
                 )
             else:
-                sweep_line = f"{sweep_axes} axes -> {_pl(n_configs, 'unique config')}"
-        else:
+                sweep_line = f"{sweep_axes} axes -> {_pl(n_from_sweep, 'config')} from sweep"
+            body.append(f"    {sweep_line}\n")
+        elif n_from_sweep > 0:
             n_dims = len(swept_paths)
-            sweep_line = f"{_pl(n_dims, 'dimension')} -> {_pl(n_configs, 'unique config')}"
-        body.append(f"    {sweep_line}\n")
+            sweep_line = f"{_pl(n_dims, 'dimension')} -> {_pl(n_from_sweep, 'config')} from sweep"
+            body.append(f"    {sweep_line}\n")
+        # Explicit experiments line
+        if n_explicit > 0:
+            body.append(f"    {_pl(n_explicit, 'explicit experiment')}\n")
+        # Total line (only when configs come from both sources)
+        if has_both:
+            body.append(f"    {_pl(n_configs, 'unique config')} total\n")
 
     body.append("\n")
     # Hash (dimmed)
