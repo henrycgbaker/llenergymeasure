@@ -425,7 +425,7 @@ def _run(
         total_energy_j=total_energy,
         unique_configurations=unique_configs,
         warnings=warnings,
-        skipped_experiments=study.skipped_configs if study.skipped_configs else [],
+        skipped_experiments=study.skipped_configs,
     )
 
 
