@@ -128,7 +128,11 @@ def _save_and_record(
                 ts_source = candidate
 
         result_path = save_result(
-            result, study_dir, timeseries_source=ts_source, experiment_index=experiment_index
+            result,
+            study_dir,
+            timeseries_source=ts_source,
+            experiment_index=experiment_index,
+            cycle=cycle,
         )
 
         # Clean up the stale flat parquet file after it has been copied into the

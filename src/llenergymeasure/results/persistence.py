@@ -1,18 +1,18 @@
 """v2.0 results persistence — save, load, atomic writes.
 
-Handles directory lifecycle ({name}_{timestamp}/), collision avoidance,
+Handles directory lifecycle, collision avoidance,
 JSON serialisation (primary), and Parquet sidecar management.
 """
 
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import shutil
 import tempfile
 import warnings
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,57 +22,41 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _experiment_dir_name(result: ExperimentResult, *, experiment_index: int | None = None) -> str:
-    """Generate a human-readable directory name matching CLI experiment headers.
+def _experiment_dir_name(
+    result: ExperimentResult,
+    *,
+    experiment_index: int | None = None,
+    cycle: int = 1,
+) -> str:
+    """Generate a human-readable directory name for an experiment result.
 
-    Format: ``[{index:03d}_]{model_short}-{backend}[-{non_default_params}]_{timestamp}``
+    Format: ``[{index:03d}_]c{cycle}_{model_short}-{backend}_{hash[:8]}``
 
     When ``experiment_index`` is provided (study context), the directory is
     prefixed with a zero-padded index for natural sort ordering.
 
     Examples:
-        ``001_Qwen2.5-0.5B-pytorch-n50-batch4_2026-03-26T14-30``
-        ``Qwen2.5-0.5B-vllm_2026-03-26T14-30``  (single experiment, no index)
+        ``001_c1_Qwen2.5-0.5B-pytorch_abcdef01``
+        ``c1_gpt2-vllm_fedcba98``  (single experiment, no index)
     """
-    from llenergymeasure.utils.formatting import (
-        _DATASET_DEFAULTS,
-        _EXPERIMENT_DEFAULTS,
-        model_short_name,
-    )
+    from llenergymeasure.utils.formatting import model_short_name
 
     raw_model = result.effective_config.get("model", "unknown")
     model_short = model_short_name(raw_model)
     backend = result.backend
+    config_hash = result.measurement_config_hash[:8]
 
-    # Collect non-default params (matching format_experiment_header logic)
-    params: list[str] = []
-    for field_name, default_val in _EXPERIMENT_DEFAULTS.items():
-        actual = result.effective_config.get(field_name)
-        if actual is not None and actual != default_val:
-            params.append(f"{field_name}={actual}")
-
-    # Check nested dataset params
-    dataset_cfg = result.effective_config.get("dataset", {})
-    if isinstance(dataset_cfg, dict):
-        for field_name, default_val in _DATASET_DEFAULTS.items():
-            actual = dataset_cfg.get(field_name)
-            if actual is not None and actual != default_val:
-                params.append(f"{field_name}={actual}")
-
-    # Build slug: model-backend[-params]_timestamp
-    parts = [model_short, backend]
-    parts.extend(params)
-    slug = "-".join(parts)
+    # Build slug: model_short-backend
+    slug = f"{model_short}-{backend}"
     # Sanitise for filesystem: replace spaces, slashes, special chars
     slug = slug.replace(" ", "_").replace("/", "-").replace(":", "-")
     # Truncate overly long slugs (filesystem limits)
     if len(slug) > 120:
         slug = slug[:120]
 
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M")
     if experiment_index is not None:
-        return f"{experiment_index:03d}_{slug}_{timestamp}"
-    return f"{slug}_{timestamp}"
+        return f"{experiment_index:03d}_c{cycle}_{slug}_{config_hash}"
+    return f"c{cycle}_{slug}_{config_hash}"
 
 
 def _find_collision_free_dir(base: Path) -> Path:
@@ -109,16 +93,34 @@ def _atomic_write(content: str, path: Path) -> None:
         raise
 
 
+def save_effective_config(experiment_dir: Path, config_dict: dict[str, object]) -> Path:
+    """Write effective_config.json sidecar to an experiment directory.
+
+    Args:
+        experiment_dir: Experiment result directory (must already exist).
+        config_dict: Fully resolved experiment config as a dict.
+
+    Returns:
+        Path to the written effective_config.json file.
+    """
+    path = experiment_dir / "effective_config.json"
+    _atomic_write(json.dumps(config_dict, indent=2, default=str), path)
+    logger.debug("Saved effective config to %s", path)
+    return path
+
+
 def save_result(
     result: ExperimentResult,
     output_dir: Path,
     timeseries_source: Path | None = None,
     experiment_index: int | None = None,
+    cycle: int = 1,
 ) -> Path:
     """Save ExperimentResult to a collision-safe subdirectory of output_dir.
 
-    Creates: {output_dir}/[{index}_]{model}-{backend}[-params]_{timestamp}/result.json
-    If timeseries_source provided: copies to {dir}/timeseries.parquet.
+    Creates: ``{output_dir}/[{index}_]c{cycle}_{model}-{backend}_{hash}/result.json``
+    Also writes ``effective_config.json`` sidecar from ``result.effective_config``.
+    If timeseries_source provided: copies to ``{dir}/timeseries.parquet``.
 
     Args:
         result: The experiment result to persist.
@@ -126,6 +128,7 @@ def save_result(
         timeseries_source: Optional path to existing .parquet file to copy in.
         experiment_index: Optional 1-based experiment index for directory prefix
             (used in study context for natural sort ordering).
+        cycle: Cycle number (1-based). Embedded in directory name.
 
     Returns:
         Path to the result.json file (usable with load_result() directly).
@@ -133,13 +136,17 @@ def save_result(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dir_name = _experiment_dir_name(result, experiment_index=experiment_index)
+    dir_name = _experiment_dir_name(result, experiment_index=experiment_index, cycle=cycle)
     base_dir = output_dir / dir_name
     target_dir = _find_collision_free_dir(base_dir)
 
     result_path = target_dir / "result.json"
     _atomic_write(result.model_dump_json(indent=2), result_path)
     logger.debug("Saved result to %s", result_path)
+
+    # Write effective_config.json sidecar
+    if result.effective_config:
+        save_effective_config(target_dir, result.effective_config)
 
     if timeseries_source is not None:
         timeseries_source = Path(timeseries_source)
@@ -153,12 +160,27 @@ def save_result(
     return result_path
 
 
+def load_effective_config(experiment_dir: Path) -> dict[str, object] | None:
+    """Load effective_config.json sidecar from an experiment directory.
+
+    Returns None if the sidecar does not exist (backward-compatible with
+    older result directories that embed config in result.json).
+    """
+    path = experiment_dir / "effective_config.json"
+    try:
+        data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    return data
+
+
 def load_result(path: Path) -> ExperimentResult:
     """Load ExperimentResult from a result.json path.
 
-    Auto-discovers timeseries.parquet sidecar in the same directory.
-    If the result references a sidecar but the file is missing, loads
-    successfully and emits a UserWarning (graceful degradation).
+    Auto-discovers timeseries.parquet and effective_config.json sidecars
+    in the same directory. If the result references a timeseries sidecar
+    but the file is missing, loads successfully and emits a UserWarning
+    (graceful degradation).
 
     Args:
         path: Path to result.json (as returned by save_result()).
@@ -171,6 +193,13 @@ def load_result(path: Path) -> ExperimentResult:
     path = Path(path)
     content = path.read_text(encoding="utf-8")
     result = ExperimentResult.model_validate_json(content)
+
+    # Auto-discover effective_config.json sidecar (backward compat: result.json
+    # still embeds effective_config, so the sidecar is informational for now)
+    if not result.effective_config:
+        sidecar_config = load_effective_config(path.parent)
+        if sidecar_config is not None:
+            result.effective_config = sidecar_config
 
     sidecar = path.parent / "timeseries.parquet"
     if result.timeseries is not None and not sidecar.exists():
