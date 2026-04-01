@@ -110,7 +110,8 @@ def test_cache_hit_returns_cached_without_pynvml_call():
     ):
         result = measure_baseline_power(gpu_indices=[0], cache_ttl_sec=3600.0)
 
-    assert result is entry
+    assert result is not entry  # replace() creates a new object
+    assert result.from_cache is True
     assert result.power_w == 42.0
     mock_pynvml.nvmlDeviceGetPowerUsage.assert_not_called()
 
@@ -127,7 +128,8 @@ def test_cache_hit_respects_ttl():
     ):
         result = measure_baseline_power(gpu_indices=[0], cache_ttl_sec=3600.0)
 
-    assert result is fresh_entry
+    assert result.from_cache is True
+    assert result.power_w == fresh_entry.power_w
 
 
 def test_cache_hit_backward_compat_device_index():
@@ -141,7 +143,7 @@ def test_cache_hit_backward_compat_device_index():
     ):
         result = measure_baseline_power(device_index=0, cache_ttl_sec=3600.0)
 
-    assert result is entry
+    assert result.from_cache is True
     assert result.power_w == 77.0
 
 
@@ -337,7 +339,8 @@ def test_multi_gpu_cache_keyed_by_sorted_tuple():
         # Same GPUs different order — should hit cache
         result = measure_baseline_power(gpu_indices=[1, 0], cache_ttl_sec=3600.0)
 
-    assert result is entry
+    assert result.from_cache is True
+    assert result.power_w == entry.power_w
 
 
 # =============================================================================
@@ -472,13 +475,14 @@ def test_create_energy_breakdown_with_fresh_baseline():
 
 
 def test_create_energy_breakdown_with_cached_baseline():
-    """Baseline with old timestamp produces method='cached' (cache_age > 1s)."""
+    """Baseline with from_cache=True produces method='cached'."""
     entry = BaselineCache(
         power_w=5.0,
         timestamp=time.time() - 600.0,  # 10 minutes old
         gpu_indices=[0],
         sample_count=5,
         duration_sec=0.5,
+        from_cache=True,
     )
 
     breakdown = create_energy_breakdown(
