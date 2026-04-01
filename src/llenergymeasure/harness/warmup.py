@@ -96,15 +96,15 @@ def warmup_until_converged(
 
         latencies.append(latency_ms)
 
-        # Compute CV whenever we have enough samples (informational in fixed mode,
-        # used for early-break in convergence mode).
-        if len(latencies) >= max(2, config.window_size):
+        # Compute CV whenever we have 2+ samples (minimum for meaningful std dev).
+        # In fixed mode this is informational; in convergence mode it drives early-break.
+        if len(latencies) >= 2:
             recent = latencies[-config.window_size :]
             final_cv = compute_cv(recent)
 
             if (
                 not fixed_mode
-                and len(latencies) >= config.min_prompts
+                and len(latencies) >= max(config.min_prompts, config.window_size)
                 and final_cv < config.cv_threshold
             ):
                 converged = True

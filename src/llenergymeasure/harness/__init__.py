@@ -249,12 +249,20 @@ class MeasurementHarness:
             if _p:
                 _p.on_step_start("baseline", "Measuring", f"baseline idle power ({dur:.0f}s)")
                 t0 = time.perf_counter()
+            t0_baseline = time.monotonic()
             baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
+            baseline_elapsed = time.monotonic() - t0_baseline
             if baseline is not None:
+                # Cache hit if measurement returned much faster than configured duration
+                was_cached = baseline_elapsed < dur * 0.5
+                cache_label = " (cached)" if was_cached else ""
                 _substep(
                     "baseline",
-                    f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples)",
+                    f"baseline: {baseline.power_w:.1f}W"
+                    f" ({baseline.sample_count} samples{cache_label})",
                 )
+                if _p and was_cached:
+                    _p.on_step_update("baseline", f"cached baseline {baseline.power_w:.1f}W")
             if _p:
                 _p.on_step_done("baseline", time.perf_counter() - t0)
         elif _p:
