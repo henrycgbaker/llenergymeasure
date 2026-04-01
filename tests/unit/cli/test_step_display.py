@@ -601,7 +601,7 @@ def test_image_prep_failure_named_fields():
 
 def test_end_experiment_ok_null_mj_per_tok_shows_dash():
     """When both mj_per_tok_adjusted and mj_per_tok_total are None, mj_tok stored as None."""
-    console, buf = _make_console()
+    console, _buf = _make_console()
     display = StudyStepDisplay(total_experiments=1, console=console)
     display.begin_experiment(1, "gpt2 / pytorch / bf16", [])
     display.end_experiment_ok(
