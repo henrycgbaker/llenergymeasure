@@ -13,7 +13,7 @@ from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import DatasetConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.config.ssot import RUNNER_DOCKER
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-from llenergymeasure.domain.experiment import ExperimentResult, StudyResult
+from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -82,7 +82,7 @@ def run_experiment(
         config: YAML file path, ExperimentConfig object, or None (use kwargs).
         model: Model name/path (kwargs form only).
         backend: Inference backend (kwargs form only, defaults to ExperimentConfig default).
-        n_prompts: Number of prompts (kwargs form only, default 100).
+        n_prompts: Number of prompts (kwargs form only, default 50).
         dataset: Dataset source name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
         progress: Optional callback for step-by-step progress reporting.
@@ -104,7 +104,7 @@ def run_experiment(
 
         error_msg = (
             study_result.summary.warnings[0]
-            if study_result.summary and study_result.summary.warnings
+            if study_result.summary.warnings
             else "Experiment produced no results"
         )
         raise ExperimentError(error_msg)
@@ -149,7 +149,7 @@ def run_study(
         no_lock: Skip GPU advisory lock acquisition. Use with --no-lock CLI flag.
 
     Returns:
-        StudyResult with experiments, result_files, measurement_protocol, summary.
+        StudyResult with experiments, result_files, measurement_protocol, and inline summary fields.
 
     Raises:
         ConfigError: Invalid config path or parse error.
@@ -212,7 +212,6 @@ def _to_study_config(
     **kwargs: Any,
 ) -> StudyConfig:
     """Convert any run_experiment() input form to a degenerate StudyConfig."""
-
     if isinstance(config, ExperimentConfig):
         experiment = config
     elif isinstance(config, (str, Path)):
@@ -275,7 +274,6 @@ def _run(
     import logging
 
     from llenergymeasure.config.user_config import load_user_config
-    from llenergymeasure.domain.experiment import StudySummary
     from llenergymeasure.study.manifest import ManifestWriter, create_study_dir
     from llenergymeasure.study.preflight import run_study_preflight
 
@@ -375,7 +373,11 @@ def _run(
                 tp = r.avg_tokens_per_second if r.avg_tokens_per_second > 0 else None
                 infer = r.total_inference_time_sec if r.total_inference_time_sec > 0 else None
                 study_cb.end_experiment_ok(
-                    1, exp_elapsed, energy_j=energy, throughput_tok_s=tp, inference_time_sec=infer
+                    1,
+                    exp_elapsed,
+                    energy_j=energy,
+                    throughput_tok_s=tp,
+                    inference_time_sec=infer,
                 )
             else:
                 study_cb.end_experiment_fail(1, exp_elapsed)
@@ -404,6 +406,14 @@ def _run(
     n_cycles = study.study_execution.n_cycles
     unique_configs = len(study.experiments) // n_cycles if n_cycles > 0 else len(study.experiments)
 
+    measurement_protocol: dict[str, Any] = {
+        "n_cycles": study.study_execution.n_cycles,
+        "experiment_order": study.study_execution.experiment_order,
+        "experiment_gap_seconds": study.study_execution.experiment_gap_seconds,
+        "cycle_gap_seconds": study.study_execution.cycle_gap_seconds,
+        "shuffle_seed": study.study_execution.shuffle_seed,
+    }
+
     summary = StudySummary(
         total_experiments=len(study.experiments),
         completed=completed,
@@ -414,14 +424,6 @@ def _run(
         warnings=warnings,
     )
 
-    measurement_protocol: dict[str, Any] = {
-        "n_cycles": study.study_execution.n_cycles,
-        "experiment_order": study.study_execution.experiment_order,
-        "experiment_gap_seconds": study.study_execution.experiment_gap_seconds,
-        "cycle_gap_seconds": study.study_execution.cycle_gap_seconds,
-        "shuffle_seed": study.study_execution.shuffle_seed,
-    }
-
     return StudyResult(
         experiments=[r for r in experiment_results if r is not None],
         study_name=study.study_name,
@@ -429,6 +431,7 @@ def _run(
         measurement_protocol=measurement_protocol,
         result_files=result_files,
         summary=summary,
+        skipped_experiments=study.skipped_configs,
     )
 
 

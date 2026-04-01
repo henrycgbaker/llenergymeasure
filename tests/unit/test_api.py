@@ -32,7 +32,7 @@ from llenergymeasure import (
     run_experiment,
     run_study,
 )
-from llenergymeasure.domain.experiment import AggregationMetadata
+from llenergymeasure.domain.experiment import AggregationMetadata, StudySummary
 from llenergymeasure.utils.exceptions import BackendError, PreFlightError
 from tests.conftest import make_config, make_user_config
 
@@ -599,7 +599,6 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     result = run_study(study)
 
     assert isinstance(result, StudyResult)
-    assert result.summary is not None
     assert result.summary.completed == 1
     assert result.summary.failed == 0
 
@@ -912,7 +911,6 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
 
     study_result = api_module._run(study)
 
-    assert study_result.summary is not None
     assert study_result.summary.total_experiments == 6, (
         f"Expected 6 (cycle-expanded count), got {study_result.summary.total_experiments} "
         f"(pre-fix bug would give 18 = 6 x 3)"
@@ -1120,7 +1118,6 @@ class TestResolveGpuIndicesTensorrt:
 def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
     """run_experiment raises ExperimentError (not IndexError) when _run returns empty experiments."""
     import llenergymeasure.api._impl as api_module
-    from llenergymeasure.domain.experiment import StudySummary
     from llenergymeasure.utils.exceptions import ExperimentError
 
     empty_study_result = StudyResult(
@@ -1148,7 +1145,6 @@ def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
 def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
     """run_experiment raises ExperimentError with fallback message when warnings list is empty."""
     import llenergymeasure.api._impl as api_module
-    from llenergymeasure.domain.experiment import StudySummary
     from llenergymeasure.utils.exceptions import ExperimentError
 
     empty_study_result = StudyResult(
@@ -1160,7 +1156,6 @@ def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
             total_wall_time_s=0.1,
             total_energy_j=0.0,
             unique_configurations=1,
-            warnings=[],
         ),
     )
 
@@ -1179,7 +1174,6 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
     experiments and a summary showing the failure count.
     """
     import llenergymeasure.api._impl as api_module
-    from llenergymeasure.domain.experiment import StudySummary
 
     successful_result = _make_experiment_result(experiment_id="partial-ok")
 
