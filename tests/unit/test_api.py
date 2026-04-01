@@ -718,7 +718,14 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     original_run_via_runner = api_module._run_via_runner
 
     def mock_run_via_runner(
-        study, manifest, study_dir, runner_specs=None, progress=None, skip_set=None, no_lock=False
+        study,
+        manifest,
+        study_dir,
+        runner_specs=None,
+        progress=None,
+        skip_set=None,
+        no_lock=False,
+        resolution_logs=None,
     ):
         captured_runner_specs.append(runner_specs)
         return original_run_via_runner(study, manifest, study_dir, runner_specs=runner_specs)
@@ -881,7 +888,14 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
 
     # Mock _run_via_runner to return pre-built results (bypasses real subprocess)
     def mock_run_via_runner(
-        study, manifest, study_dir, runner_specs=None, progress=None, skip_set=None, no_lock=False
+        study,
+        manifest,
+        study_dir,
+        runner_specs=None,
+        progress=None,
+        skip_set=None,
+        no_lock=False,
+        resolution_logs=None,
     ):
         result_files = [str(tmp_path / f"result-{i}.json") for i in range(6)]
         return result_files, mock_results, []
