@@ -304,14 +304,14 @@ class MeasurementHarness:
                 )
                 t0_warmup = time.perf_counter()
 
-            # Use run_warmup_prompt() + warmup_until_converged() from harness.warmup.
-            # First call determines warmup strategy:
-            # - returns > 0.0: CV-based convergence (PyTorch) — harness owns the loop
-            # - returns 0.0: simple kernel warmup (vLLM/TRT-LLM) — already done
-            first_latency = backend.run_warmup_prompt(config, model, prompts[0])
+            # Probe call determines warmup strategy:
+            # > 0.0 → CV-based convergence (PyTorch), 0.0 → kernel warmup (vLLM/TRT-LLM)
+            if config.warmup.enabled:
+                first_latency = backend.run_warmup_prompt(config, model, prompts[0])
+            else:
+                first_latency = 0.0
 
-            if first_latency > 0.0 and config.warmup.enabled:
-                # CV-based warmup: harness owns the convergence loop
+            if first_latency > 0.0:
                 warmup_substep = (
                     (lambda text, elapsed: _p.on_substep("warmup", text, elapsed)) if _p else None
                 )
@@ -321,7 +321,6 @@ class MeasurementHarness:
                     on_substep=warmup_substep,
                 )
             else:
-                # Simple warmup: single-token kernel warmup already done via first call
                 from llenergymeasure.domain.metrics import WarmupResult
 
                 warmup_result = WarmupResult(
@@ -614,7 +613,7 @@ class MeasurementHarness:
             flops_result: FlopsResult from estimate_flops_palm(), or None.
             timeseries_path: Relative path to Parquet sidecar, or None.
             measurement_warnings: List of quality warning strings.
-            warmup_result: WarmupResult from backend.warmup(), or None.
+            warmup_result: WarmupResult from warmup phase, or None.
 
         Returns:
             Fully assembled ExperimentResult.

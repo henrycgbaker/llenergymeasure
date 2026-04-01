@@ -71,7 +71,6 @@ def test_backend_plugin_protocol_methods():
     expected_methods = [
         "name",
         "load_model",
-        "warmup",
         "run_warmup_prompt",
         "run_inference",
         "cleanup",

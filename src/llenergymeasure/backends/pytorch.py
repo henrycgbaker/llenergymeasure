@@ -16,7 +16,6 @@ from typing import Any
 
 from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.metrics import WarmupResult
 
 logger = logging.getLogger(__name__)
 
@@ -128,33 +127,6 @@ class PyTorchBackend:
         with torch.no_grad():
             hf_model.generate(**inputs, max_new_tokens=min(config.max_output_tokens or 32, 32))
         return (time.perf_counter() - start) * 1000.0
-
-    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
-        """Run warmup using warmup_until_converged() and return WarmupResult.
-
-        Delegates to run_warmup_prompt() via warmup_until_converged() in harness.warmup.
-        thermal_floor_wait_s is NOT set here — MeasurementHarness sets it after
-        this method returns.
-
-        Args:
-            config: Experiment configuration.
-            model: Tuple of (model, tokenizer) from load_model().
-            prompts: Pre-loaded prompts (unused — PyTorch warmup uses synthetic prompt).
-
-        Returns:
-            WarmupResult with convergence status and iteration count.
-            thermal_floor_wait_s is left at default 0.0 (set by harness).
-        """
-        from llenergymeasure.harness.warmup import warmup_until_converged
-
-        # Use a synthetic prompt for warmup (not the measurement prompts)
-        words_per_prompt = max(1, (config.max_input_tokens or 512) // 4)
-        warmup_prompt = ("Hello, " * words_per_prompt).strip()
-
-        return warmup_until_converged(
-            lambda: self.run_warmup_prompt(config, model, warmup_prompt),
-            config.warmup,
-        )
 
     # -------------------------------------------------------------------------
     # BackendPlugin: run_inference

@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.domain.metrics import WarmupResult
 
 
 @dataclass
@@ -56,19 +55,6 @@ class BackendPlugin(Protocol):
             config: Experiment configuration.
             on_substep: Optional callback ``(text, elapsed_sec)`` for reporting
                 sub-operation progress (e.g. tokenizer loaded, engine compiled).
-        """
-        ...
-
-    def warmup(self, config: ExperimentConfig, model: Any, prompts: list[str]) -> WarmupResult:
-        """Run warmup iterations.
-
-        Args:
-            config: Experiment configuration.
-            model: Opaque model object from load_model().
-            prompts: Pre-loaded prompts (loaded by harness before measurement window).
-
-        Returns:
-            WarmupResult (thermal_floor_wait_s set by harness).
         """
         ...
 

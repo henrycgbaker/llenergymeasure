@@ -36,7 +36,7 @@ result = harness.run(backend, config, gpu_indices=[0])
 2. Measure baseline power (before model load)
 3. Load model via `backend.load_model(config)`
 4. Capture model memory (torch.cuda.max_memory_allocated)
-5. Run warmup via `backend.warmup(config, model)`
+5. Run warmup via `backend.run_warmup_prompt()` + `warmup_until_converged()`
 6. Thermal floor wait (let GPU cool after warmup)
 7. Select energy sampler
 8. CUDA sync (before inference — Zeus best practice)

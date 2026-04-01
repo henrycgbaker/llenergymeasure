@@ -24,7 +24,7 @@ def thermal_floor_wait(config: ExperimentConfig) -> float:
     """Sleep for thermal_floor_seconds after warmup. Returns actual wait time in seconds.
 
     Returns 0.0 immediately if warmup is disabled or thermal_floor_seconds <= 0.
-    Called by MeasurementHarness after backend.warmup(), before energy tracking starts.
+    Called by MeasurementHarness after warmup, before energy tracking starts.
 
     Args:
         config: Experiment configuration (reads warmup.enabled and warmup.thermal_floor_seconds).
@@ -88,7 +88,6 @@ def warmup_until_converged(
     iteration_limit = config.n_warmup if fixed_mode else config.max_prompts
 
     for i in range(iteration_limit):
-        # Run single inference, catching exceptions to avoid aborting warmup
         try:
             latency_ms = run_single_inference()
         except Exception as exc:
@@ -97,25 +96,19 @@ def warmup_until_converged(
 
         latencies.append(latency_ms)
 
-        # Check convergence (skip in fixed mode)
         if not fixed_mode and len(latencies) >= max(config.min_prompts, config.window_size):
             recent = latencies[-config.window_size :]
-            cv = compute_cv(recent)
-            final_cv = cv
+            final_cv = compute_cv(recent)
 
-            if on_substep:
-                target_info = f"  (target: {config.cv_threshold:.3f})" if not fixed_mode else ""
-                on_substep(f"Iteration {i + 1}/{iteration_limit}  CV: {cv:.3f}{target_info}", 0.0)
-
-            if cv < config.cv_threshold:
+            if final_cv < config.cv_threshold:
                 converged = True
-                break
-        else:
-            if on_substep:
-                target_info = f"  (target: {config.cv_threshold:.3f})" if not fixed_mode else ""
-                on_substep(
-                    f"Iteration {i + 1}/{iteration_limit}  CV: {final_cv:.3f}{target_info}", 0.0
-                )
+
+        if on_substep:
+            target_info = f"  (target: {config.cv_threshold:.3f})" if not fixed_mode else ""
+            on_substep(f"Iteration {i + 1}/{iteration_limit}  CV: {final_cv:.3f}{target_info}", 0.0)
+
+        if converged:
+            break
 
     # In fixed mode, mark as converged (user chose fixed iterations)
     if fixed_mode:

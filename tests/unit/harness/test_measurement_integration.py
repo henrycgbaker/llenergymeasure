@@ -313,37 +313,15 @@ def test_cuda_sync_skipped_when_cuda_unavailable() -> None:
     mock_torch.cuda.synchronize.assert_not_called()
 
 
-def test_pytorch_backend_warmup_returns_warmup_result() -> None:
-    """PyTorchBackend.warmup() returns a WarmupResult when warmup is disabled."""
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
+def test_warmup_disabled_skips_probe_call() -> None:
+    """Harness skips run_warmup_prompt() probe when warmup.enabled=False."""
+    from llenergymeasure.config.models import WarmupConfig
     from llenergymeasure.domain.metrics import WarmupResult
+    from llenergymeasure.harness.warmup import warmup_until_converged
 
-    backend = PyTorchBackend()
-    config = ExperimentConfig(
-        model="test/model",
-        warmup=WarmupConfig(enabled=False),
-    )
-
-    # model is a tuple (hf_model, tokenizer) in the new interface
-    result = backend.warmup(config, (MagicMock(), MagicMock()), ["test prompt"])
+    wc = WarmupConfig(enabled=False)
+    result = warmup_until_converged(lambda: 1.0, wc)
     assert isinstance(result, WarmupResult)
-    assert result.iterations_completed == 0
-    assert result.converged is True
-
-
-def test_pytorch_backend_warmup_disabled_path() -> None:
-    """PyTorchBackend.warmup() with enabled=False returns WarmupResult with 0 iterations."""
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.models import ExperimentConfig, WarmupConfig
-
-    backend = PyTorchBackend()
-    config = ExperimentConfig(
-        model="test/model",
-        warmup=WarmupConfig(enabled=False),
-    )
-
-    result = backend.warmup(config, (MagicMock(), MagicMock()), ["test prompt"])
     assert result.iterations_completed == 0
     assert result.converged is True
     assert result.final_cv == 0.0
