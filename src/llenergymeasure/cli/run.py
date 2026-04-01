@@ -477,21 +477,28 @@ def _run_study_impl(
     if exec_overrides:
         study_cli_overrides["study_execution"] = exec_overrides
 
-    # Load study config with overrides
-    print("Expanding study configuration...", file=sys.stderr)
-    t0_expand = time.perf_counter()
-    study_config = load_study_config(
-        path=config,
-        cli_overrides=study_cli_overrides if study_cli_overrides else None,
-    )
-    expand_elapsed = time.perf_counter() - t0_expand
+    # Load study config with overrides — show spinner during expansion
+    from rich.console import Console as _ExpandConsole
 
-    # Pre-panel loading feedback
+    _expand_console = _ExpandConsole(stderr=True)
+    with _expand_console.status(
+        "Expanding study configuration...", spinner="dots", spinner_style="yellow"
+    ):
+        t0_expand = time.perf_counter()
+        study_config = load_study_config(
+            path=config,
+            cli_overrides=study_cli_overrides if study_cli_overrides else None,
+        )
+        expand_elapsed = time.perf_counter() - t0_expand
+
+    # Show results with green ticks
     n_valid = len(study_config.experiments) // max(study_config.study_execution.n_cycles, 1)
     n_skipped = len(study_config.skipped_configs) if study_config.skipped_configs else 0
-    print(f"  \u2713 {n_valid} valid configs  ({expand_elapsed:.1f}s)", file=sys.stderr)
+    _expand_console.print(
+        f"  [bold green]\u2713[/] {n_valid} valid configs  ({expand_elapsed:.1f}s)"
+    )
     if n_skipped:
-        print(f"  \u2713 Skipped {n_skipped} invalid config(s)", file=sys.stderr)
+        _expand_console.print(f"  [bold green]\u2713[/] Skipped {n_skipped} invalid config(s)")
 
     # Count sweep axes vs groups from raw YAML for panel display
     raw_sweep = raw.get("sweep", {}) or {}
