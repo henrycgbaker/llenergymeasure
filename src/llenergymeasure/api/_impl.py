@@ -243,9 +243,16 @@ def _to_study_config(
     return StudyConfig(experiments=[experiment])
 
 
-def _write_skipped_configs_log(skipped_configs: list[dict[str, Any]], study_dir: Path) -> None:
-    """Write detailed skipped-config information to a log file in the study directory."""
-    log_path = study_dir / "skipped_configs.log"
+def _ensure_study_artefacts_dir(study_dir: Path) -> Path:
+    """Create and return the study-artefacts/ subdirectory."""
+    artefacts_dir = study_dir / "study-artefacts"
+    artefacts_dir.mkdir(exist_ok=True)
+    return artefacts_dir
+
+
+def _write_skipped_configs_log(skipped_configs: list[dict[str, Any]], artefacts_dir: Path) -> None:
+    """Write detailed skipped-config information to the study-artefacts directory."""
+    log_path = artefacts_dir / "skipped_configs.log"
     lines = [f"Skipped {len(skipped_configs)} config(s) due to validation errors\n"]
     for s in skipped_configs:
         label = s.get("short_label", "unknown")
@@ -336,17 +343,21 @@ def _run(
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
 
-    # Copy original YAML config to study results directory for reproducibility.
+    # Create study-artefacts/ once for config copy and skipped log.
+    artefacts_dir = _ensure_study_artefacts_dir(study_dir)
+
+    # Copy original YAML config to study-artefacts/ for reproducibility.
     if config_path is not None:
+        dest = artefacts_dir / "declared_study_config.yaml"
         try:
-            shutil.copy2(config_path, study_dir / "config.yaml")
-            _api_logger.info("Config YAML copied to %s", study_dir / "config.yaml")
+            shutil.copy2(config_path, dest)
+            _api_logger.info("Config YAML copied to %s", dest)
         except FileNotFoundError:
             _api_logger.warning("Config YAML %s not found, skipping copy", config_path)
 
-    # Persist skipped config details to a log file in the study directory.
+    # Persist skipped config details to study-artefacts/.
     if study.skipped_configs:
-        _write_skipped_configs_log(study.skipped_configs, study_dir)
+        _write_skipped_configs_log(study.skipped_configs, artefacts_dir)
 
     wall_start = time.monotonic()
     is_single = len(study.experiments) == 1 and study.study_execution.n_cycles == 1
