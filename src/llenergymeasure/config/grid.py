@@ -406,14 +406,11 @@ def build_preflight_panel(
         label: str,
         value: str,
         indent: int = 4,
-        value_style: str = "",
+        value_style: str = "dim",
     ) -> None:
         body.append(f"{' ' * indent}")
-        body.append(f"{label:<18}")
-        if value_style:
-            body.append(f"{value}\n", style=value_style)
-        else:
-            body.append(f"{value}\n")
+        body.append(f"{label:<18}", style="white")
+        body.append(f"{value}\n", style=value_style)
 
     # --- Unique backends (for Backends section) ---
     unique_backends = sorted({exp.backend for exp in experiments})
@@ -464,7 +461,9 @@ def build_preflight_panel(
     for b in unique_backends:
         if runner_specs and b in runner_specs:
             spec = runner_specs[b]
-            body.append(f"    {b:<18}{spec.mode}")
+            body.append("    ")
+            body.append(f"{b:<18}", style="white")
+            body.append(f"{spec.mode}", style="dim")
             if getattr(spec, "source", None) == SOURCE_MULTI_BACKEND_ELEVATION:
                 body.append(" (auto-elevated)", style="yellow")
             body.append("\n")

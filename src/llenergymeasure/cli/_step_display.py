@@ -815,12 +815,7 @@ class StudyStepDisplay:
         self._refresh()
 
     def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
-        """Record a completed sub-operation within the active step.
-
-        Implemented for protocol compliance and single-process study paths.
-        In multi-process study runs, the progress_queue only carries
-        started/completed/failed events, so this will not receive events.
-        """
+        """Record a completed sub-operation within the active step."""
         with self._lock:
             if step not in self._inner_substeps:
                 self._inner_substeps[step] = []
