@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import signal
 import sys
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -478,17 +479,19 @@ def _run_study_impl(
 
     # Load study config with overrides
     print("Expanding study configuration...", file=sys.stderr)
+    t0_expand = time.perf_counter()
     study_config = load_study_config(
         path=config,
         cli_overrides=study_cli_overrides if study_cli_overrides else None,
     )
+    expand_elapsed = time.perf_counter() - t0_expand
 
     # Pre-panel loading feedback
     n_valid = len(study_config.experiments) // max(study_config.study_execution.n_cycles, 1)
     n_skipped = len(study_config.skipped_configs) if study_config.skipped_configs else 0
-    print(f"  {n_valid} valid configs", file=sys.stderr)
+    print(f"  \u2713 {n_valid} valid configs  ({expand_elapsed:.1f}s)", file=sys.stderr)
     if n_skipped:
-        print(f"  Skipped {n_skipped} invalid config(s)", file=sys.stderr)
+        print(f"  \u2713 Skipped {n_skipped} invalid config(s)", file=sys.stderr)
 
     # Count sweep axes vs groups from raw YAML for panel display
     raw_sweep = raw.get("sweep", {}) or {}
