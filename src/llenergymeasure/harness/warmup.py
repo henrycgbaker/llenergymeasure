@@ -80,7 +80,7 @@ def warmup_until_converged(
 
     latencies: list[float] = []
     converged = False
-    final_cv = 1.0
+    final_cv: float | None = None
 
     # Fixed mode: run exactly n_warmup prompts without convergence checking.
     # CV mode: run up to max_prompts with convergence checking after min_prompts.
@@ -96,16 +96,23 @@ def warmup_until_converged(
 
         latencies.append(latency_ms)
 
-        if not fixed_mode and len(latencies) >= max(config.min_prompts, config.window_size):
+        # Compute CV whenever we have 2+ samples (minimum for meaningful std dev).
+        # In fixed mode this is informational; in convergence mode it drives early-break.
+        if len(latencies) >= 2:
             recent = latencies[-config.window_size :]
             final_cv = compute_cv(recent)
 
-            if final_cv < config.cv_threshold:
+            if (
+                not fixed_mode
+                and len(latencies) >= max(config.min_prompts, config.window_size)
+                and final_cv < config.cv_threshold
+            ):
                 converged = True
 
         if on_substep:
+            cv_str = f"  CV: {final_cv:.3f}" if final_cv is not None else ""
             target_info = f"  (target: {config.cv_threshold:.3f})" if not fixed_mode else ""
-            on_substep(f"Iteration {i + 1}/{iteration_limit}  CV: {final_cv:.3f}{target_info}", 0.0)
+            on_substep(f"Iteration {i + 1}/{iteration_limit}{cv_str}{target_info}", 0.0)
 
         if converged:
             break
@@ -113,32 +120,32 @@ def warmup_until_converged(
     # In fixed mode, mark as converged (user chose fixed iterations)
     if fixed_mode:
         converged = True
-        if latencies and len(latencies) >= config.window_size:
-            final_cv = compute_cv(latencies[-config.window_size :])
+
+    # Normalise for return (WarmupResult.final_cv is non-optional float)
+    result_cv = final_cv if final_cv is not None else 0.0
 
     # Log result
     if converged and not fixed_mode:
         logger.info(
             "Warmup converged after %d prompts (CV=%.3f < %.3f)",
             len(latencies),
-            final_cv,
+            result_cv,
             config.cv_threshold,
         )
     elif fixed_mode:
-        logger.info(
-            "Warmup completed %d fixed iterations (final CV=%.3f)", len(latencies), final_cv
-        )
+        cv_info = f" (final CV={result_cv:.3f})" if final_cv is not None else ""
+        logger.info("Warmup completed %d fixed iterations%s", len(latencies), cv_info)
     else:
         logger.warning(
             "Warmup did not converge after %d prompts (final CV=%.3f, target=%.3f)",
             iteration_limit,
-            final_cv,
+            result_cv,
             config.cv_threshold,
         )
 
     return WarmupResult(
         converged=converged,
-        final_cv=final_cv,
+        final_cv=result_cv,
         iterations_completed=len(latencies),
         target_cv=config.cv_threshold,
         max_prompts=config.max_prompts,

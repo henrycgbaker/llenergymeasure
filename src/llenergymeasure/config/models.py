@@ -164,9 +164,9 @@ class WarmupConfig(BaseModel):
         description="Maximum warmup prompts when CV mode is on (safety cap)",
     )
     window_size: int = Field(
-        default=5,
+        default=3,
         ge=3,
-        description="Window size for CV calculation",
+        description="Sliding window size for CV calculation (3 balances responsiveness and stability)",
     )
     min_prompts: int = Field(
         default=5,

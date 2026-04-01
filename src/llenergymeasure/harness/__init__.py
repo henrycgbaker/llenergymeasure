@@ -363,11 +363,17 @@ class MeasurementHarness:
                 iters = warmup_result.iterations_completed
                 cv_info = f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""
                 converged = "converged" if warmup_result.converged else "not converged"
-                _p.on_step_update("warmup", f"{iters} iterations ({converged}{cv_info})")
+                iters_label = f"{iters} iteration{'s' if iters != 1 else ''}"
+                # Kernel-only warmup (vLLM/TRT-LLM): no CV-based convergence
+                if first_latency == 0.0 and config.warmup.enabled:
+                    _p.on_step_update("warmup", f"engine kernel warmup ({iters_label})")
+                else:
+                    _p.on_step_update("warmup", f"{iters_label} ({converged}{cv_info})")
                 _p.on_step_done("warmup", time.perf_counter() - t0_warmup)
+            iters = warmup_result.iterations_completed
             _substep(
                 "warmup",
-                f"{warmup_result.iterations_completed} iterations"
+                f"{iters} iteration{'s' if iters != 1 else ''}"
                 + (f"  CV={warmup_result.final_cv:.1%}" if warmup_result.final_cv > 0 else ""),
             )
 
