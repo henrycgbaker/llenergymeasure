@@ -78,12 +78,23 @@ def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
     for field_name in type(first).model_fields:
         values = [getattr(exp, field_name) for exp in experiments]
 
+        # Find first non-None value to determine type (handles multi-backend
+        # studies where optional sub-configs like pytorch/vllm are None on
+        # experiments belonging to a different backend).
+        first_non_none = next((v for v in values if v is not None), None)
+
         # Sub-config: compare nested fields via getattr
-        if isinstance(values[0], BaseModel):
-            for sub_field in type(values[0]).model_fields:
-                sub_values = [str(getattr(v, sub_field)) for v in values]
-                if len(set(sub_values)) > 1:
-                    swept.add(f"{field_name}.{sub_field}")
+        if first_non_none is not None and isinstance(first_non_none, BaseModel):
+            non_none = [v for v in values if v is not None]
+            # None vs non-None means the field itself varies across experiments
+            if len(non_none) < len(values):
+                swept.add(field_name)
+            # Compare sub-fields among non-None configs
+            if len(non_none) >= 2:
+                for sub_field in type(first_non_none).model_fields:
+                    sub_values = [str(getattr(v, sub_field)) for v in non_none]
+                    if len(set(sub_values)) > 1:
+                        swept.add(f"{field_name}.{sub_field}")
         else:
             if len({str(v) for v in values}) > 1:
                 swept.add(field_name)

@@ -349,3 +349,33 @@ def test_get_swept_field_paths_nested_field():
     exp2 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
     result = get_swept_field_paths([exp1, exp2])
     assert "dataset.n_prompts" in result
+
+
+def test_get_swept_field_paths_multi_backend_none_subconfigs():
+    """Multi-backend study where optional sub-configs are None must not crash.
+
+    In a multi-backend study, pytorch experiments have vllm=None and vice versa.
+    get_swept_field_paths must handle None values in optional sub-config lists
+    rather than raising AttributeError.
+    """
+    from llenergymeasure.config.backend_configs import PyTorchConfig, VLLMConfig
+
+    exp_pt = ExperimentConfig(
+        model="gpt2",
+        backend="pytorch",
+        dtype="float16",
+        pytorch=PyTorchConfig(batch_size=4),
+    )
+    exp_vllm = ExperimentConfig(
+        model="gpt2",
+        backend="vllm",
+        dtype="float16",
+        vllm=VLLMConfig(),
+    )
+    # Must not raise AttributeError
+    result = get_swept_field_paths([exp_pt, exp_vllm])
+    # Backend itself varies
+    assert "backend" in result
+    # Optional sub-configs that are None on some experiments should be swept
+    assert "pytorch" in result
+    assert "vllm" in result
