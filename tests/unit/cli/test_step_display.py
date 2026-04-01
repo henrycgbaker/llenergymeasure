@@ -487,7 +487,9 @@ def _make_tty_console(height: int = 30, width: int = 120) -> Console:
 def _add_rows(display: StudyStepDisplay, n: int) -> None:
     """Directly append N completed rows to a StudyStepDisplay."""
     for i in range(1, n + 1):
-        display._completed_rows.append((i, "OK", f"config-{i}", float(i), None, None, None, None))
+        display._completed_rows.append(
+            (i, "OK", f"config-{i}", float(i), None, None, None, None, None)
+        )
 
 
 def test_viewport_limits_visible_rows():

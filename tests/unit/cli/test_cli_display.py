@@ -558,6 +558,9 @@ def test_print_study_summary_table_structure(capsys):
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0
     exp.total_inference_time_sec = 8.0
+    exp.energy_adjusted_j = None
+    exp.mj_per_tok_adjusted = None
+    exp.mj_per_tok_total = None
 
     result = StudyResult.model_construct(
         experiments=[exp],
@@ -576,6 +579,7 @@ def test_print_study_summary_table_structure(capsys):
     assert "deadbeef" in out
     assert "#" in out  # table header column
     assert "Config" in out
+    assert "Adj. E" in out  # 9-column header
     assert "gpt2" in out
 
 
@@ -592,6 +596,9 @@ def test_print_study_summary_failed_experiments(capsys):
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
     exp.total_inference_time_sec = 4.0
+    exp.energy_adjusted_j = None
+    exp.mj_per_tok_adjusted = None
+    exp.mj_per_tok_total = None
 
     result = StudyResult.model_construct(
         experiments=[exp],
@@ -621,6 +628,9 @@ def test_print_study_summary_no_total_experiments(capsys):
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
     exp.total_inference_time_sec = 4.0
+    exp.energy_adjusted_j = None
+    exp.mj_per_tok_adjusted = None
+    exp.mj_per_tok_total = None
 
     result = StudyResult.model_construct(
         experiments=[exp],
@@ -649,6 +659,9 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
     exp.total_inference_time_sec = 4.0
+    exp.energy_adjusted_j = None
+    exp.mj_per_tok_adjusted = None
+    exp.mj_per_tok_total = None
 
     result = StudyResult.model_construct(
         experiments=[exp],
@@ -678,6 +691,9 @@ def test_print_study_summary_with_result_files(capsys):
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
     exp.total_inference_time_sec = 4.0
+    exp.energy_adjusted_j = None
+    exp.mj_per_tok_adjusted = None
+    exp.mj_per_tok_total = None
 
     result = StudyResult.model_construct(
         experiments=[exp],
@@ -693,6 +709,81 @@ def test_print_study_summary_with_result_files(capsys):
 
     assert "Results saved" in out
     assert "2 file(s)" in out
+
+
+def test_print_study_summary_shows_adj_energy(capsys):
+    """Adj. E column appears in header and adjusted energy value in row."""
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
+
+    exp = MagicMock()
+    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.backend = "pytorch"
+    exp.duration_sec = 10.0
+    exp.total_energy_j = 50.0
+    exp.avg_tokens_per_second = 100.0
+    exp.total_inference_time_sec = 8.0
+    exp.energy_adjusted_j = 35.0
+    exp.mj_per_tok_adjusted = 0.35
+    exp.mj_per_tok_total = 0.50
+
+    summary = StudySummary(
+        total_experiments=1,
+        completed=1,
+        total_wall_time_s=10.0,
+        total_energy_j=50.0,
+    )
+    result = StudyResult.model_construct(
+        experiments=[exp],
+        study_name="adj-test",
+        summary=summary,
+        result_files=[],
+        measurement_protocol={},
+    )
+    print_study_summary(result)
+    out = capsys.readouterr().out
+
+    assert "Adj. E" in out  # header column
+    assert "35" in out  # adjusted energy value
+
+
+def test_print_study_summary_mj_tok_prefers_adjusted(capsys):
+    """mJ/tok column uses adjusted energy when available."""
+    from unittest.mock import MagicMock
+
+    from llenergymeasure.domain.experiment import StudyResult, StudySummary
+
+    exp = MagicMock()
+    exp.effective_config = {"model": "gpt2", "dtype": "float16"}
+    exp.backend = "pytorch"
+    exp.duration_sec = 10.0
+    exp.total_energy_j = 50.0
+    exp.avg_tokens_per_second = 100.0
+    exp.total_inference_time_sec = 8.0
+    exp.energy_adjusted_j = 35.0
+    exp.mj_per_tok_adjusted = 0.123
+    exp.mj_per_tok_total = 0.456
+
+    summary = StudySummary(
+        total_experiments=1,
+        completed=1,
+        total_wall_time_s=10.0,
+        total_energy_j=50.0,
+    )
+    result = StudyResult.model_construct(
+        experiments=[exp],
+        study_name="mj-test",
+        summary=summary,
+        result_files=[],
+        measurement_protocol={},
+    )
+    print_study_summary(result)
+    out = capsys.readouterr().out
+
+    # mJ/tok should show adjusted value (0.123), not total (0.456)
+    assert "0.123" in out
+    assert "0.456" not in out
 
 
 # =============================================================================

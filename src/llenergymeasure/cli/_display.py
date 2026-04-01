@@ -325,7 +325,7 @@ def print_experiment_header(config: ExperimentConfig) -> None:
 def print_study_summary(result: StudyResult) -> None:
     """Print study summary table to stdout.
 
-    Columns: #, Config, Status, Time, Energy, tok/s
+    Columns: #, Status, Config, Total, Infer, Energy, Adj. E, tok/s, mJ/tok
     Failed experiments show error type instead of metrics.
     Footer with totals.
 
@@ -338,10 +338,9 @@ def print_study_summary(result: StudyResult) -> None:
         print(f"Hash:  {result.study_design_hash}")
     print()
 
-    # Table header
     header = (
         f"{'#':>3}  {'':>2}  {'Config':<40}  {'Total':>8}  {'Infer':>8}"
-        f"  {'Energy':>10}  {'tok/s':>8}  {'mJ/tok':>8}"
+        f"  {'Energy':>10}  {'Adj. E':>10}  {'tok/s':>8}  {'mJ/tok':>8}"
     )
     print(header)
     print("-" * len(header))
@@ -382,16 +381,25 @@ def print_study_summary(result: StudyResult) -> None:
             else "-"
         )
         energy_str = f"{_sig3(exp.total_energy_j)} J" if exp.total_energy_j else "-"
+        adj_energy_str = (
+            f"{_sig3(exp.energy_adjusted_j)} J" if exp.energy_adjusted_j is not None else "-"
+        )
         toks_str = _sig3(exp.avg_tokens_per_second) if exp.avg_tokens_per_second else "-"
 
-        mj_tok = _compute_mj_per_tok(
-            exp.total_energy_j, exp.avg_tokens_per_second, exp.duration_sec
-        )
-        mj_str = _sig3(mj_tok) if mj_tok is not None else "-"
+        # mJ/tok: prefer adjusted (baseline-subtracted), fall back to total, then compute
+        if exp.mj_per_tok_adjusted is not None:
+            mj_str = _sig3(exp.mj_per_tok_adjusted)
+        elif exp.mj_per_tok_total is not None:
+            mj_str = _sig3(exp.mj_per_tok_total)
+        else:
+            mj_tok = _compute_mj_per_tok(
+                exp.total_energy_j, exp.avg_tokens_per_second, exp.duration_sec
+            )
+            mj_str = _sig3(mj_tok) if mj_tok is not None else "-"
 
         print(
             f"{i:>3}  {status_icon:>2}  {config_str:<40}  {total_str:>8}  {infer_str:>8}"
-            f"  {energy_str:>10}  {toks_str:>8}  {mj_str:>8}"
+            f"  {energy_str:>10}  {adj_energy_str:>10}  {toks_str:>8}  {mj_str:>8}"
         )
 
     print("-" * len(header))

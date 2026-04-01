@@ -5,6 +5,7 @@ This module is internal (underscore prefix). Import via llenergymeasure.__init__
 
 from __future__ import annotations
 
+import shutil
 import time
 from pathlib import Path
 from typing import Any, overload
@@ -161,8 +162,10 @@ def run_study(
     if isinstance(config, (str, Path)):
         from llenergymeasure.config.loader import load_study_config
 
-        study = load_study_config(path=Path(config))
+        config_path = Path(config).resolve()
+        study = load_study_config(path=config_path)
     elif isinstance(config, StudyConfig):
+        config_path = None
         study = config
     else:
         raise ConfigError(f"Expected str, Path, or StudyConfig; got {type(config).__name__}")
@@ -194,6 +197,7 @@ def run_study(
         resume_dir=resume_dir,
         skip_set=skip_set,
         no_lock=no_lock,
+        config_path=config_path,
     )
 
 
@@ -259,6 +263,7 @@ def _run(
     resume_dir: Path | None = None,
     skip_set: set[tuple[str, int]] | None = None,
     no_lock: bool = False,
+    config_path: Path | None = None,
 ) -> StudyResult:
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
@@ -331,6 +336,14 @@ def _run(
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
 
+    # Copy original YAML config to study results directory for reproducibility.
+    if config_path is not None:
+        try:
+            shutil.copy2(config_path, study_dir / "config.yaml")
+            _api_logger.info("Config YAML copied to %s", study_dir / "config.yaml")
+        except FileNotFoundError:
+            _api_logger.warning("Config YAML %s not found, skipping copy", config_path)
+
     # Persist skipped config details to a log file in the study directory.
     if study.skipped_configs:
         _write_skipped_configs_log(study.skipped_configs, study_dir)
@@ -372,12 +385,18 @@ def _run(
                 energy = r.total_energy_j if r.total_energy_j > 0 else None
                 tp = r.avg_tokens_per_second if r.avg_tokens_per_second > 0 else None
                 infer = r.total_inference_time_sec if r.total_inference_time_sec > 0 else None
+                adj_e = (
+                    r.energy_adjusted_j if r.energy_adjusted_j and r.energy_adjusted_j > 0 else None
+                )
                 study_cb.end_experiment_ok(
                     1,
                     exp_elapsed,
                     energy_j=energy,
                     throughput_tok_s=tp,
                     inference_time_sec=infer,
+                    adj_energy_j=adj_e,
+                    mj_per_tok_adjusted=r.mj_per_tok_adjusted,
+                    mj_per_tok_total=r.mj_per_tok_total,
                 )
             else:
                 study_cb.end_experiment_fail(1, exp_elapsed)
@@ -502,7 +521,6 @@ def _run_in_process(
             return [], [None], [error_payload["message"]]
     else:
         # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
-        import shutil
         import tempfile
 
         from llenergymeasure.backends import get_backend
@@ -554,8 +572,6 @@ def _run_in_process(
 
     # Clean up temp dirs
     if ts_source is not None and ts_source.exists():
-        import shutil
-
         shutil.rmtree(ts_source, ignore_errors=True)
 
     return result_files, [result], warnings
