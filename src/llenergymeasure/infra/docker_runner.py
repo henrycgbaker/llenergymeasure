@@ -187,11 +187,8 @@ class DockerRunner:
             # Output dir and save_timeseries are passed via env vars, not config.
             config_hash = compute_measurement_config_hash(config)
             config_path = exchange_dir / f"{config_hash}_config.json"
-            # Exclude experiment_name: it's a study-level display label that
-            # has no meaning inside the container and may not exist in the
-            # container's installed ExperimentConfig version (extra="forbid").
             config_path.write_text(
-                config.model_dump_json(exclude={"experiment_name"}),
+                config.model_dump_json(),
                 encoding="utf-8",
             )
 

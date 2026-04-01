@@ -395,24 +395,6 @@ def test_json_round_trip(make_result):
 
 
 # ---------------------------------------------------------------------------
-# experiment_name field on ExperimentConfig
-# ---------------------------------------------------------------------------
-
-
-def test_experiment_name_field_exists():
-    """ExperimentConfig has experiment_name defaulting to None."""
-    config = ExperimentConfig(model="gpt2")
-    assert hasattr(config, "experiment_name")
-    assert config.experiment_name is None
-
-
-def test_experiment_name_can_be_set():
-    """experiment_name can be set to a string value."""
-    config = ExperimentConfig(model="gpt2", experiment_name="my-run")
-    assert config.experiment_name == "my-run"
-
-
-# ---------------------------------------------------------------------------
 # DRY n_prompts default
 # ---------------------------------------------------------------------------
 
