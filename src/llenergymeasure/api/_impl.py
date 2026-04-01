@@ -83,7 +83,7 @@ def run_experiment(
         config: YAML file path, ExperimentConfig object, or None (use kwargs).
         model: Model name/path (kwargs form only).
         backend: Inference backend (kwargs form only, defaults to ExperimentConfig default).
-        n_prompts: Number of prompts (kwargs form only, default 50).
+        n_prompts: Number of prompts (kwargs form only, default 100).
         dataset: Dataset source name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
         progress: Optional callback for step-by-step progress reporting.

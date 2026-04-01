@@ -140,6 +140,14 @@ class TestExperimentResultEdgeCases:
         with pytest.raises(ValidationError):
             r.total_tokens = 9999
 
+    def test_llenergymeasure_version_default_none(self):
+        r = make_result()
+        assert r.llenergymeasure_version is None
+
+    def test_llenergymeasure_version_set(self):
+        r = make_result(llenergymeasure_version="0.9.0")
+        assert r.llenergymeasure_version == "0.9.0"
+
 
 # ---------------------------------------------------------------------------
 # TestMeasurementConfigHash

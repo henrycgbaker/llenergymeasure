@@ -917,3 +917,60 @@ class TestTemporalOverlapCheck:
         )
         result = aggregate_results([raw0, raw1], ctx)
         assert any("concurrently" in w for w in result.measurement_warnings)
+
+
+# ---------------------------------------------------------------------------
+# mj_per_tok fields populated in aggregated results
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_populates_mj_per_tok_total(make_raw_result):
+    """Aggregated result has mj_per_tok_total computed from total_energy / total_tokens."""
+    raw = make_raw_result()
+    ctx = AggregationContext(
+        experiment_id="mj-total",
+        measurement_config_hash="abc123def456abcd",
+    )
+    result = aggregate_results([raw], ctx)
+    expected = result.total_energy_j / result.total_tokens * 1000.0
+    assert result.mj_per_tok_total == pytest.approx(expected)
+
+
+def test_aggregate_populates_mj_per_tok_adjusted_with_breakdown(make_raw_result):
+    """mj_per_tok_adjusted is computed when energy_breakdown.adjusted_j is present."""
+    raw = make_raw_result(
+        process_index=0,
+        gpu_id=0,
+        energy_breakdown=EnergyBreakdown(raw_j=25.0, adjusted_j=20.0, baseline_power_w=5.0),
+    )
+    ctx = AggregationContext(
+        experiment_id="mj-adj",
+        measurement_config_hash="abc123def456abcd",
+    )
+    result = aggregate_results([raw], ctx)
+    expected = 20.0 / result.total_tokens * 1000.0
+    assert result.mj_per_tok_adjusted == pytest.approx(expected)
+
+
+def test_aggregate_mj_per_tok_adjusted_none_without_breakdown(make_raw_result):
+    """mj_per_tok_adjusted is None when no energy_breakdown is available."""
+    raw = make_raw_result()
+    ctx = AggregationContext(
+        experiment_id="mj-none",
+        measurement_config_hash="abc123def456abcd",
+    )
+    result = aggregate_results([raw], ctx)
+    assert result.mj_per_tok_adjusted is None
+
+
+def test_aggregate_sets_llenergymeasure_version(make_raw_result):
+    """Aggregated result carries llenergymeasure_version from _version.__version__."""
+    from llenergymeasure._version import __version__
+
+    raw = make_raw_result()
+    ctx = AggregationContext(
+        experiment_id="version-agg",
+        measurement_config_hash="abc123def456abcd",
+    )
+    result = aggregate_results([raw], ctx)
+    assert result.llenergymeasure_version == __version__

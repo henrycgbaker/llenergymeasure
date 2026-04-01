@@ -497,11 +497,12 @@ def test_build_generate_kwargs_greedy_decoding():
 
 
 def test_backend_plugin_protocol_has_required_methods():
-    """BackendPlugin Protocol defines all 5 required methods plus name property and validate_config."""
+    """BackendPlugin Protocol defines all required methods plus name/version properties and validate_config."""
     from llenergymeasure.backends.pytorch import PyTorchBackend
 
     obj = PyTorchBackend()
     assert hasattr(obj, "name")
+    assert hasattr(obj, "version")
     assert hasattr(obj, "load_model")
     assert hasattr(obj, "run_warmup_prompt")
     assert hasattr(obj, "run_inference")
@@ -630,3 +631,36 @@ def test_model_load_kwargs_device_map_still_works():
 
     assert kwargs["device_map"] == "cpu"
     assert "tp_plan" not in kwargs
+
+
+# =============================================================================
+# Backend version property
+# =============================================================================
+
+
+def test_pytorch_version_returns_torch_version():
+    """PyTorchBackend.version returns torch.__version__."""
+    torch = pytest.importorskip("torch")
+    from llenergymeasure.backends.pytorch import PyTorchBackend
+
+    assert PyTorchBackend().version == torch.__version__
+
+
+def test_vllm_version_returns_string():
+    """VLLMBackend.version returns a string (either vllm version or 'unknown')."""
+    from llenergymeasure.backends.vllm import VLLMBackend
+
+    version = VLLMBackend().version
+    assert isinstance(version, str)
+    assert len(version) > 0
+
+
+def test_tensorrt_version_returns_string():
+    """TensorRTBackend.version returns a string (either tensorrt_llm version or 'unknown')."""
+    from llenergymeasure.backends.tensorrt import TensorRTBackend
+
+    version = TensorRTBackend().version
+    assert isinstance(version, str)
+    assert len(version) > 0
+    # On hosts without TRT-LLM CUDA libs, import fails and version is "unknown"
+    # On containers with TRT-LLM, it returns the actual version string

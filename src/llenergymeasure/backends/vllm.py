@@ -41,6 +41,16 @@ class VLLMBackend:
         """Backend identifier."""
         return "vllm"
 
+    @property
+    def version(self) -> str:
+        """vLLM version string."""
+        try:
+            import vllm
+
+            return str(vllm.__version__)
+        except Exception:
+            return "unknown"
+
     # -------------------------------------------------------------------------
     # BackendPlugin: load_model
     # -------------------------------------------------------------------------

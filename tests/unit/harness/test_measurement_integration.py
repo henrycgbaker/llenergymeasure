@@ -353,6 +353,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     now = datetime.now()
     result = harness._build_result(
         backend_name="pytorch",
+        backend_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -401,6 +402,7 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     now = datetime.now()
     result = harness._build_result(
         backend_name="pytorch",
+        backend_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -446,6 +448,7 @@ def test_harness_build_result_zero_energy_when_no_backend() -> None:
 
     result = harness._build_result(
         backend_name="pytorch",
+        backend_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -511,6 +514,7 @@ def _make_build_result_args():
     now = datetime(2026, 1, 1, 12, 0, 0)
     return dict(
         backend_name="pytorch",
+        backend_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,

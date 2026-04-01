@@ -44,6 +44,11 @@ class BackendPlugin(Protocol):
         """Backend identifier (e.g. 'pytorch', 'vllm', 'tensorrt')."""
         ...
 
+    @property
+    def version(self) -> str:
+        """Backend library version string for reproducibility."""
+        ...
+
     def load_model(
         self,
         config: ExperimentConfig,

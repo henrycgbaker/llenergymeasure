@@ -661,7 +661,21 @@ class DockerRunner:
         if isinstance(raw, dict) and "type" in raw and "traceback" in raw:
             return raw
 
-        return ExperimentResult.model_validate(raw)
+        result = ExperimentResult.model_validate(raw)
+
+        # Warn if the container ran a different package version than the host.
+        # This catches stale Docker images that predate new result fields.
+        from llenergymeasure._version import __version__
+
+        container_version = result.llenergymeasure_version
+        if container_version is None or container_version != __version__:
+            logger.warning(
+                "Container result version %s differs from host %s — rebuild Docker images",
+                container_version,
+                __version__,
+            )
+
+        return result
 
     def _cleanup_exchange_dir(self, exchange_dir: Path) -> None:
         """Remove the temporary exchange directory.

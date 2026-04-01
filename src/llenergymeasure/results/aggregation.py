@@ -10,11 +10,13 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import BaseModel, Field
 
+from llenergymeasure._version import __version__
 from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
     RawProcessResult,
+    mj_per_token,
 )
 from llenergymeasure.domain.metrics import (
     EnergyBreakdown,
@@ -371,10 +373,16 @@ def aggregate_results(
     flops_per_input_token = total_flops / total_input_tokens if total_input_tokens > 0 else None
     flops_per_second = total_flops / wall_clock_duration if wall_clock_duration > 0 else None
 
+    # mJ/tok derived fields
+    _mj_total = mj_per_token(total_energy_j, total_tokens)
+    _energy_adj = energy_breakdown.adjusted_j if energy_breakdown else None
+    _mj_adjusted = mj_per_token(_energy_adj, total_tokens) if _energy_adj is not None else None
+
     return ExperimentResult(
         schema_version="2.0",
         experiment_id=ctx.experiment_id,
         measurement_config_hash=ctx.measurement_config_hash,
+        llenergymeasure_version=__version__,
         backend=backend,
         backend_version=backend_version,
         measurement_methodology=ctx.measurement_methodology,
@@ -388,6 +396,8 @@ def aggregate_results(
         flops_per_output_token=flops_per_output_token,
         flops_per_input_token=flops_per_input_token,
         flops_per_second=flops_per_second,
+        mj_per_tok_total=_mj_total,
+        mj_per_tok_adjusted=_mj_adjusted,
         baseline_power_w=ctx.baseline_power_w,
         energy_adjusted_j=ctx.energy_adjusted_j,
         energy_per_device_j=ctx.energy_per_device_j,

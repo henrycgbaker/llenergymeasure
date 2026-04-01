@@ -43,6 +43,11 @@ def compute_measurement_config_hash(config: ExperimentConfig) -> str:
     return _hash_canonical(canonical)
 
 
+def mj_per_token(energy_j: float, total_tokens: int) -> float | None:
+    """Millijoules per token. Returns None when total_tokens is zero."""
+    return (energy_j / total_tokens * 1000.0) if total_tokens > 0 else None
+
+
 class Timestamps(BaseModel):
     """Timing information for an experiment run."""
 
@@ -157,6 +162,9 @@ class ExperimentResult(BaseModel):
     experiment_id: str = Field(..., description="Unique experiment identifier")
     measurement_config_hash: str = Field(
         ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"
+    )
+    llenergymeasure_version: str | None = Field(
+        default=None, description="Package version that produced this result"
     )
 
     # Backend

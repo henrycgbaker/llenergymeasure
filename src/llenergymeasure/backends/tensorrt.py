@@ -98,6 +98,16 @@ class TensorRTBackend:
         """Backend identifier."""
         return "tensorrt"
 
+    @property
+    def version(self) -> str:
+        """TensorRT-LLM version string."""
+        try:
+            import tensorrt_llm
+
+            return str(tensorrt_llm.__version__)
+        except Exception:
+            return "unknown"
+
     # -------------------------------------------------------------------------
     # BackendPlugin: load_model
     # -------------------------------------------------------------------------
