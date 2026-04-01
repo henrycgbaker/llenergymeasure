@@ -70,6 +70,25 @@ def _make_mock_config() -> MagicMock:
     return config
 
 
+def _make_capture_load() -> tuple:
+    """Return (capture_fn, captured_overrides) for study routing tests.
+
+    The capture function mimics load_study_config: records cli_overrides
+    and returns a MagicMock with properly configured study attributes.
+    """
+    captured: list = []
+
+    def _capture(path, cli_overrides=None):
+        captured.append(cli_overrides)
+        mock = MagicMock()
+        mock.experiments = [MagicMock()]
+        mock.study_execution.n_cycles = 1
+        mock.skipped_configs = []
+        return mock
+
+    return _capture, captured
+
+
 # ---------------------------------------------------------------------------
 # _build_header unit tests
 # ---------------------------------------------------------------------------
@@ -437,7 +456,11 @@ def test_run_study_routing_sweep_yaml(tmp_path):
         patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
     ):
-        mock_load.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.experiments = [MagicMock(), MagicMock()]
+        mock_config.study_execution.n_cycles = 1
+        mock_config.skipped_configs = []
+        mock_load.return_value = mock_config
         result = runner.invoke(app, ["run", str(study_yaml)])
 
     assert result.exit_code == 0, (
@@ -462,7 +485,11 @@ def test_run_study_routing_experiments_yaml(tmp_path):
         patch("llenergymeasure.config.grid.build_preflight_panel"),
         patch("llenergymeasure.cli._display.print_study_summary"),
     ):
-        mock_load.return_value = MagicMock()
+        mock_config = MagicMock()
+        mock_config.experiments = [MagicMock(), MagicMock()]
+        mock_config.study_execution.n_cycles = 1
+        mock_config.skipped_configs = []
+        mock_load.return_value = mock_config
         result = runner.invoke(app, ["run", str(study_yaml)])
 
     assert result.exit_code == 0, (
@@ -498,12 +525,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
         "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
-
-    captured_overrides: list = []
-
-    def _capture_load(path, cli_overrides=None):
-        captured_overrides.append(cli_overrides)
-        return MagicMock()
+    _capture_load, captured_overrides = _make_capture_load()
 
     # load_study_config, run_study, and build_preflight_panel are all lazily
     # imported inside _run_study_impl — patch at source modules
@@ -575,11 +597,7 @@ def test_fail_fast_sets_max_consecutive_failures(tmp_path):
     """--fail-fast sets max_consecutive_failures=1 in study_execution overrides."""
     study_yaml = _make_study_yaml(tmp_path)
     mock_study_result = _make_mock_study_result()
-    captured_overrides: list = []
-
-    def _capture_load(path, cli_overrides=None):
-        captured_overrides.append(cli_overrides)
-        return MagicMock()
+    _capture_load, captured_overrides = _make_capture_load()
 
     with (
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
@@ -600,11 +618,7 @@ def test_no_circuit_breaker_sets_max_failures_zero(tmp_path):
     """--no-circuit-breaker sets max_consecutive_failures=0 in study_execution overrides."""
     study_yaml = _make_study_yaml(tmp_path)
     mock_study_result = _make_mock_study_result()
-    captured_overrides: list = []
-
-    def _capture_load(path, cli_overrides=None):
-        captured_overrides.append(cli_overrides)
-        return MagicMock()
+    _capture_load, captured_overrides = _make_capture_load()
 
     with (
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
@@ -624,11 +638,7 @@ def test_timeout_flag_sets_wall_clock_timeout(tmp_path):
     """--timeout 24 sets wall_clock_timeout_hours=24.0 in study_execution overrides."""
     study_yaml = _make_study_yaml(tmp_path)
     mock_study_result = _make_mock_study_result()
-    captured_overrides: list = []
-
-    def _capture_load(path, cli_overrides=None):
-        captured_overrides.append(cli_overrides)
-        return MagicMock()
+    _capture_load, captured_overrides = _make_capture_load()
 
     with (
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
@@ -648,11 +658,7 @@ def test_timeout_flag_fractional(tmp_path):
     """--timeout 1.5 sets wall_clock_timeout_hours=1.5."""
     study_yaml = _make_study_yaml(tmp_path)
     mock_study_result = _make_mock_study_result()
-    captured_overrides: list = []
-
-    def _capture_load(path, cli_overrides=None):
-        captured_overrides.append(cli_overrides)
-        return MagicMock()
+    _capture_load, captured_overrides = _make_capture_load()
 
     with (
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),

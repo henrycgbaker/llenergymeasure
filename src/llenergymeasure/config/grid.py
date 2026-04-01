@@ -357,27 +357,30 @@ def build_preflight_panel(
     runner_specs: dict[str, RunnerSpec] | None = None,
     study_dir: Path | None = None,
     probed_energy_sampler: str | None = None,
+    sweep_axes: int | None = None,
+    sweep_groups: int | None = None,
 ) -> Panel:
-    """Return a Rich Panel with study metadata, sweep dimensions, and design hash.
+    """Return a Rich Panel with study preflight summary.
 
     The panel shows:
     - Border title: "Study: <name>"
-    - Execution Controls: experiments, cycle order, gaps, shuffle seed, skip preflight
-    - Runners: per-backend runner mode with auto-elevation annotation
-    - Workload: constant workload fields (model, prompts, dataset, sampler, token limits)
-    - Experimental: experimental variables (dtype, backend) plus swept workload fields
-    - Sweep Dimensions: backend-specific swept params (sub-config level)
-    - Dimmed design hash at the bottom
+    - Execution Controls: experiments, experiment order, gaps, shuffle seed
+    - Workload: all workload fields; swept fields annotated with "+"
+    - Backends: per-backend runner mode with auto-elevation annotation
+    - Sweep: summary line with axis/group counts and unique configs
+    - Dimmed design hash and results path at the bottom
 
     Field labels come from json_schema_extra display_label metadata (SSOT).
     Declared values display normally; defaulted values are dimmed.
-    Swept workload fields appear in Experimental section with a dagger annotation.
 
     When ``runner_specs`` is provided (resolved by pre-flight), the panel shows
     effective runner modes. Otherwise falls back to YAML-declared runners.
 
-    When ``study_dir`` is provided, the expected results path is shown below
-    the hash. Skipped configs are NOT included; callers display them separately.
+    When ``sweep_axes`` / ``sweep_groups`` are provided (from the raw YAML
+    sweep dict via ``count_sweep_structure``), the Sweep section shows the
+    breakdown.  Otherwise falls back to counting varying field paths.
+
+    Skipped configs are NOT included; callers display them separately.
     """
     exec_cfg = study_config.study_execution
     n_cycles = exec_cfg.n_cycles
@@ -412,7 +415,7 @@ def build_preflight_panel(
         else:
             body.append(f"{value}\n")
 
-    # --- Unique backends (for Runners section) ---
+    # --- Unique backends (for Backends section) ---
     unique_backends = sorted({exp.backend for exp in experiments})
 
     # --- Resolve energy sampler display ---
@@ -429,11 +432,8 @@ def build_preflight_panel(
         unique_energy, probed_sampler=probed_energy_sampler, skip_probe=all_docker
     )
 
-    # --- Swept field paths (for section routing) ---
+    # --- Swept field paths (for annotation) ---
     swept_paths = get_swept_field_paths(experiments)
-
-    # --- Sweep dimensions (backend-scoped) ---
-    sweep_dimensions = _collect_sweep_dimensions(experiments)
 
     # --- Assemble body ---
     body = Text()
@@ -444,7 +444,7 @@ def build_preflight_panel(
     # -- Execution Controls --
     _section(body, "Execution Controls")
     _line(body, "Experiments", experiments_line)
-    _line(body, "Cycle order", str(exec_cfg.experiment_order))
+    _line(body, "Experiment order", str(exec_cfg.experiment_order))
     exp_gap = (
         f"{exec_cfg.experiment_gap_seconds}s"
         if exec_cfg.experiment_gap_seconds is not None
@@ -458,8 +458,8 @@ def build_preflight_panel(
     skip_val = "yes" if exec_cfg.skip_preflight else "no"
     _line(body, "Skip preflight", skip_val)
 
-    # -- Runners --
-    _section(body, "Runners")
+    # -- Backends (renamed from Runners) --
+    _section(body, "Backends")
     yaml_runners = study_config.runners or {}
     for b in unique_backends:
         if runner_specs and b in runner_specs:
@@ -477,14 +477,10 @@ def build_preflight_panel(
             _line(body, b, mode_str)
 
     # -- Workload section --
-    # Top-level ExperimentConfig fields with role="workload" that are NOT swept.
-    # DatasetConfig fields with role="workload" are included as dataset.field_name.
-    # Each field is displayed dim when it was not explicitly declared (defaulted).
-    workload_rows: list[tuple[str, str, bool]] = []  # (label, value, is_declared)
+    # All workload-role fields.  Swept fields annotated with "+" and bold.
+    workload_rows: list[tuple[str, str, bool, bool]] = []  # (label, value, is_declared, is_swept)
 
     first_exp = experiments[0]
-    # Determine declared fields from the first experiment's __fields_set__
-    # (constant workload fields are the same across all experiments, so first suffices)
     declared_fields = first_exp.model_fields_set
 
     for field_name, fi in ExperimentConfig.model_fields.items():
@@ -492,7 +488,6 @@ def build_preflight_panel(
         if role != "workload":
             continue
 
-        # Special handling for dataset sub-config: show dataset.* fields directly
         if field_name == "dataset":
             dataset_first = first_exp.dataset
             dataset_declared = dataset_first.model_fields_set
@@ -501,113 +496,51 @@ def build_preflight_panel(
                 if ds_role != "workload":
                     continue
                 ds_path = f"dataset.{ds_field}"
-                if ds_path in swept_paths:
-                    continue  # goes to Experimental section
-                unique_vals = {str(getattr(exp.dataset, ds_field)) for exp in experiments}
-                val_str = ", ".join(sorted(unique_vals))
+                is_swept = ds_path in swept_paths
+                unique_vals = sorted({str(getattr(exp.dataset, ds_field)) for exp in experiments})
+                val_str = ", ".join(unique_vals)
                 is_decl = ds_field in dataset_declared
                 label = get_display_label(ds_fi, ds_field)
-                workload_rows.append((label, val_str, is_decl))
-            continue
-
-        # Skip fields swept across experiments (they go to Experimental section)
-        if field_name in swept_paths:
-            continue
-
-        # Build the display value (all experiments constant here)
-        if field_name == "energy_sampler":
-            val_str = energy_display
-        else:
-            unique_vals = {str(getattr(exp, field_name)) for exp in experiments}
-            val_str = ", ".join(sorted(unique_vals))
-
-        label = get_display_label(fi, field_name)
-        is_decl = field_name in declared_fields
-        workload_rows.append((label, val_str, is_decl))
-
-    if workload_rows:
-        _section(body, "Workload")
-        for label, val_str, is_decl in workload_rows:
-            _line(body, label, val_str, value_style="" if is_decl else "dim")
-
-    # -- Experimental section --
-    # Fields with role="experimental" (always shown here).
-    # Plus workload fields that ARE swept (annotated with dagger).
-    experimental_rows: list[
-        tuple[str, str, bool, bool]
-    ] = []  # (label, value, is_swept_workload, is_swept)
-
-    for field_name, fi in ExperimentConfig.model_fields.items():
-        role = get_field_role(fi)
-        if role is None:
+                workload_rows.append((label, val_str, is_decl, is_swept))
             continue
 
         is_swept = field_name in swept_paths
-        is_workload = role == "workload"
-        is_experimental = role == "experimental"
-
-        # dataset sub-config: handle swept dataset.* fields
-        if field_name == "dataset" and is_workload:
-            for ds_field, ds_fi in DatasetConfig.model_fields.items():
-                ds_role = get_field_role(ds_fi)
-                if ds_role != "workload":
-                    continue
-                ds_path = f"dataset.{ds_field}"
-                if ds_path not in swept_paths:
-                    continue  # already shown in Workload
-                ds_unique = sorted({str(getattr(exp.dataset, ds_field)) for exp in experiments})
-                val_str = ", ".join(ds_unique)
-                label = get_display_label(ds_fi, ds_field)
-                experimental_rows.append((label, val_str, True, True))
-            continue
-
-        if is_experimental or (is_workload and is_swept):
-            exp_unique = sorted({str(getattr(exp, field_name)) for exp in experiments})
-            val_str = ", ".join(exp_unique)
-            label = get_display_label(fi, field_name)
-            experimental_rows.append((label, val_str, is_workload and is_swept, is_swept))
-
-    if experimental_rows:
-        _section(body, "Experimental")
-        for label, val_str, is_swept_workload, is_swept in experimental_rows:
-            annotation = " \u2020" if is_swept_workload else ""
-            value_style = "bold" if is_swept else ""
-            _line(body, label, f"{val_str}{annotation}", value_style=value_style)
-
-    # -- Backend sweep dimensions (sub-config level swept params) --
-    shared_dims: list[tuple[str, str, int]] = []
-    backend_dims: list[tuple[str, str, int]] = []
-
-    in_backend_section = False
-    for label, value, depth in sweep_dimensions:
-        if depth == 0 and not value and label in _BACKEND_SECTION_KEYS:
-            in_backend_section = True
-        elif depth == 0 and label not in _BACKEND_SECTION_KEYS:
-            in_backend_section = False
-
-        if in_backend_section:
-            backend_dims.append((label, value, depth))
+        if field_name == "energy_sampler":
+            val_str = energy_display
         else:
-            shared_dims.append((label, value, depth))
+            unique_vals = sorted({str(getattr(exp, field_name)) for exp in experiments})
+            val_str = ", ".join(unique_vals)
 
-    def _render_dims(body: Text, dims: list[tuple[str, str, int]]) -> None:
-        for label, value, depth in dims:
-            indent = "    " + "  " * depth
-            if value:
-                body.append(f"{indent}{label:<18}")
-                body.append(f"{value}\n", style="dim")
+        label = get_display_label(fi, field_name)
+        is_decl = field_name in declared_fields
+        workload_rows.append((label, val_str, is_decl, is_swept))
+
+    if workload_rows:
+        _section(body, "Workload")
+        for label, val_str, is_decl, is_swept in workload_rows:
+            annotation = " +" if is_swept else ""
+            if is_swept:
+                _line(body, label, f"{val_str}{annotation}", value_style="bold")
+            elif is_decl:
+                _line(body, label, val_str)
             else:
-                # Sub-config header (e.g. "pytorch", "decoder")
-                body.append(f"{indent}")
-                body.append(f"{label}\n", style="bold dim")
+                _line(body, label, val_str, value_style="dim")
 
-    if shared_dims:
-        _section(body, "Sweep Dimensions")
-        _render_dims(body, shared_dims)
-
-    if backend_dims:
-        _section(body, "Backend Sweep Dimensions")
-        _render_dims(body, backend_dims)
+    # -- Sweep summary (only when multiple configs) --
+    if n_configs > 1:
+        _section(body, "Sweep")
+        if sweep_axes is not None and sweep_groups is not None:
+            if sweep_groups > 0:
+                sweep_line = (
+                    f"{sweep_axes} axes . {sweep_groups} groups "
+                    f"-> {_pl(n_configs, 'unique config')}"
+                )
+            else:
+                sweep_line = f"{sweep_axes} axes -> {_pl(n_configs, 'unique config')}"
+        else:
+            n_dims = len(swept_paths)
+            sweep_line = f"{_pl(n_dims, 'dimension')} -> {_pl(n_configs, 'unique config')}"
+        body.append(f"    {sweep_line}\n")
 
     body.append("\n")
     # Hash (dimmed)
@@ -660,132 +593,27 @@ def _resolve_energy_display(
     return ", ".join(parts)
 
 
-def _collect_sweep_dimensions(
-    experiments: list[ExperimentConfig],
-) -> list[tuple[str, str, int]]:
-    """Return (label, value_str, depth) triples for sweep display.
+def count_sweep_structure(raw_sweep: dict[str, Any]) -> tuple[int, int]:
+    """Count independent axes and dependent groups in a raw sweep dict.
 
-    depth=0  top-level fields and sub-config headers
-    depth=1  sub-config fields and nested sub-config headers
-    depth=2+ nested sub-config fields (recursion)
+    An independent axis is a key mapping to a list of scalars (Cartesian product).
+    A dependent group is a key mapping to a list of dicts (union of variants).
 
-    A triple with an empty value string is a header; non-empty is a field.
+    Returns (n_axes, n_groups).
     """
-    if not experiments:
-        return []
+    if not raw_sweep:
+        return 0, 0
 
-    result: list[tuple[str, str, int]] = []
+    n_axes = 0
+    n_groups = 0
 
-    # --- Top-level scalar fields (always show if they vary OR are key sweep fields) ---
-    KEY_SCALAR_FIELDS = (
-        "model",
-        "backend",
-        "dtype",
-        "max_input_tokens",
-        "max_output_tokens",
-    )
-    SCALAR_FIELDS = (*KEY_SCALAR_FIELDS, "random_seed")
-
-    for field_name in SCALAR_FIELDS:
-        values = [getattr(exp, field_name) for exp in experiments]
-        unique_vals = set(str(v) for v in values)
-        if len(unique_vals) > 1:
-            result.append((field_name, ", ".join(sorted(unique_vals)), 0))
-
-    # --- Dataset sub-config fields ---
-    DATASET_FIELDS = ("source", "n_prompts", "order")
-    for field_name in DATASET_FIELDS:
-        values = [getattr(exp.dataset, field_name) for exp in experiments]
-        unique_vals = set(str(v) for v in values)
-        if len(unique_vals) > 1:
-            result.append((f"dataset.{field_name}", ", ".join(sorted(unique_vals)), 0))
-
-    # --- Sub-config fields (recursive) ---
-    SUB_CONFIGS_MANDATORY = ("decoder", "warmup", "baseline")
-    SUB_CONFIGS_OPTIONAL = ("pytorch", "vllm", "tensorrt", "lora")
-
-    def _get_sub_config_defaults(sub_config_name: str) -> dict[str, Any]:
-        """Get default field values for a sub-config class."""
-        from llenergymeasure.config.models import (
-            BaselineConfig,
-            DecoderConfig,
-            WarmupConfig,
-        )
-
-        defaults_map = {
-            "decoder": DecoderConfig(),
-            "warmup": WarmupConfig(),
-            "baseline": BaselineConfig(),
-        }
-        if sub_config_name in defaults_map:
-            obj = defaults_map[sub_config_name]
-            return {k: getattr(obj, k) for k in obj.model_fields}
-        return {}
-
-    def _collect_fields(
-        objs: list[Any],
-        defaults: dict[str, Any],
-        field_depth: int,
-    ) -> list[tuple[str, str, int]]:
-        """Collect varying/non-default fields from a list of config objects.
-
-        When a field's values are Pydantic models (nested sub-configs), recurse
-        and emit a header + nested fields instead of the full repr string.
-
-        Returns (label, value_str, depth) triples. Empty value_str = header.
-        The caller is responsible for prepending the parent header.
-        """
-        first = objs[0]
-        if not hasattr(first, "model_fields"):
-            return []
-
-        entries: list[tuple[str, str, int]] = []
-
-        for field_name in first.model_fields:
-            vals = [getattr(o, field_name) for o in objs]
-            non_none = [v for v in vals if v is not None]
-
-            # Detect nested Pydantic models - recurse instead of str()
-            if non_none and hasattr(non_none[0], "model_fields"):
-                nested = _collect_fields(non_none, {}, field_depth + 1)
-                if nested:
-                    entries.append((field_name, "", field_depth))  # nested header
-                    entries.extend(nested)
-                continue
-
-            unique_vals = set(str(v) for v in vals)
-
-            # Only show fields that actually vary across experiments.
-            # Constant non-default values belong in the panel metadata, not sweep dims.
-            if len(unique_vals) > 1:
-                entries.append((field_name, ", ".join(sorted(unique_vals)), field_depth))
-
-        return entries
-
-    def _process_sub_config(sub_config_name: str, is_optional: bool) -> None:
-        """Process a sub-config and add varying/non-default fields to result."""
-        if is_optional:
-            sub_configs = [getattr(exp, sub_config_name) for exp in experiments]
-            active = [sc for sc in sub_configs if sc is not None]
-            if not active:
-                return
+    for _key, values in raw_sweep.items():
+        if _is_group(values):
+            n_groups += 1
         else:
-            active = [getattr(exp, sub_config_name) for exp in experiments]
+            n_axes += 1
 
-        defaults = _get_sub_config_defaults(sub_config_name)
-        entries = _collect_fields(active, defaults, field_depth=1)
-
-        if entries:
-            result.append((sub_config_name, "", 0))  # parent header
-            result.extend(entries)
-
-    for sc_name in SUB_CONFIGS_MANDATORY:
-        _process_sub_config(sc_name, is_optional=False)
-
-    for sc_name in SUB_CONFIGS_OPTIONAL:
-        _process_sub_config(sc_name, is_optional=True)
-
-    return result
+    return n_axes, n_groups
 
 
 # =============================================================================

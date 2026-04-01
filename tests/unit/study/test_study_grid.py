@@ -21,6 +21,7 @@ from llenergymeasure.config.grid import (
     apply_cycles,
     build_preflight_panel,
     compute_study_design_hash,
+    count_sweep_structure,
     expand_grid,
     format_preflight_summary,
 )
@@ -740,9 +741,9 @@ class TestFormatPreflightSummary:
 # =============================================================================
 
 
-def _render_panel(study_config: StudyConfig, width: int = 100) -> str:
+def _render_panel(study_config: StudyConfig, width: int = 100, **kwargs: object) -> str:
     """Helper: render a build_preflight_panel() output to a plain-text string."""
-    panel = build_preflight_panel(study_config)
+    panel = build_preflight_panel(study_config, **kwargs)  # type: ignore[arg-type]
     buf = StringIO()
     console = Console(file=buf, force_terminal=False, no_color=True, width=width)
     console.print(panel)
@@ -824,14 +825,14 @@ class TestBuildPreflightPanel:
         assert "interleave" in output
 
     def test_panel_metadata_backends_with_runners(self):
-        """Panel shows backend with runner mode in Runners section."""
+        """Panel shows backend with runner mode in Backends section."""
         sc = _make_panel_study_config(
             models=["gpt2", "gpt2"],
             backends=["pytorch", "vllm"],
             runners={"pytorch": "local", "vllm": "docker"},
         )
         output = _render_panel(sc)
-        assert "Runners" in output
+        assert "Backends" in output
         assert "pytorch" in output
         assert "local" in output
         assert "vllm" in output
@@ -857,33 +858,12 @@ class TestBuildPreflightPanel:
         # Label comes from json_schema_extra display_label ("Sampler") not hardcoded string
         assert "Sampler" in output
 
-    def test_panel_sweep_dimensions_model(self):
-        """Sweep dimensions section contains model names when multiple models used."""
+    def test_panel_swept_model_shows_in_workload(self):
+        """Swept model field appears in Workload with all values listed."""
         sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"])
         output = _render_panel(sc)
         assert "gpt2" in output
         assert "gpt2-xl" in output
-
-    def test_panel_sweep_dimensions_nested_decoder(self):
-        """Varying decoder config shows decoder header and sub-fields in sweep dims."""
-        from llenergymeasure.config.models import DecoderConfig
-
-        exp1 = ExperimentConfig(
-            model="gpt2", decoder=DecoderConfig(temperature=0.0, do_sample=False)
-        )
-        exp2 = ExperimentConfig(
-            model="gpt2", decoder=DecoderConfig(temperature=0.8, do_sample=True)
-        )
-        sc = StudyConfig(
-            experiments=[exp1, exp2],
-            study_name="decoder-test",
-            study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
-            study_design_hash="deadbeef01234567",
-        )
-        output = _render_panel(sc)
-        # decoder sub-config header should appear since temperature varies
-        assert "decoder" in output
-        assert "temperature" in output
 
     def test_panel_hash_displayed(self):
         """Panel contains the study design hash."""
@@ -922,11 +902,25 @@ class TestBuildPreflightPanel:
         output = _render_panel(sc)
         assert "Workload" in output
 
-    def test_panel_has_experimental_section(self):
-        """Panel contains 'Experimental' section header."""
+    def test_panel_has_backends_section(self):
+        """Panel contains 'Backends' section header (renamed from 'Runners')."""
         sc = _make_panel_study_config()
         output = _render_panel(sc)
-        assert "Experimental" in output
+        assert "Backends" in output
+        assert "Runners" not in output
+
+    def test_panel_no_experimental_section(self):
+        """Panel no longer contains 'Experimental' section."""
+        sc = _make_panel_study_config()
+        output = _render_panel(sc)
+        assert "Experimental" not in output
+
+    def test_panel_experiment_order_label(self):
+        """Panel shows 'Experiment order' (not 'Cycle order')."""
+        sc = _make_panel_study_config(experiment_order="shuffle")
+        output = _render_panel(sc)
+        assert "Experiment order" in output
+        assert "shuffle" in output
 
     def test_panel_workload_shows_model(self):
         """Workload section contains model value when model is constant."""
@@ -934,28 +928,73 @@ class TestBuildPreflightPanel:
         output = _render_panel(sc)
         assert "gpt2" in output
 
-    def test_panel_experimental_shows_dtype(self):
-        """Experimental section shows dtype (role=experimental)."""
-        sc = _make_panel_study_config(dtypes=["float16"])
-        output = _render_panel(sc)
-        # 'float16' appears in the panel
-        assert "float16" in output
-
-    def test_panel_swept_workload_annotated_with_dagger(self):
-        """A swept workload field (e.g. model) gets a dagger annotation in Experimental."""
+    def test_panel_swept_workload_annotated_with_plus(self):
+        """A swept workload field (e.g. model) gets a '+' annotation in Workload."""
         sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"])
         output = _render_panel(sc)
-        # Both model values appear
         assert "gpt2" in output
-        # Dagger annotation appears because model is typically workload but is swept
-        assert "\u2020" in output
+        assert "gpt2-xl" in output
+        # "+" annotation for swept workload fields
+        assert "+" in output
 
-    def test_panel_experimental_swept_dtype_bold_no_annotation(self):
-        """A swept experimental field (dtype) has no dagger annotation."""
-        sc = _make_panel_study_config(dtypes=["float16", "bfloat16"])
+    def test_panel_sweep_summary_multiple_configs(self):
+        """Sweep section shows dimension count and unique config count."""
+        sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"], n_cycles=2)
         output = _render_panel(sc)
-        # Both dtype values appear
-        assert "float16" in output
-        assert "bfloat16" in output
-        # No dagger annotation for dtype (it is already experimental, not workload)
-        assert "\u2020" not in output
+        assert "Sweep" in output
+        assert "2 unique configs" in output
+
+    def test_panel_no_sweep_section_single_config(self):
+        """Sweep section is hidden when there is only one config."""
+        sc = _make_panel_study_config(models=["gpt2"], n_cycles=1)
+        output = _render_panel(sc)
+        # Single config = no sweep section (but "Sweep" may appear in other contexts)
+        # Check that the sweep summary line is not present
+        assert "unique config" not in output
+
+    def test_panel_sweep_with_axes_and_groups(self):
+        """Sweep section shows axes and groups when provided."""
+        sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"])
+        output = _render_panel(sc, sweep_axes=3, sweep_groups=2)
+        assert "3 axes . 2 groups" in output
+        assert "2 unique configs" in output
+
+    def test_panel_sweep_axes_only(self):
+        """Sweep section shows axes only when no groups."""
+        sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"])
+        output = _render_panel(sc, sweep_axes=4, sweep_groups=0)
+        assert "4 axes" in output
+        assert "groups" not in output
+
+
+# =============================================================================
+# count_sweep_structure() tests
+# =============================================================================
+
+
+class TestCountSweepStructure:
+    def test_empty_sweep(self):
+        assert count_sweep_structure({}) == (0, 0)
+
+    def test_axes_only(self):
+        sweep = {"backend": ["pytorch", "vllm"], "dtype": ["float16", "bfloat16"]}
+        assert count_sweep_structure(sweep) == (2, 0)
+
+    def test_groups_only(self):
+        sweep = {"quant_group": [{"dtype": "float16"}, {"dtype": "bfloat16"}]}
+        assert count_sweep_structure(sweep) == (0, 1)
+
+    def test_mixed_axes_and_groups(self):
+        sweep = {
+            "backend": ["pytorch", "vllm"],
+            "dtype": ["float16", "bfloat16"],
+            "pytorch.compilation": [
+                {"pytorch.torch_compile": True},
+                {"pytorch.torch_compile": False},
+            ],
+        }
+        assert count_sweep_structure(sweep) == (2, 1)
+
+    def test_scalar_counted_as_axis(self):
+        sweep = {"backend": "pytorch"}
+        assert count_sweep_structure(sweep) == (1, 0)

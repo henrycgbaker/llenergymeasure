@@ -445,7 +445,7 @@ def test_print_study_dry_run_shows_configs(capsys, monkeypatch):
 
     configs = [
         make_config(model="gpt2", dtype="float16"),
-        make_config(model="gpt2", dtype="bfloat16"),
+        make_config(model="gpt2", dtype="float32"),
     ]
     study = StudyConfig(experiments=configs, study_name="test-sweep")
 
@@ -458,8 +458,9 @@ def test_print_study_dry_run_shows_configs(capsys, monkeypatch):
 
     assert "2 configs" in out
     assert "gpt2" in out
+    # Both dtypes appear in the per-experiment list (both non-default)
     assert "float16" in out
-    assert "bfloat16" in out
+    assert "float32" in out
     assert "Config valid" in out
 
 

@@ -417,7 +417,7 @@ def _run_study_impl(
     import yaml
 
     from llenergymeasure.cli._display import print_study_dry_run
-    from llenergymeasure.config.grid import build_preflight_panel
+    from llenergymeasure.config.grid import build_preflight_panel, count_sweep_structure
     from llenergymeasure.config.loader import load_study_config
 
     # Fast-fail: verify resume target exists before expensive grid expansion.
@@ -477,10 +477,22 @@ def _run_study_impl(
         study_cli_overrides["study_execution"] = exec_overrides
 
     # Load study config with overrides
+    print("Expanding study configuration...", file=sys.stderr)
     study_config = load_study_config(
         path=config,
         cli_overrides=study_cli_overrides if study_cli_overrides else None,
     )
+
+    # Pre-panel loading feedback
+    n_valid = len(study_config.experiments) // max(study_config.study_execution.n_cycles, 1)
+    n_skipped = len(study_config.skipped_configs) if study_config.skipped_configs else 0
+    print(f"  {n_valid} valid configs", file=sys.stderr)
+    if n_skipped:
+        print(f"  Skipped {n_skipped} invalid config(s)", file=sys.stderr)
+
+    # Count sweep axes vs groups from raw YAML for panel display
+    raw_sweep = raw.get("sweep", {}) or {}
+    sweep_axes, sweep_groups = count_sweep_structure(raw_sweep)
 
     # ---------------------------------------------------------------
     # Resolve runners and compute study dir preview — shared by both
@@ -516,6 +528,8 @@ def _run_study_impl(
             verbose=verbose,
             runner_specs=runner_specs,
             study_dir=study_dir_preview,
+            sweep_axes=sweep_axes,
+            sweep_groups=sweep_groups,
         )
         return
 
@@ -538,6 +552,8 @@ def _run_study_impl(
             runner_specs=runner_specs,
             study_dir=study_dir_preview,
             probed_energy_sampler=probe_energy_sampler(),
+            sweep_axes=sweep_axes,
+            sweep_groups=sweep_groups,
         )
         _stderr_console.print(panel)
 
