@@ -84,7 +84,7 @@ jobs:
         run: uv run pytest tests/ -m "not gpu and not docker" -n auto -v --tb=short --cov=llenergymeasure --cov-report=xml:coverage.xml
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
