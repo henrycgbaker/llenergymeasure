@@ -638,16 +638,18 @@ dataset:
 
 ### Warmup (`warmup:`)
 
+Two modes: **fixed** (default) runs exactly `n_warmup` prompts; **CV convergence** (opt-in via `convergence_detection: true`) runs until latency CV drops below threshold. CV mode replaces `n_warmup` - they are alternative modes, not additive. After warmup, `thermal_floor_seconds` wait lets GPU temperature plateau before measurement.
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable warmup phase |
-| `n_warmup` | integer | `5` | Number of full-length warmup prompts before measurement |
-| `thermal_floor_seconds` | number | `60.0` | Minimum seconds to wait after warmup before measuring (thermal stabilisation). Minimum 30s enforced. |
-| `convergence_detection` | boolean | `false` | Enable CV-based convergence detection (additive to n_warmup) |
-| `cv_threshold` | number | `0.05` | CV target for convergence (only used when convergence_detection=True) |
-| `max_prompts` | integer | `20` | Maximum warmup prompts when CV mode is on (safety cap) |
-| `window_size` | integer | `5` | Window size for CV calculation |
-| `min_prompts` | integer | `5` | Minimum prompts before checking convergence (warm start) |
+| `n_warmup` | integer | `5` | Number of warmup prompts in fixed mode (ignored when convergence_detection=true) |
+| `thermal_floor_seconds` | number | `60.0` | Post-warmup thermal stabilisation wait in seconds. Minimum 30s enforced. |
+| `convergence_detection` | boolean | `false` | Enable CV-based adaptive warmup (replaces fixed n_warmup) |
+| `cv_threshold` | number | `0.05` | CV target for convergence (stop when CV < this value) |
+| `max_prompts` | integer | `20` | Safety cap on warmup prompts in CV mode |
+| `window_size` | integer | `3` | Sliding window size for CV calculation |
+| `min_prompts` | integer | `5` | Minimum prompts before checking convergence |
 
 ### Baseline (`baseline:`)
 

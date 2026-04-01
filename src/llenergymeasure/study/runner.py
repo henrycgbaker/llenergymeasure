@@ -79,6 +79,7 @@ def _save_and_record(
     experiment_index: int | None = None,
     ts_source_dir: Path | None = None,
     effective_config: dict[str, Any] | None = None,
+    resolution_log: dict[str, Any] | None = None,
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
@@ -89,6 +90,7 @@ def _save_and_record(
     Args:
         ts_source_dir: Directory where the harness wrote timeseries.parquet.
         effective_config: Fully resolved experiment config dict for sidecar.
+        resolution_log: Pre-built resolution log for this experiment (written as _resolution.json).
 
     On save failure, marks the experiment as completed with empty path.
     """
@@ -113,6 +115,7 @@ def _save_and_record(
             experiment_index=experiment_index,
             cycle=cycle,
             effective_config=effective_config,
+            resolution_log=resolution_log,
         )
 
         # Clean up the stale flat parquet file after it has been copied into the
@@ -122,7 +125,21 @@ def _save_and_record(
 
         result_files.append(str(result_path))
         rel_path = str(result_path.relative_to(study_dir))
-        manifest.mark_completed(config_hash, cycle, rel_path)
+
+        # Extract summary metrics for manifest (used by --resume display).
+        elapsed_sec = getattr(result, "total_inference_time_sec", None)
+        manifest.mark_completed(
+            config_hash,
+            cycle,
+            rel_path,
+            elapsed_seconds=elapsed_sec,
+            inference_seconds=elapsed_sec,
+            energy_joules=getattr(result, "total_energy_j", None),
+            adj_energy_joules=getattr(result, "energy_adjusted_j", None),
+            throughput_tok_s=getattr(result, "avg_tokens_per_second", None),
+            mj_per_tok=getattr(result, "mj_per_tok_adjusted", None)
+            or getattr(result, "mj_per_tok_total", None),
+        )
     except Exception as exc:
         manifest.mark_failed(config_hash, cycle, type(exc).__name__, str(exc))
 
@@ -448,6 +465,7 @@ class StudyRunner:
         progress: StudyProgressCallback | None = None,
         no_lock: bool = False,
         skip_set: set[tuple[str, int]] | None = None,
+        resolution_logs: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.study = study
         self.manifest = manifest_writer
@@ -461,6 +479,8 @@ class StudyRunner:
         self._no_lock = no_lock
         # Set of (config_hash, cycle) pairs to skip (resume mode)
         self._skip_set: set[tuple[str, int]] = skip_set or set()
+        # Pre-built resolution logs keyed by config_hash (written as _resolution.json sidecar)
+        self._resolution_logs: dict[str, dict[str, Any]] = resolution_logs or {}
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -1071,6 +1091,7 @@ class StudyRunner:
                 experiment_index=index,
                 ts_source_dir=ts_source_dir,
                 effective_config=effective_config,
+                resolution_log=self._resolution_logs.get(config_hash),
             )
             if self._progress:
                 # Emit save paths as substeps BEFORE end_experiment_ok (which clears

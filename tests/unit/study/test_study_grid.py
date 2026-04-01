@@ -938,11 +938,11 @@ class TestBuildPreflightPanel:
         assert "+" in output
 
     def test_panel_sweep_summary_multiple_configs(self):
-        """Sweep section shows dimension count and unique config count."""
+        """Sweep section shows dimension count and config count from sweep."""
         sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"], n_cycles=2)
         output = _render_panel(sc)
         assert "Sweep" in output
-        assert "2 unique configs" in output
+        assert "2 configs from sweep" in output
 
     def test_panel_no_sweep_section_single_config(self):
         """Sweep section is hidden when there is only one config."""
@@ -957,7 +957,7 @@ class TestBuildPreflightPanel:
         sc = _make_panel_study_config(models=["gpt2", "gpt2-xl"])
         output = _render_panel(sc, sweep_axes=3, sweep_groups=2)
         assert "3 axes . 2 groups" in output
-        assert "2 unique configs" in output
+        assert "2 configs from sweep" in output
 
     def test_panel_sweep_axes_only(self):
         """Sweep section shows axes only when no groups."""
