@@ -6,6 +6,7 @@
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
 .PHONY: package-check docs-check docker-smoke docker-smoke-pytorch docker-smoke-vllm ci ci-all
+.PHONY: gpu-ci gpu-ci-pytorch gpu-ci-vllm
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 export PUID := $(shell id -u)
@@ -150,6 +151,41 @@ docker-smoke-vllm:
 ci: lint typecheck test package-check docs-check
 
 ci-all: ci docker-smoke
+
+# GPU CI targets — mirrors .github/workflows/gpu-ci.yml
+# Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit
+gpu-ci: gpu-ci-pytorch gpu-ci-vllm
+
+gpu-ci-pytorch:
+	docker build -f docker/Dockerfile.pytorch -t llenergymeasure-ci:pytorch .
+	docker run --name llem-ci-setup llenergymeasure-ci:pytorch pip install --no-cache-dir pytest pytest-xdist
+	docker commit llem-ci-setup llenergymeasure-ci:pytorch
+	docker rm llem-ci-setup
+	mkdir -p results/
+	docker run --rm --gpus all \
+		-v "$(CURDIR)/tests":/app/tests:ro \
+		-v "$(CURDIR)/results":/app/results \
+		llenergymeasure-ci:pytorch \
+		python3 -m pytest tests/ -v --tb=short -o "addopts="
+	docker run --rm --gpus all \
+		-v "$(CURDIR)/tests":/app/tests:ro \
+		-v "$(CURDIR)/results":/app/results \
+		llenergymeasure-ci:pytorch \
+		bash tests/integration/sigint_verify.sh
+	docker rmi llenergymeasure-ci:pytorch 2>/dev/null || true
+
+gpu-ci-vllm:
+	docker build -f docker/Dockerfile.vllm -t llenergymeasure-ci:vllm .
+	docker run --name llem-vllm-ci-setup llenergymeasure-ci:vllm pip install --no-cache-dir pytest pytest-xdist
+	docker commit llem-vllm-ci-setup llenergymeasure-ci:vllm
+	docker rm llem-vllm-ci-setup
+	mkdir -p results/
+	docker run --rm --gpus all \
+		-v "$(CURDIR)/tests":/app/tests:ro \
+		-v "$(CURDIR)/results":/app/results \
+		llenergymeasure-ci:vllm \
+		bash tests/integration/killpg_verify.sh
+	docker rmi llenergymeasure-ci:vllm 2>/dev/null || true
 
 # =============================================================================
 # Docker Commands (Production)
