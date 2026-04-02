@@ -12,10 +12,14 @@ Covers:
 - adjust_energy_for_baseline (positive and floor-at-zero)
 - create_energy_breakdown (with and without baseline)
 - Multi-GPU baseline measurement sums power across GPUs
+- Disk-persisted cache: save/load round-trip, TTL expiry, missing fields
+- Baseline method override in EnergyBreakdown
+- Spot-check measurement for drift validation
 """
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from contextlib import contextmanager
@@ -29,7 +33,9 @@ from llenergymeasure.harness.baseline import (
     adjust_energy_for_baseline,
     create_energy_breakdown,
     invalidate_baseline_cache,
+    load_baseline_cache,
     measure_baseline_power,
+    save_baseline_cache,
 )
 
 # =============================================================================
@@ -519,3 +525,181 @@ def test_create_energy_breakdown_adjusted_value_correct():
 
     expected_adjusted = adjust_energy_for_baseline(total_energy_j, power_w, duration_sec)
     assert breakdown.adjusted_j == pytest.approx(expected_adjusted)
+
+
+# =============================================================================
+# Disk-persisted baseline cache
+# =============================================================================
+
+
+def test_save_and_load_baseline_cache_round_trip(tmp_path):
+    """save_baseline_cache + load_baseline_cache round-trips correctly."""
+    cache_path = tmp_path / "baseline_cache.json"
+    original = BaselineCache(
+        power_w=150.0,
+        timestamp=time.time(),
+        gpu_indices=[0, 1],
+        sample_count=300,
+        duration_sec=30.0,
+    )
+
+    save_baseline_cache(cache_path, original)
+
+    loaded = load_baseline_cache(cache_path, ttl=3600.0)
+
+    assert loaded is not None
+    assert loaded.power_w == original.power_w
+    assert loaded.timestamp == original.timestamp
+    assert loaded.gpu_indices == original.gpu_indices
+    assert loaded.sample_count == original.sample_count
+    assert loaded.duration_sec == original.duration_sec
+    assert loaded.from_cache is True
+
+
+def test_save_baseline_cache_json_format(tmp_path):
+    """Saved JSON contains the expected fields including measurement_host."""
+    cache_path = tmp_path / "baseline_cache.json"
+    original = BaselineCache(
+        power_w=42.0,
+        timestamp=1234567890.0,
+        gpu_indices=[0],
+        sample_count=100,
+        duration_sec=10.0,
+    )
+
+    save_baseline_cache(cache_path, original)
+
+    raw = json.loads(cache_path.read_text())
+    assert raw["power_w"] == 42.0
+    assert raw["timestamp"] == 1234567890.0
+    assert raw["gpu_indices"] == [0]
+    assert raw["sample_count"] == 100
+    assert raw["duration_sec"] == 10.0
+    assert "measurement_host" in raw
+
+
+def test_save_baseline_cache_creates_parent_dirs(tmp_path):
+    """save_baseline_cache creates intermediate directories."""
+    cache_path = tmp_path / "nested" / "deep" / "baseline_cache.json"
+    original = BaselineCache(
+        power_w=50.0,
+        timestamp=time.time(),
+        gpu_indices=[0],
+        sample_count=10,
+        duration_sec=5.0,
+    )
+
+    save_baseline_cache(cache_path, original)
+    assert cache_path.exists()
+
+
+def test_load_baseline_cache_missing_file(tmp_path):
+    """load_baseline_cache returns None for a non-existent file."""
+    result = load_baseline_cache(tmp_path / "does_not_exist.json")
+    assert result is None
+
+
+def test_load_baseline_cache_expired(tmp_path):
+    """load_baseline_cache returns None when cache has expired."""
+    cache_path = tmp_path / "baseline_cache.json"
+    original = BaselineCache(
+        power_w=100.0,
+        timestamp=time.time() - 7200.0,  # 2 hours ago
+        gpu_indices=[0],
+        sample_count=50,
+        duration_sec=15.0,
+    )
+
+    save_baseline_cache(cache_path, original)
+
+    # TTL of 1800s (30 min) — 2-hour-old cache should be expired
+    result = load_baseline_cache(cache_path, ttl=1800.0)
+    assert result is None
+
+
+def test_load_baseline_cache_malformed_json(tmp_path):
+    """load_baseline_cache returns None for malformed JSON."""
+    cache_path = tmp_path / "baseline_cache.json"
+    cache_path.write_text("not valid json{{{", encoding="utf-8")
+
+    result = load_baseline_cache(cache_path)
+    assert result is None
+
+
+def test_load_baseline_cache_missing_fields(tmp_path):
+    """load_baseline_cache returns None when required fields are missing."""
+    cache_path = tmp_path / "baseline_cache.json"
+    # Missing sample_count and duration_sec
+    cache_path.write_text(
+        json.dumps({"power_w": 100.0, "timestamp": time.time(), "gpu_indices": [0]}),
+        encoding="utf-8",
+    )
+
+    result = load_baseline_cache(cache_path)
+    assert result is None
+
+
+# =============================================================================
+# Baseline method override in EnergyBreakdown
+# =============================================================================
+
+
+def test_create_energy_breakdown_method_override():
+    """BaselineCache.method overrides the from_cache-based default."""
+    entry = BaselineCache(
+        power_w=20.0,
+        timestamp=time.time(),
+        gpu_indices=[0],
+        sample_count=5,
+        duration_sec=0.5,
+        from_cache=True,
+        method="validated",
+    )
+
+    breakdown = create_energy_breakdown(
+        total_energy_j=100.0,
+        baseline=entry,
+        duration_sec=10.0,
+    )
+
+    assert breakdown.baseline_method == "validated"
+
+
+def test_create_energy_breakdown_no_method_override_uses_from_cache():
+    """Without method override, from_cache=True produces 'cached'."""
+    entry = BaselineCache(
+        power_w=20.0,
+        timestamp=time.time(),
+        gpu_indices=[0],
+        sample_count=5,
+        duration_sec=0.5,
+        from_cache=True,
+    )
+
+    breakdown = create_energy_breakdown(
+        total_energy_j=100.0,
+        baseline=entry,
+        duration_sec=10.0,
+    )
+
+    assert breakdown.baseline_method == "cached"
+
+
+def test_create_energy_breakdown_fresh_method():
+    """Without method override, from_cache=False produces 'fresh'."""
+    entry = BaselineCache(
+        power_w=20.0,
+        timestamp=time.time(),
+        gpu_indices=[0],
+        sample_count=5,
+        duration_sec=0.5,
+        from_cache=False,
+    )
+
+    breakdown = create_energy_breakdown(
+        total_energy_j=100.0,
+        baseline=entry,
+        duration_sec=10.0,
+    )
+
+    assert breakdown.baseline_method == "fresh"

@@ -148,6 +148,17 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     output_dir = os.environ.get("LLEM_OUTPUT_DIR")
     save_timeseries = os.environ.get("LLEM_SAVE_TIMESERIES", "1") != "0"
 
+    # --- Load baseline from disk cache (mounted by host StudyRunner) ---
+    baseline = None
+    baseline_cache_path = Path("/run/llem/baseline_cache.json")
+    if baseline_cache_path.exists() and config.baseline.enabled:
+        from llenergymeasure.harness.baseline import load_baseline_cache
+
+        baseline = load_baseline_cache(
+            baseline_cache_path,
+            ttl=config.baseline.cache_ttl_seconds,
+        )
+
     # --- Run experiment via library API (not CLI) ---
     progress.on_step_start("preflight", "Checking", "preflight, CUDA, model access")
     t0 = time.perf_counter()
@@ -164,6 +175,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
         progress=progress,
         output_dir=output_dir,
         save_timeseries=save_timeseries,
+        baseline=baseline,
     )
 
     # --- Write result ---

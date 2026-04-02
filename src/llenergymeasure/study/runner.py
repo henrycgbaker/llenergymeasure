@@ -491,6 +491,10 @@ class StudyRunner:
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
         # Study-level baseline power cache — measured once, shared across experiments
         self._baseline: Any = None  # BaselineCache | None (lazy import)
+        # Disk path for baseline cache (shared with Docker containers)
+        self._baseline_cache_path: Path | None = None
+        # Counter for validation interval (strategy='validated')
+        self._experiments_since_validation: int = 0
         # Study-level image preparation: True after _prepare_images() succeeds
         self._images_prepared: bool = False
 
@@ -736,22 +740,51 @@ class StudyRunner:
         return self._env_snapshot_future.result(timeout=10)
 
     def _get_baseline(self, config: ExperimentConfig) -> Any:
-        """Return cached baseline power, measuring on first call.
+        """Return baseline power according to the configured strategy.
 
-        Measures idle GPU baseline once using the given experiment's settings,
-        then reuses the result for all subsequent experiments in the study.
-        All experiments in a study share the same GPU set, so a single
-        measurement is sufficient.
+        Strategy behaviour:
+            cached: Measure once, persist to disk, reuse within TTL.
+            validated: Same as cached but spot-checks periodically for drift.
+            fresh: Always returns None (each experiment measures its own).
+
+        For 'cached' and 'validated', the baseline is written to a JSON file
+        in the study artefacts directory so Docker containers can mount it.
 
         Args:
-            config: Experiment config providing baseline duration and GPU indices.
+            config: Experiment config providing baseline settings and GPU indices.
 
         Returns:
-            BaselineCache or None if measurement failed or baseline is disabled.
+            BaselineCache or None if measurement failed, baseline is disabled,
+            or strategy is 'fresh'.
         """
+        strategy = config.baseline.strategy
+
+        # fresh: no study-level caching — each experiment measures its own
+        if strategy == "fresh":
+            return None
+
+        # validated: check if we need to spot-check
+        if strategy == "validated" and self._baseline is not None:
+            self._experiments_since_validation += 1
+            if self._experiments_since_validation >= config.baseline.validation_interval:
+                self._validate_baseline(config)
+
+        # Return cached baseline if we have one
         if self._baseline is not None:
             return self._baseline
 
+        # Try loading from disk first (handles mid-study restarts)
+        cache_path = self._get_baseline_cache_path()
+        if cache_path is not None:
+            from llenergymeasure.harness.baseline import load_baseline_cache
+
+            cached = load_baseline_cache(cache_path, ttl=config.baseline.cache_ttl_seconds)
+            if cached is not None:
+                self._baseline = cached
+                logger.debug("Loaded baseline from disk cache: %.1fW", cached.power_w)
+                return self._baseline
+
+        # Measure fresh baseline
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
         from llenergymeasure.harness.baseline import measure_baseline_power
 
@@ -760,7 +793,89 @@ class StudyRunner:
             duration_sec=config.baseline.duration_seconds,
             gpu_indices=gpu_indices,
         )
+
+        # Set method based on strategy for result reporting
+        if self._baseline is not None:
+            self._baseline.method = strategy
+
+        # Persist to disk for Docker containers and resume
+        if self._baseline is not None and cache_path is not None:
+            from llenergymeasure.harness.baseline import save_baseline_cache
+
+            save_baseline_cache(cache_path, self._baseline)
+
+        self._experiments_since_validation = 0
         return self._baseline
+
+    def _validate_baseline(self, config: ExperimentConfig) -> None:
+        """Spot-check baseline for drift (strategy='validated' only).
+
+        Performs a quick 5-second measurement and compares with the cached
+        baseline. If drift exceeds the configured threshold, re-measures
+        the full baseline and updates the disk cache.
+
+        Args:
+            config: Experiment config providing validation settings.
+        """
+        if self._baseline is None:
+            return
+
+        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+        from llenergymeasure.harness.baseline import (
+            measure_baseline_power,
+            measure_spot_check,
+            save_baseline_cache,
+        )
+
+        gpu_indices = _resolve_gpu_indices(config)
+        spot = measure_spot_check(gpu_indices=gpu_indices, duration_sec=5.0)
+        self._experiments_since_validation = 0
+
+        if spot is None:
+            logger.warning("Baseline validation: spot-check measurement failed")
+            return
+
+        drift = abs(spot - self._baseline.power_w) / self._baseline.power_w
+        if drift > config.baseline.drift_threshold:
+            logger.info(
+                "Baseline drift detected: %.1fW -> %.1fW (%.1f%% > %.1f%% threshold). "
+                "Re-measuring full baseline.",
+                self._baseline.power_w,
+                spot,
+                drift * 100,
+                config.baseline.drift_threshold * 100,
+            )
+            self._baseline = measure_baseline_power(
+                duration_sec=config.baseline.duration_seconds,
+                gpu_indices=gpu_indices,
+            )
+            if self._baseline is not None:
+                self._baseline.method = "validated"
+            cache_path = self._get_baseline_cache_path()
+            if self._baseline is not None and cache_path is not None:
+                save_baseline_cache(cache_path, self._baseline)
+        else:
+            # Mark as validated for result reporting
+            self._baseline.method = "validated"
+            logger.debug(
+                "Baseline validation passed: drift=%.1f%% (threshold=%.1f%%)",
+                drift * 100,
+                config.baseline.drift_threshold * 100,
+            )
+
+    def _get_baseline_cache_path(self) -> Path | None:
+        """Return the disk path for the baseline cache file.
+
+        The file lives in {study_dir}/_study-artefacts/baseline_cache.json.
+        Creates the artefacts directory if needed.
+        """
+        if self._baseline_cache_path is not None:
+            return self._baseline_cache_path
+
+        artefacts_dir = self.study_dir / "_study-artefacts"
+        artefacts_dir.mkdir(parents=True, exist_ok=True)
+        self._baseline_cache_path = artefacts_dir / "baseline_cache.json"
+        return self._baseline_cache_path
 
     def _prepare_images(self) -> None:
         """Check/pull Docker images for all Docker backends before experiments.
@@ -1177,11 +1292,23 @@ class StudyRunner:
         container_name = generate_container_name(study_id, index)
         labels = generate_container_labels(study_id)
 
+        # Measure baseline on host and persist to disk (if strategy != 'fresh').
+        # The cache file is mounted into the container so it can reuse the measurement.
+        extra_mounts = list(spec.extra_mounts) if spec.extra_mounts else []
+        baseline = self._get_baseline(config) if config.baseline.enabled else None
+        baseline_cache_path = self._get_baseline_cache_path()
+        if (
+            baseline is not None
+            and baseline_cache_path is not None
+            and baseline_cache_path.exists()
+        ):
+            extra_mounts.append((str(baseline_cache_path), "/run/llem/baseline_cache.json"))
+
         docker_runner = DockerRunner(
             image=image,
             timeout=_calculate_timeout(config),
             source=spec.source,
-            extra_mounts=spec.extra_mounts,
+            extra_mounts=extra_mounts,
             container_name=container_name,
             labels=labels,
         )

@@ -1,4 +1,4 @@
-"""Baseline power measurement with session-level caching.
+"""Baseline power measurement with session-level and disk-persisted caching.
 
 Measures idle GPU power draw to enable baseline-adjusted energy measurements.
 The baseline represents idle power consumption; subtracting it from total energy
@@ -6,16 +6,22 @@ isolates the energy attributable to inference work.
 
 For multi-GPU setups, baseline power is summed across all specified GPUs.
 
+Disk persistence enables sharing baselines across processes (e.g. host -> Docker
+container) via a JSON cache file with configurable TTL.
+
 Gracefully degrades when NVML is unavailable — returns None instead of crashing.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
+import socket
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 from llenergymeasure.device.gpu_info import nvml_context
 from llenergymeasure.domain.metrics import EnergyBreakdown
@@ -33,6 +39,9 @@ class BaselineCache:
     sample_count: int
     duration_sec: float
     from_cache: bool = False
+    #: Override for baseline_method in EnergyBreakdown. When set, takes
+    #: precedence over the from_cache-based default ("cached"/"fresh").
+    method: str | None = None
 
 
 # Module-level cache keyed by sorted tuple of gpu_indices
@@ -230,11 +239,18 @@ def create_energy_breakdown(
         adjusted_j = adjust_energy_for_baseline(total_energy_j, baseline.power_w, duration_sec)
         cache_age = time.time() - baseline.timestamp
 
+        # Explicit method override takes precedence (e.g. "validated"),
+        # otherwise fall back to from_cache flag.
+        if baseline.method is not None:
+            method = baseline.method
+        else:
+            method = "cached" if baseline.from_cache else "fresh"
+
         return EnergyBreakdown(
             raw_j=total_energy_j,
             adjusted_j=adjusted_j,
             baseline_power_w=baseline.power_w,
-            baseline_method="cached" if baseline.from_cache else "fresh",
+            baseline_method=method,
             baseline_timestamp=datetime.fromtimestamp(baseline.timestamp, tz=timezone.utc),
             baseline_cache_age_sec=cache_age,
         )
@@ -247,3 +263,113 @@ def create_energy_breakdown(
         baseline_timestamp=None,
         baseline_cache_age_sec=None,
     )
+
+
+# =============================================================================
+# Disk-persisted baseline cache (for cross-process / Docker sharing)
+# =============================================================================
+
+
+def save_baseline_cache(path: Path, baseline: BaselineCache) -> None:
+    """Persist a baseline measurement to a JSON file.
+
+    The JSON format includes all fields needed to reconstruct a BaselineCache
+    plus the measurement hostname for provenance.
+
+    Args:
+        path: File path to write the JSON cache.
+        baseline: Baseline measurement to persist.
+    """
+    payload = {
+        "power_w": baseline.power_w,
+        "timestamp": baseline.timestamp,
+        "gpu_indices": baseline.gpu_indices,
+        "sample_count": baseline.sample_count,
+        "duration_sec": baseline.duration_sec,
+        "measurement_host": socket.gethostname(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    logger.debug("Baseline cache written to %s (%.1fW)", path, baseline.power_w)
+
+
+def load_baseline_cache(path: Path, ttl: float = 1800.0) -> BaselineCache | None:
+    """Load a baseline measurement from a JSON cache file.
+
+    Returns None if the file does not exist, is malformed, or the cached
+    measurement has expired (age > ttl seconds).
+
+    Args:
+        path: File path to the JSON cache.
+        ttl: Maximum age in seconds for the cache to be considered valid.
+
+    Returns:
+        BaselineCache with from_cache=True, or None if invalid/expired/missing.
+    """
+    if not path.exists():
+        logger.debug("Baseline cache file not found: %s", path)
+        return None
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to read baseline cache %s: %s", path, exc)
+        return None
+
+    # Validate required fields
+    required = {"power_w", "timestamp", "gpu_indices", "sample_count", "duration_sec"}
+    if not required.issubset(raw.keys()):
+        missing = required - set(raw.keys())
+        logger.warning("Baseline cache %s missing fields: %s", path, missing)
+        return None
+
+    # Check TTL
+    age = time.time() - raw["timestamp"]
+    if age > ttl:
+        logger.debug(
+            "Baseline cache expired: age=%.0fs > ttl=%.0fs (%s)",
+            age,
+            ttl,
+            path,
+        )
+        return None
+
+    cache = BaselineCache(
+        power_w=raw["power_w"],
+        timestamp=raw["timestamp"],
+        gpu_indices=raw["gpu_indices"],
+        sample_count=raw["sample_count"],
+        duration_sec=raw["duration_sec"],
+        from_cache=True,
+    )
+    logger.debug(
+        "Loaded baseline from disk cache: %.1fW (age=%.0fs, host=%s)",
+        cache.power_w,
+        age,
+        raw.get("measurement_host", "unknown"),
+    )
+    return cache
+
+
+def measure_spot_check(
+    gpu_indices: list[int] | None = None,
+    duration_sec: float = 5.0,
+) -> float | None:
+    """Quick spot-check measurement for drift validation.
+
+    Performs a short baseline measurement and returns the mean power.
+    Much faster than a full baseline measurement (~5s vs ~30s).
+
+    Args:
+        gpu_indices: GPU device indices to measure. Defaults to [0].
+        duration_sec: Spot-check duration (default 5s).
+
+    Returns:
+        Mean power in watts, or None if measurement failed.
+    """
+    result = measure_baseline_power(
+        gpu_indices=gpu_indices,
+        duration_sec=duration_sec,
+        cache_ttl_sec=0.0,  # always measure fresh for spot-check
+    )
+    return result.power_w if result is not None else None
