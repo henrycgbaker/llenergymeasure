@@ -16,14 +16,6 @@ on:
           - package-validation
           - docs-freshness
           - docker-smoke
-      runner:
-        description: "Runner to use (ubuntu-latest or self-hosted)"
-        required: false
-        default: "ubuntu-latest"
-        type: choice
-        options:
-          - ubuntu-latest
-          - self-hosted
   pull_request:
     branches: [main]
   push:
@@ -66,7 +58,7 @@ jobs:
       github.event_name != 'workflow_dispatch'
       || inputs.job == 'all'
       || inputs.job == 'lint'
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -87,7 +79,7 @@ jobs:
       github.event_name != 'workflow_dispatch'
       || inputs.job == 'all'
       || inputs.job == 'type-check'
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -107,7 +99,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'test'))
         || needs.filter.outputs.src == 'true'
       )
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -140,7 +132,7 @@ jobs:
       github.event_name != 'workflow_dispatch'
       || inputs.job == 'all'
       || inputs.job == 'package-validation'
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -170,7 +162,7 @@ jobs:
       github.event_name != 'workflow_dispatch'
       || inputs.job == 'all'
       || inputs.job == 'docs-freshness'
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -193,7 +185,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'docker-smoke'))
         || needs.filter.outputs.docker == 'true'
       )
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.runner) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
