@@ -1,10 +1,11 @@
-.PHONY: format lint typecheck check test test-integration test-all install dev clean
+.PHONY: format lint lint-fix typecheck check test test-unit test-integration test-all install dev clean
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-local test-runtime-docker
 .PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
+.PHONY: package-check docs-check docker-smoke docker-smoke-pytorch docker-smoke-vllm ci ci-all
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
 export PUID := $(shell id -u)
@@ -32,24 +33,33 @@ docker-setup: setup
 # =============================================================================
 
 format:
-	poetry run ruff format src/ tests/
+	uv run ruff format src/ tests/
 
 lint:
-	poetry run ruff check src/ tests/ --fix
+	uv run ruff check src/ tests/
+	uv run ruff format --check src/ tests/
+	uv run lint-imports
+
+lint-fix:
+	uv run ruff check src/ tests/ --fix
+	uv run ruff format src/ tests/
 
 typecheck:
-	poetry run mypy src/
+	uv run mypy src/
 
-check: format lint typecheck
+check: lint typecheck
 
 test:
-	poetry run pytest tests/unit/ -v
+	uv run pytest tests/ -m "not gpu and not docker" -x -q --tb=short
+
+test-unit:
+	uv run pytest tests/unit/ -v
 
 test-integration:
-	poetry run pytest tests/integration/ -v
+	uv run pytest tests/integration/ -v
 
 test-all:
-	poetry run pytest tests/ -v --ignore=tests/runtime/
+	uv run pytest tests/ -v --ignore=tests/runtime/
 
 # Runtime tests with Docker container dispatch
 # These tests use SSOT introspection to discover ALL params, then dispatch
@@ -84,11 +94,11 @@ test-runtime-docker:
 	python scripts/runtime-test-orchestrator.py --backend pytorch --build
 
 install:
-	poetry install
+	uv sync
 
 dev:
-	poetry install --with dev
-	poetry run pre-commit install
+	uv sync --dev
+	uv run pre-commit install
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage dist/ build/
@@ -102,13 +112,44 @@ generate-docs:
 	@echo "Generated docs in docs/generated/"
 
 # Check if generated docs are stale (CI validation)
-check-docs:
-	@python scripts/generate_invalid_combos_doc.py
-	@git diff --quiet docs/generated/ || \
-		(echo "ERROR: Generated docs are stale. Run 'make generate-docs' and commit." && exit 1)
+check-docs: docs-check
+
+docs-check:
+	@uv run python scripts/generate_config_docs.py > /dev/null
+	@uv run python scripts/generate_cli_reference.py > /dev/null
+	@uv run python scripts/generate_invalid_combos_doc.py > /dev/null
 	@echo "Generated docs are up to date"
 
-ci: check test check-docs
+# Build wheel + validate package install + check version consistency
+package-check:
+	uv build --wheel
+	@python3 -m venv /tmp/pkg-check-local 2>/dev/null || true
+	@/tmp/pkg-check-local/bin/pip install dist/*.whl --quiet --force-reinstall
+	@/tmp/pkg-check-local/bin/python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('Package install OK')"
+	@PYPROJECT_VER=$$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); print(tomllib.load(f)['project']['version'])"); \
+	 VERSION_VER=$$(python3 -c "import re; s=open('src/llenergymeasure/_version.py').read(); print(re.search(r'__version__[^=]*=\s*\"([^\"]+)\"', s).group(1))"); \
+	 echo "pyproject.toml: $$PYPROJECT_VER"; \
+	 echo "_version.py:    $$VERSION_VER"; \
+	 [ "$$PYPROJECT_VER" = "$$VERSION_VER" ] || { echo "ERROR: Version mismatch"; exit 1; }
+	@echo "Package validation OK"
+
+# Docker smoke tests — mirrors CI docker-smoke job
+docker-smoke: docker-smoke-pytorch docker-smoke-vllm
+
+docker-smoke-pytorch:
+	docker build -f docker/Dockerfile.pytorch --build-arg INSTALL_FA3=false . -t smoke-pytorch
+	docker run --rm smoke-pytorch llem --version
+	docker run --rm smoke-pytorch llem config
+
+docker-smoke-vllm:
+	docker build -f docker/Dockerfile.vllm --build-arg INSTALL_FA3=false . -t smoke-vllm
+	docker run --rm smoke-vllm llem --version
+	docker run --rm smoke-vllm llem config
+
+# CI targets — run the same checks as GitHub Actions
+ci: lint typecheck test package-check docs-check
+
+ci-all: ci docker-smoke
 
 # =============================================================================
 # Docker Commands (Production)
