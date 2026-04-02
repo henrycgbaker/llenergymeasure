@@ -2,6 +2,20 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      job:
+        description: "Job to run (all, lint, type-check, test, package-validation, docs-freshness, docker-smoke)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - lint
+          - type-check
+          - test
+          - package-validation
+          - docs-freshness
+          - docker-smoke
   pull_request:
     branches: [main]
   push:
@@ -17,6 +31,7 @@ env:
 
 jobs:
   filter:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       src: ${{ steps.changes.outputs.src }}
@@ -39,6 +54,10 @@ jobs:
               - 'pyproject.toml'
 
   lint:
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.job == 'all'
+      || inputs.job == 'lint'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -56,6 +75,10 @@ jobs:
         run: uv run lint-imports
 
   type-check:
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.job == 'all'
+      || inputs.job == 'type-check'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -70,7 +93,12 @@ jobs:
 
   test:
     needs: filter
-    if: needs.filter.outputs.src == 'true'
+    if: >-
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'test'))
+        || needs.filter.outputs.src == 'true'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -100,6 +128,10 @@ jobs:
         run: uv run python -c "from llenergymeasure import run_experiment, ExperimentConfig, ExperimentResult; print('OK')"
 
   package-validation:
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.job == 'all'
+      || inputs.job == 'package-validation'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -126,6 +158,10 @@ jobs:
           [ "$PYPROJECT_VER" = "$VERSION_VER" ] || { echo "ERROR: Version mismatch: pyproject.toml=${PYPROJECT_VER}, _version.py=${VERSION_VER}"; exit 1; }
 
   docs-freshness:
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.job == 'all'
+      || inputs.job == 'docs-freshness'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -143,7 +179,12 @@ jobs:
 
   docker-smoke:
     needs: filter
-    if: needs.filter.outputs.docker == 'true'
+    if: >-
+      always()
+      && (
+        (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'docker-smoke'))
+        || needs.filter.outputs.docker == 'true'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
