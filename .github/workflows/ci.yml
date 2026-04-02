@@ -157,6 +157,12 @@ jobs:
     continue-on-error: ${{ !matrix.blocking }}
     steps:
       - uses: actions/checkout@v6
+      - name: Free disk space
+        run: |
+          # Remove large pre-installed packages that aren't needed
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
       - name: Build ${{ matrix.dockerfile }} image
         run: docker build -f docker/Dockerfile.${{ matrix.dockerfile }} --build-arg INSTALL_FA3=false . -t smoke-${{ matrix.dockerfile }}
       - name: Smoke test ${{ matrix.dockerfile }}
