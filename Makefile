@@ -5,7 +5,7 @@
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
-.PHONY: package-check docs-check docker-smoke docker-smoke-pytorch docker-smoke-vllm ci ci-all
+.PHONY: package-check docs-check docker-smoke docker-smoke-pytorch docker-smoke-vllm ci ci-all ci-docker
 .PHONY: gpu-ci gpu-ci-pytorch gpu-ci-vllm
 
 # PUID/PGID for correct file ownership on bind mounts (LinuxServer.io pattern)
@@ -151,6 +151,32 @@ docker-smoke-vllm:
 ci: lint typecheck test package-check docs-check
 
 ci-all: ci docker-smoke
+
+# Run CI in a clean container matching GitHub Actions (ubuntu + Python 3.12 + uv)
+# Catches "works on my machine" issues before pushing
+CI_IMAGE := llenergymeasure-ci-env:local
+define CI_DOCKERFILE
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv python3.12-dev curl ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+WORKDIR /app
+COPY . .
+ENV UV_FROZEN=true UV_NO_PROGRESS=1
+RUN uv sync --dev --extra pytorch --extra codecarbon --extra zeus
+endef
+export CI_DOCKERFILE
+ci-docker:
+	echo "$$CI_DOCKERFILE" | docker build -t $(CI_IMAGE) -f - .
+	docker run --rm $(CI_IMAGE) sh -c '\
+		uv run ruff check src/ tests/ && \
+		uv run ruff format --check src/ tests/ && \
+		uv run lint-imports && \
+		uv run mypy src/ && \
+		uv run pytest tests/ -m "not gpu and not docker" -x -q --tb=short && \
+		echo "=== CI-docker: all checks passed ==="'
+	@docker rmi $(CI_IMAGE) 2>/dev/null || true
 
 # GPU CI targets — mirrors .github/workflows/gpu-ci.yml
 # Requires: Docker, NVIDIA GPUs, nvidia-container-toolkit
