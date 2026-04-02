@@ -106,7 +106,7 @@ def _get_defaults_flat(model_cls: type[BaseModel], prefix: str = "") -> dict[str
         if field_info.default is not PydanticUndefined:
             val = field_info.default
         elif field_info.default_factory is not None:
-            val = field_info.default_factory()  # type: ignore[misc]
+            val = field_info.default_factory()  # type: ignore[call-arg]
         else:
             continue  # Required field (no default) — any value is explicitly set
 
