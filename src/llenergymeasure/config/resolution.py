@@ -8,12 +8,10 @@ Produces a per-experiment ``_resolution.json`` sidecar that records:
    field values (e.g. convergence_detection controls warmup mode).
 3. **defaults_in_effect** -- significant default values that actively control behaviour.
 
-Schema v2.0 (backward-compatible: overrides section unchanged from v1.0).
-
 Usage::
 
     log = build_resolution_log(config, cli_overrides={"dtype": "float16"}, swept_fields={"model"})
-    # -> {"schema_version": "2.0", "overrides": {...}, "semantic_context": {...}, ...}
+    # -> {"schema_version": "1.0", "overrides": {...}, "semantic_context": {...}, ...}
 """
 
 from __future__ import annotations
@@ -330,7 +328,7 @@ def build_resolution_log(
     defaults_in_effect = _build_defaults_in_effect(flat_effective, flat_defaults)
 
     return {
-        "schema_version": "2.0",
+        "schema_version": "1.0",
         "overrides": overrides,
         "semantic_context": semantic_context,
         "defaults_in_effect": defaults_in_effect,

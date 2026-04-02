@@ -1,4 +1,4 @@
-"""Tests for config resolution log v2.0 (semantic context + defaults in effect)."""
+"""Tests for config resolution log (semantic context + defaults in effect)."""
 
 from __future__ import annotations
 
@@ -106,9 +106,9 @@ def config_beam_search() -> dict:
 
 
 class TestSchemaVersion:
-    def test_schema_version_is_2_0(self, default_config_dict):
+    def test_schema_version(self, default_config_dict):
         log = build_resolution_log(default_config_dict)
-        assert log["schema_version"] == "2.0"
+        assert log["schema_version"] == "1.0"
 
     def test_has_all_sections(self, default_config_dict):
         log = build_resolution_log(default_config_dict)
@@ -445,13 +445,13 @@ class TestRuleRegistry:
 
 class TestIntegration:
     def test_full_log_structure(self, default_config_dict):
-        """Verify the full output structure matches the v2.0 schema."""
+        """Verify the full output structure matches the schema."""
         log = build_resolution_log(
             default_config_dict,
             cli_overrides={"model": "gpt2"},
             swept_fields=set(),
         )
-        assert log["schema_version"] == "2.0"
+        assert log["schema_version"] == "1.0"
         assert isinstance(log["overrides"], dict)
         assert isinstance(log["semantic_context"], dict)
         assert isinstance(log["defaults_in_effect"], dict)
