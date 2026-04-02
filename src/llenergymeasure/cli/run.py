@@ -433,7 +433,7 @@ def _run_study_impl(
                 param_hint="--resume-dir",
             )
         try:
-            from llenergymeasure.study.resume import load_resume_state
+            from llenergymeasure.api import load_resume_state
 
             _resume_manifest, _ = load_resume_state(resume_dir)
         except Exception:
@@ -449,7 +449,7 @@ def _run_study_impl(
                 param_hint="--resume",
             )
         try:
-            from llenergymeasure.study.resume import load_resume_state
+            from llenergymeasure.api import load_resume_state
 
             _resume_manifest, _ = load_resume_state(resume_dir)
         except Exception:

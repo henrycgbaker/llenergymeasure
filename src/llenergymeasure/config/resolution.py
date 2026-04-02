@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel
-from pydantic.fields import PydanticUndefined
+from pydantic.fields import PydanticUndefined  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -106,7 +106,7 @@ def _get_defaults_flat(model_cls: type[BaseModel], prefix: str = "") -> dict[str
         if field_info.default is not PydanticUndefined:
             val = field_info.default
         elif field_info.default_factory is not None:
-            val = field_info.default_factory()
+            val = field_info.default_factory()  # type: ignore[misc]
         else:
             continue  # Required field (no default) — any value is explicitly set
 
@@ -128,7 +128,4 @@ def _normalise_cli_keys(cli_overrides: dict[str, Any] | None) -> set[str]:
 
 def _values_equal(a: Any, b: Any) -> bool:
     """Compare two values for equality, handling common edge cases."""
-    # Handle list comparison (order-sensitive)
-    if isinstance(a, list) and isinstance(b, list):
-        return a == b
-    return a == b
+    return bool(a == b)
