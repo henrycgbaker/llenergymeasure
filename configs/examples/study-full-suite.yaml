@@ -66,16 +66,19 @@ baseline:
   duration_seconds: 30.0         # 5.0 - 120.0
 
 # --- Warmup ---
+# Two modes: fixed (default) or CV convergence (opt-in).
+# Fixed mode: runs exactly n_warmup prompts. CV computed for info only.
+# CV mode: replaces n_warmup; runs until CV < cv_threshold (up to max_prompts).
+# After warmup, thermal_floor_seconds wait lets GPU temperature plateau before measurement.
 warmup:
   enabled: true
-  n_warmup: 3 # number of warmup prompts to run before the main experiment? TODO: rename to n_warmup_prompts for clarity
-  thermal_floor_seconds: 30.0    # Minimum 30s
-  # CV-based convergence detection (opt-in, additive to n_warmup): TODO: use dot notation: warmup.convergence_detection.enabled, warmup.convergence_detection.cv_threshold, etc. for better organization and extensibility; validate that this works as intended (i.e. only runs if enabled: true) and clarify in docs how this interacts with n_warmup (e.g. does it run at least n_warmup prompts and then check for convergence after that until either convergence is reached or max_prompts is reached?)
-  # convergence_detection: true # TODO: this seems to run even if if this is commented out - need to validate that this is working as intended (i.e. only runs if enabled: true) / what is default? is this for all backends or just PyTorch? if convergence detection is enabled, how does this interact with n_warmup - does it run at least n_warmup prompts and then check for convergence after that until either convergence is reached or max_prompts is reached? need to clarify this in the docs and validate that it's working as intended
-  # cv_threshold: 0.05
-  # max_prompts: 20              # Upper bound on warmup prompts TODO: how does this interact w/ n_warmup
-  # window_size: 5
-  # min_prompts: 5
+  n_warmup: 3                      # Fixed mode iteration count (default: 5)
+  thermal_floor_seconds: 30.0     # Post-warmup stabilisation wait. Minimum 30s (default: 60s)
+  #convergence_detection: true   # Enable CV-based warmup (replaces n_warmup). Default: false
+  #cv_threshold: 0.05            # Stop when CV < 5%. Default: 0.05
+  #max_prompts: 20               # Safety cap for CV mode. Default: 20
+  #window_size: 3                # Sliding window for CV calculation. Default: 3
+  #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
 
 # --- Decoder / sampling (universal, shared across backends) ---
 decoder:

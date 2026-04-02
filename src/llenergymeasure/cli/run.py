@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import signal
 import sys
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -421,21 +422,38 @@ def _run_study_impl(
     from llenergymeasure.config.loader import load_study_config
 
     # Fast-fail: verify resume target exists before expensive grid expansion.
+    # For resume, also load the manifest early so we can show a summary and
+    # pre-populate the completed experiments table.
+    _resume_manifest = None
+    is_resume = resume or resume_dir is not None
     if resume_dir is not None:
         if not (resume_dir / "manifest.json").exists():
             raise typer.BadParameter(
                 f"No manifest.json in {resume_dir} — not a valid study directory.",
                 param_hint="--resume-dir",
             )
+        try:
+            from llenergymeasure.api import load_resume_state
+
+            _resume_manifest, _ = load_resume_state(resume_dir)
+        except Exception:
+            pass  # Best-effort: display will work without manifest data
     elif resume:
         from llenergymeasure.api import find_resumable_study
 
         _output = Path(output or "./results")
-        if not find_resumable_study(_output):
+        resume_dir = find_resumable_study(_output)
+        if resume_dir is None:
             raise typer.BadParameter(
                 f"No resumable study found in {_output}. Run a study first or use --resume-dir.",
                 param_hint="--resume",
             )
+        try:
+            from llenergymeasure.api import load_resume_state
+
+            _resume_manifest, _ = load_resume_state(resume_dir)
+        except Exception:
+            pass  # Best-effort: display will work without manifest data
 
     # Check what the YAML execution block specifies (to apply CLI effective defaults)
     raw = yaml.safe_load(config.read_text()) or {}
@@ -476,23 +494,91 @@ def _run_study_impl(
     if exec_overrides:
         study_cli_overrides["study_execution"] = exec_overrides
 
-    # Load study config with overrides
-    print("Expanding study configuration...", file=sys.stderr)
-    study_config = load_study_config(
-        path=config,
-        cli_overrides=study_cli_overrides if study_cli_overrides else None,
-    )
+    # Load study config with overrides — show step-format spinner during expansion
+    from rich.console import Console as _ExpandConsole
+    from rich.live import Live as _ExpandLive
+    from rich.text import Text as _ExpandText
 
-    # Pre-panel loading feedback
+    from llenergymeasure.utils.formatting import format_elapsed as _fmt_elapsed
+    from llenergymeasure.utils.formatting import truncate_detail as _trunc_detail
+
+    _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    _expand_label = "validating config (resume)..." if is_resume else "expanding study config..."
+
+    _expand_console = _ExpandConsole(stderr=True)
+    t0_expand = time.perf_counter()
+
+    def _expand_render() -> _ExpandText:
+        elapsed = time.perf_counter() - t0_expand
+        frame = _SPINNER[int(elapsed * 8) % len(_SPINNER)]
+        detail = _trunc_detail(_expand_label)
+        line = _ExpandText()
+        line.append(f"   {'[1/2]':>7s}  {'Config':<16s} {detail:<34s}")
+        line.append(f"  {frame}", style="yellow")
+        line.append(f"  {_fmt_elapsed(elapsed)}")
+        return line
+
+    class _ExpandRenderable:
+        def __rich_console__(self, console: Any, options: Any) -> Any:
+            yield _expand_render()
+
+    with _ExpandLive(
+        _ExpandRenderable(),
+        console=_expand_console,
+        refresh_per_second=8,
+        transient=True,
+    ):
+        study_config = load_study_config(
+            path=config,
+            cli_overrides=study_cli_overrides if study_cli_overrides else None,
+        )
+    expand_elapsed = time.perf_counter() - t0_expand
+
+    # Print completed lines with green ticks (same format as step display)
     n_valid = len(study_config.experiments) // max(study_config.study_execution.n_cycles, 1)
     n_skipped = len(study_config.skipped_configs) if study_config.skipped_configs else 0
-    print(f"  {n_valid} valid configs", file=sys.stderr)
-    if n_skipped:
-        print(f"  Skipped {n_skipped} invalid config(s)", file=sys.stderr)
+    _step_n = 1
+    _step_total = 1 + (1 if n_skipped else 0) + (1 if is_resume else 0)
 
-    # Count sweep axes vs groups from raw YAML for panel display
+    detail_done = _trunc_detail(f"{n_valid} valid configs")
+    _expand_console.print(
+        f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Config':<16s} {detail_done:<34s}"
+        f"  [bold green]✓[/]  {_fmt_elapsed(expand_elapsed)}"
+    )
+    _step_n += 1
+
+    if n_skipped:
+        detail_skip = _trunc_detail(f"skipped {n_skipped} invalid config(s)")
+        _expand_console.print(
+            f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Config':<16s} {detail_skip:<34s}"
+            f"  [bold green]✓[/]  {_fmt_elapsed(expand_elapsed)}"
+        )
+        _step_n += 1
+
+    # Resume summary: show status counts from manifest
+    if is_resume and _resume_manifest is not None:
+        m = _resume_manifest
+        parts = []
+        if m.completed > 0:
+            parts.append(f"{m.completed} completed")
+        if m.failed > 0:
+            parts.append(f"{m.failed} failed")
+        if m.interrupted > 0:
+            parts.append(f"{m.interrupted} interrupted")
+        if m.skipped > 0:
+            parts.append(f"{m.skipped} skipped")
+        n_to_run = m.total_experiments - m.completed
+        parts.append(f"{n_to_run} to run")
+        resume_detail = _trunc_detail(", ".join(parts))
+        _expand_console.print(
+            f"   {f'[{_step_n}/{_step_total}]':>7s}  {'Resume':<16s} {resume_detail:<34s}"
+            f"  [bold green]✓[/]  {_fmt_elapsed(0.0)}"
+        )
+
+    # Count sweep axes vs groups and explicit experiments from raw YAML for panel display
     raw_sweep = raw.get("sweep", {}) or {}
     sweep_axes, sweep_groups = count_sweep_structure(raw_sweep)
+    n_explicit = len(raw.get("experiments", []) or [])
 
     # ---------------------------------------------------------------
     # Resolve runners and compute study dir preview — shared by both
@@ -530,6 +616,7 @@ def _run_study_impl(
             study_dir=study_dir_preview,
             sweep_axes=sweep_axes,
             sweep_groups=sweep_groups,
+            n_explicit=n_explicit,
         )
         return
 
@@ -554,6 +641,7 @@ def _run_study_impl(
             probed_energy_sampler=probe_energy_sampler(),
             sweep_axes=sweep_axes,
             sweep_groups=sweep_groups,
+            n_explicit=n_explicit,
         )
         _stderr_console.print(panel)
 
@@ -569,6 +657,48 @@ def _run_study_impl(
             n_cycles=n_cycles,
             force_plain=effective_mode == "plain",
         )
+
+        # Pre-populate completed experiments from manifest on resume.
+        # Uses sequential index (1, 2, 3...) for historical rows.
+        if is_resume and _resume_manifest is not None:
+            historical: list[
+                tuple[
+                    int,
+                    str,
+                    str,
+                    float,
+                    float | None,
+                    float | None,
+                    float | None,
+                    float | None,
+                    float | None,
+                ]
+            ] = []
+            hist_idx = 0
+            for entry in _resume_manifest.experiments:
+                if entry.status not in ("completed", "failed"):
+                    continue
+                hist_idx += 1
+                elapsed = entry.elapsed_seconds or 0.0
+                if elapsed == 0.0 and entry.started_at and entry.completed_at:
+                    elapsed = (entry.completed_at - entry.started_at).total_seconds()
+                status = "OK" if entry.status == "completed" else "FAIL"
+                historical.append(
+                    (
+                        hist_idx,
+                        status,
+                        entry.config_summary,
+                        elapsed,
+                        entry.inference_seconds,
+                        entry.energy_joules,
+                        entry.adj_energy_joules,
+                        entry.throughput_tok_s,
+                        entry.mj_per_tok,
+                    )
+                )
+            if historical:
+                study_display.add_historical_rows(historical)
+
         # Header already printed above; start Live without repeating it
         study_display.start(print_header=False)
 
@@ -590,6 +720,8 @@ def _run_study_impl(
             resume_dir=resume_dir,
             output_dir=Path(output) if output else None,
             no_lock=no_lock,
+            config_path=config.resolve(),
+            cli_overrides=cli_overrides or None,
         )
     finally:
         # Safety stop — ensures Rich Live is torn down even on exceptions
