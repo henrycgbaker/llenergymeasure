@@ -366,39 +366,15 @@ class TestStrategyValidated:
         assert runner._baseline.power_w == 50.0  # unchanged
         assert mock_measure.call_count == 1  # no re-measurement
 
-    def test_drift_triggers_remeasurement(self, tmp_path: Path, config_validated: ExperimentConfig):
-        """Drift above threshold triggers a full re-measurement."""
-        runner = _make_runner(tmp_path, config_validated)
+    @staticmethod
+    def _run_drift_scenario(tmp_path: Path, config: ExperimentConfig):
+        """Run a drift scenario: initial measure -> 3 calls -> drift triggers re-measure.
+
+        Returns (runner, mock_save) for assertions.
+        """
+        runner = _make_runner(tmp_path, config)
         original = _make_baseline(50.0)
         remeasured = _make_baseline(58.0)
-
-        call_count = [0]
-
-        def measure_side_effect(**kwargs):
-            call_count[0] += 1
-            return original if call_count[0] == 1 else remeasured
-
-        with (
-            patch(_MEASURE, side_effect=measure_side_effect),
-            patch(_RESOLVE_GPU, return_value=[0]),
-            patch(_SAVE),
-            patch(_SPOT, return_value=60.0),  # 20% drift, above 10% threshold
-        ):
-            runner._get_baseline(config_validated)
-            for _ in range(3):
-                runner._get_baseline(config_validated)
-
-        assert runner._baseline.power_w == 58.0  # updated
-        assert call_count[0] == 2  # initial + re-measurement
-
-    def test_drift_remeasurement_saved_to_disk(
-        self, tmp_path: Path, config_validated: ExperimentConfig
-    ):
-        """Re-measured baseline after drift is persisted to disk."""
-        runner = _make_runner(tmp_path, config_validated)
-        original = _make_baseline(50.0)
-        remeasured = _make_baseline(58.0)
-
         call_count = [0]
 
         def measure_side_effect(**kwargs):
@@ -409,11 +385,26 @@ class TestStrategyValidated:
             patch(_MEASURE, side_effect=measure_side_effect),
             patch(_RESOLVE_GPU, return_value=[0]),
             patch(_SAVE) as mock_save,
-            patch(_SPOT, return_value=60.0),
+            patch(_SPOT, return_value=60.0),  # 20% drift, above 10% threshold
         ):
-            runner._get_baseline(config_validated)
+            runner._get_baseline(config)
             for _ in range(3):
-                runner._get_baseline(config_validated)
+                runner._get_baseline(config)
+
+        return runner, mock_save, call_count[0]
+
+    def test_drift_triggers_remeasurement(self, tmp_path: Path, config_validated: ExperimentConfig):
+        """Drift above threshold triggers a full re-measurement."""
+        runner, _, measure_calls = self._run_drift_scenario(tmp_path, config_validated)
+
+        assert runner._baseline.power_w == 58.0  # updated
+        assert measure_calls == 2  # initial + re-measurement
+
+    def test_drift_remeasurement_saved_to_disk(
+        self, tmp_path: Path, config_validated: ExperimentConfig
+    ):
+        """Re-measured baseline after drift is persisted to disk."""
+        _, mock_save, _ = self._run_drift_scenario(tmp_path, config_validated)
 
         # save called twice: initial + after drift re-measurement
         assert mock_save.call_count == 2

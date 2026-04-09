@@ -60,90 +60,91 @@ def test_host_inmemory_ttl() -> None:
     from llenergymeasure.harness.baseline import BaselineCache
     from llenergymeasure.study.runner import StudyRunner
 
-    runner = StudyRunner.__new__(StudyRunner)
-    runner._study_config = MagicMock()
-    runner._baseline_cache_path = None
-    runner._experiments_since_validation = 0
-    runner.study_dir = Path(tempfile.mkdtemp())
+    with tempfile.TemporaryDirectory() as tmpdir1, tempfile.TemporaryDirectory() as tmpdir2:
+        runner = StudyRunner.__new__(StudyRunner)
+        runner._study_config = MagicMock()
+        runner._baseline_cache_path = None
+        runner._experiments_since_validation = 0
+        runner.study_dir = Path(tmpdir1)
 
-    mock_config = MagicMock()
-    mock_config.baseline.strategy = "cached"
-    mock_config.baseline.cache_ttl_seconds = 300.0  # 5-minute TTL
-    mock_config.baseline.duration_seconds = 30.0
-    mock_config.gpu_indices = [0]
+        mock_config = MagicMock()
+        mock_config.baseline.strategy = "cached"
+        mock_config.baseline.cache_ttl_seconds = 300.0  # 5-minute TTL
+        mock_config.baseline.duration_seconds = 30.0
+        mock_config.gpu_indices = [0]
 
-    # Case A: expired baseline (10 min old, 5-min TTL) -> should re-measure
-    old_baseline = BaselineCache(
-        power_w=50.0,
-        timestamp=time.time() - 600,  # 10 min ago
-        gpu_indices=[0],
-        sample_count=200,
-        duration_sec=30.0,
-    )
-    runner._baseline = old_baseline
+        # Case A: expired baseline (10 min old, 5-min TTL) -> should re-measure
+        old_baseline = BaselineCache(
+            power_w=50.0,
+            timestamp=time.time() - 600,  # 10 min ago
+            gpu_indices=[0],
+            sample_count=200,
+            duration_sec=30.0,
+        )
+        runner._baseline = old_baseline
 
-    fresh_baseline = BaselineCache(
-        power_w=52.0,
-        timestamp=time.time(),
-        gpu_indices=[0],
-        sample_count=200,
-        duration_sec=30.0,
-    )
+        fresh_baseline = BaselineCache(
+            power_w=52.0,
+            timestamp=time.time(),
+            gpu_indices=[0],
+            sample_count=200,
+            duration_sec=30.0,
+        )
 
-    with (
-        patch(
+        with (
+            patch(
+                "llenergymeasure.harness.baseline.measure_baseline_power",
+                return_value=fresh_baseline,
+            ) as mock_measure,
+            patch(
+                "llenergymeasure.device.gpu_info._resolve_gpu_indices",
+                return_value=[0],
+            ),
+            patch("llenergymeasure.harness.baseline.save_baseline_cache"),
+            patch("llenergymeasure.harness.baseline.load_baseline_cache", return_value=None),
+        ):
+            result = runner._get_baseline(mock_config)
+
+        check(
+            "expired baseline triggers re-measurement",
+            mock_measure.call_count == 1,
+            f"measure called {mock_measure.call_count} time(s)",
+        )
+        check(
+            "returns fresh baseline (52W, not stale 50W)",
+            result is not None and result.power_w == 52.0,
+            f"power={result.power_w if result else None}",
+        )
+
+        # Case B: fresh baseline (1 min old, 5-min TTL) -> should reuse
+        runner2 = StudyRunner.__new__(StudyRunner)
+        runner2._study_config = MagicMock()
+        runner2._baseline_cache_path = None
+        runner2._experiments_since_validation = 0
+        runner2.study_dir = Path(tmpdir2)
+
+        fresh_inmem = BaselineCache(
+            power_w=55.0,
+            timestamp=time.time() - 60,  # 1 min ago
+            gpu_indices=[0],
+            sample_count=200,
+            duration_sec=30.0,
+        )
+        runner2._baseline = fresh_inmem
+
+        with patch(
             "llenergymeasure.harness.baseline.measure_baseline_power",
-            return_value=fresh_baseline,
-        ) as mock_measure,
-        patch(
-            "llenergymeasure.device.gpu_info._resolve_gpu_indices",
-            return_value=[0],
-        ),
-        patch("llenergymeasure.harness.baseline.save_baseline_cache"),
-        patch("llenergymeasure.harness.baseline.load_baseline_cache", return_value=None),
-    ):
-        result = runner._get_baseline(mock_config)
+        ) as mock_measure2:
+            result2 = runner2._get_baseline(mock_config)
 
-    check(
-        "expired baseline triggers re-measurement",
-        mock_measure.call_count == 1,
-        f"measure called {mock_measure.call_count} time(s)",
-    )
-    check(
-        "returns fresh baseline (52W, not stale 50W)",
-        result is not None and result.power_w == 52.0,
-        f"power={result.power_w if result else None}",
-    )
-
-    # Case B: fresh baseline (1 min old, 5-min TTL) -> should reuse
-    runner2 = StudyRunner.__new__(StudyRunner)
-    runner2._study_config = MagicMock()
-    runner2._baseline_cache_path = None
-    runner2._experiments_since_validation = 0
-    runner2.study_dir = Path(tempfile.mkdtemp())
-
-    fresh_inmem = BaselineCache(
-        power_w=55.0,
-        timestamp=time.time() - 60,  # 1 min ago
-        gpu_indices=[0],
-        sample_count=200,
-        duration_sec=30.0,
-    )
-    runner2._baseline = fresh_inmem
-
-    with patch(
-        "llenergymeasure.harness.baseline.measure_baseline_power",
-    ) as mock_measure2:
-        result2 = runner2._get_baseline(mock_config)
-
-    check(
-        "within-TTL baseline reused (no re-measurement)",
-        mock_measure2.call_count == 0,
-    )
-    check(
-        "same object returned",
-        result2 is fresh_inmem,
-    )
+        check(
+            "within-TTL baseline reused (no re-measurement)",
+            mock_measure2.call_count == 0,
+        )
+        check(
+            "same object returned",
+            result2 is fresh_inmem,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -397,91 +398,92 @@ def test_validated_with_ttl() -> None:
     from llenergymeasure.harness.baseline import BaselineCache
     from llenergymeasure.study.runner import StudyRunner
 
-    runner = StudyRunner.__new__(StudyRunner)
-    runner._study_config = MagicMock()
-    runner._baseline_cache_path = None
-    runner.study_dir = Path(tempfile.mkdtemp())
+    with tempfile.TemporaryDirectory() as tmpdir:
+        runner = StudyRunner.__new__(StudyRunner)
+        runner._study_config = MagicMock()
+        runner._baseline_cache_path = None
+        runner.study_dir = Path(tmpdir)
 
-    mock_config = MagicMock()
-    mock_config.baseline.strategy = "validated"
-    mock_config.baseline.validation_interval = 3
-    mock_config.baseline.drift_threshold = 0.10
-    mock_config.baseline.cache_ttl_seconds = 3600.0
-    mock_config.baseline.duration_seconds = 30.0
-    mock_config.gpu_indices = [0]
+        mock_config = MagicMock()
+        mock_config.baseline.strategy = "validated"
+        mock_config.baseline.validation_interval = 3
+        mock_config.baseline.drift_threshold = 0.10
+        mock_config.baseline.cache_ttl_seconds = 3600.0
+        mock_config.baseline.duration_seconds = 30.0
+        mock_config.gpu_indices = [0]
 
-    # Baseline within TTL
-    recent = BaselineCache(
-        power_w=50.0,
-        timestamp=time.time() - 1800,  # 30 min, within 1h TTL
-        gpu_indices=[0],
-        sample_count=200,
-        duration_sec=30.0,
-    )
-    runner._baseline = recent
-    runner._experiments_since_validation = 2  # next call triggers spot-check
+        # Baseline within TTL
+        recent = BaselineCache(
+            power_w=50.0,
+            timestamp=time.time() - 1800,  # 30 min, within 1h TTL
+            gpu_indices=[0],
+            sample_count=200,
+            duration_sec=30.0,
+        )
+        runner._baseline = recent
+        runner._experiments_since_validation = 2  # next call triggers spot-check
 
-    # Spot-check with no drift
-    with (
-        patch(
-            "llenergymeasure.harness.baseline.measure_spot_check",
-            return_value=51.0,  # 2% drift
-        ) as mock_spot,
-        patch(
-            "llenergymeasure.device.gpu_info._resolve_gpu_indices",
-            return_value=[0],
-        ),
-    ):
-        result = runner._get_baseline(mock_config)
+        # Spot-check with no drift
+        with (
+            patch(
+                "llenergymeasure.harness.baseline.measure_spot_check",
+                return_value=51.0,  # 2% drift
+            ) as mock_spot,
+            patch(
+                "llenergymeasure.device.gpu_info._resolve_gpu_indices",
+                return_value=[0],
+            ),
+        ):
+            result = runner._get_baseline(mock_config)
 
-    check("spot-check triggered", mock_spot.call_count == 1)
-    check(
-        "baseline kept (within TTL + no drift)",
-        result.power_w == 50.0,
-    )
-    check("method set to validated", result.method == "validated")
+        check("spot-check triggered", mock_spot.call_count == 1)
+        check(
+            "baseline kept (within TTL + no drift)",
+            result.power_w == 50.0,
+        )
+        check("method set to validated", result.method == "validated")
 
-    # Now set baseline to expired + validated strategy
-    expired = BaselineCache(
-        power_w=50.0,
-        timestamp=time.time() - 7200,  # 2h, past 1h TTL
-        gpu_indices=[0],
-        sample_count=200,
-        duration_sec=30.0,
-    )
-    runner._baseline = expired
-    runner._experiments_since_validation = 0
+        # Now set baseline to expired + validated strategy
+        expired = BaselineCache(
+            power_w=50.0,
+            timestamp=time.time() - 7200,  # 2h, past 1h TTL
+            gpu_indices=[0],
+            sample_count=200,
+            duration_sec=30.0,
+        )
+        runner._baseline = expired
+        runner._experiments_since_validation = 0
 
-    fresh = BaselineCache(
-        power_w=55.0,
-        timestamp=time.time(),
-        gpu_indices=[0],
-        sample_count=200,
-        duration_sec=30.0,
-    )
+        fresh = BaselineCache(
+            power_w=55.0,
+            timestamp=time.time(),
+            gpu_indices=[0],
+            sample_count=200,
+            duration_sec=30.0,
+        )
 
-    with (
-        patch(
-            "llenergymeasure.harness.baseline.measure_baseline_power",
-            return_value=fresh,
-        ) as mock_measure,
-        patch(
-            "llenergymeasure.device.gpu_info._resolve_gpu_indices",
-            return_value=[0],
-        ),
-        patch("llenergymeasure.harness.baseline.save_baseline_cache"),
-        patch("llenergymeasure.harness.baseline.load_baseline_cache", return_value=None),
-    ):
-        result = runner._get_baseline(mock_config)
+        with (
+            patch(
+                "llenergymeasure.harness.baseline.measure_baseline_power",
+                return_value=fresh,
+            ) as mock_measure,
+            patch(
+                "llenergymeasure.device.gpu_info._resolve_gpu_indices",
+                return_value=[0],
+            ),
+            patch("llenergymeasure.harness.baseline.save_baseline_cache"),
+            patch("llenergymeasure.harness.baseline.load_baseline_cache", return_value=None),
+        ):
+            result = runner._get_baseline(mock_config)
 
-    check(
-        "TTL-expired validated baseline triggers re-measurement",
-        mock_measure.call_count == 1,
-    )
-    check(
-        "fresh baseline returned (55W)",
-        result is not None and result.power_w == 55.0,
-    )
+        check(
+            "TTL-expired validated baseline triggers re-measurement",
+            mock_measure.call_count == 1,
+        )
+        check(
+            "fresh baseline returned (55W)",
+            result is not None and result.power_w == 55.0,
+        )
 
 
 # ---------------------------------------------------------------------------

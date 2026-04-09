@@ -763,23 +763,26 @@ class StudyRunner:
         if strategy == "fresh":
             return None
 
-        # validated: check if we need to spot-check
+        # Check TTL before anything else — no point validating an expired baseline
+        if self._baseline is not None:
+            age = time.time() - self._baseline.timestamp
+            if age >= config.baseline.cache_ttl_seconds:
+                logger.info(
+                    "Baseline expired (age=%.0fs > ttl=%.0fs). Re-measuring.",
+                    age,
+                    config.baseline.cache_ttl_seconds,
+                )
+                self._baseline = None
+
+        # validated: periodic spot-check for drift (only if baseline still valid)
         if strategy == "validated" and self._baseline is not None:
             self._experiments_since_validation += 1
             if self._experiments_since_validation >= config.baseline.validation_interval:
                 self._validate_baseline(config)
 
-        # Return cached baseline if still within TTL
+        # Return cached baseline if we have one
         if self._baseline is not None:
-            age = time.time() - self._baseline.timestamp
-            if age < config.baseline.cache_ttl_seconds:
-                return self._baseline
-            logger.info(
-                "Baseline expired (age=%.0fs > ttl=%.0fs). Re-measuring.",
-                age,
-                config.baseline.cache_ttl_seconds,
-            )
-            self._baseline = None
+            return self._baseline
 
         # Try loading from disk first (handles mid-study restarts)
         cache_path = self._get_baseline_cache_path()
