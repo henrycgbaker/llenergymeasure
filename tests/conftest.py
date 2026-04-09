@@ -23,6 +23,18 @@ from llenergymeasure.domain.metrics import (
 
 _REPLAY_DIR = Path(__file__).parent / "fixtures" / "replay"
 
+# ---------------------------------------------------------------------------
+# Shared test constants - single source of truth for magic values
+# ---------------------------------------------------------------------------
+
+TEST_MODEL = "gpt2"
+TEST_BACKEND = "pytorch"
+TEST_EXPERIMENT_ID = "test-001"
+TEST_CONFIG_HASH = "deadbeef12345678"
+TEST_MEASUREMENT_HASH = "abc123def4567890"
+TEST_POWER_MW = 200_000  # 200 W in milliwatts (pynvml convention)
+TEST_POWER_W = 200.0
+
 _EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
 
@@ -33,8 +45,8 @@ def make_config(**overrides) -> ExperimentConfig:
     Tests override only what they care about.
     """
     defaults: dict = {
-        "model": "gpt2",
-        "backend": "pytorch",
+        "model": TEST_MODEL,
+        "backend": TEST_BACKEND,
     }
     defaults.update(overrides)
     return ExperimentConfig(**defaults)
@@ -47,8 +59,8 @@ def make_result(**overrides) -> ExperimentResult:
     measurement_methodology, start_time, end_time) to prevent ValidationError.
     """
     defaults: dict = {
-        "experiment_id": "test-001",
-        "measurement_config_hash": "abc123def4567890",
+        "experiment_id": TEST_EXPERIMENT_ID,
+        "measurement_config_hash": TEST_MEASUREMENT_HASH,
         "measurement_methodology": "total",
         "aggregation": AggregationMetadata(num_processes=1),
         "total_tokens": 1000,
@@ -129,10 +141,10 @@ def make_raw_process_result(**overrides) -> RawProcessResult:
     make_compute_metrics factories for nested fields.
     """
     defaults: dict = {
-        "experiment_id": "test-001",
+        "experiment_id": TEST_EXPERIMENT_ID,
         "process_index": 0,
         "gpu_id": 0,
-        "model_name": "gpt2",
+        "model_name": TEST_MODEL,
         "timestamps": Timestamps.from_times(
             datetime(2026, 2, 26, 14, 0, 0, tzinfo=timezone.utc),
             datetime(2026, 2, 26, 14, 0, 10, tzinfo=timezone.utc),

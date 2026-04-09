@@ -126,6 +126,9 @@ markers = [
     "docker: marks tests as requiring Docker with NVIDIA runtime",
     "slow: marks tests as slow (>30s); excluded from Tier 1 fast runs",
 ]
+filterwarnings = [
+    "ignore:.*rm_rf.*:pytest.PytestWarning",
+]
 
 [tool.coverage.run]
 source = ["llenergymeasure"]

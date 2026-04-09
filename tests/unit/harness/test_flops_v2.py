@@ -245,30 +245,22 @@ def test_flops_result_invalid_method_rejected() -> None:
 
 
 def _make_experiment_result(**overrides):
-    """Build a minimal valid ExperimentResult for FLOPs derived field tests."""
-    from datetime import datetime, timezone
+    """Build a minimal valid ExperimentResult for FLOPs derived field tests.
 
-    from llenergymeasure.domain.experiment import AggregationMetadata, ExperimentResult
-
-    epoch = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    epoch_end = datetime(2026, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
+    Delegates to conftest make_result with FLOPs-specific defaults.
+    """
+    from tests.conftest import make_result
 
     defaults = {
         "experiment_id": "flops-test-001",
-        "measurement_config_hash": "abc123def4567890",
-        "measurement_methodology": "total",
-        "aggregation": AggregationMetadata(num_processes=1),
         "total_tokens": 100,
-        "total_energy_j": 10.0,
         "total_inference_time_sec": 10.0,
         "avg_tokens_per_second": 10.0,
         "avg_energy_per_token_j": 0.1,
         "total_flops": 0.0,
-        "start_time": epoch,
-        "end_time": epoch_end,
     }
     defaults.update(overrides)
-    return ExperimentResult(**defaults)
+    return make_result(**defaults)
 
 
 def test_flops_derived_fields_computed() -> None:
