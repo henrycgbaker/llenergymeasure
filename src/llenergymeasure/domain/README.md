@@ -106,7 +106,6 @@ RawProcessResult(
     experiment_id="exp_20240115_123456",
     process_index=0,
     gpu_id=0,
-    config_name="llama2-7b",
     model_name="meta-llama/Llama-2-7b-hf",
     timestamps=Timestamps(...),
     inference_metrics=InferenceMetrics(...),

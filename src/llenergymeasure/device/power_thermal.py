@@ -260,7 +260,6 @@ class PowerThermalSampler:
         if not self._samples:
             return ThermalThrottleInfo()
 
-        any_throttle = any(s.thermal_throttle for s in self._samples)
         throttled_timestamps = [s.timestamp for s in self._samples if s.thermal_throttle]
         throttle_duration = len(throttled_timestamps) * (self._sample_interval_ms / 1000.0)
 
@@ -300,7 +299,6 @@ class PowerThermalSampler:
             thermal_bit = hw_thermal_bit | sw_thermal_bit
 
             return ThermalThrottleInfo(
-                detected=any_throttle,
                 thermal=bool(combined_reasons & thermal_bit),
                 power=bool(combined_reasons & power_bit),
                 sw_thermal=bool(combined_reasons & sw_thermal_bit),
@@ -313,7 +311,6 @@ class PowerThermalSampler:
         except ImportError:
             # pynvml not available — return basic info from sample flags
             return ThermalThrottleInfo(
-                detected=any_throttle,
                 throttle_duration_sec=throttle_duration,
                 max_temperature_c=max_temp,
                 throttle_timestamps=throttled_timestamps,

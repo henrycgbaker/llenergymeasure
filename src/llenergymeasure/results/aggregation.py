@@ -350,7 +350,6 @@ def aggregate_results(
         if throttles:
             max_temps = [t.max_temperature_c for t in throttles if t.max_temperature_c is not None]
             thermal_throttle = ThermalThrottleInfo(
-                detected=any(t.detected for t in throttles),
                 thermal=any(t.thermal for t in throttles),
                 power=any(t.power for t in throttles),
                 sw_thermal=any(t.sw_thermal for t in throttles),
