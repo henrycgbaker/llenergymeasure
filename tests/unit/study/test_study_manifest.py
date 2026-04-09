@@ -28,6 +28,7 @@ from llenergymeasure.study.manifest import (
     create_study_dir,
     experiment_result_filename,
 )
+from tests.conftest import TEST_CONFIG_HASH
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -46,7 +47,7 @@ def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
         study_name="test-study",
         experiments=experiments,
         study_execution=ExecutionConfig(n_cycles=n_cycles),
-        study_design_hash="deadbeef12345678",
+        study_design_hash=TEST_CONFIG_HASH,
     )
 
 

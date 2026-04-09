@@ -11,6 +11,8 @@ backend packages are imported or required.
 
 from __future__ import annotations
 
+import sys
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +23,26 @@ from llenergymeasure.config.backend_detection import (
     get_backend_install_hint,
     is_backend_available,
 )
+
+
+@contextmanager
+def _hide_module(name: str):
+    """Temporarily poison *name* in sys.modules so imports see it as missing.
+
+    Snapshots and restores **all** submodules (``name.*``) to prevent
+    order-dependent failures when pytest-randomly reorders tests.
+    """
+    saved = {k: sys.modules[k] for k in list(sys.modules) if k == name or k.startswith(f"{name}.")}
+    sys.modules[name] = None  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        # Remove any entries added during the poisoned import attempt
+        for k in list(sys.modules):
+            if k == name or k.startswith(f"{name}."):
+                sys.modules.pop(k, None)
+        sys.modules.update(saved)
+
 
 # ---------------------------------------------------------------------------
 # is_backend_available
@@ -34,47 +56,18 @@ class TestIsBackendAvailable:
         assert result is True
 
     def test_returns_false_when_torch_not_importable(self):
-        import sys
-
-        # Temporarily hide torch from sys.modules so the deferred import inside
-        # is_backend_available() sees it as missing — no global builtins patch needed.
-        torch_mod = sys.modules.pop("torch", None)
-        sys.modules["torch"] = None  # type: ignore[assignment]
-        try:
+        with _hide_module("torch"):
             result = is_backend_available("pytorch")
-        finally:
-            sys.modules.pop("torch", None)
-            if torch_mod is not None:
-                sys.modules["torch"] = torch_mod
-
         assert result is False
 
     def test_returns_false_when_vllm_not_importable(self):
-        import sys
-
-        vllm_mod = sys.modules.pop("vllm", None)
-        sys.modules["vllm"] = None  # type: ignore[assignment]
-        try:
+        with _hide_module("vllm"):
             result = is_backend_available("vllm")
-        finally:
-            sys.modules.pop("vllm", None)
-            if vllm_mod is not None:
-                sys.modules["vllm"] = vllm_mod
-
         assert result is False
 
     def test_returns_false_when_tensorrt_not_importable(self):
-        import sys
-
-        trt_mod = sys.modules.pop("tensorrt_llm", None)
-        sys.modules["tensorrt_llm"] = None  # type: ignore[assignment]
-        try:
+        with _hide_module("tensorrt_llm"):
             result = is_backend_available("tensorrt")
-        finally:
-            sys.modules.pop("tensorrt_llm", None)
-            if trt_mod is not None:
-                sys.modules["tensorrt_llm"] = trt_mod
-
         assert result is False
 
     def test_returns_false_for_unknown_backend(self):
@@ -83,14 +76,7 @@ class TestIsBackendAvailable:
 
     def test_returns_false_when_oserror_on_import(self):
         """OSError (e.g. missing .so) should be caught and return False."""
-        import sys
-
         import llenergymeasure.config.backend_detection as _bd_mod
-
-        # Temporarily remove tensorrt_llm from sys.modules so the bare `import tensorrt_llm`
-        # inside is_backend_available() is re-evaluated. Then patch __import__ narrowly on
-        # the backend_detection module's builtins to raise OSError for that one module.
-        trt_mod = sys.modules.pop("tensorrt_llm", None)
 
         real_import = __import__
 
@@ -99,28 +85,22 @@ class TestIsBackendAvailable:
                 raise OSError("libcudart.so not found")
             return real_import(name, *args, **kwargs)
 
-        # Patch __import__ on the backend_detection module's builtins dict (narrow scope)
         original_builtins_import = _bd_mod.__builtins__.get("__import__")  # type: ignore[union-attr]
-        _bd_mod.__builtins__["__import__"] = _raise_oserror  # type: ignore[index]
-        try:
-            result = is_backend_available("tensorrt")
-        finally:
-            if original_builtins_import is not None:
-                _bd_mod.__builtins__["__import__"] = original_builtins_import  # type: ignore[index]
-            else:
-                del _bd_mod.__builtins__["__import__"]  # type: ignore[attr-defined]
-            if trt_mod is not None:
-                sys.modules["tensorrt_llm"] = trt_mod
+        with _hide_module("tensorrt_llm"):
+            _bd_mod.__builtins__["__import__"] = _raise_oserror  # type: ignore[index]
+            try:
+                result = is_backend_available("tensorrt")
+            finally:
+                if original_builtins_import is not None:
+                    _bd_mod.__builtins__["__import__"] = original_builtins_import  # type: ignore[index]
+                else:
+                    del _bd_mod.__builtins__["__import__"]  # type: ignore[attr-defined]
 
         assert result is False
 
     def test_handles_generic_exception_during_import(self):
         """Unexpected exception during import should be caught and return False."""
-        import sys
-
         import llenergymeasure.config.backend_detection as _bd_mod
-
-        vllm_mod = sys.modules.pop("vllm", None)
 
         real_import = __import__
 
@@ -130,16 +110,15 @@ class TestIsBackendAvailable:
             return real_import(name, *args, **kwargs)
 
         original_builtins_import = _bd_mod.__builtins__.get("__import__")  # type: ignore[union-attr]
-        _bd_mod.__builtins__["__import__"] = _raise_runtime  # type: ignore[index]
-        try:
-            result = is_backend_available("vllm")
-        finally:
-            if original_builtins_import is not None:
-                _bd_mod.__builtins__["__import__"] = original_builtins_import  # type: ignore[index]
-            else:
-                del _bd_mod.__builtins__["__import__"]  # type: ignore[attr-defined]
-            if vllm_mod is not None:
-                sys.modules["vllm"] = vllm_mod
+        with _hide_module("vllm"):
+            _bd_mod.__builtins__["__import__"] = _raise_runtime  # type: ignore[index]
+            try:
+                result = is_backend_available("vllm")
+            finally:
+                if original_builtins_import is not None:
+                    _bd_mod.__builtins__["__import__"] = original_builtins_import  # type: ignore[index]
+                else:
+                    del _bd_mod.__builtins__["__import__"]  # type: ignore[attr-defined]
 
         assert result is False
 

@@ -17,8 +17,6 @@ Tests cover Phase 3 and Phase 4 (Plan 03) success criteria:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
 
 import llenergymeasure
@@ -32,43 +30,9 @@ from llenergymeasure import (
     run_experiment,
     run_study,
 )
-from llenergymeasure.domain.experiment import AggregationMetadata, StudySummary
+from llenergymeasure.domain.experiment import StudySummary
 from llenergymeasure.utils.exceptions import BackendError, PreFlightError
-from tests.conftest import make_config, make_user_config
-
-_EPOCH = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-_EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
-
-
-# =============================================================================
-# Test helper
-# =============================================================================
-
-
-def _make_experiment_result(**overrides) -> ExperimentResult:
-    """Build a minimal valid ExperimentResult for testing."""
-    defaults = {
-        "experiment_id": "test-001",
-        "measurement_config_hash": "abc123def4567890",
-        "measurement_methodology": "total",
-        "aggregation": AggregationMetadata(num_processes=1),
-        "total_tokens": 1000,
-        "total_energy_j": 10.0,
-        "total_inference_time_sec": 5.0,
-        "avg_tokens_per_second": 200.0,
-        "avg_energy_per_token_j": 0.01,
-        "total_flops": 1e9,
-        "start_time": _EPOCH,
-        "end_time": _EPOCH_END,
-    }
-    defaults.update(overrides)
-    return ExperimentResult(**defaults)
-
-
-def _make_study_result(**overrides) -> StudyResult:
-    """Build a StudyResult containing one ExperimentResult."""
-    return StudyResult(experiments=[_make_experiment_result()])
-
+from tests.conftest import make_config, make_result, make_study_result, make_user_config
 
 # =============================================================================
 # Test 1: Public imports resolve
@@ -114,7 +78,7 @@ def test_run_experiment_returns_experiment_result(monkeypatch):
     """run_experiment returns exactly ExperimentResult, not a union or None."""
     import llenergymeasure.api._impl as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: _make_study_result())
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
 
     config = ExperimentConfig(model="gpt2")
     result = run_experiment(config)
@@ -138,7 +102,7 @@ def test_run_experiment_yaml_path_form(tmp_path, monkeypatch):
 
     def mock_run(study, **kw):
         captured_study["value"] = study
-        return _make_study_result()
+        return make_study_result()
 
     monkeypatch.setattr(api_module, "_run", mock_run)
 
@@ -165,7 +129,7 @@ def test_run_experiment_kwargs_form(monkeypatch):
 
     def mock_run(study, **kw):
         captured_study["value"] = study
-        return _make_study_result()
+        return make_study_result()
 
     monkeypatch.setattr(api_module, "_run", mock_run)
 
@@ -198,7 +162,7 @@ def test_run_experiment_no_disk_writes(tmp_path, monkeypatch):
     """run_experiment produces no disk writes when output_dir is not specified."""
     import llenergymeasure.api._impl as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: _make_study_result())
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
 
     # Change working directory to tmp_path to catch any accidental writes
     config = ExperimentConfig(model="gpt2")
@@ -253,7 +217,7 @@ def test_run_experiment_path_object_form(tmp_path, monkeypatch):
     """run_experiment accepts a Path object as well as a str path."""
     import llenergymeasure.api._impl as api_module
 
-    monkeypatch.setattr(api_module, "_run", lambda study, **kw: _make_study_result())
+    monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
 
     config_path = tmp_path / "config.yaml"
     config_path.write_text("model: gpt2\n")
@@ -275,7 +239,7 @@ def test_run_experiment_kwargs_backend(monkeypatch):
 
     def mock_run(study, **kw):
         captured_study["value"] = study
-        return _make_study_result()
+        return make_study_result()
 
     monkeypatch.setattr(api_module, "_run", mock_run)
 
@@ -365,7 +329,7 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     def mock_preflight(config):
         preflight_calls.append(config)
 
-    mock_result = _make_experiment_result()
+    mock_result = make_result()
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
@@ -400,7 +364,7 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
-    mock_result = _make_experiment_result()
+    mock_result = make_result()
     mock_backend = _MockBackend(mock_result)
 
     backend_calls: list[str] = []
@@ -441,7 +405,7 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
-    mock_result = _make_experiment_result(experiment_id="wired-001")
+    mock_result = make_result(experiment_id="wired-001")
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
@@ -486,7 +450,7 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    mock_result = _make_experiment_result()
+    mock_result = make_result()
     monkeypatch.setattr(backends_module, "get_backend", lambda name: _MockBackend(mock_result))
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
@@ -517,9 +481,7 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    monkeypatch.setattr(
-        backends_module, "get_backend", lambda name: _MockBackend(_make_experiment_result())
-    )
+    monkeypatch.setattr(backends_module, "get_backend", lambda name: _MockBackend(make_result()))
     monkeypatch.setattr(harness_module.MeasurementHarness, "run", _failing_harness_run)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -539,7 +501,7 @@ def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
-    expected_result = _make_experiment_result(experiment_id="e2e-test")
+    expected_result = make_result(experiment_id="e2e-test")
     mock_backend = _MockBackend(expected_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
@@ -576,7 +538,7 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
-    mock_result = _make_experiment_result(experiment_id="study-test")
+    mock_result = make_result(experiment_id="study-test")
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
@@ -614,7 +576,7 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
     yaml_path = tmp_path / "study.yaml"
     yaml_path.write_text(yaml_content)
 
-    mock_result = _make_experiment_result(experiment_id="path-test")
+    mock_result = make_result(experiment_id="path-test")
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
@@ -646,7 +608,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.study.runner import StudyRunner
 
-    mock_result = _make_experiment_result(experiment_id="inproc-test")
+    mock_result = make_result(experiment_id="inproc-test")
     mock_backend = _MockBackend(mock_result)
 
     runner_created = []
@@ -707,7 +669,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
-    mock_result = _make_experiment_result(experiment_id="runner-wired")
+    mock_result = make_result(experiment_id="runner-wired")
 
     resolved_specs = {
         "pytorch": RunnerSpec(mode="local", image=None, source="default"),
@@ -788,7 +750,7 @@ def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
     def mock_gpu_check(device_index=0, threshold_mb=1024.0):
         gpu_check_calls.append(device_index)
 
-    mock_result = _make_experiment_result(experiment_id="gpu-check-test")
+    mock_result = make_result(experiment_id="gpu-check-test")
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
@@ -834,7 +796,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
         "vllm": RunnerSpec(mode="docker", image=None, source="yaml"),
     }
 
-    mock_result = _make_experiment_result()
+    mock_result = make_result()
     mock_backend = _MockBackend(mock_result)
 
     monkeypatch.setattr(
@@ -884,7 +846,7 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     import llenergymeasure.study.preflight as study_pf_module
 
     # Build 6 mock results (2 configs x 3 cycles, already cycle-expanded)
-    mock_results = [_make_experiment_result(experiment_id=f"b3-{i}") for i in range(6)]
+    mock_results = [make_result(experiment_id=f"b3-{i}") for i in range(6)]
 
     # Mock _run_via_runner to return pre-built results (bypasses real subprocess)
     def mock_run_via_runner(
@@ -1194,7 +1156,7 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
     """
     import llenergymeasure.api._impl as api_module
 
-    successful_result = _make_experiment_result(experiment_id="partial-ok")
+    successful_result = make_result(experiment_id="partial-ok")
 
     partial_study_result = StudyResult(
         experiments=[successful_result],  # 1 succeeded, 1 was filtered (None)

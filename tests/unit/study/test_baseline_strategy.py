@@ -25,6 +25,7 @@ from llenergymeasure.config.models import (
 )
 from llenergymeasure.harness.baseline import BaselineCache
 from llenergymeasure.study.runner import StudyRunner
+from tests.conftest import TEST_CONFIG_HASH
 
 # Patch targets: source modules, not runner imports (lazy local imports)
 _MEASURE = "llenergymeasure.harness.baseline.measure_baseline_power"
@@ -57,7 +58,7 @@ def _make_runner(tmp_path: Path, config: ExperimentConfig) -> StudyRunner:
         experiments=[config],
         study_name="test-baseline",
         study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
-        study_design_hash="deadbeef12345678",
+        study_design_hash=TEST_CONFIG_HASH,
     )
     manifest = MagicMock()
     runner = StudyRunner(study, manifest, tmp_path)

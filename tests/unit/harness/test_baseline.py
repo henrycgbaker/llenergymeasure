@@ -37,28 +37,11 @@ from llenergymeasure.harness.baseline import (
     measure_baseline_power,
     save_baseline_cache,
 )
+from tests.unit.harness.conftest import make_pynvml_mock
 
 # =============================================================================
 # Helpers
 # =============================================================================
-
-
-def _make_pynvml_mock(power_mw_values: list[int] | None = None) -> MagicMock:
-    """Build a minimal pynvml mock.
-
-    power_mw_values: side_effect list for nvmlDeviceGetPowerUsage.
-                     If None, returns a constant 200_000 (200 W).
-    """
-    mock = MagicMock()
-    # Must define NVMLError as an exception class so `except pynvml.NVMLError` works
-    mock.NVMLError = Exception
-
-    if power_mw_values is not None:
-        mock.nvmlDeviceGetPowerUsage.side_effect = power_mw_values
-    else:
-        mock.nvmlDeviceGetPowerUsage.return_value = 200_000  # 200 W
-
-    return mock
 
 
 @contextmanager
@@ -107,7 +90,7 @@ def test_cache_hit_returns_cached_without_pynvml_call():
     entry = _make_fresh_cache_entry(gpu_indices=[0], power_w=42.0)
     _baseline_cache[(0,)] = entry
 
-    mock_pynvml = _make_pynvml_mock()
+    mock_pynvml = make_pynvml_mock()
 
     with (
         patch(f"{_MODULE}.nvml_context", _noop_nvml_context),
@@ -163,7 +146,7 @@ def test_cache_expired_triggers_fresh_measurement():
     expired = _make_expired_cache_entry(gpu_indices=[0], power_w=10.0)
     _baseline_cache[(0,)] = expired
 
-    mock_pynvml = _make_pynvml_mock(power_mw_values=[200_000])
+    mock_pynvml = make_pynvml_mock(power_mw_values=[200_000])
 
     # monotonic: start=0.0, loop-check=0.1 (< 1.0 duration, one iteration), then 999.0 exits
     mono_values = [0.0, 0.1, 999.0, 999.0]
@@ -187,7 +170,7 @@ def test_cache_expired_triggers_fresh_measurement():
 def test_fresh_measurement_samples_and_caches():
     """Empty cache: samples power, computes mean, stores in _baseline_cache."""
     power_values = [150_000, 155_000, 148_000]  # milliwatts
-    mock_pynvml = _make_pynvml_mock(power_mw_values=power_values)
+    mock_pynvml = make_pynvml_mock(power_mw_values=power_values)
 
     # monotonic: start=0.0, then 0.1, 0.2, 0.3 (< 0.4 duration) then 1.0 (exits)
     mono_values = [0.0, 0.1, 0.2, 0.3, 1.0, 1.0]
@@ -226,7 +209,7 @@ def test_pynvml_unavailable_returns_none():
 
 def test_device_handle_failure_returns_none():
     """nvmlDeviceGetHandleByIndex raises: measure_baseline_power returns None."""
-    mock_pynvml = _make_pynvml_mock()
+    mock_pynvml = make_pynvml_mock()
     mock_pynvml.nvmlDeviceGetHandleByIndex.side_effect = Exception("handle error")
 
     with (
@@ -245,7 +228,7 @@ def test_nvml_error_during_sampling_skips_bad_samples():
     # Alternating: good, bad, good
     power_side_effects = [200_000, nvml_error, 180_000]
 
-    mock_pynvml = _make_pynvml_mock(power_mw_values=power_side_effects)
+    mock_pynvml = make_pynvml_mock(power_mw_values=power_side_effects)
     mock_pynvml.NVMLError = type(nvml_error)
 
     mono_values = [0.0, 0.1, 0.2, 0.3, 1.0, 1.0]
@@ -269,7 +252,7 @@ def test_nvml_error_during_sampling_skips_bad_samples():
 def test_no_samples_collected_returns_none():
     """All nvmlDeviceGetPowerUsage calls raise NVMLError: returns None."""
     nvml_error = Exception("nvml error")
-    mock_pynvml = _make_pynvml_mock()
+    mock_pynvml = make_pynvml_mock()
     mock_pynvml.NVMLError = type(nvml_error)
     mock_pynvml.nvmlDeviceGetPowerUsage.side_effect = nvml_error
 

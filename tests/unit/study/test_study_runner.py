@@ -28,6 +28,7 @@ from llenergymeasure.study.runner import (
     _kill_process_group,
     _run_experiment_worker,
 )
+from tests.conftest import TEST_CONFIG_HASH
 
 # =============================================================================
 # Fixtures
@@ -57,7 +58,7 @@ def study_config(basic_config: ExperimentConfig) -> StudyConfig:
         experiments=[basic_config],
         study_name="test-study",
         study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
-        study_design_hash="deadbeef12345678",
+        study_design_hash=TEST_CONFIG_HASH,
     )
 
 
@@ -443,7 +444,7 @@ def _make_sigint_study() -> StudyConfig:
         ],
         study_name="sigint-test",
         study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
-        study_design_hash="deadbeef12345678",
+        study_design_hash=TEST_CONFIG_HASH,
     )
 
 
@@ -501,7 +502,7 @@ def test_sigint_during_gap_exits_immediately() -> None:
         study_execution=ExecutionConfig(
             n_cycles=1, experiment_order="sequential", experiment_gap_seconds=60.0
         ),
-        study_design_hash="deadbeef12345678",
+        study_design_hash=TEST_CONFIG_HASH,
     )
     manifest = MagicMock()
     fake_result = {"status": "ok"}

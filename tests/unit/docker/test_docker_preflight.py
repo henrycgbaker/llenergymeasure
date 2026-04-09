@@ -22,29 +22,21 @@ from llenergymeasure.utils.exceptions import (
     LLEMError,
     PreFlightError,
 )
+from tests.unit.docker.conftest import make_subprocess_result
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_subprocess_result(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
-    """Create a mock subprocess.CompletedProcess-like object."""
-    mock = MagicMock()
-    mock.returncode = returncode
-    mock.stdout = stdout
-    mock.stderr = stderr
-    return mock
-
-
 def _make_successful_probe(gpu_name: str = "Tesla A100", driver: str = "525.89.02") -> MagicMock:
     """Probe result with GPU name and driver version (tier 2 success)."""
-    return _make_subprocess_result(returncode=0, stdout=f"{gpu_name}, {driver}\n")
+    return make_subprocess_result(returncode=0, stdout=f"{gpu_name}, {driver}\n")
 
 
 def _make_nvidia_smi_result(driver: str = "525.89.02") -> MagicMock:
     """Host nvidia-smi result returning a driver version string."""
-    return _make_subprocess_result(returncode=0, stdout=f"{driver}\n")
+    return make_subprocess_result(returncode=0, stdout=f"{driver}\n")
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +319,7 @@ class TestTier2GPUVisibility:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),  # host nvidia-smi
-                _make_subprocess_result(
+                make_subprocess_result(
                     returncode=125,
                     stderr='could not select device driver "" with capabilities: [[gpu]]',
                 ),  # container probe fails
@@ -349,7 +341,7 @@ class TestTier2GPUVisibility:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(returncode=125, stderr="could not select device driver"),
+                make_subprocess_result(returncode=125, stderr="could not select device driver"),
             ]
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
@@ -450,7 +442,7 @@ class TestTier2CUDADriverCompat:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result("470.57.02"),  # old host driver
-                _make_subprocess_result(
+                make_subprocess_result(
                     returncode=1,
                     stderr="Failed to initialize NVML: Driver/library version mismatch\ncuda error",
                 ),
@@ -472,7 +464,7 @@ class TestTier2CUDADriverCompat:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result("470.57.02"),
-                _make_subprocess_result(
+                make_subprocess_result(
                     returncode=1,
                     stderr="CUDA version incompatible with driver",
                 ),
@@ -493,7 +485,7 @@ class TestTier2CUDADriverCompat:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result("470.57.02"),
-                _make_subprocess_result(
+                make_subprocess_result(
                     returncode=1,
                     stderr="Failed to initialize NVML: Driver/library version mismatch",
                 ),
@@ -654,7 +646,7 @@ class TestTier2QuotaAndFallbackStderr:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(
+                make_subprocess_result(
                     returncode=1,
                     stderr=(
                         "DS01 GPU Allocation Failed - You have reached your GPU quota limit. "
@@ -683,7 +675,7 @@ class TestTier2QuotaAndFallbackStderr:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(returncode=1, stderr=raw_stderr),
+                make_subprocess_result(returncode=1, stderr=raw_stderr),
             ]
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
@@ -701,7 +693,7 @@ class TestTier2QuotaAndFallbackStderr:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(returncode=1, stderr="GPU Allocation Failed"),
+                make_subprocess_result(returncode=1, stderr="GPU Allocation Failed"),
             ]
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
@@ -722,7 +714,7 @@ class TestTier2QuotaAndFallbackStderr:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(returncode=1, stderr="gpu quota limit reached"),
+                make_subprocess_result(returncode=1, stderr="gpu quota limit reached"),
             ]
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
@@ -743,7 +735,7 @@ class TestTier2QuotaAndFallbackStderr:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(returncode=1, stderr=raw_stderr),
+                make_subprocess_result(returncode=1, stderr=raw_stderr),
             ]
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
@@ -761,7 +753,7 @@ class TestTier2QuotaAndFallbackStderr:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(returncode=1, stderr=""),
+                make_subprocess_result(returncode=1, stderr=""),
             ]
             with pytest.raises(DockerPreFlightError) as exc_info:
                 run_docker_preflight()
@@ -779,7 +771,7 @@ class TestTier2QuotaAndFallbackStderr:
         ):
             mock_run.side_effect = [
                 _make_nvidia_smi_result(),
-                _make_subprocess_result(
+                make_subprocess_result(
                     returncode=125,
                     stderr='could not select device driver "" with capabilities: [[gpu]]',
                 ),
