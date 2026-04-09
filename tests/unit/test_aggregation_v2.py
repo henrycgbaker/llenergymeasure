@@ -42,7 +42,6 @@ def make_raw_result():
             experiment_id="test-001",
             process_index=process_index,
             gpu_id=gpu_id,
-            config_name="test",
             model_name="gpt2",
             timestamps=Timestamps.from_times(
                 datetime(2026, 2, 26, 14, 0, 0),
@@ -576,12 +575,12 @@ class TestThermalThrottleAggregation:
         raw0 = make_raw_result(
             process_index=0,
             gpu_id=0,
-            thermal_throttle=ThermalThrottleInfo(detected=False, max_temperature_c=70.0),
+            thermal_throttle=ThermalThrottleInfo(max_temperature_c=70.0),
         )
         raw1 = make_raw_result(
             process_index=1,
             gpu_id=1,
-            thermal_throttle=ThermalThrottleInfo(detected=True, max_temperature_c=85.0),
+            thermal_throttle=ThermalThrottleInfo(thermal=True, max_temperature_c=85.0),
         )
         ctx = AggregationContext(
             experiment_id="tt-any",
@@ -613,12 +612,12 @@ class TestThermalThrottleAggregation:
         raw0 = make_raw_result(
             process_index=0,
             gpu_id=0,
-            thermal_throttle=ThermalThrottleInfo(detected=False),
+            thermal_throttle=ThermalThrottleInfo(),
         )
         raw1 = make_raw_result(
             process_index=1,
             gpu_id=1,
-            thermal_throttle=ThermalThrottleInfo(detected=False),
+            thermal_throttle=ThermalThrottleInfo(),
         )
         ctx = AggregationContext(
             experiment_id="tt-false",

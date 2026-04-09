@@ -132,7 +132,6 @@ def make_raw_process_result(**overrides) -> RawProcessResult:
         "experiment_id": "test-001",
         "process_index": 0,
         "gpu_id": 0,
-        "config_name": "test",
         "model_name": "gpt2",
         "timestamps": Timestamps.from_times(
             datetime(2026, 2, 26, 14, 0, 0, tzinfo=timezone.utc),

@@ -1,4 +1,4 @@
-"""Unit tests for domain/metrics.py — precision, normalised, energy, inference, latency models."""
+"""Unit tests for domain/metrics.py — precision, energy, inference, latency models."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from llenergymeasure.domain.metrics import (
     FlopsResult,
     LatencyMeasurementMode,
     LatencyMeasurements,
-    NormalisedMetrics,
     PrecisionMetadata,
     collect_itl_measurements,
 )
@@ -59,104 +58,6 @@ class TestPrecisionMetadata:
         pm = PrecisionMetadata()
         # Default compute is fp16 -> 1.0
         assert pm.precision_factor == 1.0
-
-
-# ---------------------------------------------------------------------------
-# TestNormalisedMetrics
-# ---------------------------------------------------------------------------
-
-
-class TestNormalisedMetrics:
-    """from_metrics() classmethod with division-by-zero guards."""
-
-    def test_normal_case(self):
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=10.0,
-            mean_power_w=50.0,
-            inference_time_sec=5.0,
-            theoretical_flops=1e15,
-        )
-        assert result.tokens_per_joule == pytest.approx(10.0)
-        assert result.tokens_per_second_per_watt == pytest.approx(0.4)
-        assert result.effective_flops == pytest.approx(1e15)
-
-    def test_zero_energy(self):
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=0.0,
-            mean_power_w=50.0,
-            inference_time_sec=5.0,
-            theoretical_flops=1e12,
-        )
-        assert result.tokens_per_joule == 0.0
-
-    def test_zero_time(self):
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=10.0,
-            mean_power_w=50.0,
-            inference_time_sec=0.0,
-            theoretical_flops=1e12,
-        )
-        assert result.tokens_per_second_per_watt == 0.0
-
-    def test_zero_power(self):
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=10.0,
-            mean_power_w=0.0,
-            inference_time_sec=5.0,
-            theoretical_flops=1e12,
-        )
-        assert result.tokens_per_second_per_watt == 0.0
-
-    def test_zero_flops(self):
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=10.0,
-            mean_power_w=50.0,
-            inference_time_sec=5.0,
-            theoretical_flops=0.0,
-        )
-        assert result.tokens_per_effective_pflop == 0.0
-        assert result.effective_flops == 0.0
-
-    def test_precision_factor_application(self):
-        prec = PrecisionMetadata(compute="int8")  # factor = 0.5
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=10.0,
-            mean_power_w=50.0,
-            inference_time_sec=5.0,
-            theoretical_flops=1e15,
-            precision=prec,
-        )
-        assert result.effective_flops == pytest.approx(0.5e15)
-        assert result.precision is prec
-
-    def test_none_precision_fallback(self):
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=10.0,
-            mean_power_w=50.0,
-            inference_time_sec=5.0,
-            theoretical_flops=1e15,
-            precision=None,
-        )
-        # None precision -> factor=1.0
-        assert result.effective_flops == pytest.approx(1e15)
-
-    def test_tokens_per_effective_pflop(self):
-        result = NormalisedMetrics.from_metrics(
-            total_output_tokens=100,
-            total_energy_j=10.0,
-            mean_power_w=50.0,
-            inference_time_sec=5.0,
-            theoretical_flops=1e15,
-        )
-        # 100 / (1e15 / 1e15) = 100.0
-        assert result.tokens_per_effective_pflop == pytest.approx(100.0)
 
 
 # ---------------------------------------------------------------------------
@@ -381,21 +282,7 @@ class TestCollectItlMeasurements:
 
 
 class TestLatencyMeasurements:
-    """LatencyMeasurements dataclass legacy alias and defaults."""
-
-    def test_measurement_method_legacy_alias(self):
-        lm = LatencyMeasurements(
-            ttft_ms=[10.0],
-            itl_full_ms=[5.0],
-            itl_trimmed_ms=[5.0],
-            request_count=1,
-            total_output_tokens=10,
-            excluded_tokens=0,
-            streaming_mode=True,
-            warmup_requests_excluded=0,
-            measurement_mode=LatencyMeasurementMode.PER_REQUEST_BATCH,
-        )
-        assert lm.measurement_method == "per_request_batch"
+    """LatencyMeasurements defaults."""
 
     def test_default_measurement_mode(self):
         lm = LatencyMeasurements(
@@ -409,4 +296,3 @@ class TestLatencyMeasurements:
             warmup_requests_excluded=0,
         )
         assert lm.measurement_mode == LatencyMeasurementMode.TRUE_STREAMING
-        assert lm.measurement_method == "true_streaming"

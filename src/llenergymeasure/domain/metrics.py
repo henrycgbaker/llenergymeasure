@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 # =============================================================================
 # Precision Metadata - For cross-backend comparisons
@@ -74,90 +74,6 @@ class PrecisionMetadata(BaseModel):
             "mixed": 0.75,  # Conservative estimate for mixed
         }
         return precision_factors.get(self.compute, 1.0)
-
-
-# =============================================================================
-# Normalised Metrics - For fair cross-backend comparisons
-# =============================================================================
-
-
-class NormalisedMetrics(BaseModel):
-    """Normalised efficiency metrics for cross-backend comparisons.
-
-    These metrics account for precision differences, enabling fair
-    comparison of efficiency across backends using different quantization.
-    """
-
-    # Primary efficiency metrics (higher = better)
-    tokens_per_joule: float = Field(
-        default=0.0,
-        description="Output tokens generated per Joule of energy",
-    )
-    tokens_per_effective_pflop: float = Field(
-        default=0.0,
-        description="Output tokens per effective peta-FLOP (precision-adjusted)",
-    )
-
-    # Power efficiency
-    tokens_per_second_per_watt: float = Field(
-        default=0.0,
-        description="Throughput normalised by power consumption",
-    )
-
-    # Raw vs effective FLOPs
-    theoretical_flops: float = Field(
-        default=0.0,
-        description="Theoretical FLOPs (2 * params * tokens)",
-    )
-    effective_flops: float = Field(
-        default=0.0,
-        description="Effective FLOPs accounting for precision (theoretical * precision_factor)",
-    )
-
-    # Precision metadata
-    precision: PrecisionMetadata | None = Field(
-        default=None,
-        description="Precision metadata used for normalisation",
-    )
-
-    @classmethod
-    def from_metrics(
-        cls,
-        total_output_tokens: int,
-        total_energy_j: float,
-        mean_power_w: float,
-        inference_time_sec: float,
-        theoretical_flops: float,
-        precision: PrecisionMetadata | None = None,
-    ) -> "NormalisedMetrics":
-        """Create normalised metrics from raw measurements.
-
-        Args:
-            total_output_tokens: Total output tokens generated.
-            total_energy_j: Total energy consumed in Joules.
-            mean_power_w: Mean power consumption in Watts.
-            inference_time_sec: Total inference time in seconds.
-            theoretical_flops: Theoretical FLOPs count.
-            precision: Precision metadata for normalisation.
-
-        Returns:
-            NormalisedMetrics with calculated efficiency values.
-        """
-        precision_factor = precision.precision_factor if precision else 1.0
-        effective = theoretical_flops * precision_factor
-
-        tokens_per_sec = total_output_tokens / inference_time_sec if inference_time_sec > 0 else 0.0
-
-        return cls(
-            tokens_per_joule=total_output_tokens / total_energy_j if total_energy_j > 0 else 0.0,
-            tokens_per_effective_pflop=(
-                total_output_tokens / (effective / 1e15) if effective > 0 else 0.0
-            ),
-            tokens_per_second_per_watt=tokens_per_sec / mean_power_w if mean_power_w > 0 else 0.0,
-            theoretical_flops=theoretical_flops,
-            effective_flops=effective,
-            precision=precision,
-        )
 
 
 # =============================================================================
@@ -310,10 +226,6 @@ class ThermalThrottleInfo(BaseModel):
     can invalidate energy and performance measurements.
     """
 
-    detected: bool = Field(
-        default=False,
-        description="Whether any throttling occurred during experiment",
-    )
     thermal: bool = Field(
         default=False,
         description="GPU thermal throttling detected",
@@ -346,6 +258,12 @@ class ThermalThrottleInfo(BaseModel):
         default_factory=list,
         description="Timestamps (seconds from start) when throttle was detected",
     )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def detected(self) -> bool:
+        """Whether any throttling occurred during experiment."""
+        return any((self.thermal, self.power, self.sw_thermal, self.hw_thermal, self.hw_power))
 
 
 class WarmupResult(BaseModel):
@@ -651,12 +569,6 @@ class LatencyMeasurements:
     streaming_mode: bool
     warmup_requests_excluded: int
     measurement_mode: LatencyMeasurementMode = LatencyMeasurementMode.TRUE_STREAMING
-
-    # Legacy alias for backwards compatibility
-    @property
-    def measurement_method(self) -> str:
-        """Legacy accessor - returns string value of measurement_mode."""
-        return self.measurement_mode.value
 
 
 @dataclass
