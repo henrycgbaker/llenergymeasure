@@ -215,8 +215,8 @@ conflate background power draw with inference energy.
 
 | Strategy | Behaviour | When to use |
 |:---------|:----------|:------------|
-| `cached` (default) | Measure once, persist to disk with configurable TTL (default 1 hour). After `cache_ttl_seconds` the baseline is re-measured automatically. Docker containers load the host's cached measurement via bind-mount. | Most studies - saves ~30s per experiment after the first. |
-| `validated` | Same as `cached`, but periodically spot-checks (5s quick measurement) every N experiments. If power drift exceeds the threshold, re-measures the full baseline. | Long-running studies where thermal conditions may shift. |
+| `cached` | Measure once, persist to disk with configurable TTL. After `cache_ttl_seconds` the baseline is re-measured automatically. Docker containers load the host's cached measurement via bind-mount. | Short studies where thermal conditions are stable. |
+| `validated` (default) | Same as `cached`, but periodically spot-checks (5s quick measurement) every N experiments. If power drift exceeds the threshold, re-measures the full baseline. | Most studies - catches thermal drift with negligible overhead (~5s per spot-check). |
 | `fresh` | Every experiment measures its own baseline independently. No study-level caching. | Maximum accuracy when measurement isolation matters more than speed. |
 
 Configure via the `baseline:` section:
@@ -225,8 +225,8 @@ Configure via the `baseline:` section:
 baseline:
   enabled: true
   duration_seconds: 30        # 5-120s accepted
-  strategy: cached            # or "validated" or "fresh"
-  cache_ttl_seconds: 3600     # 1 hour TTL (strategy: cached/validated)
+  strategy: validated          # or "cached" or "fresh"
+  cache_ttl_seconds: 7200     # 2 hour TTL (strategy: cached/validated)
   validation_interval: 5      # spot-check every 5 experiments (strategy: validated)
   drift_threshold: 0.10       # 10% drift triggers re-measurement (strategy: validated)
 ```
@@ -248,7 +248,7 @@ implementation details, or have single correct values:
 | CodeCarbon tracking mode | `process` | Better attribution than `machine` for single-workload benchmarks. |
 | CodeCarbon file output | Disabled | We extract metrics programmatically; prevents stray `emissions.csv`. |
 | GPU indices | Auto-resolved | Derived from backend config (tensor_parallel_size, device_map, etc.). |
-| Baseline cache TTL | 1 hour | Configurable via `baseline.cache_ttl_seconds`. Disk-persisted and shared with Docker containers. |
+| Baseline cache TTL | 2 hours | Configurable via `baseline.cache_ttl_seconds`. Disk-persisted and shared with Docker containers. |
 | Integration method | Trapezoidal rule | Standard for non-uniform timesteps; Simpson's offers no practical gain given +/-5% sensor noise. |
 | Power reading mode | Instantaneous | Uses least-smoothed NVML reading for best temporal resolution. |
 

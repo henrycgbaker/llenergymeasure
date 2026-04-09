@@ -657,8 +657,8 @@ Two modes: **fixed** (default) runs exactly `n_warmup` prompts; **CV convergence
 |-------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable baseline power measurement |
 | `duration_seconds` | number | `30.0` | Baseline measurement duration in seconds (5-120s) |
-| `strategy` | string | `"cached"` | Caching strategy: `cached` (disk-persisted TTL), `validated` (cached with periodic spot-check), `fresh` (measure every experiment) |
-| `cache_ttl_seconds` | number | `3600.0` | How long a cached baseline remains valid before re-measurement, in seconds. Min 60s. Used with `cached`/`validated` strategies. |
+| `strategy` | string | `"validated"` | Caching strategy: `validated` (cached with periodic spot-check, default), `cached` (disk-persisted TTL), `fresh` (measure every experiment) |
+| `cache_ttl_seconds` | number | `7200.0` | How long a cached baseline remains valid before re-measurement, in seconds. Min 60s. Used with `cached`/`validated` strategies. |
 | `validation_interval` | integer | `5` | Re-validate baseline every N experiments. Used with `validated` strategy only. |
 | `drift_threshold` | number | `0.10` | Power drift fraction (0.01-0.50) to trigger re-measurement. Used with `validated` strategy only. |
 
