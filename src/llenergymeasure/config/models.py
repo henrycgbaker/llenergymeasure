@@ -213,10 +213,10 @@ class BaselineConfig(BaseModel):
         ),
     )
     cache_ttl_seconds: float = Field(
-        default=1800.0,
+        default=3600.0,
         ge=60.0,
         description=(
-            "TTL for cached baseline measurements in seconds. "
+            "How long a cached baseline remains valid before re-measurement, in seconds. "
             "Only used with strategy='cached' or 'validated'."
         ),
     )

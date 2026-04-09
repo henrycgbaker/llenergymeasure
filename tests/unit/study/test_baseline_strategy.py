@@ -236,6 +236,57 @@ class TestStrategyCached:
 
         assert result is None
 
+    def test_ttl_expiry_triggers_remeasurement(self, tmp_path: Path):
+        """In-memory baseline is re-measured when TTL expires."""
+        config = ExperimentConfig(
+            model="test/model",
+            backend="pytorch",
+            baseline=BaselineConfig(strategy="cached", cache_ttl_seconds=3600.0),
+        )
+        runner = _make_runner(tmp_path, config)
+
+        # Initial baseline with old timestamp (2 hours ago)
+        old = _make_baseline(50.0, timestamp=time.time() - 7200)
+        fresh = _make_baseline(55.0)
+
+        with (
+            patch(_MEASURE, return_value=old),
+            patch(_RESOLVE_GPU, return_value=[0]),
+            patch(_SAVE),
+        ):
+            runner._get_baseline(config)
+
+        assert runner._baseline.power_w == 50.0
+
+        # Second call: old baseline has expired (age 7200 > ttl 3600)
+        with (
+            patch(_MEASURE, return_value=fresh) as mock_measure,
+            patch(_RESOLVE_GPU, return_value=[0]),
+            patch(_SAVE),
+            patch(_LOAD, return_value=None),
+        ):
+            result = runner._get_baseline(config)
+
+        assert result.power_w == 55.0  # re-measured
+        mock_measure.assert_called_once()
+
+    def test_ttl_not_expired_reuses_cache(self, tmp_path: Path, config_cached: ExperimentConfig):
+        """In-memory baseline within TTL is reused without re-measurement."""
+        runner = _make_runner(tmp_path, config_cached)
+        # Recent baseline (timestamp = now)
+        recent = _make_baseline(60.0)
+
+        with (
+            patch(_MEASURE, return_value=recent) as mock_measure,
+            patch(_RESOLVE_GPU, return_value=[0]),
+            patch(_SAVE),
+        ):
+            first = runner._get_baseline(config_cached)
+            second = runner._get_baseline(config_cached)
+
+        assert second is first
+        assert mock_measure.call_count == 1
+
 
 # =============================================================================
 # Strategy: validated

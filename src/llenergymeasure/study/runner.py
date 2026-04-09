@@ -769,9 +769,17 @@ class StudyRunner:
             if self._experiments_since_validation >= config.baseline.validation_interval:
                 self._validate_baseline(config)
 
-        # Return cached baseline if we have one
+        # Return cached baseline if still within TTL
         if self._baseline is not None:
-            return self._baseline
+            age = time.time() - self._baseline.timestamp
+            if age < config.baseline.cache_ttl_seconds:
+                return self._baseline
+            logger.info(
+                "Baseline expired (age=%.0fs > ttl=%.0fs). Re-measuring.",
+                age,
+                config.baseline.cache_ttl_seconds,
+            )
+            self._baseline = None
 
         # Try loading from disk first (handles mid-study restarts)
         cache_path = self._get_baseline_cache_path()
