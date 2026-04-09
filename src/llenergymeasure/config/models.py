@@ -185,6 +185,14 @@ class BaselineConfig(BaseModel):
 
     Controls whether and how idle GPU power is measured before experiments,
     enabling baseline-adjusted energy attribution.
+
+    Strategies:
+        cached: Disk-persisted baseline with configurable TTL (default).
+            Host measures once, writes to JSON, mounts into Docker containers.
+        validated: Same as cached but periodically spot-checks for drift.
+            If drift exceeds threshold, re-measures full baseline.
+        fresh: Every experiment measures its own baseline. Most accurate
+            but wastes ~30s per experiment.
     """
 
     model_config = {"extra": "forbid"}
@@ -195,6 +203,38 @@ class BaselineConfig(BaseModel):
         ge=5.0,
         le=120.0,
         description="Baseline measurement duration in seconds",
+    )
+    strategy: Literal["cached", "validated", "fresh"] = Field(
+        default="cached",
+        description=(
+            "Baseline caching strategy: 'cached' (disk-persisted TTL), "
+            "'validated' (cached with periodic spot-check), "
+            "'fresh' (measure every experiment)"
+        ),
+    )
+    cache_ttl_seconds: float = Field(
+        default=1800.0,
+        ge=60.0,
+        description=(
+            "TTL for cached baseline measurements in seconds. "
+            "Only used with strategy='cached' or 'validated'."
+        ),
+    )
+    validation_interval: int = Field(
+        default=5,
+        ge=1,
+        description=(
+            "Re-validate baseline every N experiments. Only used with strategy='validated'."
+        ),
+    )
+    drift_threshold: float = Field(
+        default=0.10,
+        ge=0.01,
+        le=0.50,
+        description=(
+            "Power drift threshold (fraction) to trigger re-measurement. "
+            "Only used with strategy='validated'."
+        ),
     )
 
 

@@ -291,7 +291,7 @@ class EnergyBreakdown(BaseModel):
     )
     baseline_method: str | None = Field(
         default=None,
-        description="How baseline was obtained ('cached', 'fresh', 'unavailable')",
+        description="How baseline was obtained ('cached', 'validated', 'fresh', 'unavailable')",
     )
     baseline_timestamp: datetime | None = Field(
         default=None,
