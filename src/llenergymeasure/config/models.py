@@ -205,7 +205,7 @@ class BaselineConfig(BaseModel):
         description="Baseline measurement duration in seconds",
     )
     strategy: Literal["cached", "validated", "fresh"] = Field(
-        default="cached",
+        default="validated",
         description=(
             "Baseline caching strategy: 'cached' (disk-persisted TTL), "
             "'validated' (cached with periodic spot-check), "
@@ -213,10 +213,10 @@ class BaselineConfig(BaseModel):
         ),
     )
     cache_ttl_seconds: float = Field(
-        default=1800.0,
+        default=7200.0,
         ge=60.0,
         description=(
-            "TTL for cached baseline measurements in seconds. "
+            "How long a cached baseline remains valid before re-measurement, in seconds. "
             "Only used with strategy='cached' or 'validated'."
         ),
     )

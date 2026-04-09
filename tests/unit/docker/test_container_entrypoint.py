@@ -230,6 +230,183 @@ class TestMainErrorHandling:
 
 
 # ---------------------------------------------------------------------------
+# Container-side baseline loading (PR #242)
+# ---------------------------------------------------------------------------
+
+
+_PATCH_LOAD_BASELINE = "llenergymeasure.harness.baseline.load_baseline_cache"
+
+
+class TestContainerBaselineLoading:
+    """Tests for baseline cache loading inside Docker containers.
+
+    The container entrypoint loads a host-persisted baseline from
+    /run/llem/baseline_cache.json when it exists and baseline is enabled.
+    """
+
+    def test_loads_baseline_when_cache_file_exists(self, config, result_dir: Path, tmp_path: Path):
+        """Baseline loaded from disk when cache file exists and baseline enabled."""
+        _cfg, config_path = config
+        fake_result = make_result()
+        fake_baseline = MagicMock()
+        fake_baseline.power_w = 55.0
+
+        with (
+            patch(_PATCH_PREFLIGHT),
+            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
+            patch(_PATCH_LOAD_BASELINE, return_value=fake_baseline) as mock_load,
+            patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
+        ):
+            mock_get_backend.return_value = MagicMock()
+
+            # Make the baseline cache path report as existing
+            mock_cache_path = MagicMock()
+            mock_cache_path.exists.return_value = True
+
+            def path_factory(p):
+                if p == "/run/llem/baseline_cache.json":
+                    return mock_cache_path
+                return Path(p)
+
+            mock_path_cls.side_effect = path_factory
+
+            from llenergymeasure.entrypoints.container import run_container_experiment
+
+            run_container_experiment(config_path, result_dir)
+
+        # Baseline was loaded from disk
+        mock_load.assert_called_once()
+        # Baseline was passed to harness.run
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("baseline") is fake_baseline
+
+    def test_no_baseline_when_cache_file_missing(self, config, result_dir: Path, tmp_path: Path):
+        """No baseline loaded when cache file does not exist."""
+        _cfg, config_path = config
+        fake_result = make_result()
+
+        with (
+            patch(_PATCH_PREFLIGHT),
+            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
+            patch(_PATCH_LOAD_BASELINE) as mock_load,
+        ):
+            mock_get_backend.return_value = MagicMock()
+
+            from llenergymeasure.entrypoints.container import run_container_experiment
+
+            # /run/llem/baseline_cache.json doesn't exist (default in test env)
+            run_container_experiment(config_path, result_dir)
+
+        mock_load.assert_not_called()
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("baseline") is None
+
+    def test_no_baseline_when_disabled(self, tmp_path: Path, result_dir: Path):
+        """Baseline not loaded even if cache exists when baseline.enabled=False."""
+        cfg = make_config(model="gpt2", backend="pytorch", baseline={"enabled": False})
+        config_path = tmp_path / "abc123_config.json"
+        config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
+        fake_result = make_result()
+
+        with (
+            patch(_PATCH_PREFLIGHT),
+            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
+            patch(_PATCH_LOAD_BASELINE) as mock_load,
+            patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
+        ):
+            mock_get_backend.return_value = MagicMock()
+            mock_cache_path = MagicMock()
+            mock_cache_path.exists.return_value = True
+
+            def path_factory(p):
+                if p == "/run/llem/baseline_cache.json":
+                    return mock_cache_path
+                return Path(p)
+
+            mock_path_cls.side_effect = path_factory
+
+            from llenergymeasure.entrypoints.container import run_container_experiment
+
+            run_container_experiment(config_path, result_dir)
+
+        mock_load.assert_not_called()
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("baseline") is None
+
+    def test_uses_config_ttl_for_loading(self, tmp_path: Path, result_dir: Path):
+        """load_baseline_cache is called with the config's cache_ttl_seconds."""
+        cfg = make_config(
+            model="gpt2",
+            backend="pytorch",
+            baseline={"enabled": True, "cache_ttl_seconds": 900.0},
+        )
+        config_path = tmp_path / "abc123_config.json"
+        config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
+        fake_result = make_result()
+
+        with (
+            patch(_PATCH_PREFLIGHT),
+            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result),
+            patch(_PATCH_LOAD_BASELINE, return_value=MagicMock()) as mock_load,
+            patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
+        ):
+            mock_get_backend.return_value = MagicMock()
+            mock_cache_path = MagicMock()
+            mock_cache_path.exists.return_value = True
+
+            def path_factory(p):
+                if p == "/run/llem/baseline_cache.json":
+                    return mock_cache_path
+                return Path(p)
+
+            mock_path_cls.side_effect = path_factory
+
+            from llenergymeasure.entrypoints.container import run_container_experiment
+
+            run_container_experiment(config_path, result_dir)
+
+        mock_load.assert_called_once()
+        _, kwargs = mock_load.call_args
+        assert kwargs.get("ttl") == 900.0
+
+    def test_expired_cache_passes_none_baseline(self, tmp_path: Path, result_dir: Path):
+        """When disk cache is expired (load returns None), baseline=None."""
+        cfg = make_config(model="gpt2", backend="pytorch")
+        config_path = tmp_path / "abc123_config.json"
+        config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
+        fake_result = make_result()
+
+        with (
+            patch(_PATCH_PREFLIGHT),
+            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
+            patch(_PATCH_LOAD_BASELINE, return_value=None),
+            patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
+        ):
+            mock_get_backend.return_value = MagicMock()
+            mock_cache_path = MagicMock()
+            mock_cache_path.exists.return_value = True
+
+            def path_factory(p):
+                if p == "/run/llem/baseline_cache.json":
+                    return mock_cache_path
+                return Path(p)
+
+            mock_path_cls.side_effect = path_factory
+
+            from llenergymeasure.entrypoints.container import run_container_experiment
+
+            run_container_experiment(config_path, result_dir)
+
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("baseline") is None
+
+
+# ---------------------------------------------------------------------------
 # __main__ guard — MPI safety contract
 # ---------------------------------------------------------------------------
 
