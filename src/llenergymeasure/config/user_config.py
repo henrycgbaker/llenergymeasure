@@ -19,6 +19,12 @@ import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from llenergymeasure.config.models import EnergySamplerName
+from llenergymeasure.config.ssot import (
+    ENV_CARBON_INTENSITY,
+    ENV_DATACENTER_PUE,
+    ENV_NO_PROMPT,
+    ENV_RUNNER_PREFIX,
+)
 
 
 class UserOutputConfig(BaseModel):
@@ -156,20 +162,20 @@ def _apply_env_overrides(config: UserConfig) -> UserConfig:
     """
     runners_updates: dict[str, str] = {}
     for backend in ("pytorch", "vllm", "tensorrt"):
-        env_key = f"LLEM_RUNNER_{backend.upper()}"
+        env_key = f"{ENV_RUNNER_PREFIX}{backend.upper()}"
         if val := os.environ.get(env_key):
             runners_updates[backend] = val
 
     measurement_updates: dict[str, Any] = {}
-    if val := os.environ.get("LLEM_CARBON_INTENSITY"):
+    if val := os.environ.get(ENV_CARBON_INTENSITY):
         with contextlib.suppress(ValueError):
             measurement_updates["carbon_intensity_gco2_kwh"] = float(val)
-    if val := os.environ.get("LLEM_DATACENTER_PUE"):
+    if val := os.environ.get(ENV_DATACENTER_PUE):
         with contextlib.suppress(ValueError):
             measurement_updates["datacenter_pue"] = float(val)
 
     ui_updates: dict[str, Any] = {}
-    if os.environ.get("LLEM_NO_PROMPT"):
+    if os.environ.get(ENV_NO_PROMPT):
         ui_updates["prompt"] = False
 
     # Apply updates using model_copy(update=...) for immutable Pydantic models

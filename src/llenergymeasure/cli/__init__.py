@@ -9,6 +9,7 @@ from typing import Annotated
 import typer
 
 from llenergymeasure._version import __version__
+from llenergymeasure.config.ssot import ENV_LOG_LEVEL
 
 app = typer.Typer(
     name="llem",
@@ -40,7 +41,7 @@ def _setup_logging(verbose: int = 0) -> None:
     elif verbose == 1:
         level = logging.INFO
     else:
-        env_level = os.environ.get("LLEM_LOG_LEVEL", "").upper()
+        env_level = os.environ.get(ENV_LOG_LEVEL, "").upper()
         level = getattr(logging, env_level, logging.WARNING)
 
     root_logger = logging.getLogger("llenergymeasure")

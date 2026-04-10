@@ -23,6 +23,7 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+from llenergymeasure.config.ssot import ENV_TABLE_ROWS
 from llenergymeasure.domain.progress import PHASE_MEASUREMENT, STEP_LABELS, STEP_PHASES
 from llenergymeasure.utils.compat import StrEnum
 from llenergymeasure.utils.formatting import format_elapsed as _format_elapsed
@@ -994,7 +995,7 @@ class StudyStepDisplay:
         """
         import os
 
-        env_rows = os.environ.get("LLEM_TABLE_ROWS")
+        env_rows = os.environ.get(ENV_TABLE_ROWS)
         if env_rows:
             try:
                 return max(3, int(env_rows))

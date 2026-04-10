@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from llenergymeasure.config.user_config import UserRunnersConfig
 
-from llenergymeasure.config.ssot import RUNNER_DOCKER, RUNNER_LOCAL, RunnerMode
+from llenergymeasure.config.ssot import ENV_RUNNER_PREFIX, RUNNER_DOCKER, RUNNER_LOCAL, RunnerMode
 
 # Re-exported from image_registry for convenience — parse_runner_value is defined
 # there (canonical home) but used heavily in this module and its tests.
@@ -165,7 +165,7 @@ def resolve_runner(
     _load_dotenv()
 
     # 1. Env var: LLEM_RUNNER_{BACKEND} (highest precedence)
-    env_key = f"LLEM_RUNNER_{backend.upper()}"
+    env_key = f"{ENV_RUNNER_PREFIX}{backend.upper()}"
     if env_val := os.environ.get(env_key):
         mode, image = parse_runner_value(env_val)
         return RunnerSpec(mode=mode, image=image, source="env")

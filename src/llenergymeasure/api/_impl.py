@@ -13,7 +13,7 @@ from typing import Any, overload
 
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.models import DatasetConfig, ExperimentConfig, StudyConfig
-from llenergymeasure.config.ssot import RUNNER_DOCKER
+from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
 from llenergymeasure.domain.progress import ProgressCallback
@@ -650,7 +650,7 @@ def _run_in_process(
             progress.on_step_done("container_preflight", time.perf_counter() - t0)
 
         # Create temp dir for timeseries parquet (if enabled)
-        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-")) if save_ts else None
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
 
         try:
             backend = get_backend(config.backend)

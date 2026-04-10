@@ -33,6 +33,13 @@ import time
 import traceback
 from pathlib import Path
 
+from llenergymeasure.config.ssot import (
+    CONTAINER_EXCHANGE_DIR,
+    ENV_CONFIG_PATH,
+    ENV_OUTPUT_DIR,
+    ENV_SAVE_TIMESERIES,
+)
+
 __all__ = ["StreamProgressCallback", "main", "run_container_experiment"]
 
 
@@ -145,12 +152,12 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     progress = StreamProgressCallback()
 
     # --- Resolve output params from env vars (set by DockerRunner) ---
-    output_dir = os.environ.get("LLEM_OUTPUT_DIR")
-    save_timeseries = os.environ.get("LLEM_SAVE_TIMESERIES", "1") != "0"
+    output_dir = os.environ.get(ENV_OUTPUT_DIR)
+    save_timeseries = os.environ.get(ENV_SAVE_TIMESERIES, "1") != "0"
 
     # --- Load baseline from disk cache (mounted by host StudyRunner) ---
     baseline = None
-    baseline_cache_path = Path("/run/llem/baseline_cache.json")
+    baseline_cache_path = Path(f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json")
     if baseline_cache_path.exists() and config.baseline.enabled:
         from llenergymeasure.harness.baseline import load_baseline_cache
 
@@ -200,10 +207,10 @@ def main() -> None:
             "traceback": "full traceback string"
         }
     """
-    config_path_env = os.environ.get("LLEM_CONFIG_PATH")
+    config_path_env = os.environ.get(ENV_CONFIG_PATH)
     if not config_path_env:
         raise RuntimeError(
-            "LLEM_CONFIG_PATH environment variable is not set. "
+            f"{ENV_CONFIG_PATH} environment variable is not set. "
             "The DockerRunner must set this before starting the container."
         )
 
