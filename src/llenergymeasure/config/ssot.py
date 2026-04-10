@@ -91,8 +91,10 @@ TIMEOUT_DOCKER_STOP: Final = 10
 """``docker stop`` graceful shutdown."""
 
 # NVIDIA tool subprocess timeouts
-TIMEOUT_NVCC: Final = 5
-"""``nvcc --version`` subprocess."""
+# TIMEOUT_NVCC is defined in utils/constants.py because domain/environment.py
+# needs it, and domain/ cannot import config/ (sibling layers). Re-exported
+# here so existing ssot.py consumers keep their import path.
+from llenergymeasure.utils.constants import TIMEOUT_NVCC as TIMEOUT_NVCC  # noqa: E402
 
 TIMEOUT_NVIDIA_SMI: Final = 10
 """``nvidia-smi`` query subprocess."""
