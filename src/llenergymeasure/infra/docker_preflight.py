@@ -24,6 +24,7 @@ import logging
 import shutil
 import subprocess
 
+from llenergymeasure.config.ssot import TIMEOUT_NVIDIA_SMI
 from llenergymeasure.utils.exceptions import DockerPreFlightError
 
 __all__ = ["run_docker_preflight"]
@@ -90,7 +91,7 @@ def _get_host_driver_version() -> str | None:
             ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=TIMEOUT_NVIDIA_SMI,
         )
         if result.returncode == 0:
             version = result.stdout.strip().splitlines()[0].strip()

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
+from llenergymeasure.config.ssot import ENV_RUNNER_PREFIX
 from llenergymeasure.config.user_config import UserRunnersConfig
 from llenergymeasure.infra.runner_resolution import (
     RunnerSpec,
@@ -129,7 +130,7 @@ class TestResolveRunner:
 
     def test_env_var_wins_over_everything(self, monkeypatch):
         """LLEM_RUNNER_VLLM=docker:custom/img wins over yaml and user_config."""
-        monkeypatch.setenv("LLEM_RUNNER_VLLM", "docker:custom/img")
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}VLLM", "docker:custom/img")
         yaml_runners = {"vllm": "local"}
         user_config = UserRunnersConfig(vllm="local")
 
@@ -141,7 +142,7 @@ class TestResolveRunner:
 
     def test_env_var_bare_docker(self, monkeypatch):
         """LLEM_RUNNER_PYTORCH=docker (bare) sets mode=docker, image=None."""
-        monkeypatch.setenv("LLEM_RUNNER_PYTORCH", "docker")
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "docker")
 
         spec = resolve_runner("pytorch")
 
@@ -151,7 +152,7 @@ class TestResolveRunner:
 
     def test_env_var_local_overrides_yaml_docker(self, monkeypatch):
         """Env var 'local' takes precedence even when yaml says 'docker'."""
-        monkeypatch.setenv("LLEM_RUNNER_PYTORCH", "local")
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "local")
         spec = resolve_runner("pytorch", yaml_runners={"pytorch": "docker"})
         assert spec.source == "env"
         assert spec.mode == "local"
@@ -316,7 +317,7 @@ class TestResolveRunner:
 
     def test_parse_runner_value_integration_docker_custom_image(self, monkeypatch):
         """parse_runner_value integration: 'docker:ghcr.io/custom:v1' resolves image."""
-        monkeypatch.setenv("LLEM_RUNNER_PYTORCH", "docker:ghcr.io/custom:v1")
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "docker:ghcr.io/custom:v1")
         spec = resolve_runner("pytorch")
         assert spec.mode == "docker"
         assert spec.image == "ghcr.io/custom:v1"

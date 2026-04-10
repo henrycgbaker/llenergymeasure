@@ -1,12 +1,15 @@
-"""Single source of truth for backend capability constants.
+"""Single source of truth for project-wide constants.
 
-These dicts define which dtype modes and decoding strategies each backend
-supports. They are consumed by:
+Centralises backend capabilities, runner modes, environment variable names,
+temp file prefixes, and infrastructure timeout values. Consumers include:
 - ExperimentConfig cross-validators (structural validation)
 - config/introspection.py (backend capability metadata)
 - CLI help generation
+- Infrastructure modules (Docker runner, runner resolution, image registry)
+- Study runner and container lifecycle management
 
-Do not inline these values in validators — always import from here.
+Do not inline these values in validators or infrastructure code — always
+import from here.
 """
 
 from __future__ import annotations
@@ -39,6 +42,74 @@ RunnerMode = Literal["local", "docker"]
 
 DOCKER_PULL_TIMEOUT: Final = 1800
 """Maximum seconds to wait for ``docker pull`` (30 min — generous for large images like TensorRT ~10 GB)."""
+
+# ---------------------------------------------------------------------------
+# Environment variable name constants
+# ---------------------------------------------------------------------------
+
+ENV_RUNNER_PREFIX: Final = "LLEM_RUNNER_"
+"""Prefix for per-backend runner override env vars (e.g. ``LLEM_RUNNER_PYTORCH=docker``)."""
+
+ENV_IMAGE_PREFIX: Final = "LLEM_IMAGE_"
+"""Prefix for per-backend image override env vars (e.g. ``LLEM_IMAGE_VLLM=custom:tag``)."""
+
+ENV_CARBON_INTENSITY: Final = "LLEM_CARBON_INTENSITY"
+ENV_DATACENTER_PUE: Final = "LLEM_DATACENTER_PUE"
+ENV_NO_PROMPT: Final = "LLEM_NO_PROMPT"
+ENV_HF_TOKEN: Final = "HF_TOKEN"
+ENV_OUTPUT_DIR: Final = "LLEM_OUTPUT_DIR"
+ENV_SAVE_TIMESERIES: Final = "LLEM_SAVE_TIMESERIES"
+ENV_CONFIG_PATH: Final = "LLEM_CONFIG_PATH"
+ENV_LOG_LEVEL: Final = "LLEM_LOG_LEVEL"
+ENV_TABLE_ROWS: Final = "LLEM_TABLE_ROWS"
+
+# ---------------------------------------------------------------------------
+# Temp file/directory prefixes
+# ---------------------------------------------------------------------------
+
+TEMP_PREFIX_EXCHANGE: Final = "llem-"
+"""Prefix for exchange directory created by DockerRunner."""
+
+TEMP_PREFIX_ENV_FILE: Final = "llem-env"
+"""Prefix for env-file temp files used to pass secrets to Docker."""
+
+TEMP_PREFIX_TIMESERIES: Final = "llem-ts-"
+"""Prefix for temp directories holding timeseries parquet files."""
+
+# ---------------------------------------------------------------------------
+# Subprocess / thread timeout constants (seconds)
+# ---------------------------------------------------------------------------
+
+# Docker CLI subprocess timeouts
+TIMEOUT_DOCKER_CLI: Final = 5
+"""Quick Docker CLI calls: ``docker ps``, ``docker image inspect`` (cache check)."""
+
+TIMEOUT_DOCKER_INSPECT: Final = 10
+"""``docker image inspect`` in ensure_image / study runner image preparation."""
+
+TIMEOUT_DOCKER_STOP: Final = 10
+"""``docker stop`` graceful shutdown."""
+
+# NVIDIA tool subprocess timeouts
+TIMEOUT_NVCC: Final = 5
+"""``nvcc --version`` subprocess."""
+
+TIMEOUT_NVIDIA_SMI: Final = 10
+"""``nvidia-smi`` query subprocess."""
+
+# Background task timeouts
+TIMEOUT_ENV_SNAPSHOT: Final = 10
+"""Environment snapshot collection future."""
+
+# Thread / process lifecycle timeouts
+TIMEOUT_THREAD_JOIN: Final = 5
+"""Thread joins, process teardown."""
+
+TIMEOUT_SIGTERM_GRACE: Final = 2
+"""Grace period after SIGTERM before SIGKILL."""
+
+TIMEOUT_INTERRUPT_POLL: Final = 1
+"""Interrupt event wait loop tick."""
 
 # ---------------------------------------------------------------------------
 # Backend capability dicts
@@ -97,12 +168,37 @@ __all__ = [
     "BACKEND_PYTORCH",
     "BACKEND_TENSORRT",
     "BACKEND_VLLM",
+    "CONTAINER_EXCHANGE_DIR",
     "DECODER_PARAM_SUPPORT",
     "DECODING_SUPPORT",
     "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
+    "ENV_CARBON_INTENSITY",
+    "ENV_CONFIG_PATH",
+    "ENV_DATACENTER_PUE",
+    "ENV_HF_TOKEN",
+    "ENV_IMAGE_PREFIX",
+    "ENV_LOG_LEVEL",
+    "ENV_NO_PROMPT",
+    "ENV_OUTPUT_DIR",
+    "ENV_RUNNER_PREFIX",
+    "ENV_SAVE_TIMESERIES",
+    "ENV_TABLE_ROWS",
     "RUNNER_DOCKER",
     "RUNNER_LOCAL",
+    "SOURCE_MULTI_BACKEND_ELEVATION",
+    "TEMP_PREFIX_ENV_FILE",
+    "TEMP_PREFIX_EXCHANGE",
+    "TEMP_PREFIX_TIMESERIES",
+    "TIMEOUT_DOCKER_CLI",
+    "TIMEOUT_DOCKER_INSPECT",
+    "TIMEOUT_DOCKER_STOP",
+    "TIMEOUT_ENV_SNAPSHOT",
+    "TIMEOUT_INTERRUPT_POLL",
+    "TIMEOUT_NVCC",
+    "TIMEOUT_NVIDIA_SMI",
+    "TIMEOUT_SIGTERM_GRACE",
+    "TIMEOUT_THREAD_JOIN",
     "BackendName",
     "RunnerMode",
 ]

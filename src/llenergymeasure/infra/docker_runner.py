@@ -32,7 +32,20 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from llenergymeasure.domain.progress import ProgressCallback
 
-from llenergymeasure.config.ssot import BACKEND_TENSORRT, DOCKER_PULL_TIMEOUT
+from llenergymeasure.config.ssot import (
+    BACKEND_TENSORRT,
+    CONTAINER_EXCHANGE_DIR,
+    DOCKER_PULL_TIMEOUT,
+    ENV_CONFIG_PATH,
+    ENV_HF_TOKEN,
+    ENV_OUTPUT_DIR,
+    ENV_SAVE_TIMESERIES,
+    TEMP_PREFIX_ENV_FILE,
+    TEMP_PREFIX_EXCHANGE,
+    TEMP_PREFIX_TIMESERIES,
+    TIMEOUT_DOCKER_INSPECT,
+    TIMEOUT_THREAD_JOIN,
+)
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerTimeoutError,
@@ -64,7 +77,7 @@ def _env_file(secrets: dict[str, str]) -> Iterator[Path | None]:
         yield None
         return
 
-    fd, path_str = tempfile.mkstemp(prefix="llem-env", suffix=".env")
+    fd, path_str = tempfile.mkstemp(prefix=TEMP_PREFIX_ENV_FILE, suffix=".env")
     path = Path(path_str)
     try:
         with os.fdopen(fd, "w") as f:
@@ -167,13 +180,13 @@ class DockerRunner:
         # Lazy import to avoid heavy domain imports at module load time
         from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
-        exchange_dir = Path(tempfile.mkdtemp(prefix="llem-"))
+        exchange_dir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_EXCHANGE))
 
         # Collect secrets for env-file (never pass as CLI args)
         secrets: dict[str, str] = {}
-        hf_token = os.environ.get("HF_TOKEN")
+        hf_token = os.environ.get(ENV_HF_TOKEN)
         if hf_token:
-            secrets["HF_TOKEN"] = hf_token
+            secrets[ENV_HF_TOKEN] = hf_token
 
         _p = progress  # short alias
 
@@ -194,8 +207,8 @@ class DockerRunner:
 
             # Pass output params via env vars so the container entrypoint can
             # forward them to the harness as runtime params.
-            secrets["LLEM_OUTPUT_DIR"] = "/run/llem"
-            secrets["LLEM_SAVE_TIMESERIES"] = "1" if save_timeseries else "0"
+            secrets[ENV_OUTPUT_DIR] = CONTAINER_EXCHANGE_DIR
+            secrets[ENV_SAVE_TIMESERIES] = "1" if save_timeseries else "0"
 
             # --- Build and execute docker command ---
             t0_container: float | None = None
@@ -293,7 +306,7 @@ class DockerRunner:
             ts_parquet = exchange_dir / "timeseries.parquet"
             ts_tmpdir: Path | None = None
             if ts_parquet.exists() and not isinstance(result, dict):
-                ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-"))
+                ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES))
                 shutil.move(str(ts_parquet), str(ts_tmpdir / "timeseries.parquet"))
 
             # --- Success: clean up ---
@@ -332,7 +345,7 @@ class DockerRunner:
         check = subprocess.run(
             ["docker", "image", "inspect", self.image],
             capture_output=True,
-            timeout=10,
+            timeout=TIMEOUT_DOCKER_INSPECT,
         )
         if check.returncode == 0:
             if progress:
@@ -534,7 +547,7 @@ class DockerRunner:
                 fix_suggestion="Increase timeout or reduce experiment size.",
             ) from exc
 
-        stderr_thread.join(timeout=5)
+        stderr_thread.join(timeout=TIMEOUT_THREAD_JOIN)
         stderr_text = "".join(stderr_lines)
 
         return proc.returncode, stderr_text
@@ -573,9 +586,9 @@ class DockerRunner:
             "--gpus",
             "all",
             "-v",
-            f"{exchange_dir}:/run/llem",
+            f"{exchange_dir}:{CONTAINER_EXCHANGE_DIR}",
             "-e",
-            f"LLEM_CONFIG_PATH=/run/llem/{config_hash}_config.json",
+            f"{ENV_CONFIG_PATH}={CONTAINER_EXCHANGE_DIR}/{config_hash}_config.json",
             "--shm-size",
             "8g",
         ]

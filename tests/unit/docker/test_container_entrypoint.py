@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llenergymeasure.config.ssot import CONTAINER_EXCHANGE_DIR, ENV_CONFIG_PATH
 from tests.conftest import make_config, make_result
 
 # Patch targets: patch the source modules, not container_entrypoint references,
@@ -151,7 +152,7 @@ class TestMainErrorHandling:
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
 
-        monkeypatch.setenv("LLEM_CONFIG_PATH", str(config_path))
+        monkeypatch.setenv(ENV_CONFIG_PATH, str(config_path))
 
         with (
             patch(_PATCH_PREFLIGHT),
@@ -180,7 +181,7 @@ class TestMainErrorHandling:
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
         fake_result = make_result()
 
-        monkeypatch.setenv("LLEM_CONFIG_PATH", str(config_path))
+        monkeypatch.setenv(ENV_CONFIG_PATH, str(config_path))
 
         with (
             patch(_PATCH_PREFLIGHT),
@@ -197,11 +198,11 @@ class TestMainErrorHandling:
         assert len(result_files) == 1
 
     def test_main_raises_if_env_var_missing(self, monkeypatch):
-        monkeypatch.delenv("LLEM_CONFIG_PATH", raising=False)
+        monkeypatch.delenv(ENV_CONFIG_PATH, raising=False)
 
         from llenergymeasure.entrypoints.container import main
 
-        with pytest.raises(RuntimeError, match="LLEM_CONFIG_PATH"):
+        with pytest.raises(RuntimeError, match=ENV_CONFIG_PATH):
             main()
 
     def test_error_json_has_required_keys(self, tmp_path: Path, monkeypatch):
@@ -209,7 +210,7 @@ class TestMainErrorHandling:
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
 
-        monkeypatch.setenv("LLEM_CONFIG_PATH", str(config_path))
+        monkeypatch.setenv(ENV_CONFIG_PATH, str(config_path))
 
         with (
             patch(_PATCH_PREFLIGHT),
@@ -265,7 +266,7 @@ class TestContainerBaselineLoading:
             mock_cache_path.exists.return_value = True
 
             def path_factory(p):
-                if p == "/run/llem/baseline_cache.json":
+                if p == f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json":
                     return mock_cache_path
                 return Path(p)
 
@@ -322,7 +323,7 @@ class TestContainerBaselineLoading:
             mock_cache_path.exists.return_value = True
 
             def path_factory(p):
-                if p == "/run/llem/baseline_cache.json":
+                if p == f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json":
                     return mock_cache_path
                 return Path(p)
 
@@ -359,7 +360,7 @@ class TestContainerBaselineLoading:
             mock_cache_path.exists.return_value = True
 
             def path_factory(p):
-                if p == "/run/llem/baseline_cache.json":
+                if p == f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json":
                     return mock_cache_path
                 return Path(p)
 
@@ -392,7 +393,7 @@ class TestContainerBaselineLoading:
             mock_cache_path.exists.return_value = True
 
             def path_factory(p):
-                if p == "/run/llem/baseline_cache.json":
+                if p == f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json":
                     return mock_cache_path
                 return Path(p)
 
