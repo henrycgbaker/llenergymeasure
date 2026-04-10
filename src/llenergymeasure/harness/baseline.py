@@ -287,6 +287,7 @@ def save_baseline_cache(path: Path, baseline: BaselineCache) -> None:
         "sample_count": baseline.sample_count,
         "duration_sec": baseline.duration_sec,
         "measurement_host": socket.gethostname(),
+        "method": baseline.method,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -341,6 +342,7 @@ def load_baseline_cache(path: Path, ttl: float = 1800.0) -> BaselineCache | None
         sample_count=raw["sample_count"],
         duration_sec=raw["duration_sec"],
         from_cache=True,
+        method=raw.get("method"),
     )
     logger.debug(
         "Loaded baseline from disk cache: %.1fW (age=%.0fs, host=%s)",

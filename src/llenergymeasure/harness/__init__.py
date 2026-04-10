@@ -248,6 +248,11 @@ class MeasurementHarness:
 
         # 2. Baseline power measurement (before model load)
         if baseline is not None and config.baseline.enabled:
+            # Host runner (study/runner.py::_get_baseline) owns the baseline step
+            # for cached/validated strategies — it emits Measuring/Loading/Reusing/
+            # Validating against a registered experiment index. Harness only handles
+            # the data path here: mark the passed-in cache as from_cache for the
+            # downstream create_energy_breakdown method attribution.
             from dataclasses import replace as _dc_replace
 
             baseline = _dc_replace(baseline, from_cache=True)
@@ -256,18 +261,6 @@ class MeasurementHarness:
                 baseline.power_w,
                 baseline.sample_count,
             )
-            if _p:
-                _p.on_step_start(
-                    "baseline",
-                    "Reusing",
-                    f"cached baseline {baseline.power_w:.1f}W",
-                )
-            _substep(
-                "baseline",
-                f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples, study-level cache)",
-            )
-            if _p:
-                _p.on_step_done("baseline", 0.0)
         elif config.baseline.enabled:
             dur = config.baseline.duration_seconds
             logger.debug("Measuring baseline power (%.0fs)...", dur)
