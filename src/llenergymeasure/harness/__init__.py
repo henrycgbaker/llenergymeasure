@@ -773,7 +773,6 @@ class MeasurementHarness:
             process_results=[],
             start_time=start_time,
             end_time=end_time,
-            environment_snapshot=snapshot,
             thermal_throttle=thermal_info,
             energy_breakdown=energy_breakdown,
             model_name=config.model,

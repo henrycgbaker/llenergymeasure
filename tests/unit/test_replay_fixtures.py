@@ -24,10 +24,12 @@ class TestReplayFixtures:
             assert isinstance(result, ExperimentResult)
 
     def test_schema_version(self, replay_results):
-        """All replay fixtures have schema_version 2.0."""
+        """All replay fixtures have schema_version 3.0."""
         self._require_fixtures(replay_results)
         for result in replay_results:
-            assert result.schema_version == "2.0"
+            from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+
+            assert result.schema_version == EXPERIMENT_SCHEMA_VERSION
 
     def test_energy_values_positive(self, replay_results):
         """Real GPU experiments produce positive energy measurements."""
@@ -56,14 +58,6 @@ class TestReplayFixtures:
         for result in replay_results:
             assert len(result.measurement_config_hash) == 16
             assert all(c in "0123456789abcdef" for c in result.measurement_config_hash)
-
-    def test_environment_snapshot_present(self, replay_results):
-        """Real GPU experiments include environment snapshot."""
-        self._require_fixtures(replay_results)
-        for result in replay_results:
-            assert result.environment_snapshot is not None
-            assert result.environment_snapshot.python_version
-            assert result.environment_snapshot.hardware.gpu.name
 
     def test_json_round_trip(self, replay_results):
         """Replay fixtures survive a JSON round-trip without data loss."""

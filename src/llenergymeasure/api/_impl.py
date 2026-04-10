@@ -34,6 +34,7 @@ def run_experiment(
     *,
     skip_preflight: bool = ...,
     progress: ProgressCallback | None = ...,
+    output_dir: str | Path | None = ...,
 ) -> ExperimentResult: ...
 
 
@@ -43,6 +44,7 @@ def run_experiment(
     *,
     skip_preflight: bool = ...,
     progress: ProgressCallback | None = ...,
+    output_dir: str | Path | None = ...,
 ) -> ExperimentResult: ...
 
 
@@ -56,6 +58,7 @@ def run_experiment(
     dataset: str = "aienergyscore",
     skip_preflight: bool = ...,
     progress: ProgressCallback | None = ...,
+    output_dir: str | Path | None = ...,
     **kwargs: Any,
 ) -> ExperimentResult: ...
 
@@ -69,11 +72,10 @@ def run_experiment(
     dataset: str = "aienergyscore",
     skip_preflight: bool = False,
     progress: ProgressCallback | None = None,
+    output_dir: str | Path | None = None,
     **kwargs: Any,
 ) -> ExperimentResult:
     """Run a single LLM inference efficiency experiment.
-
-    Side-effect free: no disk writes unless output_dir is specified in the config.
 
     Three call forms:
         run_experiment("config.yaml")              # YAML path
@@ -88,6 +90,9 @@ def run_experiment(
         dataset: Dataset source name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
         progress: Optional callback for step-by-step progress reporting.
+        output_dir: Base directory for results. When provided, overrides the
+            default ``./results`` directory. A timestamped study subdirectory
+            is created within this path.
         **kwargs: Additional ExperimentConfig fields (kwargs form only).
 
     Returns:
@@ -100,6 +105,8 @@ def run_experiment(
     study = _to_study_config(
         config, model=model, backend=backend, n_prompts=n_prompts, dataset=dataset, **kwargs
     )
+    if output_dir is not None:
+        study.output = study.output.model_copy(update={"results_dir": str(output_dir)})
     study_result = _run(study, skip_preflight=skip_preflight, progress=progress)
     if not study_result.experiments:
         from llenergymeasure.utils.exceptions import ExperimentError
@@ -260,10 +267,18 @@ def _ensure_study_artefacts_dir(study_dir: Path) -> Path:
     return artefacts_dir
 
 
-def _write_skipped_configs_log(skipped_configs: list[dict[str, Any]], artefacts_dir: Path) -> None:
+def _write_skipped_configs_log(
+    skipped_configs: list[dict[str, Any]],
+    artefacts_dir: Path,
+    study_design_hash: str = "",
+    study_name: str = "",
+) -> None:
     """Write detailed skipped-config information to the _study-artefacts directory."""
     log_path = artefacts_dir / "skipped_configs.log"
-    lines = [f"Skipped {len(skipped_configs)} config(s) due to validation errors\n"]
+    lines = [
+        f"# study_design_hash: {study_design_hash} | study_name: {study_name}",
+        f"Skipped {len(skipped_configs)} config(s) due to validation errors\n",
+    ]
     for s in skipped_configs:
         label = s.get("short_label", "unknown")
         reason = s.get("reason", "unknown error")
@@ -354,30 +369,59 @@ def _run(
         study_dir = create_study_dir(study.study_name, Path(results_dir_str))
         manifest = ManifestWriter(study, study_dir)
 
-    # Create _study-artefacts/ once for config copy and skipped log.
+    # Create _study-artefacts/ once for config copy, skipped log, and study-level env.
     artefacts_dir = _ensure_study_artefacts_dir(study_dir)
 
-    # Copy original YAML config to _study-artefacts/ for reproducibility.
+    # Identity fields for all study-level artefacts
+    _study_hash = study.study_design_hash or ""
+    _study_name = study.study_name or ""
+
+    # Copy original YAML config to _study-artefacts/ with identity header.
     if config_path is not None:
-        dest = artefacts_dir / "declared_study_config.yaml"
+        dest = artefacts_dir / "study_config.yaml"
         try:
-            shutil.copy2(config_path, dest)
+            original = Path(config_path).read_text(encoding="utf-8")
+            header = f"# study_design_hash: {_study_hash} | study_name: {_study_name}\n"
+            dest.write_text(header + original, encoding="utf-8")
             _api_logger.info("Config YAML copied to %s", dest)
         except FileNotFoundError:
             _api_logger.warning("Config YAML %s not found, skipping copy", config_path)
 
     # Persist skipped config details to _study-artefacts/.
     if study.skipped_configs:
-        _write_skipped_configs_log(study.skipped_configs, artefacts_dir)
+        _write_skipped_configs_log(study.skipped_configs, artefacts_dir, _study_hash, _study_name)
 
     # Persist system overrides to _study-artefacts/ (runner auto-elevation, etc.)
     if system_overrides:
+        overrides_with_identity = {
+            "study_design_hash": _study_hash,
+            "study_name": _study_name,
+            **system_overrides,
+        }
         overrides_path = artefacts_dir / "system_overrides.json"
         try:
-            overrides_path.write_text(json.dumps(system_overrides, indent=2), encoding="utf-8")
+            overrides_path.write_text(
+                json.dumps(overrides_with_identity, indent=2), encoding="utf-8"
+            )
             _api_logger.info("System overrides written to %s", overrides_path)
         except OSError as exc:
             _api_logger.warning("Failed to write system_overrides.json: %s", exc)
+
+    # Write study-level environment.json (installed_packages + software constants).
+    try:
+        from llenergymeasure.harness.environment import collect_software_environment
+
+        sw_env = collect_software_environment()
+        study_env = {
+            "study_design_hash": _study_hash,
+            "study_name": _study_name,
+            **sw_env,
+        }
+        env_path = artefacts_dir / "environment.json"
+        env_path.write_text(json.dumps(study_env, indent=2), encoding="utf-8")
+        _api_logger.info("Study-level environment written to %s", env_path)
+    except Exception as exc:
+        _api_logger.warning("Failed to write study-level environment.json: %s", exc)
 
     # Build per-experiment resolution logs (config_hash -> resolution dict).
     # Computed once here so runners don't need to know about resolution logic.
@@ -544,6 +588,11 @@ def _run_in_process(
 
     check_gpu_memory_residual()
 
+    # Collect environment snapshot once — used for both harness and environment.json sidecar
+    from llenergymeasure.harness.environment import collect_environment_snapshot
+
+    snapshot = collect_environment_snapshot()
+
     # Check runner spec for this backend
     spec = runner_specs.get(config.backend) if runner_specs else None
 
@@ -610,6 +659,7 @@ def _run_in_process(
             result = harness.run(
                 backend,
                 config,
+                snapshot=snapshot,
                 gpu_indices=gpu_indices,
                 progress=progress,
                 output_dir=str(ts_tmpdir) if ts_tmpdir else None,
@@ -627,14 +677,6 @@ def _run_in_process(
         manifest.mark_failed(config_hash, cycle, error_type, error_message)
         return [], [None], [error_message]
 
-    # Build effective_config for sidecar: experiment config + experiment_id + runner metadata
-    effective_config_dict: dict[str, Any] = {
-        "experiment_id": result.experiment_id,
-        **config.model_dump(),
-    }
-    if spec is not None and spec.mode == RUNNER_DOCKER:
-        effective_config_dict = {**effective_config_dict, **docker_runner.get_runner_metadata()}
-
     result_files: list[str] = []
     warnings: list[str] = []
     _save_and_record(
@@ -645,7 +687,7 @@ def _run_in_process(
         cycle,
         result_files,
         ts_source_dir=ts_tmpdir,
-        effective_config=effective_config_dict,
+        environment_snapshot=snapshot,
         resolution_log=(resolution_logs or {}).get(config_hash),
     )
 

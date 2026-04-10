@@ -45,7 +45,9 @@ class TestM1ExitCriteria:
 
         # Core result assertions
         assert isinstance(result, ExperimentResult)
-        assert result.schema_version == "2.0"
+        from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+
+        assert result.schema_version == EXPERIMENT_SCHEMA_VERSION
         assert result.measurement_config_hash  # non-empty string
         assert len(result.measurement_config_hash) == 16
 
@@ -63,25 +65,6 @@ class TestM1ExitCriteria:
 
         # Save replay fixture for offline unit tests
         _save_replay(result, "gpt2", "pytorch")
-
-    def test_environment_snapshot_populated(self, tmp_path):
-        """Environment snapshot contains GPU, Python, CUDA info."""
-        from llenergymeasure import ExperimentConfig, run_experiment
-        from llenergymeasure.config.models import DatasetConfig
-
-        config = ExperimentConfig(
-            model="gpt2",
-            backend="pytorch",
-            dataset=DatasetConfig(n_prompts=5),
-            output_dir=str(tmp_path),
-        )
-        result = run_experiment(config)
-
-        assert result.environment_snapshot is not None
-        snap = result.environment_snapshot
-        assert snap.python_version  # non-empty
-        assert snap.hardware.gpu.name  # non-empty GPU name
-        assert snap.cuda_version  # non-empty on GPU machine
 
     def test_output_files_written(self, tmp_path):
         """Timeseries parquet file written to output_dir."""

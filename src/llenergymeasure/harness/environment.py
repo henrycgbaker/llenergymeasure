@@ -52,11 +52,31 @@ def collect_environment_snapshot() -> EnvironmentSnapshot:
     return EnvironmentSnapshot(
         hardware=hardware,
         python_version=platform.python_version(),
-        installed_packages=_collect_installed_packages(),
         tool_version=__version__,
         cuda_version=cuda_version,
         cuda_version_source=cuda_version_source,
     )
+
+
+def collect_software_environment() -> dict[str, object]:
+    """Collect study-level software environment for the environment.json artefact.
+
+    This is a study-level constant (the container environment doesn't change
+    between experiments), so it's collected once per study and written to
+    ``_study-artefacts/environment.json``.
+
+    Returns:
+        Dict with python_version, installed_packages, llenergymeasure_version,
+        cuda_version, and cuda_version_source.
+    """
+    cuda_version, cuda_version_source = detect_cuda_version_with_source()
+    return {
+        "python_version": platform.python_version(),
+        "installed_packages": _collect_installed_packages(),
+        "llenergymeasure_version": __version__,
+        "cuda_version": cuda_version,
+        "cuda_version_source": cuda_version_source,
+    }
 
 
 # ---------------------------------------------------------------------------

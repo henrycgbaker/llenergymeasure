@@ -78,7 +78,7 @@ def _save_and_record(
     result_files: list[str],
     experiment_index: int | None = None,
     ts_source_dir: Path | None = None,
-    effective_config: dict[str, Any] | None = None,
+    environment_snapshot: Any | None = None,
     resolution_log: dict[str, Any] | None = None,
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
@@ -89,13 +89,13 @@ def _save_and_record(
 
     Args:
         ts_source_dir: Directory where the harness wrote timeseries.parquet.
-        effective_config: Fully resolved experiment config dict for sidecar.
+        environment_snapshot: EnvironmentSnapshot for per-experiment environment.json sidecar.
         resolution_log: Pre-built resolution log for this experiment (written as _resolution.json).
 
     On save failure, marks the experiment as completed with empty path.
     """
     try:
-        from llenergymeasure.results.persistence import save_result
+        from llenergymeasure.results.persistence import save_environment, save_result
 
         # Resolve timeseries sidecar from result fields.
         # MeasurementHarness writes timeseries.parquet to the output_dir and
@@ -114,9 +114,17 @@ def _save_and_record(
             timeseries_source=ts_source,
             experiment_index=experiment_index,
             cycle=cycle,
-            effective_config=effective_config,
             resolution_log=resolution_log,
         )
+
+        # Write per-experiment environment.json sidecar
+        if environment_snapshot is not None:
+            save_environment(
+                environment_snapshot,
+                result.experiment_id,
+                config_hash,
+                result_path.parent,
+            )
 
         # Clean up the stale flat parquet file after it has been copied into the
         # experiment subdirectory (mirrors cli/run.py line 288).
@@ -1163,11 +1171,6 @@ class StudyRunner:
         result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
 
-        # Build effective_config: experiment_id from result + resolved config
-        effective_config: dict[str, Any] | None = None
-        if not isinstance(result, dict):
-            effective_config = {"experiment_id": result.experiment_id, **config.model_dump()}
-
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(
             result,
@@ -1176,7 +1179,7 @@ class StudyRunner:
             index,
             exp_elapsed,
             ts_source_dir=ts_tmpdir,
-            effective_config=effective_config,
+            environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
         )
 
         # Clean up the temp dir created for timeseries parquet output.
@@ -1194,7 +1197,7 @@ class StudyRunner:
         index: int,
         elapsed: float,
         ts_source_dir: Path | None = None,
-        effective_config: dict[str, Any] | None = None,
+        environment_snapshot: Any | None = None,
     ) -> None:
         """Update manifest and signal study display based on experiment outcome."""
         if isinstance(result, dict) and "type" in result:
@@ -1216,7 +1219,7 @@ class StudyRunner:
                 self.result_files,
                 experiment_index=index,
                 ts_source_dir=ts_source_dir,
-                effective_config=effective_config,
+                environment_snapshot=environment_snapshot,
                 resolution_log=self._resolution_logs.get(config_hash),
             )
             if self._progress:
@@ -1376,15 +1379,6 @@ class StudyRunner:
                 }
             self._persist_failure_artefacts(exc, config_hash, cycle, result)
 
-        # Build effective_config: experiment_id from result + config + runner metadata
-        effective_config_docker: dict[str, Any] | None = None
-        if not isinstance(result, dict):
-            effective_config_docker = {
-                "experiment_id": result.experiment_id,
-                **config.model_dump(),
-                **docker_runner.get_runner_metadata(),
-            }
-
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(
             result,
@@ -1393,7 +1387,7 @@ class StudyRunner:
             index,
             exp_elapsed,
             ts_source_dir=docker_ts_dir,
-            effective_config=effective_config_docker,
+            environment_snapshot=self._get_env_snapshot() if not isinstance(result, dict) else None,
         )
 
         # Clean up the temp dir after _save_and_record has copied the parquet.
