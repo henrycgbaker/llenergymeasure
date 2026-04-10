@@ -207,7 +207,9 @@ class StepDisplay:
     Usage::
 
         display = StepDisplay(header="Experiment: gpt2 | pytorch | bf16")
-        display.register_steps(STEPS_DOCKER)
+        display.register_steps(
+            docker_steps(images_prepared=False, host_baseline=True)
+        )
         display.start()
         # ... pass display as ProgressCallback to harness ...
         display.finish()

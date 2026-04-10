@@ -281,15 +281,20 @@ STEP_PHASES: dict[str, str] = {
     STEP_SAVE: PHASE_MEASUREMENT,
 }
 
+# -------------------------------------------------------------------------
 # Ordered step lists for pre-registration (fixed [x/y] counters).
-# Docker path: host setup + container measurement forwarded as top-level steps.
-STEPS_DOCKER = [
-    STEP_PREFLIGHT,
-    STEP_IMAGE_CHECK,
-    STEP_PULL,
-    STEP_CONTAINER_START,
-    STEP_CONTAINER_PREFLIGHT,
-    STEP_BASELINE,
+#
+# The Docker path is assembled by ``docker_steps()`` from three named pieces
+# (setup head, container start, measurement tail) plus the strategy-dependent
+# placement of ``STEP_BASELINE``. Keeping one constructor instead of four
+# parallel constants avoids drift between variants when the measurement tail
+# changes.
+# -------------------------------------------------------------------------
+
+_DOCKER_SETUP_HEAD: list[str] = [STEP_PREFLIGHT]
+_DOCKER_IMAGE_PREP: list[str] = [STEP_IMAGE_CHECK, STEP_PULL]
+_DOCKER_CONTAINER_START: list[str] = [STEP_CONTAINER_START, STEP_CONTAINER_PREFLIGHT]
+_DOCKER_MEASUREMENT_TAIL: list[str] = [
     STEP_MODEL,
     STEP_PROMPTS,
     STEP_WARMUP,
@@ -300,11 +305,39 @@ STEPS_DOCKER = [
     STEP_SAVE,
 ]
 
-# Docker per-experiment path: image_check/pull handled at study level.
-STEPS_DOCKER_RUN = [s for s in STEPS_DOCKER if s not in {STEP_IMAGE_CHECK, STEP_PULL}]
+
+def docker_steps(*, images_prepared: bool, host_baseline: bool) -> list[str]:
+    """Assemble the Docker-path step list for the given run mode.
+
+    Args:
+        images_prepared: True when the study preflight has already verified
+            and pulled backend images. Omits ``image_check`` / ``pull`` from
+            the list because they were handled at study level.
+        host_baseline: True when the host runner measures baseline *before*
+            dispatching the experiment container — i.e. ``cached`` or
+            ``validated`` strategies that fire a short-lived baseline
+            container (or host-side measurement for local runners). False
+            for ``fresh``, where the harness measures baseline inside the
+            experiment container after ``container_preflight``.
+
+    The two modes differ in exactly one position: where ``STEP_BASELINE``
+    sits relative to ``STEP_CONTAINER_START`` / ``STEP_CONTAINER_PREFLIGHT``.
+    The measurement-phase tail is identical in both.
+    """
+    steps: list[str] = list(_DOCKER_SETUP_HEAD)
+    if not images_prepared:
+        steps.extend(_DOCKER_IMAGE_PREP)
+    if host_baseline:
+        steps.append(STEP_BASELINE)
+    steps.extend(_DOCKER_CONTAINER_START)
+    if not host_baseline:
+        steps.append(STEP_BASELINE)
+    steps.extend(_DOCKER_MEASUREMENT_TAIL)
+    return steps
+
 
 # Local path: no Docker steps, direct harness measurement.
-STEPS_LOCAL = [
+STEPS_LOCAL: list[str] = [
     STEP_PREFLIGHT,
     STEP_CONTAINER_PREFLIGHT,
     STEP_BASELINE,

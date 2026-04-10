@@ -44,7 +44,7 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_SIGTERM_GRACE,
     TIMEOUT_THREAD_JOIN,
 )
-from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_DOCKER_RUN, STEPS_LOCAL
+from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
 from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
@@ -810,6 +810,10 @@ class StudyRunner:
             return None
 
         cache_key = self._baseline_cache_key(config)
+        # Short location label for progress detail strings — tells the user
+        # whether the measurement runs on the host or in a dedicated baseline
+        # container (see two-container architecture notes in methodology.md).
+        location = "host" if cache_key == "local" else "baseline container"
         cached = self._baselines.get(cache_key)
 
         # TTL expiry check
@@ -839,7 +843,7 @@ class StudyRunner:
                 self._progress.on_step_start(
                     "baseline",
                     "Reusing",
-                    f"cached baseline {cached.power_w:.1f}W",
+                    f"cached {cached.power_w:.1f}W · {location}",
                 )
                 self._progress.on_step_done("baseline", 0.0)
             return cached
@@ -850,7 +854,7 @@ class StudyRunner:
             from llenergymeasure.harness.baseline import load_baseline_cache
 
             if self._progress is not None:
-                self._progress.on_step_start("baseline", "Loading", "baseline cache from disk")
+                self._progress.on_step_start("baseline", "Loading", f"baseline cache · {location}")
                 t0_load = time.perf_counter()
 
             loaded = load_baseline_cache(disk_path, ttl=config.baseline.cache_ttl_seconds)
@@ -871,7 +875,7 @@ class StudyRunner:
         dur = config.baseline.duration_seconds
         if self._progress is not None:
             self._progress.on_step_start(
-                "baseline", "Measuring", f"baseline idle power ({dur:.0f}s)"
+                "baseline", "Measuring", f"{location} · idle power ({dur:.0f}s)"
             )
             t0_meas = time.perf_counter()
 
@@ -978,9 +982,10 @@ class StudyRunner:
         from llenergymeasure.harness.baseline import save_baseline_cache
 
         gpu_indices = _resolve_gpu_indices(config)
+        location = "host" if cache_key == "local" else "baseline container"
 
         if self._progress is not None:
-            self._progress.on_step_start("baseline", "Validating", "baseline drift check (5s)")
+            self._progress.on_step_start("baseline", "Validating", f"{location} · drift check (5s)")
             t0 = time.perf_counter()
 
         spot = self._spot_check_baseline(config, cache_key, gpu_indices)
@@ -1006,8 +1011,8 @@ class StudyRunner:
             if self._progress is not None:
                 self._progress.on_step_update(
                     "baseline",
-                    f"drift {drift * 100:.1f}% > "
-                    f"{config.baseline.drift_threshold * 100:.0f}% threshold, "
+                    f"{location} · drift {drift * 100:.1f}% > "
+                    f"{config.baseline.drift_threshold * 100:.0f}%, "
                     f"re-measuring ({dur:.0f}s)",
                 )
 
@@ -1459,9 +1464,20 @@ class StudyRunner:
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
-            # Use STEPS_DOCKER_RUN (no image_check/pull) when images were
-            # prepared at study level; fall back to full STEPS_DOCKER otherwise.
-            steps = list(STEPS_DOCKER_RUN) if self._images_prepared else list(STEPS_DOCKER)
+            # Where STEP_BASELINE appears depends on the baseline strategy:
+            #   - cached/validated: baseline runs in a short-lived baseline
+            #     container BEFORE the experiment container → baseline
+            #     precedes container_start in the registered list so events
+            #     arrive in the same order the renderer iterates.
+            #   - fresh: harness Branch B measures baseline inside the
+            #     experiment container AFTER container_preflight.
+            # docker_steps() also drops image_check/pull when images were
+            # verified at study level (images_prepared=True).
+            host_baseline = config.baseline.enabled and config.baseline.strategy != "fresh"
+            steps = docker_steps(
+                images_prepared=self._images_prepared,
+                host_baseline=host_baseline,
+            )
             self._progress.begin_experiment(
                 index,
                 format_experiment_header(config),
