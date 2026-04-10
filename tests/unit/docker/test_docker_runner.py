@@ -12,6 +12,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from llenergymeasure.config.ssot import (
+    CONTAINER_EXCHANGE_DIR,
+    ENV_CONFIG_PATH,
+    ENV_HF_TOKEN,
+)
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
     DockerImagePullError,
@@ -438,12 +443,12 @@ class TestDockerCommandStructure:
         assert "--shm-size" in cmd
         assert "8g" in cmd
 
-        # Volume mount: exchange_dir:/run/llem
+        # Volume mount: exchange_dir:{CONTAINER_EXCHANGE_DIR}
         joined = " ".join(cmd)
-        assert ":/run/llem" in joined
+        assert f":{CONTAINER_EXCHANGE_DIR}" in joined
 
-        # LLEM_CONFIG_PATH env var
-        assert any("LLEM_CONFIG_PATH" in arg for arg in cmd)
+        # Config path env var
+        assert any(ENV_CONFIG_PATH in arg for arg in cmd)
 
         # Entrypoint module
         assert "llenergymeasure.entrypoints.container" in joined
@@ -460,7 +465,7 @@ class TestDockerCommandStructure:
 class TestHFTokenPropagation:
     def test_hf_token_uses_env_file_not_cli_arg(self, tmp_path, monkeypatch):
         """HF_TOKEN is forwarded via --env-file, not as a -e CLI argument."""
-        monkeypatch.setenv("HF_TOKEN", "hf_test_secret_token")
+        monkeypatch.setenv(ENV_HF_TOKEN, "hf_test_secret_token")
         config = make_config()
         exchange_dir = tmp_path / "llem-hftoken"
         exchange_dir.mkdir()
@@ -494,7 +499,7 @@ class TestHFTokenPropagation:
 
     def test_hf_token_absent_when_not_set(self, tmp_path, monkeypatch):
         """HF_TOKEN is not added to docker command when env var is absent."""
-        monkeypatch.delenv("HF_TOKEN", raising=False)
+        monkeypatch.delenv(ENV_HF_TOKEN, raising=False)
         config = make_config()
         exchange_dir = tmp_path / "llem-nohf"
         exchange_dir.mkdir()
@@ -521,7 +526,7 @@ class TestHFTokenPropagation:
 
         cmd = captured_cmds[0]
         joined = " ".join(cmd)
-        assert "HF_TOKEN" not in joined
+        assert ENV_HF_TOKEN not in joined
 
 
 # ---------------------------------------------------------------------------
@@ -619,7 +624,7 @@ class TestCleanupWarning:
 class TestHFTokenSecure:
     def test_hf_token_not_in_cmd_args(self, tmp_path, monkeypatch):
         """HF_TOKEN value never appears in docker run command args (S1 security fix)."""
-        monkeypatch.setenv("HF_TOKEN", "hf_test_secret_token_12345")
+        monkeypatch.setenv(ENV_HF_TOKEN, "hf_test_secret_token_12345")
         config = make_config()
         exchange_dir = tmp_path / "llem-s1-cmd"
         exchange_dir.mkdir()
@@ -648,13 +653,13 @@ class TestHFTokenSecure:
         # Token value must not appear in any cmd element
         assert not any("hf_test_secret_token_12345" in arg for arg in cmd)
         # Token must not be passed as -e KEY=VALUE
-        assert not any("HF_TOKEN" in arg and "=" in arg for arg in cmd)
+        assert not any(ENV_HF_TOKEN in arg and "=" in arg for arg in cmd)
         # --env-file must be present
         assert "--env-file" in cmd
 
     def test_hf_token_env_file_content(self):
         """_env_file creates a file with KEY=VALUE format; file is deleted after context exits."""
-        secrets = {"HF_TOKEN": "hf_test_secret_value"}
+        secrets = {ENV_HF_TOKEN: "hf_test_secret_value"}
 
         captured_path: list[Path] = []
 
@@ -669,7 +674,7 @@ class TestHFTokenSecure:
 
     def test_env_file_without_hf_token_still_has_output_vars(self, tmp_path, monkeypatch):
         """When HF_TOKEN is absent, env-file still exists (LLEM_OUTPUT_DIR etc.) but has no HF_TOKEN."""
-        monkeypatch.delenv("HF_TOKEN", raising=False)
+        monkeypatch.delenv(ENV_HF_TOKEN, raising=False)
         config = make_config()
         exchange_dir = tmp_path / "llem-s1-notoken"
         exchange_dir.mkdir()
@@ -695,15 +700,15 @@ class TestHFTokenSecure:
                 runner.run(config)
 
         cmd = captured_cmds[0]
-        # Env-file is still used for LLEM_OUTPUT_DIR and LLEM_SAVE_TIMESERIES
+        # Env-file is still used for ENV_OUTPUT_DIR and ENV_SAVE_TIMESERIES
         assert "--env-file" in cmd
         # But HF_TOKEN must not appear anywhere in the command
         joined = " ".join(cmd)
-        assert "HF_TOKEN" not in joined
+        assert ENV_HF_TOKEN not in joined
 
     def test_env_file_cleanup_on_failure(self):
         """Temp env-file is deleted even when an exception is raised inside the context."""
-        secrets = {"HF_TOKEN": "hf_cleanup_test_value"}
+        secrets = {ENV_HF_TOKEN: "hf_cleanup_test_value"}
         captured_path: list[Path] = []
 
         try:
@@ -723,10 +728,10 @@ class TestHFTokenSecure:
         """_mask_secrets replaces long secret values with *** in strings."""
         # Long values (>4 chars) are masked
         result = _mask_secrets(
-            "docker run -e HF_TOKEN=abc123xyz",
-            {"HF_TOKEN": "abc123xyz"},
+            f"docker run -e {ENV_HF_TOKEN}=abc123xyz",
+            {ENV_HF_TOKEN: "abc123xyz"},
         )
-        assert result == "docker run -e HF_TOKEN=***"
+        assert result == f"docker run -e {ENV_HF_TOKEN}=***"
 
         # Short values (<=4 chars) are NOT masked — avoids false positives
         result_short = _mask_secrets(
@@ -880,7 +885,7 @@ class TestExtraMounts:
         # Only one -v flag: the exchange dir
         v_count = cmd.count("-v")
         assert v_count == 1
-        assert "/tmp/llem-test:/run/llem" in cmd
+        assert f"/tmp/llem-test:{CONTAINER_EXCHANGE_DIR}" in cmd
 
     def test_tensorrt_auto_cache_mount(self, tmp_path):
         """TRT-LLM backend auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""

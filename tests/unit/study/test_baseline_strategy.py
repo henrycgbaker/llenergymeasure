@@ -23,6 +23,7 @@ from llenergymeasure.config.models import (
     ExperimentConfig,
     StudyConfig,
 )
+from llenergymeasure.config.ssot import CONTAINER_EXCHANGE_DIR
 from llenergymeasure.harness.baseline import BaselineCache
 from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study.runner import StudyRunner
@@ -566,9 +567,8 @@ class TestDockerBaselineMount:
             runner._run_one_docker(config_cached, spec, config_hash="abc123", cycle=1, index=1)
 
         extra_mounts = captured.get("extra_mounts") or []
-        baseline_mounts = [
-            host for host, cont in extra_mounts if cont == "/run/llem/baseline_cache.json"
-        ]
+        baseline_container_path = f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json"
+        baseline_mounts = [host for host, cont in extra_mounts if cont == baseline_container_path]
         assert baseline_mounts, "baseline cache was not mounted"
         host_path = baseline_mounts[0]
         assert Path(host_path).is_absolute(), (

@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
+from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX
+
 
 @pytest.fixture(autouse=True)
 def clear_cuda_version_cache():
@@ -158,7 +160,7 @@ class TestResolveImage:
     def test_env_var_takes_highest_precedence(self, monkeypatch):
         from llenergymeasure.infra.image_registry import resolve_image
 
-        monkeypatch.setenv("LLEM_IMAGE_VLLM", "custom/env-image:v1")
+        monkeypatch.setenv(f"{ENV_IMAGE_PREFIX}VLLM", "custom/env-image:v1")
 
         image, source = resolve_image(
             "vllm",
@@ -232,7 +234,7 @@ class TestResolveImage:
     def test_env_var_case_insensitive_backend(self, monkeypatch):
         from llenergymeasure.infra.image_registry import resolve_image
 
-        monkeypatch.setenv("LLEM_IMAGE_PYTORCH", "my/pytorch:v1")
+        monkeypatch.setenv(f"{ENV_IMAGE_PREFIX}PYTORCH", "my/pytorch:v1")
         image, source = resolve_image("pytorch")
         assert image == "my/pytorch:v1"
         assert source == "env"

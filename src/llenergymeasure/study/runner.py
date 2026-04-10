@@ -33,7 +33,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from llenergymeasure.config.ssot import DOCKER_PULL_TIMEOUT, RUNNER_DOCKER
+from llenergymeasure.config.ssot import (
+    CONTAINER_EXCHANGE_DIR,
+    DOCKER_PULL_TIMEOUT,
+    RUNNER_DOCKER,
+    TEMP_PREFIX_TIMESERIES,
+    TIMEOUT_DOCKER_INSPECT,
+    TIMEOUT_ENV_SNAPSHOT,
+    TIMEOUT_INTERRUPT_POLL,
+    TIMEOUT_SIGTERM_GRACE,
+    TIMEOUT_THREAD_JOIN,
+)
 from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_DOCKER_RUN, STEPS_LOCAL
 from llenergymeasure.study.gaps import run_gap
 
@@ -745,7 +755,7 @@ class StudyRunner:
             from llenergymeasure.harness.environment import collect_environment_snapshot_async
 
             self._env_snapshot_future = collect_environment_snapshot_async()
-        return self._env_snapshot_future.result(timeout=10)
+        return self._env_snapshot_future.result(timeout=TIMEOUT_ENV_SNAPSHOT)
 
     def _get_baseline(self, config: ExperimentConfig) -> Any:
         """Return baseline power according to the configured strategy.
@@ -928,7 +938,7 @@ class StudyRunner:
                 check = subprocess.run(
                     ["docker", "image", "inspect", image],
                     capture_output=True,
-                    timeout=10,
+                    timeout=TIMEOUT_DOCKER_INSPECT,
                 )
             except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
                 check = None
@@ -979,7 +989,7 @@ class StudyRunner:
                 inspect = subprocess.run(
                     ["docker", "image", "inspect", image],
                     capture_output=True,
-                    timeout=10,
+                    timeout=TIMEOUT_DOCKER_INSPECT,
                 )
                 metadata = self._parse_image_metadata(inspect.stdout)
             except Exception:
@@ -1050,7 +1060,7 @@ class StudyRunner:
                 if self._interrupt_event.is_set():
                     break
                 self._progress.show_gap(f"{label}: {format_gap_duration(remaining)}")
-                self._interrupt_event.wait(timeout=1)
+                self._interrupt_event.wait(timeout=TIMEOUT_INTERRUPT_POLL)
             self._progress.clear_gap()
         else:
             # Fall back to terminal countdown
@@ -1101,7 +1111,7 @@ class StudyRunner:
         # output_dir as a runtime param (not from config). The temp dir is
         # cleaned up after _handle_result copies the parquet into the study directory.
         save_ts = self.study.output.save_timeseries
-        ts_tmpdir = Path(tempfile.mkdtemp(prefix="llem-ts-")) if save_ts else None
+        ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
 
         # Resolve cached snapshot in parent — serialised to subprocess via Pipe
         snapshot = self._get_env_snapshot()
@@ -1151,13 +1161,13 @@ class StudyRunner:
             except Exception:
                 pipe_payload = _UNSET
 
-        # Non-blocking join after pipe is drained (5s grace for teardown)
-        p.join(timeout=5)
+        # Non-blocking join after pipe is drained (grace for teardown)
+        p.join(timeout=TIMEOUT_THREAD_JOIN)
 
         # SIGINT was received during join: SIGTERM was already sent by handler.
-        # Give child 2s grace for clean CUDA teardown, then SIGKILL.
+        # Grace period for clean CUDA teardown, then SIGKILL.
         if self._interrupt_event.is_set() and p.is_alive():
-            p.join(timeout=2)  # 2s grace after SIGTERM
+            p.join(timeout=TIMEOUT_SIGTERM_GRACE)
             if p.is_alive():
                 _kill_process_group(p.pid, signal.SIGKILL)
                 p.join()
@@ -1237,8 +1247,6 @@ class StudyRunner:
                     )
                     is_docker = spec is not None and spec.mode == RUNNER_DOCKER
                     if is_docker:
-                        from llenergymeasure.config.ssot import CONTAINER_EXCHANGE_DIR
-
                         self._progress.on_substep("save", f"container: {CONTAINER_EXCHANGE_DIR}")
                     self._progress.on_substep("save", f"host: {host_path}")
 
@@ -1316,10 +1324,12 @@ class StudyRunner:
             and baseline_cache_path is not None
             and baseline_cache_path.exists()
         ):
-            # Docker requires absolute paths for bind-mount sources; relative paths are
-            # parsed as named volumes and rejected when they contain "/".
+            # Docker parses relative bind-mount sources as named volumes; resolve first.
             extra_mounts.append(
-                (str(baseline_cache_path.resolve()), "/run/llem/baseline_cache.json")
+                (
+                    str(baseline_cache_path.resolve()),
+                    f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json",
+                )
             )
 
         docker_runner = DockerRunner(

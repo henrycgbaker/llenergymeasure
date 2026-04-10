@@ -15,7 +15,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
-from llenergymeasure.config.ssot import BACKEND_PYTORCH, BACKEND_TENSORRT, BACKEND_VLLM
+from llenergymeasure.config.ssot import (
+    BACKEND_PYTORCH,
+    BACKEND_TENSORRT,
+    BACKEND_VLLM,
+    TIMEOUT_NVIDIA_SMI,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +197,7 @@ def _get_mig_instance_counts() -> dict[int, int]:
             ["nvidia-smi", "-L"],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=TIMEOUT_NVIDIA_SMI,
         )
         if result.returncode != 0:
             return {}

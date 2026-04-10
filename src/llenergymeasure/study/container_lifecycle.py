@@ -23,6 +23,8 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
+from llenergymeasure.config.ssot import TIMEOUT_DOCKER_CLI, TIMEOUT_DOCKER_STOP
+
 __all__ = [
     "cleanup_study_containers",
     "generate_container_labels",
@@ -93,14 +95,14 @@ def cleanup_study_containers(study_id: str) -> None:
             ["docker", "ps", "-q", "--filter", f"label=llem.study_id={study_id}"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=TIMEOUT_DOCKER_CLI,
         )
         for cid in result.stdout.strip().splitlines():
             if cid.strip():
                 subprocess.run(
                     ["docker", "stop", "-t", "5", cid.strip()],
                     capture_output=True,
-                    timeout=10,
+                    timeout=TIMEOUT_DOCKER_STOP,
                 )
     except Exception:
         pass  # Best-effort; atexit handlers must never raise
@@ -172,7 +174,7 @@ def reap_orphaned_containers() -> int:
             ],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=TIMEOUT_DOCKER_CLI,
         )
         for line in result.stdout.strip().splitlines():
             parts = line.split()
@@ -186,7 +188,7 @@ def reap_orphaned_containers() -> int:
                 subprocess.run(
                     ["docker", "stop", "-t", "5", cid],
                     capture_output=True,
-                    timeout=10,
+                    timeout=TIMEOUT_DOCKER_STOP,
                 )
                 reaped += 1
             except PermissionError:

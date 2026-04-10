@@ -10,6 +10,12 @@ from pathlib import Path
 
 import pytest
 
+from llenergymeasure.config.ssot import (
+    ENV_CARBON_INTENSITY,
+    ENV_DATACENTER_PUE,
+    ENV_NO_PROMPT,
+    ENV_RUNNER_PREFIX,
+)
 from llenergymeasure.config.user_config import UserConfig, get_user_config_path, load_user_config
 
 # ---------------------------------------------------------------------------
@@ -98,28 +104,28 @@ def test_load_user_config_energy_sampler_override(tmp_path):
 
 def test_env_var_llem_carbon_intensity(tmp_path, monkeypatch):
     """LLEM_CARBON_INTENSITY env var sets carbon_intensity_gco2_kwh."""
-    monkeypatch.setenv("LLEM_CARBON_INTENSITY", "450.0")
+    monkeypatch.setenv(ENV_CARBON_INTENSITY, "450.0")
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     assert config.measurement.carbon_intensity_gco2_kwh == pytest.approx(450.0)
 
 
 def test_env_var_llem_datacenter_pue(tmp_path, monkeypatch):
     """LLEM_DATACENTER_PUE env var sets datacenter_pue."""
-    monkeypatch.setenv("LLEM_DATACENTER_PUE", "1.5")
+    monkeypatch.setenv(ENV_DATACENTER_PUE, "1.5")
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     assert config.measurement.datacenter_pue == pytest.approx(1.5)
 
 
 def test_env_var_llem_no_prompt(tmp_path, monkeypatch):
     """LLEM_NO_PROMPT env var disables interactive prompts."""
-    monkeypatch.setenv("LLEM_NO_PROMPT", "1")
+    monkeypatch.setenv(ENV_NO_PROMPT, "1")
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     assert config.ui.prompt is False
 
 
 def test_env_var_runner_pytorch(tmp_path, monkeypatch):
     """LLEM_RUNNER_PYTORCH env var overrides pytorch runner."""
-    monkeypatch.setenv("LLEM_RUNNER_PYTORCH", "docker:nvcr.io/nvidia/pytorch:latest")
+    monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "docker:nvcr.io/nvidia/pytorch:latest")
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     assert config.runners.pytorch == "docker:nvcr.io/nvidia/pytorch:latest"
 
@@ -128,7 +134,7 @@ def test_env_var_overrides_take_precedence_over_file(tmp_path, monkeypatch):
     """Env var overrides take precedence over config file values."""
     config_file = tmp_path / "config.yaml"
     config_file.write_text("measurement:\n  datacenter_pue: 1.2\n")
-    monkeypatch.setenv("LLEM_DATACENTER_PUE", "1.8")
+    monkeypatch.setenv(ENV_DATACENTER_PUE, "1.8")
     config = load_user_config(config_path=config_file)
     assert config.measurement.datacenter_pue == pytest.approx(1.8)
 
@@ -140,7 +146,7 @@ def test_env_var_overrides_take_precedence_over_file(tmp_path, monkeypatch):
 
 def test_silent_ignore_invalid_float_carbon_intensity(tmp_path, monkeypatch):
     """LLEM_CARBON_INTENSITY='not_a_number' is silently ignored (treated as not set)."""
-    monkeypatch.setenv("LLEM_CARBON_INTENSITY", "not_a_number")
+    monkeypatch.setenv(ENV_CARBON_INTENSITY, "not_a_number")
     # Should not raise
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     # Value is not set (treated as None — same as not providing the env var)
@@ -149,7 +155,7 @@ def test_silent_ignore_invalid_float_carbon_intensity(tmp_path, monkeypatch):
 
 def test_silent_ignore_invalid_float_datacenter_pue(tmp_path, monkeypatch):
     """LLEM_DATACENTER_PUE='abc' is silently ignored (treated as not set)."""
-    monkeypatch.setenv("LLEM_DATACENTER_PUE", "abc")
+    monkeypatch.setenv(ENV_DATACENTER_PUE, "abc")
     # Should not raise — value is silently ignored
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
     # Falls back to default when invalid

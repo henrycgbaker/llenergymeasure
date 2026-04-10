@@ -38,8 +38,11 @@ from llenergymeasure.config.ssot import (
     BACKEND_PYTORCH,
     BACKEND_TENSORRT,
     BACKEND_VLLM,
+    ENV_IMAGE_PREFIX,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
+    TIMEOUT_DOCKER_CLI,
+    TIMEOUT_NVCC,
     RunnerMode,
 )
 
@@ -88,7 +91,7 @@ def get_cuda_major_version() -> str | None:
             ["nvcc", "--version"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=TIMEOUT_NVCC,
         )
         if result.returncode == 0:
             major = _parse_cuda_major_from_nvcc(result.stdout)
@@ -186,7 +189,7 @@ def _image_exists_locally(image: str) -> bool:
         result = subprocess.run(
             ["docker", "image", "inspect", image],
             capture_output=True,
-            timeout=5,
+            timeout=TIMEOUT_DOCKER_CLI,
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -232,7 +235,7 @@ def resolve_image(
     _load_dotenv()
 
     # 1. Env var (includes .env via python-dotenv)
-    env_key = f"LLEM_IMAGE_{backend.upper()}"
+    env_key = f"{ENV_IMAGE_PREFIX}{backend.upper()}"
     if env_val := os.environ.get(env_key):
         logger.info("Image for %s resolved from env var %s: %s", backend, env_key, env_val)
         return (env_val, "env")
