@@ -24,7 +24,9 @@ from llenergymeasure.config.models import (
     StudyConfig,
 )
 from llenergymeasure.harness.baseline import BaselineCache
+from llenergymeasure.infra.runner_resolution import RunnerSpec
 from llenergymeasure.study.runner import StudyRunner
+from llenergymeasure.utils.exceptions import DockerError
 from tests.conftest import TEST_CONFIG_HASH
 
 # Patch targets: source modules, not runner imports (lazy local imports)
@@ -532,29 +534,19 @@ class TestDockerBaselineMount:
         monkeypatch: pytest.MonkeyPatch,
         config_cached: ExperimentConfig,
     ):
-        """Regression: relative study_dir must still yield an absolute bind-mount source.
-
-        Docker rejects relative paths as bind-mount sources (parsed as named volumes).
-        The default results_dir is "./results", so the mount host path MUST be resolved
-        to absolute before being passed to DockerRunner.
-        """
-        from llenergymeasure.infra.runner_resolution import RunnerSpec
-        from llenergymeasure.utils.exceptions import DockerError
-
+        """Regression: relative study_dir must yield an absolute bind-mount source."""
         monkeypatch.chdir(tmp_path)
         relative_study_dir = Path("results/test-study")
 
         runner = _make_runner(relative_study_dir, config_cached)
-        runner._baseline = _make_baseline()  # skip measurement
-        runner._images_prepared = True  # skip image prep/pull
+        runner._baseline = _make_baseline()
+        runner._images_prepared = True
 
-        # Pre-populate the cache file (at the relative location, which resolves
-        # against cwd=tmp_path via monkeypatch.chdir above).
         cache_path = relative_study_dir / "_study-artefacts" / "baseline_cache.json"
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps({"power_w": 50.0}))
 
-        captured: dict = {}
+        captured: dict[str, object] = {}
 
         class FakeDockerRunner:
             def __init__(self, **kwargs):
