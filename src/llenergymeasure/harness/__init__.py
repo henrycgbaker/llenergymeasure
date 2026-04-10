@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from llenergymeasure._version import __version__
 from llenergymeasure.backends.protocol import BackendPlugin, InferenceOutput
+from llenergymeasure.config.ssot import TIMEOUT_ENV_SNAPSHOT
 from llenergymeasure.datasets import load_prompts
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
@@ -302,7 +303,7 @@ class MeasurementHarness:
 
         # 3b. Join snapshot future — collection hidden behind model loading
         if snapshot_future is not None:
-            snapshot = snapshot_future.result(timeout=10)
+            snapshot = snapshot_future.result(timeout=TIMEOUT_ENV_SNAPSHOT)
 
         # 4. Capture model memory baseline immediately after model load.
         # Must happen BEFORE warmup, which allocates KV cache.

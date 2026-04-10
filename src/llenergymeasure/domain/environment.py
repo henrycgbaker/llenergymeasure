@@ -11,6 +11,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from llenergymeasure.config.ssot import TIMEOUT_NVCC
+
 logger = logging.getLogger(__name__)
 
 
@@ -202,7 +204,7 @@ def detect_cuda_version_with_source() -> tuple[str | None, str | None]:
             ["nvcc", "--version"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=TIMEOUT_NVCC,
         )
         match = re.search(r"release (\d+\.\d+)", result.stdout)
         if match:
