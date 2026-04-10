@@ -1,4 +1,4 @@
-"""v2.0 results persistence — save, load, atomic writes.
+"""v3.0 results persistence — save, load, atomic writes.
 
 Handles directory lifecycle, collision avoidance,
 JSON serialisation (primary), and Parquet sidecar management.
@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from llenergymeasure.domain.environment import EnvironmentSnapshot
     from llenergymeasure.domain.experiment import ExperimentResult
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def _atomic_write(content: str, path: Path) -> None:
 
 
 def save_environment(
-    snapshot: object,
+    snapshot: EnvironmentSnapshot,
     experiment_id: str,
     measurement_config_hash: str,
     experiment_dir: Path,
@@ -104,7 +105,7 @@ def save_environment(
     listings live in the study-level environment.json instead.
 
     Args:
-        snapshot: EnvironmentSnapshot (typed as object to avoid circular import).
+        snapshot: EnvironmentSnapshot with hardware/runtime metadata.
         experiment_id: Unique experiment identifier.
         measurement_config_hash: Config hash for orphan attribution.
         experiment_dir: Experiment result directory (must already exist).
@@ -116,8 +117,7 @@ def save_environment(
         "experiment_id": experiment_id,
         "measurement_config_hash": measurement_config_hash,
     }
-    # snapshot is an EnvironmentSnapshot pydantic model
-    snapshot_dict = snapshot.model_dump()  # type: ignore[union-attr]
+    snapshot_dict = snapshot.model_dump()
     env_data["hardware"] = snapshot_dict["hardware"]
     env_data["python_version"] = snapshot_dict["python_version"]
     env_data["tool_version"] = snapshot_dict["tool_version"]
@@ -189,7 +189,7 @@ def save_result(
 def load_result(path: Path) -> ExperimentResult:
     """Load ExperimentResult from a result.json path.
 
-    Auto-discovers timeseries.parquet and effective_config.json sidecars
+    Auto-discovers timeseries.parquet and environment.json sidecars
     in the same directory. If the result references a timeseries sidecar
     but the file is missing, loads successfully and emits a UserWarning
     (graceful degradation).
