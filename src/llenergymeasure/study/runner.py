@@ -1324,8 +1324,12 @@ class StudyRunner:
             and baseline_cache_path is not None
             and baseline_cache_path.exists()
         ):
+            # Docker parses relative bind-mount sources as named volumes; resolve first.
             extra_mounts.append(
-                (str(baseline_cache_path), f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json")
+                (
+                    str(baseline_cache_path.resolve()),
+                    f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json",
+                )
             )
 
         docker_runner = DockerRunner(

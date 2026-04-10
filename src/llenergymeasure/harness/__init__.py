@@ -248,7 +248,6 @@ class MeasurementHarness:
 
         # 2. Baseline power measurement (before model load)
         if baseline is not None and config.baseline.enabled:
-            # Study-level cache: reuse pre-measured baseline from parent process
             from dataclasses import replace as _dc_replace
 
             baseline = _dc_replace(baseline, from_cache=True)
@@ -258,8 +257,11 @@ class MeasurementHarness:
                 baseline.sample_count,
             )
             if _p:
-                _p.on_step_start("baseline", "Measuring", "baseline idle power")
-                _p.on_step_update("baseline", f"cached baseline {baseline.power_w:.1f}W")
+                _p.on_step_start(
+                    "baseline",
+                    "Reusing",
+                    f"cached baseline {baseline.power_w:.1f}W",
+                )
             _substep(
                 "baseline",
                 f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples, study-level cache)",
