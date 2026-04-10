@@ -113,6 +113,36 @@ baseline:
 For publication-quality results, always include baseline in your reported energy.
 `adjusted_energy_joules` is the preferred metric for comparing configurations.
 
+### Where baselines are measured
+
+Baseline idle power is measured in the same CUDA environment as the inference
+work it will be subtracted from. For local (host) runs that is the host
+process itself. For Docker runs, the baseline is measured inside a short-lived
+container of the same backend image, with the CUDA runtime initialised and
+the torch memory pool seeded — matching the state the experiment container
+will be in just before inference starts.
+
+**Why this matters:** a host-measured baseline underestimates the container's
+idle power by ~8.7 W per A100 because the host has no CUDA context and no GPU
+memory pool allocated. On a 4-GPU 120 s A100 experiment this is a ~4.2 kJ
+under-subtraction (~19 % of typical adjusted energy). Measuring in the
+matching CUDA environment eliminates this bias. See
+`.product/research/baseline-measurement-location.md` for the controlled
+experiment and statistics.
+
+**Baseline strategies and where they run:**
+
+| Strategy    | Where measured (local runner)     | Where measured (Docker runner)                |
+|-------------|-----------------------------------|-----------------------------------------------|
+| `fresh`     | Host, per experiment              | Inside experiment container (per-experiment) |
+| `cached`    | Host, once per TTL window         | Short-lived baseline container, once          |
+| `validated` | Host, once + periodic spot-check  | Short-lived baseline / spot-check containers  |
+
+**Cross-backend comparisons:** each backend image gets its own baseline cache.
+If your study mixes backends, each backend's adjusted energy is computed
+against a baseline measured in that backend's environment — cross-backend
+energy comparisons remain apples-to-apples.
+
 ---
 
 ## Multi-Cycle Execution
