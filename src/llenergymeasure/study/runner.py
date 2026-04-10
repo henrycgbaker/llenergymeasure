@@ -1316,7 +1316,11 @@ class StudyRunner:
             and baseline_cache_path is not None
             and baseline_cache_path.exists()
         ):
-            extra_mounts.append((str(baseline_cache_path), "/run/llem/baseline_cache.json"))
+            # Docker requires absolute paths for bind-mount sources; relative paths are
+            # parsed as named volumes and rejected when they contain "/".
+            extra_mounts.append(
+                (str(baseline_cache_path.resolve()), "/run/llem/baseline_cache.json")
+            )
 
         docker_runner = DockerRunner(
             image=image,

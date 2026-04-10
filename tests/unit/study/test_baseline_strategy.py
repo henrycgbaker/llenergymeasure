@@ -525,3 +525,62 @@ class TestDockerBaselineMount:
         # Verify the cache file path is correct
         assert runner._get_baseline_cache_path() == cache_path
         assert cache_path.exists()
+
+    def test_baseline_cache_mount_path_is_absolute_when_study_dir_relative(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        config_cached: ExperimentConfig,
+    ):
+        """Regression: relative study_dir must still yield an absolute bind-mount source.
+
+        Docker rejects relative paths as bind-mount sources (parsed as named volumes).
+        The default results_dir is "./results", so the mount host path MUST be resolved
+        to absolute before being passed to DockerRunner.
+        """
+        from llenergymeasure.infra.runner_resolution import RunnerSpec
+        from llenergymeasure.utils.exceptions import DockerError
+
+        monkeypatch.chdir(tmp_path)
+        relative_study_dir = Path("results/test-study")
+
+        runner = _make_runner(relative_study_dir, config_cached)
+        runner._baseline = _make_baseline()  # skip measurement
+        runner._images_prepared = True  # skip image prep/pull
+
+        # Pre-populate the cache file (at the relative location, which resolves
+        # against cwd=tmp_path via monkeypatch.chdir above).
+        cache_path = relative_study_dir / "_study-artefacts" / "baseline_cache.json"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps({"power_w": 50.0}))
+
+        captured: dict = {}
+
+        class FakeDockerRunner:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def run(self, *args, **kwargs):
+                raise DockerError("stop here")
+
+        spec = RunnerSpec(mode="docker", image="test/image:latest", source="yaml")
+
+        with (
+            patch("llenergymeasure.infra.docker_runner.DockerRunner", FakeDockerRunner),
+            patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
+            patch.object(runner, "_handle_result"),
+            patch.object(runner, "_persist_failure_artefacts"),
+        ):
+            runner._run_one_docker(config_cached, spec, config_hash="abc123", cycle=1, index=1)
+
+        extra_mounts = captured.get("extra_mounts") or []
+        baseline_mounts = [
+            host for host, cont in extra_mounts if cont == "/run/llem/baseline_cache.json"
+        ]
+        assert baseline_mounts, "baseline cache was not mounted"
+        host_path = baseline_mounts[0]
+        assert Path(host_path).is_absolute(), (
+            f"baseline_cache.json bind-mount source must be absolute for Docker, "
+            f"got relative path: {host_path!r}"
+        )
+        assert Path(host_path).exists(), f"resolved mount path does not exist: {host_path}"
