@@ -499,21 +499,23 @@ def test_run_study_routing_experiments_yaml(tmp_path):
 
 
 def test_run_saves_to_output_dir(tmp_path):
-    """When --output CLI flag is passed, save_result is called."""
+    """When --output CLI flag is passed, run_experiment receives output_dir."""
     mock_config = _make_mock_config()
     mock_result = _make_mock_result()
     mock_result.timeseries = None
+    output_dir = tmp_path / "out"
 
     with (
         patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result),
+        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result) as mock_run,
         patch("llenergymeasure.cli.run.print_result_summary"),
-        patch("llenergymeasure.api.save_result") as mock_save_result,
     ):
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--output", str(tmp_path / "out")])
+        result = runner.invoke(app, ["run", "--model", "gpt2", "--output", str(output_dir)])
 
     assert result.exit_code == 0, f"Expected exit 0. Output: {result.output}"
-    mock_save_result.assert_called_once()
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args
+    assert call_kwargs.kwargs.get("output_dir") == str(output_dir)
 
 
 def test_run_study_cli_defaults_applied(tmp_path):

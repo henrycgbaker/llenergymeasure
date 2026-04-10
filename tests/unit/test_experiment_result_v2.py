@@ -1,6 +1,6 @@
-"""Unit tests for ExperimentResult v2.0 schema.
+"""Unit tests for ExperimentResult v3.0 schema.
 
-Tests cover: schema_version="2.0", all RES-01..RES-11 fields, JSON round-trip,
+Tests cover: schema_version="3.0", all RES-01..RES-11 fields, JSON round-trip,
 config hash utility, MultiGPUMetrics, frozen model enforcement.
 """
 
@@ -50,10 +50,12 @@ def make_result():
 # ---------------------------------------------------------------------------
 
 
-def test_schema_version_default_is_2_0(make_result):
-    """schema_version defaults to '2.0', not '2.0.0'."""
+def test_schema_version_default_is_3_0(make_result):
+    """schema_version defaults to '3.0', not '3.0.0'."""
     result = make_result()
-    assert result.schema_version == "2.0"
+    from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+
+    assert result.schema_version == EXPERIMENT_SCHEMA_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -239,17 +241,6 @@ def test_timeseries_field(make_result):
 
     result_none = make_result(timeseries=None)
     assert result_none.timeseries is None
-
-
-# ---------------------------------------------------------------------------
-# Task 2.17: environment_snapshot
-# ---------------------------------------------------------------------------
-
-
-def test_environment_snapshot_optional(make_result):
-    """Can embed EnvironmentSnapshot or leave as None."""
-    result_none = make_result()
-    assert result_none.environment_snapshot is None
 
 
 # ---------------------------------------------------------------------------

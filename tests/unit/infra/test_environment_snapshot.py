@@ -55,7 +55,6 @@ def test_environment_snapshot_model() -> None:
     snap = EnvironmentSnapshot(
         hardware=hardware,
         python_version="3.11.5",
-        installed_packages=["numpy==1.26.0", "torch==2.2.0"],
         tool_version=__version__,
         cuda_version="12.4",
         cuda_version_source="torch",
@@ -65,7 +64,6 @@ def test_environment_snapshot_model() -> None:
     assert snap.tool_version == __version__
     assert snap.cuda_version == "12.4"
     assert snap.cuda_version_source == "torch"
-    assert "numpy==1.26.0" in snap.installed_packages
 
 
 def test_environment_snapshot_optional_fields() -> None:
@@ -75,7 +73,6 @@ def test_environment_snapshot_optional_fields() -> None:
     snap = EnvironmentSnapshot(
         hardware=hardware,
         python_version="3.10.0",
-        installed_packages=[],
         tool_version=__version__,
     )
     assert snap.cuda_version is None
@@ -298,5 +295,5 @@ def test_collect_environment_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     assert snap.cuda_version == "12.4"
     assert snap.cuda_version_source == "torch"
     assert snap.python_version != ""  # Real platform.python_version()
-    assert isinstance(snap.installed_packages, list)
-    assert len(snap.installed_packages) > 0  # At least llenergymeasure itself
+    # installed_packages is now study-level only (collect_software_environment)
+    assert not hasattr(snap, "installed_packages") or "installed_packages" not in snap.model_fields

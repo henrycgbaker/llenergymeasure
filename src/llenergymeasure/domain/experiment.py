@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.metrics import (
     ComputeMetrics,
     EnergyBreakdown,
@@ -69,7 +68,7 @@ class RawProcessResult(BaseModel):
     experiment. Raw results are saved individually and aggregated separately.
     """
 
-    schema_version: str = Field(default="2.0", description="Result schema version")
+    schema_version: str = Field(default="3.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
     backend: str = Field(default="pytorch", description="Inference backend used")
     backend_version: str | None = Field(
@@ -147,7 +146,7 @@ class ExperimentResult(BaseModel):
     """
 
     # Identity
-    schema_version: str = Field(default="2.0", description="Result schema version")
+    schema_version: str = Field(default="3.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
     measurement_config_hash: str = Field(
         ..., description="SHA-256[:16] of ExperimentConfig (environment excluded)"
@@ -220,11 +219,6 @@ class ExperimentResult(BaseModel):
     # Multi-GPU (from result-schema.md design)
     multi_gpu: MultiGPUMetrics | None = Field(
         default=None, description="Multi-GPU metrics. None for single-GPU runs."
-    )
-
-    # Environment
-    environment_snapshot: EnvironmentSnapshot | None = Field(
-        default=None, description="Full software+hardware environment snapshot"
     )
 
     # Quality

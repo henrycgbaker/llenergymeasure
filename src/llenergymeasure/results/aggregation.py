@@ -11,7 +11,6 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from llenergymeasure._version import __version__
-from llenergymeasure.domain.environment import EnvironmentSnapshot
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
@@ -144,7 +143,6 @@ class AggregationContext:
     multi_gpu: MultiGPUMetrics | None = None
 
     # -- Environment -----------------------------------------------------
-    environment_snapshot: EnvironmentSnapshot | None = None
     thermal_throttle: ThermalThrottleInfo | None = None
 
     # -- Warmup ----------------------------------------------------------
@@ -375,7 +373,7 @@ def aggregate_results(
     _mj_adjusted = mj_per_token(_energy_adj, total_tokens) if _energy_adj is not None else None
 
     return ExperimentResult(
-        schema_version="2.0",
+        schema_version="3.0",
         experiment_id=ctx.experiment_id,
         measurement_config_hash=ctx.measurement_config_hash,
         llenergymeasure_version=__version__,
@@ -400,7 +398,6 @@ def aggregate_results(
         energy_per_device_j=ctx.energy_per_device_j,
         energy_breakdown=energy_breakdown,
         multi_gpu=ctx.multi_gpu,
-        environment_snapshot=ctx.environment_snapshot,
         measurement_warnings=warnings,
         warmup_excluded_samples=ctx.warmup_excluded_samples,
         timeseries=ctx.timeseries,

@@ -313,7 +313,12 @@ def _run_impl(
 
     result = None
     try:
-        result = run_experiment(experiment_config, skip_preflight=skip_preflight, progress=progress)
+        result = run_experiment(
+            experiment_config,
+            skip_preflight=skip_preflight,
+            progress=progress,
+            output_dir=output,
+        )
     finally:
         if display is not None:
             energy = getattr(result, "total_energy_j", None) if result is not None else None
@@ -324,16 +329,7 @@ def _run_impl(
 
     print_result_summary(result)
 
-    # Save output if --output flag specified (runtime param, not config field)
     if output:
-        from llenergymeasure.api import save_result
-
-        output_path = Path(output)
-        ts_source = output_path / result.timeseries if result.timeseries else None
-        save_result(result, output_path, timeseries_source=ts_source)
-        # Clean up stale flat timeseries file after copy into subdirectory
-        if ts_source is not None:
-            ts_source.unlink(missing_ok=True)
         print(f"Saved: {output}", file=sys.stderr)
 
 

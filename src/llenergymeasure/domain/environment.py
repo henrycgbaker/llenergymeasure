@@ -143,11 +143,15 @@ class EnvironmentMetadata(BaseModel):
 
 
 class EnvironmentSnapshot(BaseModel):
-    """Full software+hardware environment snapshot for experiment reproducibility."""
+    """Full software+hardware environment snapshot for experiment reproducibility.
+
+    Contains per-experiment hardware and runtime metadata. Software package
+    listings (installed_packages) are study-level constants and live in the
+    study-level environment.json artefact instead.
+    """
 
     hardware: EnvironmentMetadata
     python_version: str
-    installed_packages: list[str]
     tool_version: str
     cuda_version: str | None = None
     cuda_version_source: str | None = None  # "torch" | "version_txt" | "nvcc" | None

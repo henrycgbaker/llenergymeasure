@@ -148,7 +148,9 @@ def test_save_atomic_write(tmp_path: Path, minimal_result: ExperimentResult) -> 
     content = result_path.read_text(encoding="utf-8")
     parsed = json.loads(content)
     assert parsed["experiment_id"] == "persist-test-001"
-    assert parsed["schema_version"] == "2.0"
+    from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+
+    assert parsed["schema_version"] == EXPERIMENT_SCHEMA_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +194,9 @@ def test_from_json_loads_correctly(tmp_path: Path, minimal_result: ExperimentRes
 
     assert loaded.experiment_id == minimal_result.experiment_id
     assert loaded.measurement_config_hash == minimal_result.measurement_config_hash
-    assert loaded.schema_version == "2.0"
+    from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+
+    assert loaded.schema_version == EXPERIMENT_SCHEMA_VERSION
     assert loaded.measurement_methodology == minimal_result.measurement_methodology
     assert loaded.total_tokens == minimal_result.total_tokens
     assert loaded.total_energy_j == pytest.approx(minimal_result.total_energy_j)
@@ -277,41 +281,6 @@ def test_from_json_missing_sidecar_loads_successfully(
     assert loaded.timeseries == "timeseries.parquet"
     # But the file itself is not there
     assert not (result_path.parent / "timeseries.parquet").exists()
-
-
-# ---------------------------------------------------------------------------
-# effective_config.json sidecar
-# ---------------------------------------------------------------------------
-
-
-def test_save_writes_effective_config_sidecar(
-    tmp_path: Path, minimal_result: ExperimentResult
-) -> None:
-    """save_result() writes effective_config.json sidecar when config param provided."""
-    ec = {"model": "gpt2", "backend": "pytorch"}
-    result_path = save_result(minimal_result, tmp_path, effective_config=ec)
-    sidecar = result_path.parent / "effective_config.json"
-    assert sidecar.exists(), "effective_config.json should be written as sidecar"
-
-
-def test_effective_config_sidecar_content(tmp_path: Path, minimal_result: ExperimentResult) -> None:
-    """effective_config.json sidecar contains the provided config dict."""
-    import json
-
-    ec = {"model": "gpt2", "backend": "pytorch"}
-    result_path = save_result(minimal_result, tmp_path, effective_config=ec)
-    sidecar = result_path.parent / "effective_config.json"
-    config = json.loads(sidecar.read_text())
-    assert config == ec
-
-
-def test_save_without_effective_config_no_sidecar(
-    tmp_path: Path, minimal_result: ExperimentResult
-) -> None:
-    """save_result() without effective_config param does not write sidecar."""
-    result_path = save_result(minimal_result, tmp_path)
-    sidecar = result_path.parent / "effective_config.json"
-    assert not sidecar.exists()
 
 
 # ---------------------------------------------------------------------------

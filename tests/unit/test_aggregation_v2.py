@@ -104,14 +104,16 @@ def test_aggregate_returns_experiment_result(make_raw_result):
 
 
 def test_aggregate_schema_version(make_raw_result):
-    """Aggregated result carries schema_version == '2.0'."""
+    """Aggregated result carries schema_version == '3.0'."""
     raw = make_raw_result()
     ctx = AggregationContext(
         experiment_id="test-001",
         measurement_config_hash="abc123def456abcd",
     )
     result = aggregate_results([raw], ctx)
-    assert result.schema_version == "2.0"
+    from tests.conftest import EXPERIMENT_SCHEMA_VERSION
+
+    assert result.schema_version == EXPERIMENT_SCHEMA_VERSION
 
 
 def test_aggregate_measurement_config_hash(make_raw_result):

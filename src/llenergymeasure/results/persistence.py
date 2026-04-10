@@ -92,19 +92,41 @@ def _atomic_write(content: str, path: Path) -> None:
         raise
 
 
-def save_effective_config(experiment_dir: Path, config_dict: dict[str, object]) -> Path:
-    """Write effective_config.json sidecar to an experiment directory.
+def save_environment(
+    snapshot: object,
+    experiment_id: str,
+    measurement_config_hash: str,
+    experiment_dir: Path,
+) -> Path:
+    """Write per-experiment environment.json sidecar.
+
+    Contains hardware/runtime metadata for the experiment. Software package
+    listings live in the study-level environment.json instead.
 
     Args:
+        snapshot: EnvironmentSnapshot (typed as object to avoid circular import).
+        experiment_id: Unique experiment identifier.
+        measurement_config_hash: Config hash for orphan attribution.
         experiment_dir: Experiment result directory (must already exist).
-        config_dict: Fully resolved experiment config as a dict.
 
     Returns:
-        Path to the written effective_config.json file.
+        Path to the written environment.json file.
     """
-    path = experiment_dir / "effective_config.json"
-    _atomic_write(json.dumps(config_dict, indent=2, default=str), path)
-    logger.debug("Saved effective config to %s", path)
+    env_data: dict[str, object] = {
+        "experiment_id": experiment_id,
+        "measurement_config_hash": measurement_config_hash,
+    }
+    # snapshot is an EnvironmentSnapshot pydantic model
+    snapshot_dict = snapshot.model_dump()  # type: ignore[union-attr]
+    env_data["hardware"] = snapshot_dict["hardware"]
+    env_data["python_version"] = snapshot_dict["python_version"]
+    env_data["tool_version"] = snapshot_dict["tool_version"]
+    env_data["cuda_version"] = snapshot_dict.get("cuda_version")
+    env_data["cuda_version_source"] = snapshot_dict.get("cuda_version_source")
+
+    path = experiment_dir / "environment.json"
+    _atomic_write(json.dumps(env_data, indent=2, default=str), path)
+    logger.debug("Saved environment to %s", path)
     return path
 
 
@@ -114,13 +136,11 @@ def save_result(
     timeseries_source: Path | None = None,
     experiment_index: int | None = None,
     cycle: int = 1,
-    effective_config: dict[str, object] | None = None,
     resolution_log: dict[str, object] | None = None,
 ) -> Path:
     """Save ExperimentResult to a collision-safe subdirectory of output_dir.
 
     Creates: ``{output_dir}/[{index}_]c{cycle}_{model}-{backend}_{hash}/result.json``
-    Also writes ``effective_config.json`` sidecar when ``effective_config`` is provided.
     Also writes ``_resolution.json`` sidecar when ``resolution_log`` is provided.
     If timeseries_source provided: copies to ``{dir}/timeseries.parquet``.
 
@@ -131,8 +151,6 @@ def save_result(
         experiment_index: Optional 1-based experiment index for directory prefix
             (used in study context for natural sort ordering).
         cycle: Cycle number (1-based). Embedded in directory name.
-        effective_config: Fully resolved experiment config dict to write as
-            a sidecar file. Passed separately from the result (not embedded).
         resolution_log: Per-experiment config resolution log showing which fields
             were overridden and why (CLI flag, sweep, YAML).
 
@@ -150,10 +168,6 @@ def save_result(
     _atomic_write(result.model_dump_json(indent=2), result_path)
     logger.debug("Saved result to %s", result_path)
 
-    # Write effective_config.json sidecar
-    if effective_config:
-        save_effective_config(target_dir, effective_config)
-
     # Write _resolution.json sidecar
     if resolution_log:
         res_path = target_dir / "_resolution.json"
@@ -170,20 +184,6 @@ def save_result(
             logger.warning("timeseries_source %s does not exist — skipping copy", timeseries_source)
 
     return result_path
-
-
-def load_effective_config(experiment_dir: Path) -> dict[str, object] | None:
-    """Load effective_config.json sidecar from an experiment directory.
-
-    Returns None if the sidecar does not exist (backward-compatible with
-    older result directories that embed config in result.json).
-    """
-    path = experiment_dir / "effective_config.json"
-    try:
-        data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    return data
 
 
 def load_result(path: Path) -> ExperimentResult:
