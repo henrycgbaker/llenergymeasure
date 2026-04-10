@@ -1,5 +1,5 @@
 # Full-suite multi-backend study - comprehensive coverage across all backends
-# Run: llem run configs/examples/study-full-suite.yaml
+# Run: llem run configs/example-study-full.yaml
 #
 # Reference config - not intended for end-to-end execution.
 # Experiment counts depend on sweep axes and groups; run `llem run --dry-run`
