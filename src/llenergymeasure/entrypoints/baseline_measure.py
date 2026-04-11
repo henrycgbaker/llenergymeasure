@@ -64,7 +64,7 @@ def _emit_stage(name: str, **kv: object) -> None:
     Wire format: ``[llem.baseline] stage=<name> [k=v ...]``. Keys and values
     must be whitespace-free — this is a purpose-built internal protocol, not
     a general key-value serialiser. ``flush=True`` is non-negotiable: without
-    it, container stdio buffering delays each marker until the pipe's 4–8KB
+    it, container stdio buffering delays each marker until the pipe's 4-8KB
     block fills, which hides the whole point of streaming.
     """
     parts = [f"stage={name}"]

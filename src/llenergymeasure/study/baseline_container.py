@@ -16,6 +16,7 @@ invocation.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import shutil
@@ -216,10 +217,8 @@ def run_baseline_container(
             # expires, not only when the kernel delivers the next line.
             if (time.monotonic() - start) > timeout_sec:
                 process.kill()
-                try:
+                with contextlib.suppress(Exception):
                     process.wait(timeout=5)
-                except Exception:
-                    pass
                 logger.warning(
                     "Baseline container timed out after %.0fs (image=%s, mode=%s). "
                     "Exchange dir preserved at %s for post-mortem.",
@@ -232,10 +231,8 @@ def run_baseline_container(
         returncode = process.wait(timeout=max(5.0, timeout_sec))
     except subprocess.TimeoutExpired:
         process.kill()
-        try:
+        with contextlib.suppress(Exception):
             process.wait(timeout=5)
-        except Exception:
-            pass
         logger.warning(
             "Baseline container timed out after %.0fs (image=%s, mode=%s). "
             "Exchange dir preserved at %s for post-mortem.",
