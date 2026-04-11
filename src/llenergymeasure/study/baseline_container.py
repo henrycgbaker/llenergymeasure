@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from llenergymeasure.config.ssot import (
@@ -33,7 +34,18 @@ from llenergymeasure.harness.baseline import BaselineCache
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["build_baseline_docker_cmd", "run_baseline_container"]
+__all__ = [
+    "StageCallback",
+    "build_baseline_docker_cmd",
+    "parse_stage_line",
+    "run_baseline_container",
+]
+
+# Host callback signature for stage markers parsed from the container's stdout.
+# Positional args: (stage_name, elapsed_since_subprocess_start, kv_tags).
+StageCallback = Callable[[str, float, "dict[str, str]"], None]
+
+_STAGE_LINE_PREFIX = "[llem.baseline] stage="
 
 
 def build_baseline_docker_cmd(
@@ -68,12 +80,36 @@ def build_baseline_docker_cmd(
     ]
 
 
+def parse_stage_line(line: str) -> tuple[str, dict[str, str]] | None:
+    """Parse a ``[llem.baseline] stage=NAME k=v ...`` line.
+
+    Returns ``(stage_name, kv)`` or ``None`` if the line is not a stage
+    marker. Malformed key-value tokens (no ``=``) are skipped silently;
+    we treat this wire format as a best-effort progress channel, not a
+    critical data path.
+    """
+    if not line.startswith(_STAGE_LINE_PREFIX):
+        return None
+    payload = line[len(_STAGE_LINE_PREFIX) :].strip()
+    if not payload:
+        return None
+    parts = payload.split()
+    stage_name = parts[0]
+    kv: dict[str, str] = {}
+    for token in parts[1:]:
+        if "=" in token:
+            k, v = token.split("=", 1)
+            kv[k] = v
+    return stage_name, kv
+
+
 def run_baseline_container(
     image: str,
     mode: str,
     duration_sec: float,
     gpu_indices: list[int],
     timeout_sec: float | None = None,
+    on_stage: StageCallback | None = None,
 ) -> BaselineCache | None:
     """Spawn a short-lived baseline container and return the measurement.
 
@@ -95,6 +131,12 @@ def run_baseline_container(
         timeout_sec: Subprocess timeout. Defaults to
             ``max(duration_sec * 2 + 60, 120)`` — enough for cold-start,
             sampling, and teardown with headroom.
+        on_stage: Optional callback invoked for each stage marker streamed on
+            the container's stdout (``container_ready``, ``cuda_primed``,
+            ``sampling_started``, ``sampling_done``, ``result_written``). The
+            callback is passed ``(stage_name, elapsed_since_popen, kv_tags)``
+            and is what the CLI hooks to emit live sub-bullets while the
+            container is still running.
 
     Returns:
         A ``BaselineCache`` with ``method=None`` on success (the caller sets
@@ -131,15 +173,69 @@ def run_baseline_container(
         gpu_indices,
     )
 
+    # Popen + line-buffered iteration gives the CLI a chance to emit live
+    # sub-step progress as the container transitions stages. stderr is merged
+    # into stdout so a single iterator covers both streams — avoids the risk
+    # of stderr's pipe buffer filling up and deadlocking the child while we
+    # drain stdout, and keeps the stage-marker parser simple.
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            timeout=timeout_sec,
-            check=False,
+            bufsize=1,
         )
+    except FileNotFoundError:
+        logger.warning("Baseline container dispatch failed: `docker` binary not found on PATH")
+        _cleanup_exchange_dir(exchange_dir)
+        return None
+
+    start = time.monotonic()
+    output_lines: list[str] = []
+
+    try:
+        assert process.stdout is not None
+        for line in process.stdout:
+            output_lines.append(line)
+            stripped = line.rstrip("\n")
+            parsed = parse_stage_line(stripped)
+            if parsed is not None and on_stage is not None:
+                stage_name, kv = parsed
+                elapsed = time.monotonic() - start
+                try:
+                    on_stage(stage_name, elapsed, kv)
+                except Exception:
+                    # A broken CLI callback must never take down the measurement.
+                    logger.debug(
+                        "baseline on_stage callback raised; continuing",
+                        exc_info=True,
+                    )
+            # Deadline check inside the read loop so a wedged container
+            # (e.g. stuck in CUDA init) is still killed when the budget
+            # expires, not only when the kernel delivers the next line.
+            if (time.monotonic() - start) > timeout_sec:
+                process.kill()
+                try:
+                    process.wait(timeout=5)
+                except Exception:
+                    pass
+                logger.warning(
+                    "Baseline container timed out after %.0fs (image=%s, mode=%s). "
+                    "Exchange dir preserved at %s for post-mortem.",
+                    timeout_sec,
+                    image,
+                    mode,
+                    exchange_dir,
+                )
+                return None
+        returncode = process.wait(timeout=max(5.0, timeout_sec))
     except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=5)
+        except Exception:
+            pass
         logger.warning(
             "Baseline container timed out after %.0fs (image=%s, mode=%s). "
             "Exchange dir preserved at %s for post-mortem.",
@@ -149,20 +245,16 @@ def run_baseline_container(
             exchange_dir,
         )
         return None
-    except FileNotFoundError:
-        logger.warning("Baseline container dispatch failed: `docker` binary not found on PATH")
-        _cleanup_exchange_dir(exchange_dir)
-        return None
 
-    if completed.returncode != 0:
-        stderr_tail = (completed.stderr or "").strip().splitlines()[-10:]
+    if returncode != 0:
+        tail = [line.rstrip("\n") for line in output_lines[-10:]]
         logger.warning(
             "Baseline container exited non-zero (code=%d, image=%s, mode=%s). "
-            "Stderr tail: %s. Exchange dir preserved at %s.",
-            completed.returncode,
+            "Output tail: %s. Exchange dir preserved at %s.",
+            returncode,
             image,
             mode,
-            stderr_tail,
+            tail,
             exchange_dir,
         )
         if error_path.exists():

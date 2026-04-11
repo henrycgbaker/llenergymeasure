@@ -783,6 +783,74 @@ class TestBaselineHostProgressEvents:
         # the measurement itself failed — the substep carries the "why".
         assert "on_step_done" in names
 
+    def test_docker_fresh_emits_live_stage_substeps(
+        self, tmp_path: Path, config_cached: ExperimentConfig
+    ):
+        """Streamed stage markers from run_baseline_container become sub-bullets
+        under the active baseline step, with per-stage deltas rather than
+        ever-increasing cumulative totals.
+
+        This is the regression for "why did a 30s measurement take 37s?" —
+        the user now sees dispatched + CUDA init + sampling as separate dim
+        sub-bullets whose durations add up to the parent elapsed.
+        """
+        spec = RunnerSpec(mode="docker", image="test/pytorch:v0", source="yaml")
+        runner, progress = _make_runner_with_progress(
+            tmp_path, config_cached, runner_specs={"pytorch": spec}
+        )
+
+        fake_cache = _make_baseline(
+            power_w=42.68,
+            sample_count=289,
+            duration_sec=30.00,
+            gpu_indices=[0],
+        )
+
+        captured_on_stage: list = []
+
+        def _fake_run_container(*_args, on_stage=None, **_kwargs):
+            captured_on_stage.append(on_stage)
+            # Simulate the container emitting its five stage markers, each
+            # roughly 1s apart except for the sampling window.
+            if on_stage is not None:
+                on_stage("container_ready", 2.5, {})
+                on_stage("cuda_primed", 4.1, {})
+                on_stage("sampling_started", 4.2, {"duration": "30.0"})
+                on_stage(
+                    "sampling_done",
+                    34.3,
+                    {"power_w": "42.68", "samples": "289", "duration": "30.00"},
+                )
+                on_stage("result_written", 34.4, {})
+            return fake_cache
+
+        with (
+            patch(_RESOLVE_GPU, return_value=[0]),
+            patch(_SAVE),
+            patch(_RUN_BASELINE_CONTAINER, side_effect=_fake_run_container),
+        ):
+            result = runner._get_baseline(config_cached)
+
+        assert result is fake_cache
+        # Callback was threaded through _measure_baseline → run_baseline_container.
+        assert captured_on_stage and captured_on_stage[0] is not None
+
+        substeps = [
+            call
+            for call in progress.mock_calls
+            if call[0] == "on_substep" and call[1] and call[1][0] == "baseline"
+        ]
+        # Expect three visible substeps: dispatched (from container_ready),
+        # CUDA primed, sampled. result_written fires but its delta is <0.1s
+        # so the substep is suppressed. sampling_started never emits.
+        texts = [call[1][1] for call in substeps]
+        assert any("dispatched" in t for t in texts)
+        assert any("CUDA" in t for t in texts)
+        assert any("sampled" in t and "42.68" in t and "289" in t for t in texts)
+        # No retroactive "container launch + teardown" substep — those were
+        # the old retroactive pre-streaming labels.
+        assert not any("container launch + teardown" in t for t in texts)
+
     def test_validated_spot_check_no_drift_emits_validating(
         self, tmp_path: Path, config_validated: ExperimentConfig
     ):
