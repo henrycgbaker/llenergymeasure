@@ -460,6 +460,27 @@ llem run experiment.yaml --skip-preflight
 
 ---
 
+### Updating to a new backend version
+
+The three backend Dockerfiles each pin a specific upstream image via `ARG`:
+
+- `docker/Dockerfile.pytorch` — `PYTORCH_VERSION`
+- `docker/Dockerfile.vllm` — `VLLM_VERSION`
+- `docker/Dockerfile.tensorrt` — `TRTLLM_VERSION`
+
+You almost never have to bump these by hand. Renovate watches each upstream registry and
+opens a PR automatically; a GitHub Actions workflow then rebuilds the image, re-runs
+parameter discovery inside it, and commits the regenerated vendored schema back to the PR.
+The PR is labelled `schema-safe` or `schema-breaking` based on a semantic diff, and auto-merge
+is gated on the safe label.
+
+For the full pipeline (how Renovate is configured, how the semantic diff is classified,
+what to do when you see `schema-breaking`, how to run a manual refresh locally via
+`./scripts/update_backend_schema.sh <framework>`, and how to troubleshoot drift-guard
+failures), see [schema-refresh.md](schema-refresh.md).
+
+---
+
 ## Next Steps
 
 - [Getting Started](getting-started.md) — run your first vLLM or TensorRT-LLM experiment
