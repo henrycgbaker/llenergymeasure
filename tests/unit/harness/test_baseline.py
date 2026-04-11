@@ -540,7 +540,7 @@ def test_save_and_load_baseline_cache_round_trip(tmp_path):
 
 
 def test_save_baseline_cache_json_format(tmp_path):
-    """Saved JSON contains the expected fields including measurement_host."""
+    """Saved JSON contains the expected fields including measurement_host and method."""
     cache_path = tmp_path / "baseline_cache.json"
     original = BaselineCache(
         power_w=42.0,
@@ -548,6 +548,7 @@ def test_save_baseline_cache_json_format(tmp_path):
         gpu_indices=[0],
         sample_count=100,
         duration_sec=10.0,
+        method="cached",
     )
 
     save_baseline_cache(cache_path, original)
@@ -559,6 +560,7 @@ def test_save_baseline_cache_json_format(tmp_path):
     assert raw["sample_count"] == 100
     assert raw["duration_sec"] == 10.0
     assert "measurement_host" in raw
+    assert raw["method"] == "cached"
 
 
 def test_save_baseline_cache_creates_parent_dirs(tmp_path):
@@ -620,6 +622,51 @@ def test_load_baseline_cache_missing_fields(tmp_path):
 
     result = load_baseline_cache(cache_path)
     assert result is None
+
+
+@pytest.mark.parametrize("method", ["cached", "validated", "fresh"])
+def test_save_and_load_baseline_cache_preserves_method(tmp_path, method):
+    """BaselineCache.method round-trips cleanly through save + load."""
+    cache_path = tmp_path / "baseline_cache.json"
+    original = BaselineCache(
+        power_w=42.0,
+        timestamp=time.time(),
+        gpu_indices=[0],
+        sample_count=100,
+        duration_sec=10.0,
+        method=method,
+    )
+
+    save_baseline_cache(cache_path, original)
+    loaded = load_baseline_cache(cache_path, ttl=3600.0)
+
+    assert loaded is not None
+    assert loaded.method == method
+
+
+def test_load_baseline_cache_backward_compat_no_method(tmp_path):
+    """Pre-fix cache files (no 'method' key) still load; method is None."""
+    cache_path = tmp_path / "baseline_cache.json"
+    # Hand-written pre-fix JSON: no 'method' field at all.
+    cache_path.write_text(
+        json.dumps(
+            {
+                "power_w": 33.9,
+                "timestamp": time.time(),
+                "gpu_indices": [0],
+                "sample_count": 300,
+                "duration_sec": 30.0,
+                "measurement_host": "old-host",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_baseline_cache(cache_path, ttl=3600.0)
+
+    assert loaded is not None
+    assert loaded.method is None
+    assert loaded.from_cache is True
 
 
 # =============================================================================

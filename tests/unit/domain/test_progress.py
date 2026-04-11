@@ -16,6 +16,7 @@ from llenergymeasure.domain.progress import (
     STEP_SAVE,
     STEP_WARMUP,
     ProgressCallback,
+    docker_steps,
 )
 
 
@@ -92,3 +93,84 @@ def test_step_phases_cover_all_constants():
         STEP_SAVE,
     ]:
         assert step in STEP_PHASES, f"Missing phase for step: {step}"
+
+
+# -------------------------------------------------------------------------
+# docker_steps() — assembles the Docker step list with strategy-dependent
+# placement of STEP_BASELINE. The renderer iterates in registered order, so
+# a step list out of sync with actual event order is exactly what causes the
+# "janky" progress display when using cached/validated baselines.
+# -------------------------------------------------------------------------
+
+
+def test_docker_steps_full_with_host_baseline():
+    """Baseline container runs BEFORE the experiment container.
+
+    cached/validated: host dispatches a short-lived baseline container first
+    so STEP_BASELINE must come before STEP_CONTAINER_START in the step list.
+    """
+    steps = docker_steps(images_prepared=False, host_baseline=True)
+    assert steps == [
+        STEP_PREFLIGHT,
+        STEP_IMAGE_CHECK,
+        STEP_PULL,
+        STEP_BASELINE,
+        STEP_CONTAINER_START,
+        STEP_CONTAINER_PREFLIGHT,
+        STEP_MODEL,
+        "prompts",
+        STEP_WARMUP,
+        "thermal_floor",
+        "energy_select",
+        STEP_MEASURE,
+        "flops",
+        STEP_SAVE,
+    ]
+
+
+def test_docker_steps_full_with_fresh_baseline():
+    """fresh strategy: harness measures baseline INSIDE the experiment container.
+
+    STEP_BASELINE must sit after container_preflight (which is the last
+    in-container setup event before the harness starts measuring).
+    """
+    steps = docker_steps(images_prepared=False, host_baseline=False)
+    assert steps.index(STEP_BASELINE) > steps.index(STEP_CONTAINER_PREFLIGHT)
+    assert steps[:3] == [STEP_PREFLIGHT, STEP_IMAGE_CHECK, STEP_PULL]
+    # Baseline sits immediately after container_preflight, before model.
+    baseline_idx = steps.index(STEP_BASELINE)
+    assert steps[baseline_idx - 1] == STEP_CONTAINER_PREFLIGHT
+    assert steps[baseline_idx + 1] == STEP_MODEL
+
+
+def test_docker_steps_images_prepared_drops_image_check_and_pull():
+    """Study-level image prep means per-experiment image_check/pull are redundant."""
+    steps = docker_steps(images_prepared=True, host_baseline=True)
+    assert STEP_IMAGE_CHECK not in steps
+    assert STEP_PULL not in steps
+    # host_baseline still positions baseline before container_start
+    assert steps.index(STEP_BASELINE) < steps.index(STEP_CONTAINER_START)
+
+
+def test_docker_steps_images_prepared_fresh():
+    """Per-study image prep combined with fresh strategy."""
+    steps = docker_steps(images_prepared=True, host_baseline=False)
+    assert STEP_IMAGE_CHECK not in steps
+    assert STEP_PULL not in steps
+    assert steps.index(STEP_BASELINE) > steps.index(STEP_CONTAINER_PREFLIGHT)
+
+
+def test_docker_steps_measurement_tail_is_identical_across_variants():
+    """The measurement-phase tail (model…save) is the same in every mode.
+
+    This locks in the single-source-of-truth property of the constructor —
+    changing the tail in one variant would drift the others automatically.
+    """
+    tails = {}
+    for images_prepared in (True, False):
+        for host_baseline in (True, False):
+            steps = docker_steps(images_prepared=images_prepared, host_baseline=host_baseline)
+            # Everything from STEP_MODEL onwards is the measurement tail.
+            tail = steps[steps.index(STEP_MODEL) :]
+            tails[(images_prepared, host_baseline)] = tuple(tail)
+    assert len(set(tails.values())) == 1, f"Measurement tail drifted across variants: {tails}"

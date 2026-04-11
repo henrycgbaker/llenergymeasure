@@ -452,7 +452,7 @@ def _run(
     if is_single:
         # For single-experiment studies with a StudyProgressCallback, emit
         # begin/end experiment events so the study display shows the table row.
-        from llenergymeasure.domain.progress import STEPS_DOCKER, STEPS_LOCAL, StudyProgressCallback
+        from llenergymeasure.domain.progress import STEPS_LOCAL, StudyProgressCallback, docker_steps
 
         study_cb: StudyProgressCallback | None = (
             progress if isinstance(progress, StudyProgressCallback) else None
@@ -463,7 +463,11 @@ def _run(
             config = study.experiments[0]
             spec = runner_specs.get(config.backend) if runner_specs else None
             is_docker = spec and spec.mode == RUNNER_DOCKER
-            steps = list(STEPS_DOCKER if is_docker else STEPS_LOCAL)
+            if is_docker:
+                host_baseline = config.baseline.enabled and config.baseline.strategy != "fresh"
+                steps = docker_steps(images_prepared=False, host_baseline=host_baseline)
+            else:
+                steps = list(STEPS_LOCAL)
             study_cb.begin_experiment(
                 1,
                 format_experiment_header(config),

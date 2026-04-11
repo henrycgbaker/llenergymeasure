@@ -300,6 +300,61 @@ def test_study_display_substep_in_active_experiment():
     assert substeps[1][0] == "energy tracker started"
 
 
+def test_study_display_step_restart_clears_prior_completion():
+    """Re-firing on_step_start for a completed step replaces the old state.
+
+    Regression: the baseline step can be fired twice in a row when the host
+    runner's short-lived baseline container fails and the experiment container
+    falls back to an in-harness measurement. The render loop checks
+    completed_map before _inner_active, so stale completion state would hide
+    the re-run spinner; guarantee the re-fire wins instead.
+    """
+    console, _buf = _make_console()
+    display = StudyStepDisplay(total_experiments=1, console=console)
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", ["baseline", "model"])
+    # First attempt: completes (e.g. the failed host dispatch that mistakenly
+    # got marked done with a small elapsed).
+    display.on_step_start("baseline", "Measuring", "baseline container · idle power")
+    display.on_substep("baseline", "measurement failed after 5.7s", 5.7)
+    display.on_step_done("baseline", 5.7)
+
+    # Sanity: prior state is recorded.
+    with display._lock:
+        assert any(c[0] == "baseline" for c in display._inner_completed)
+        assert display._inner_substeps.get("baseline")
+
+    # Second attempt: harness inside the experiment container fires a fresh
+    # on_step_start for the same step.
+    display.on_step_start("baseline", "Measuring", "baseline idle power (30s)")
+
+    with display._lock:
+        # Prior completion is gone so the renderer sees the new active state.
+        assert not any(c[0] == "baseline" for c in display._inner_completed)
+        assert "baseline" not in display._inner_substeps
+        assert display._inner_active is not None
+        assert display._inner_active[0] == "baseline"
+        assert display._inner_active[2] == "baseline idle power (30s)"
+
+
+def test_step_display_step_restart_clears_prior_completion():
+    """StepDisplay also clears prior completion on step re-fire."""
+    console, _buf = _make_console()
+    display = StepDisplay(header="test", console=console)
+    display.register_steps(["baseline", "model"])
+    display.on_step_start("baseline", "Measuring", "first attempt")
+    display.on_substep("baseline", "first substep", 0.0)
+    display.on_step_done("baseline", 5.7)
+
+    assert "baseline" in display._completed_steps
+
+    display.on_step_start("baseline", "Measuring", "second attempt")
+
+    assert "baseline" not in display._completed_steps
+    assert "baseline" not in display._substeps
+    assert display._active_step == "baseline"
+    assert display._active_detail == "second attempt"
+
+
 def test_study_display_finish_prints_summary_table():
     """finish() prints the final Rich Table with all experiment results."""
     buf = StringIO()

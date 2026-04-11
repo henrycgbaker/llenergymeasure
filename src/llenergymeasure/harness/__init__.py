@@ -25,6 +25,7 @@ from llenergymeasure.domain.experiment import (
     compute_measurement_config_hash,
     mj_per_token,
 )
+from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.energy import select_energy_sampler
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
 
@@ -248,6 +249,9 @@ class MeasurementHarness:
 
         # 2. Baseline power measurement (before model load)
         if baseline is not None and config.baseline.enabled:
+            # For cached/validated strategies, progress events are emitted by
+            # study/runner.py::_get_baseline. Here we only mark from_cache for
+            # create_energy_breakdown method attribution.
             from dataclasses import replace as _dc_replace
 
             baseline = _dc_replace(baseline, from_cache=True)
@@ -256,38 +260,26 @@ class MeasurementHarness:
                 baseline.power_w,
                 baseline.sample_count,
             )
-            if _p:
-                _p.on_step_start(
-                    "baseline",
-                    "Reusing",
-                    f"cached baseline {baseline.power_w:.1f}W",
-                )
-            _substep(
-                "baseline",
-                f"baseline: {baseline.power_w:.1f}W ({baseline.sample_count} samples, study-level cache)",
-            )
-            if _p:
-                _p.on_step_done("baseline", 0.0)
         elif config.baseline.enabled:
             dur = config.baseline.duration_seconds
             logger.debug("Measuring baseline power (%.0fs)...", dur)
             if _p:
-                _p.on_step_start("baseline", "Measuring", f"baseline idle power ({dur:.0f}s)")
+                _p.on_step_start(STEP_BASELINE, "Measuring", f"baseline idle power ({dur:.0f}s)")
                 t0 = time.perf_counter()
             baseline = measure_baseline_power(dur, gpu_indices=gpu_indices)
             if baseline is not None:
                 cache_label = " (cached)" if baseline.from_cache else ""
                 _substep(
-                    "baseline",
+                    STEP_BASELINE,
                     f"baseline: {baseline.power_w:.1f}W"
                     f" ({baseline.sample_count} samples{cache_label})",
                 )
                 if _p and baseline.from_cache:
-                    _p.on_step_update("baseline", f"cached baseline {baseline.power_w:.1f}W")
+                    _p.on_step_update(STEP_BASELINE, f"cached baseline {baseline.power_w:.1f}W")
             if _p:
-                _p.on_step_done("baseline", time.perf_counter() - t0)
+                _p.on_step_done(STEP_BASELINE, time.perf_counter() - t0)
         elif _p:
-            _p.on_step_skip("baseline", "disabled")
+            _p.on_step_skip(STEP_BASELINE, "disabled")
 
         # 3. Load model via backend plugin
         if _p:

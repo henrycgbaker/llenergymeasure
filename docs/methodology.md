@@ -113,6 +113,124 @@ baseline:
 For publication-quality results, always include baseline in your reported energy.
 `adjusted_energy_joules` is the preferred metric for comparing configurations.
 
+### Where baselines are measured
+
+Baseline idle power is measured in the same CUDA environment as the inference
+work it will be subtracted from. For local (host) runs that is the host
+process itself. For Docker runs, the baseline is measured inside a short-lived
+container of the same backend image, with the CUDA runtime initialised and
+the torch memory pool seeded — matching the state the experiment container
+will be in just before inference starts.
+
+**Why this matters:** a host-measured baseline underestimates the container's
+idle power by ~8.7 W per A100 because the host has no CUDA context and no GPU
+memory pool allocated. On a 4-GPU 120 s A100 experiment this is a ~4.2 kJ
+under-subtraction (~19 % of typical adjusted energy). Measuring in the
+matching CUDA environment eliminates this bias. See
+`.product/research/baseline-measurement-location.md` for the controlled
+experiment and statistics.
+
+**Baseline strategies and where they run:**
+
+| Strategy    | Where measured (local runner)     | Where measured (Docker runner)                |
+|-------------|-----------------------------------|-----------------------------------------------|
+| `fresh`     | Host, per experiment              | Inside experiment container (per-experiment) |
+| `cached`    | Host, once per TTL window         | Short-lived baseline container, once          |
+| `validated` | Host, once + periodic spot-check  | Short-lived baseline / spot-check containers  |
+
+**Cross-backend comparisons:** each backend image gets its own baseline cache.
+If your study mixes backends, each backend's adjusted energy is computed
+against a baseline measured in that backend's environment — cross-backend
+energy comparisons remain apples-to-apples.
+
+### Multi-backend studies: per-backend scoping
+
+Baseline caches, TTL expiry, and the `validated` strategy's spot-check
+counter are all keyed per backend target (``local`` for host runs,
+``image:<sanitised-tag>`` for each Docker image). In a mixed-backend
+study — for example 300 experiments randomly interleaving PyTorch, vLLM,
+and TensorRT-LLM — each backend behaves as if it had its own independent
+baseline session:
+
+- **`cached` TTL:** each backend's baseline ages out independently after
+  `baseline.cache_ttl_seconds`. A stale pytorch cache does not force a
+  re-measure of vllm, and vice versa. Cache files live at
+  `{study_dir}/_study-artefacts/baseline_cache_{key}.json`.
+- **`validated` interval:** `baseline.validation_interval` counts
+  experiments *per backend*, not across the whole study. If the interval
+  is 50 and the study interleaves three backends, each backend triggers
+  its own drift check after 50 experiments against *that* backend's
+  cached baseline — regardless of how many experiments ran against the
+  other backends in between.
+- **Drift threshold:** a drift detected on one backend only re-measures
+  that backend's baseline. The other backends' caches are untouched.
+
+This scoping makes randomised multi-backend studies safe to run without
+baseline interference — interleaving does not corrupt the statistical
+independence of each backend's adjusted energy figures.
+
+### Two-container architecture (Docker runs)
+
+For `cached` / `validated` strategies, a Docker experiment is dispatched
+as **two sequential containers** of the same backend image:
+
+```text
+          ┌────────────────────────────────────────────────┐
+          │ Host runner (study/runner.py)                  │
+          │                                                │
+          │  1. dispatch Container A ─┐                    │
+          │                           ▼                    │
+          │    ┌────────────────────────────────────────┐  │
+          │    │ Container A  (baseline_measure)        │  │
+          │    │ · init CUDA runtime                    │  │
+          │    │ · seed torch memory pool               │  │
+          │    │ · sample NVML power for duration_s     │  │
+          │    │ · write BaselineCache to JSON          │  │
+          │    │ · exit                                 │  │
+          │    └────────────────────────────────────────┘  │
+          │                           │                    │
+          │  2. bind-mount JSON ◀─────┘                    │
+          │                                                │
+          │  3. dispatch Container B                       │
+          │                           ▼                    │
+          │    ┌────────────────────────────────────────┐  │
+          │    │ Container B  (experiment harness)      │  │
+          │    │ · mount baseline_cache.json read-only  │  │
+          │    │ · load baseline via harness Branch A   │  │
+          │    │ · run warmup + measurement + save      │  │
+          │    └────────────────────────────────────────┘  │
+          │                                                │
+          └────────────────────────────────────────────────┘
+```
+
+**Key properties:**
+
+- **Strictly sequential.** Container A runs to completion (`subprocess.run`
+  is blocking) before Container B is started. The two containers never
+  execute concurrently, even though the CLI display may briefly show
+  overlapping updates during the ~100 ms handover.
+- **Same image, same CUDA state.** Using the backend image for Container A
+  guarantees the baseline is measured in the same CUDA runtime, same
+  Python interpreter, and same torch allocator footprint that Container B
+  will inherit. This is what eliminates the ~8.7 W/GPU host-vs-container
+  bias documented above.
+- **No shared process state.** Information crosses the container boundary
+  only through a single JSON file (`baseline_cache.json`) bind-mounted
+  into Container B under `/run/llem/`. No stdin pipes, no long-lived
+  sidecars, no shared volumes beyond the read-only cache.
+- **`fresh` strategy is single-container.** The harness measures its own
+  baseline inside Container B (Branch B of `harness/__init__.py`). No
+  Container A is dispatched. This is the simplest path but pays the
+  baseline cost on every experiment.
+
+**Why not measure baseline inside Container B in all cases?** Doing so
+would force every experiment in a cached or validated study to pay the
+full `duration_seconds` (typically 30 s) up front, cancelling the main
+benefit of caching. The two-container design pays that cost once per
+backend per TTL window and then reuses the result — a 300-experiment
+mixed-backend study pays ~3 × 30 s of baseline measurement instead of
+300 × 30 s.
+
 ---
 
 ## Multi-Cycle Execution

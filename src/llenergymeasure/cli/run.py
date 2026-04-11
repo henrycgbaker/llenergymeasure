@@ -299,7 +299,7 @@ def _run_impl(
     display = None
     if effective_mode != "quiet":
         from llenergymeasure.cli._step_display import StepDisplay
-        from llenergymeasure.domain.progress import STEPS_DOCKER
+        from llenergymeasure.domain.progress import docker_steps
 
         display = StepDisplay(
             header=f"Experiment: {header}",
@@ -307,7 +307,13 @@ def _run_impl(
         )
         # Pre-register: Docker path is the common case (auto-elevation).
         # Local path is rare (only when runner explicitly set to local).
-        display.register_steps(STEPS_DOCKER)
+        # Single-experiment CLI has no study-level image prep, so include
+        # image_check/pull. host_baseline tracks where STEP_BASELINE sits
+        # relative to container_start (see docker_steps() docstring).
+        host_baseline = (
+            experiment_config.baseline.enabled and experiment_config.baseline.strategy != "fresh"
+        )
+        display.register_steps(docker_steps(images_prepared=False, host_baseline=host_baseline))
         display.start()
         progress = display
 
