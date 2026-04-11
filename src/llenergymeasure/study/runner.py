@@ -356,7 +356,7 @@ def _collect_result(
     p: Any,  # multiprocessing.Process
     parent_conn: Any,  # multiprocessing.Connection (parent end)
     config: ExperimentConfig,
-    timeout: int,
+    timeout: float,
     pipe_payload: Any = _UNSET,
 ) -> Any:
     """Inspect process outcome and return either a result or a failure dict.
