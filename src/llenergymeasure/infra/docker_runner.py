@@ -682,17 +682,37 @@ class DockerRunner:
 
         result = ExperimentResult.model_validate(raw)
 
-        # Warn if the container ran a different package version than the host.
-        # This catches stale Docker images that predate new result fields.
+        # Belt-and-braces warning for the single-shot run_experiment() API path
+        # (which bypasses StudyRunner._prepare_images and therefore the
+        # fingerprint handshake). This catches stale images that predate new
+        # result fields. StudyRunner-driven runs already hit a hard abort in
+        # _verify_image_fingerprint before any experiment starts.
         from llenergymeasure._version import __version__
+        from llenergymeasure.infra.version_handshake import (
+            compute_expconf_fingerprint,
+            inspect_image_stamp,
+        )
 
         container_version = result.llenergymeasure_version
         if container_version is None or container_version != __version__:
-            logger.warning(
-                "Container result version %s differs from host %s - rebuild Docker images",
-                container_version,
-                __version__,
-            )
+            stamp = inspect_image_stamp(self.image)
+            host_fp = compute_expconf_fingerprint()
+            if stamp.expconf_fingerprint and stamp.expconf_fingerprint != host_fp:
+                logger.warning(
+                    "Container result version %s differs from host %s "
+                    "(image %s schema %s, host schema %s) — rebuild Docker images",
+                    container_version,
+                    __version__,
+                    self.image,
+                    stamp.expconf_fingerprint[:12],
+                    host_fp[:12],
+                )
+            else:
+                logger.warning(
+                    "Container result version %s differs from host %s — rebuild Docker images",
+                    container_version,
+                    __version__,
+                )
 
         return result
 

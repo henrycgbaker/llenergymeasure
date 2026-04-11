@@ -1771,6 +1771,199 @@ class TestParseImageMetadata:
         data = b"[{}]"
         assert StudyRunner._parse_image_metadata(data) is None
 
+    def test_labels_extracted_under_llem_keys(self) -> None:
+        """Schema-handshake labels surface as llem_* keys for the verify step."""
+        data = (
+            b'[{"Id": "sha256:abc123def456789", "Size": 1073741824, '
+            b'"Config": {"Labels": {'
+            b'"llem.expconf.schema.fingerprint": "' + b"a" * 64 + b'",'
+            b'"org.opencontainers.image.version": "0.9.0"'
+            b"}}}]"
+        )
+        meta = StudyRunner._parse_image_metadata(data)
+        assert meta is not None
+        assert meta["llem_expconf_fingerprint"] == "a" * 64
+        assert meta["llem_pkg_version"] == "0.9.0"
+
+
+# =============================================================================
+# Schema-fingerprint handshake wired into _prepare_images
+# =============================================================================
+
+
+def _inspect_json_with_labels(fingerprint: str, pkg_version: str = "0.9.0") -> bytes:
+    import json as _json
+
+    return _json.dumps(
+        [
+            {
+                "Id": "sha256:abc123def4560000000000000000000000000000000000000000000000000000",
+                "Size": 1073741824,
+                "Created": "2026-03-20T10:00:00Z",
+                "RootFS": {"Layers": ["sha256:a"]},
+                "Config": {
+                    "Labels": {
+                        "llem.expconf.schema.fingerprint": fingerprint,
+                        "org.opencontainers.image.version": pkg_version,
+                    }
+                },
+            }
+        ]
+    ).encode("utf-8")
+
+
+class TestSchemaFingerprintHandshake:
+    """Verify that _prepare_images enforces the host/container schema handshake."""
+
+    def _make_runner(
+        self,
+        study_config: StudyConfig,
+        runner_specs: dict,
+        tmp_path: Path,
+        progress: MagicMock | None = None,
+    ) -> StudyRunner:
+        manifest = MagicMock()
+        fake_ctx = MagicMock()
+        with patch("multiprocessing.get_context", return_value=fake_ctx):
+            return StudyRunner(
+                study_config,
+                manifest,
+                tmp_path,
+                runner_specs=runner_specs,
+                progress=progress,
+            )
+
+    def test_fingerprint_match_proceeds(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        import subprocess
+
+        from llenergymeasure.infra.version_handshake import compute_expconf_fingerprint
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        ok = MagicMock(spec=subprocess.CompletedProcess)
+        ok.returncode = 0
+        ok.stdout = _inspect_json_with_labels(compute_expconf_fingerprint())
+
+        with patch("subprocess.run", return_value=ok):
+            runner._prepare_images()
+
+        assert runner._images_prepared
+        call = progress.image_ready.call_args
+        meta = call[1].get("metadata") or call[0][4]
+        assert meta["schema"] == "ok"
+        # Raw label keys must have been popped out of the display metadata.
+        assert "llem_expconf_fingerprint" not in meta
+        assert "llem_pkg_version" not in meta
+
+    def test_fingerprint_mismatch_raises_after_render(
+        self, study_config: StudyConfig, tmp_path: Path
+    ) -> None:
+        import subprocess
+
+        from llenergymeasure.infra.version_handshake import VersionMismatchError
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        ok = MagicMock(spec=subprocess.CompletedProcess)
+        ok.returncode = 0
+        ok.stdout = _inspect_json_with_labels("b" * 64)
+
+        with (
+            patch("subprocess.run", return_value=ok),
+            pytest.raises(VersionMismatchError, match="rebuild"),
+        ):
+            runner._prepare_images()
+
+        # image_ready must fire *before* the exception so the terminal
+        # shows which backend was stale.
+        progress.image_ready.assert_called_once()
+        progress.end_image_prep.assert_called_once()
+        rendered_meta = (
+            progress.image_ready.call_args[1].get("metadata")
+            or (progress.image_ready.call_args[0][4])
+        )
+        assert rendered_meta["schema"] == "mismatch"
+
+    def test_skip_env_var_bypasses_check(
+        self,
+        study_config: StudyConfig,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import subprocess
+
+        monkeypatch.setenv("LLEM_SKIP_IMAGE_CHECK", "1")
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        ok = MagicMock(spec=subprocess.CompletedProcess)
+        ok.returncode = 0
+        ok.stdout = _inspect_json_with_labels("b" * 64)  # would normally mismatch
+
+        with patch("subprocess.run", return_value=ok):
+            runner._prepare_images()
+
+        assert runner._images_prepared
+        meta = (
+            progress.image_ready.call_args[1].get("metadata")
+            or (progress.image_ready.call_args[0][4])
+        )
+        assert meta["schema"] == "bypassed"
+
+    def test_unlabelled_image_warns_no_raise(
+        self,
+        study_config: StudyConfig,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        import subprocess
+
+        progress = MagicMock()
+        runner = self._make_runner(
+            study_config,
+            {"pytorch": _make_docker_runner_spec()},
+            tmp_path,
+            progress=progress,
+        )
+
+        ok = MagicMock(spec=subprocess.CompletedProcess)
+        ok.returncode = 0
+        ok.stdout = FAKE_INSPECT_JSON  # no Config.Labels
+
+        import logging as _logging
+
+        with (
+            caplog.at_level(_logging.WARNING, logger="llenergymeasure.study.runner"),
+            patch("subprocess.run", return_value=ok),
+        ):
+            runner._prepare_images()
+
+        assert runner._images_prepared
+        assert any("schema skew check skipped" in rec.message for rec in caplog.records)
+        meta = (
+            progress.image_ready.call_args[1].get("metadata")
+            or (progress.image_ready.call_args[0][4])
+        )
+        assert meta["schema"].startswith("unverified")
+
 
 # =============================================================================
 # Circuit breaker, wall-clock timeout, mark_study_completed (Plan 03)

@@ -37,4 +37,11 @@ RUN uv pip install --system --break-system-packages --no-cache --no-deps ".[vllm
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
+# Host/container schema handshake labels (see infra/version_handshake.py).
+ARG LLEM_PKG_VERSION=dev
+ARG LLEM_EXPCONF_SCHEMA_FINGERPRINT=unknown
+LABEL org.opencontainers.image.version="${LLEM_PKG_VERSION}"
+LABEL org.opencontainers.image.source="https://github.com/henrycgbaker/llenergymeasure"
+LABEL llem.expconf.schema.fingerprint="${LLEM_EXPCONF_SCHEMA_FINGERPRINT}"
+
 CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]

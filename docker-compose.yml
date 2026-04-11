@@ -90,6 +90,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.pytorch
       target: runtime
+      args:
+        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
+        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
     image: llenergymeasure:pytorch
 
   pytorch-dev:
@@ -102,6 +105,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.pytorch
       target: dev
+      args:
+        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
+        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
     image: llenergymeasure:pytorch-dev
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
@@ -125,6 +131,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.vllm
       target: runtime
+      args:
+        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
+        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
     image: llenergymeasure:vllm
 
   vllm-dev:
@@ -139,6 +148,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.vllm
       target: dev
+      args:
+        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
+        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
     image: llenergymeasure:vllm-dev
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
@@ -163,6 +175,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: runtime
+      args:
+        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
+        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
     image: llenergymeasure:tensorrt
 
   tensorrt-dev:
@@ -178,6 +193,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: dev
+      args:
+        LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
+        LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
     image: llenergymeasure:tensorrt-dev
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []

@@ -15,7 +15,7 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 - **Multi-backend inference** — PyTorch, vLLM, TensorRT-LLM, SGLang (planned)
 - **GPU energy measurement** — NVML, Zeus, CodeCarbon, others 
 - **Smart sweep system** — define parameter grids, run Cartesian product experiments automatically; intelligently managed sweep hierarchy scopes available config fields to appropriate backend/component, and ensures invalid combinations are removed
-- **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each backend in registry with full runnder configurability and local mode also available.
+- **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each backend in registry with full runnder configurability and local mode also available. Every study pre-flight now verifies that each image's `ExperimentConfig` schema fingerprint matches the host's, aborting with an actionable rebuild hint on drift (`llem doctor` for a one-shot check).
 - **Reproducibility** — fixed seeds, cycle ordering, thermal management, environment snapshots, effective config recorded (add others)
 - **Built-in datasets** — AI Energy Score benchmark prompts included; custom JSONL datasets also supported
 
@@ -48,7 +48,7 @@ See [Installation](docs/installation.md) for system requirements, Docker setup, 
 | [Docker Setup](docs/docker-setup.md) | NVIDIA Container Toolkit walkthrough for vLLM |
 | [Backend Configuration](docs/backends.md) | PyTorch vs vLLM, parameter support matrix |
 | [Study & Experiment Configuration](docs/study-config.md) | YAML reference, sweeps, config schema |
-| [CLI Reference](docs/cli-reference.md) | `llem run` and `llem config` flags and options |
+| [CLI Reference](docs/cli-reference.md) | `llem run`, `llem config`, and `llem doctor` flags and options |
 | [Energy Measurement](docs/energy-measurement.md) | NVML, Zeus, CodeCarbon backends, measurement mechanics |
 | [Measurement Methodology](docs/methodology.md) | Warmup, baseline, thermal management, reproducibility |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues, invalid combinations, getting help |

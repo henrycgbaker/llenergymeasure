@@ -95,6 +95,15 @@ RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache/huggingface && chmod 777 /app/.cache/huggingface
 
+# Host/container schema handshake labels (see infra/version_handshake.py).
+# LLEM_PKG_VERSION is the llenergymeasure release; LLEM_EXPCONF_SCHEMA_FINGERPRINT
+# is a SHA-256 of ExperimentConfig.model_json_schema() at build time.
+ARG LLEM_PKG_VERSION=dev
+ARG LLEM_EXPCONF_SCHEMA_FINGERPRINT=unknown
+LABEL org.opencontainers.image.version="${LLEM_PKG_VERSION}"
+LABEL org.opencontainers.image.source="https://github.com/henrycgbaker/llenergymeasure"
+LABEL llem.expconf.schema.fingerprint="${LLEM_EXPCONF_SCHEMA_FINGERPRINT}"
+
 CMD ["python3", "-m", "llenergymeasure.entrypoints.container"]
 
 # Dev stage — adds development tools for local iteration

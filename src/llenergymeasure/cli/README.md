@@ -4,7 +4,7 @@ Typer-based CLI for llenergymeasure. Layer 6 (top layer) in the six-layer archit
 
 ## Purpose
 
-Two commands: `llem run` for running experiments and studies, `llem config` for environment diagnostics. The CLI is a thin client over the `api/` layer — it handles argument parsing, user-facing formatting, and error presentation.
+Three commands: `llem run` for running experiments and studies, `llem config` for environment diagnostics, and `llem doctor` for host/container Docker-image schema verification. The CLI is a thin client over the `api/` layer — it handles argument parsing, user-facing formatting, and error presentation.
 
 ## Modules
 
@@ -13,6 +13,7 @@ Two commands: `llem run` for running experiments and studies, `llem config` for 
 | `__init__.py` | `app` Typer instance, logging setup, command registration |
 | `run.py` | `llem run` command |
 | `config_cmd.py` | `llem config` command |
+| `doctor_cmd.py` | `llem doctor` command (image schema handshake) |
 | `_display.py` | Output formatting helpers (headers, result tables, errors) |
 | `_vram.py` | VRAM estimation for pre-run model size hints |
 
@@ -51,6 +52,14 @@ llem config -v       # verbose: list all GPU properties, energy samplers, etc.
 ```
 
 Shows GPU hardware (name, VRAM), installed backends, energy sampler availability, and user config path. Always exits 0 — purely informational.
+
+### llem doctor
+
+```bash
+llem doctor          # verify Docker images match the host ExperimentConfig schema
+```
+
+Reads the `llem.expconf.schema.fingerprint` OCI label from each backend image and compares it to a fingerprint computed from the host's current `ExperimentConfig.model_json_schema()`. Exits non-zero on any `MISMATCH`. Set `LLEM_SKIP_IMAGE_CHECK=1` to bypass the runtime handshake in `llem run` (doctor still reports the true status with a warning footer).
 
 ### llem --version
 

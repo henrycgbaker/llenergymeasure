@@ -378,6 +378,37 @@ runners:
 SGLang (M5) images will follow the same naming convention, resolution logic, and auto-pull
 behaviour. No additional setup is needed when SGLang ships.
 
+### Image labels and versioning
+
+Every backend image is stamped at build time with OCI labels that llem reads at
+study start-up to detect host/container schema skew:
+
+| Label | Source | Purpose |
+|-------|--------|---------|
+| `org.opencontainers.image.version` | `LLEM_PKG_VERSION` build-arg (from `_version.py`) | Human-readable llenergymeasure release baked into the image |
+| `org.opencontainers.image.source` | Dockerfile | Points at the GitHub repository |
+| `llem.expconf.schema.fingerprint` | `LLEM_EXPCONF_SCHEMA_FINGERPRINT` build-arg | SHA-256 of `ExperimentConfig.model_json_schema()`; the blocking signal for schema skew |
+
+The package version is *not* what catches skew during dev: phase PRs don't
+touch `_version.py`, so both host and image report the same version through
+an entire milestone of schema churn. The fingerprint is the blocking signal —
+it changes whenever any `ExperimentConfig` field (or nested model) is added,
+renamed, or restructured.
+
+Inspect the labels on a local image:
+
+```bash
+docker image inspect llenergymeasure:pytorch \
+    --format '{{json .Config.Labels}}' | python3 -m json.tool
+```
+
+`Makefile` and `.github/workflows/docker-publish.yml` both call
+`scripts/compute_expconf_fingerprint.py` so locally-built and CI-published
+images carry identical fingerprints.
+
+See [troubleshooting.md](troubleshooting.md#schema-skew-between-host-and-docker-image)
+for the remediation flow when a mismatch is reported.
+
 ---
 
 ## Troubleshooting

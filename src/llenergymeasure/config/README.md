@@ -132,6 +132,14 @@ config = ExperimentConfig(
 - `VLLMConfig` - vLLM backend options
 - `TensorRTConfig` - TensorRT-LLM backend options
 
+**Cross-boundary contract:** `ExperimentConfig.model_json_schema()` is the
+canonical host/container contract. Every Docker image is stamped at build time
+with a SHA-256 fingerprint of that schema via
+`infra/version_handshake.compute_expconf_fingerprint()`, and study pre-flight
+compares the image label to the host fingerprint. Any field addition/rename
+here therefore invalidates older images and surfaces as a hard abort before
+any experiment runs (see `infra/version_handshake.py` and `llem doctor`).
+
 ## Decoder Sampling Configuration
 
 Industry-standard sampling parameters aligned with vLLM, HuggingFace, and MLPerf.

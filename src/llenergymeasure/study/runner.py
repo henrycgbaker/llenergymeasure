@@ -1234,10 +1234,15 @@ class StudyRunner:
             if check is not None and check.returncode == 0:
                 elapsed = time.monotonic() - t0
                 metadata = self._parse_image_metadata(check.stdout)
+                mismatch_error = self._verify_image_fingerprint(backend, image, metadata)
                 if self._progress:
                     self._progress.image_ready(
                         backend, image, cached=True, elapsed=elapsed, metadata=metadata
                     )
+                if mismatch_error is not None:
+                    if self._progress:
+                        self._progress.end_image_prep()
+                    raise mismatch_error
                 continue
 
             # Image not found locally — try to pull
@@ -1283,10 +1288,15 @@ class StudyRunner:
             except Exception:
                 metadata = None
 
+            mismatch_error = self._verify_image_fingerprint(backend, image, metadata)
             if self._progress:
                 self._progress.image_ready(
                     backend, image, cached=False, elapsed=elapsed, metadata=metadata
                 )
+            if mismatch_error is not None:
+                if self._progress:
+                    self._progress.end_image_prep()
+                raise mismatch_error
 
         if self._progress:
             self._progress.end_image_prep()
@@ -1295,7 +1305,26 @@ class StudyRunner:
 
     @staticmethod
     def _parse_image_metadata(inspect_stdout: bytes) -> dict[str, str] | None:
-        """Extract human-readable metadata from docker image inspect JSON."""
+        """Extract human-readable metadata from docker image inspect JSON.
+
+        Also captures schema-handshake labels (``llem.expconf.schema.fingerprint``
+        and ``org.opencontainers.image.version``) under dedicated keys:
+
+        - ``llem_expconf_fingerprint``: full 64-char hex (raw, for programmatic
+          comparison by ``_verify_image_fingerprint``; not shown in the
+          inline progress line because it'd bloat the display).
+        - ``llem_pkg_version``: llenergymeasure version string baked into the
+          image at build time.
+
+        ``_verify_image_fingerprint`` overwrites/sets a ``schema`` key on the
+        returned dict which *is* rendered inline (``schema: ok`` etc.) by the
+        existing metadata renderer at ``cli/_step_display.py``.
+        """
+        from llenergymeasure.infra.version_handshake import (
+            LABEL_IMAGE_VERSION,
+            LABEL_SCHEMA_FINGERPRINT,
+        )
+
         try:
             data = json.loads(inspect_stdout)
             if not data:
@@ -1335,9 +1364,85 @@ class StudyRunner:
             if layers:
                 meta["layers"] = str(len(layers))
 
+            labels = info.get("Config", {}).get("Labels") or {}
+            fingerprint = labels.get(LABEL_SCHEMA_FINGERPRINT)
+            if fingerprint:
+                meta["llem_expconf_fingerprint"] = fingerprint
+            pkg_version = labels.get(LABEL_IMAGE_VERSION)
+            if pkg_version:
+                meta["llem_pkg_version"] = pkg_version
+
             return meta if meta else None
         except (json.JSONDecodeError, KeyError, IndexError):
             return None
+
+    def _verify_image_fingerprint(
+        self,
+        backend: str,
+        image: str,
+        metadata: dict[str, str] | None,
+    ) -> Exception | None:
+        """Compare host schema fingerprint to the image label; return error on mismatch.
+
+        Mutates *metadata* in-place: pops the raw ``llem_*`` label keys
+        (consumed only by this check) and sets a display-friendly ``schema``
+        key ("ok" / "mismatch" / "unverified" / "bypassed") that the existing
+        ``cli/_step_display`` metadata renderer shows inline next to
+        id/size/built.
+
+        Returns the ``VersionMismatchError`` to raise on mismatch, or None on
+        match, bypass, or missing labels. Callers raise *after* emitting
+        ``image_ready`` so the offending backend shows in the terminal output
+        before the study aborts.
+        """
+        from llenergymeasure.infra.version_handshake import (
+            VersionMismatchError,
+            compute_expconf_fingerprint,
+            skip_check_enabled,
+        )
+
+        if metadata is None:
+            metadata = {}
+
+        # Pop raw labels so they never pollute the inline progress line; the
+        # display iterates metadata.items() and would otherwise show the full
+        # 64-char fingerprint next to id/size/built.
+        img_fp = metadata.pop("llem_expconf_fingerprint", None)
+        img_pkg_ver = metadata.pop("llem_pkg_version", None)
+
+        if skip_check_enabled():
+            metadata["schema"] = "bypassed"
+            return None
+
+        if img_fp is None:
+            metadata["schema"] = "unverified (no labels)"
+            logger.warning(
+                "Image %s has no %s label — schema skew check skipped "
+                "(image predates the handshake feature; rebuild to enable)",
+                image,
+                "llem.expconf.schema.fingerprint",
+            )
+            return None
+
+        host_fp = compute_expconf_fingerprint()
+        if img_fp == host_fp:
+            metadata["schema"] = "ok"
+            return None
+
+        metadata["schema"] = "mismatch"
+        from llenergymeasure._version import __version__ as host_pkg_ver
+
+        return VersionMismatchError(
+            f"Docker image '{image}' was built from llenergymeasure "
+            f"{img_pkg_ver or 'unknown'} (schema {img_fp[:12]}) but the host is "
+            f"running {host_pkg_ver} (schema {host_fp[:12]}). The container "
+            f"will reject ExperimentConfig fields added on the host after the "
+            f"image was built.\n\n"
+            f"To fix:\n"
+            f"  make docker-build-{backend}       # rebuild locally\n"
+            f"  make docker-pull                  # or pull a newer tagged release\n\n"
+            f"If you're certain the skew is harmless, set LLEM_SKIP_IMAGE_CHECK=1."
+        )
 
     def _run_gap(self, seconds: float, label: str) -> None:
         """Run a thermal gap, rendering countdown in the live display or terminal."""

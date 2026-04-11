@@ -1,10 +1,11 @@
 # CLI Reference
 
-`llem` has two commands (`run` and `config`) and one flag (`--version`).
+`llem` has three commands (`run`, `config`, `doctor`) and one flag (`--version`).
 
 ```
 llem run [CONFIG] [OPTIONS]   # run an experiment or study
 llem config [OPTIONS]         # show environment and configuration status
+llem doctor                   # verify Docker images match the host schema
 llem --version                # print version and exit
 ```
 
@@ -84,6 +85,56 @@ Config
   Status: using defaults (no config file)
 Python
   3.12.0
+```
+
+---
+
+## `llem doctor`
+
+Verify that every backend's resolved Docker image matches the host's
+`ExperimentConfig` schema. Compares the `llem.expconf.schema.fingerprint`
+OCI label baked into each image against a fingerprint computed from the
+host's current `ExperimentConfig.model_json_schema()`.
+
+Image resolution follows the same chain as `llem run`: local build
+(`llenergymeasure:{backend}`) first, then the versioned GHCR tag
+(`ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}`).
+
+**Exit codes:** `0` when every reachable image matches (or labels are absent
+on legacy images); `1` when at least one image's schema fingerprint differs
+from the host.
+
+**Columns:**
+
+| Column | Meaning |
+|--------|---------|
+| `Backend` | Backend identifier (`pytorch`, `vllm`, `tensorrt`) |
+| `Image` | Resolved image tag (local or GHCR) |
+| `Pkg ver` | `org.opencontainers.image.version` label (llenergymeasure release) |
+| `Img FP` | First 12 chars of `llem.expconf.schema.fingerprint` label |
+| `Host FP` | First 12 chars of host `ExperimentConfig` fingerprint |
+| `Status` | `OK` / `MISMATCH` / `UNVERIFIED` (pre-handshake image) / `UNREACHABLE` (no such image) |
+
+**Bypass:** `LLEM_SKIP_IMAGE_CHECK=1` disables the runtime handshake in
+`llem run`; when set, `llem doctor` still reports the true status but prints a
+warning in the footer.
+
+**Example:**
+
+```bash
+llem doctor
+```
+
+```
+Backend     Image                          Pkg ver     Img FP          Host FP         Status
+---------------------------------------------------------------------------------------------
+pytorch     llenergymeasure:pytorch        0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
+vllm        llenergymeasure:vllm           0.9.0       9988776655ff    a1b2c3d4e5f6    MISMATCH
+            └─ rebuild: make docker-build-vllm
+tensorrt    llenergymeasure:tensorrt       0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
+
+Host llenergymeasure version: 0.9.0
+Host ExperimentConfig fingerprint: a1b2c3d4e5f6…
 ```
 
 ---
