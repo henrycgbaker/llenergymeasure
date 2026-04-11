@@ -164,10 +164,20 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
     from llenergymeasure.harness import MeasurementHarness
     from llenergymeasure.harness.preflight import run_preflight
+    from llenergymeasure.infra.version_handshake import compute_expconf_fingerprint
 
     # --- Deserialise config ---
     raw = json.loads(config_path.read_text(encoding="utf-8"))
     config = ExperimentConfig.model_validate(raw)
+
+    # Diagnostic: log container-side fingerprint so post-mortem analysis can
+    # spot host/container schema drift even when model_validate happens to
+    # succeed (e.g. host added an optional field the container silently ignores).
+    print(
+        f"[llem] container ExperimentConfig fingerprint: {compute_expconf_fingerprint()[:12]}",
+        file=sys.stdout,
+        flush=True,
+    )
 
     # --- Stable file name derived from config content ---
     config_hash = compute_measurement_config_hash(config)

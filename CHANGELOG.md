@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Host/container schema fingerprint verification.** Docker images are now stamped at build time with a `llem.expconf.schema.fingerprint` OCI label (SHA-256 of `ExperimentConfig.model_json_schema()`) plus `org.opencontainers.image.version`. `StudyRunner._prepare_images` compares the label to the host fingerprint before any experiment runs and aborts with an actionable rebuild hint on mismatch. The check is bypassable via `LLEM_SKIP_IMAGE_CHECK=1`.
+- **`llem doctor` CLI command.** Reports per-backend image status (OK / MISMATCH / UNVERIFIED / UNREACHABLE) and exits non-zero on mismatch for CI-friendly gating.
+- **Inline schema status in the image-prep progress line** (`schema: ok` / `schema: mismatch` / `schema: unverified` / `schema: bypassed`), rendered via the existing metadata display with no changes to the progress protocol.
+
 ### Changed
 
 - **Per-experiment timeout is now configurable** via `study_execution.experiment_timeout_seconds` (default 600s). Replaces the previous `max(n_prompts*2, 600)` heuristic. Both the local subprocess path and the Docker container path honour the same field, and Docker-path timeouts are normalised to `TimeoutError` so the circuit breaker counts them consistently across both paths.

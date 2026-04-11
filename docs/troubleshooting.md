@@ -257,6 +257,50 @@ Notes:
 
 ---
 
+## Schema skew between host and Docker image
+
+**Symptom:** `llem run study.yaml` aborts before any experiment with a message
+like:
+
+```
+Docker image 'llenergymeasure:pytorch' was built from llenergymeasure 0.9.0
+(schema 9988776655ff) but the host is running 0.9.0 (schema a1b2c3d4e5f6).
+The container will reject ExperimentConfig fields added on the host after
+the image was built.
+```
+
+Or, without the handshake catching it first, a container stack trace full of
+`extra_forbidden` Pydantic errors (often with URLs mixing
+`errors.pydantic.dev/2.10/…` and `errors.pydantic.dev/2.12/…`, a second tell
+for version skew).
+
+**Cause:** the host's `ExperimentConfig` (or a nested model like
+`BaselineConfig`, `WarmupConfig`, etc.) gained fields after the Docker image
+was built. `llem` stamps every image at build time with a
+`llem.expconf.schema.fingerprint` label computed from
+`ExperimentConfig.model_json_schema()`. `StudyRunner._prepare_images` compares
+that label against the host fingerprint before any experiment starts.
+
+**Fix:** rebuild the affected backend image. One of:
+
+```bash
+make docker-build-pytorch        # or -vllm / -tensorrt, local build
+make docker-pull                 # pull the newest published tagged release
+```
+
+Verify with:
+
+```bash
+llem doctor                      # exits 1 on mismatch, 0 when every backend is OK
+```
+
+**Bypass (last resort):** set `LLEM_SKIP_IMAGE_CHECK=1` to skip the handshake.
+Only safe when you're confident the new field is optional and the container
+silently ignores it. The container will still hard-fail on any required field
+it doesn't know about.
+
+---
+
 ## Getting Help
 
 Run `llem config --verbose` to capture full environment details (Python version, installed

@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from llenergymeasure._version import __version__ as _HOST_PKG_VERSION
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     DOCKER_PULL_TIMEOUT,
@@ -45,6 +46,17 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_THREAD_JOIN,
 )
 from llenergymeasure.domain.progress import STEP_BASELINE, STEPS_LOCAL, docker_steps
+from llenergymeasure.infra.version_handshake import (
+    LABEL_SCHEMA_FINGERPRINT,
+    ImageStamp,
+    SchemaStatus,
+    VersionMismatchError,
+    classify_stamp,
+    compute_expconf_fingerprint,
+    parse_image_stamp,
+    rebuild_hint,
+    skip_check_enabled,
+)
 from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
@@ -1233,11 +1245,13 @@ class StudyRunner:
 
             if check is not None and check.returncode == 0:
                 elapsed = time.monotonic() - t0
-                metadata = self._parse_image_metadata(check.stdout)
-                if self._progress:
-                    self._progress.image_ready(
-                        backend, image, cached=True, elapsed=elapsed, metadata=metadata
-                    )
+                mismatch_error = self._finalise_image(
+                    backend, image, check.stdout, cached=True, elapsed=elapsed
+                )
+                if mismatch_error is not None:
+                    if self._progress:
+                        self._progress.end_image_prep()
+                    raise mismatch_error
                 continue
 
             # Image not found locally — try to pull
@@ -1272,21 +1286,23 @@ class StudyRunner:
                 )
 
             elapsed = time.monotonic() - t0
-            # Re-inspect for metadata after pull
             try:
                 inspect = subprocess.run(
                     ["docker", "image", "inspect", image],
                     capture_output=True,
                     timeout=TIMEOUT_DOCKER_INSPECT,
                 )
-                metadata = self._parse_image_metadata(inspect.stdout)
+                inspect_stdout = inspect.stdout if inspect.returncode == 0 else b""
             except Exception:
-                metadata = None
+                inspect_stdout = b""
 
-            if self._progress:
-                self._progress.image_ready(
-                    backend, image, cached=False, elapsed=elapsed, metadata=metadata
-                )
+            mismatch_error = self._finalise_image(
+                backend, image, inspect_stdout, cached=False, elapsed=elapsed
+            )
+            if mismatch_error is not None:
+                if self._progress:
+                    self._progress.end_image_prep()
+                raise mismatch_error
 
         if self._progress:
             self._progress.end_image_prep()
@@ -1295,7 +1311,13 @@ class StudyRunner:
 
     @staticmethod
     def _parse_image_metadata(inspect_stdout: bytes) -> dict[str, str] | None:
-        """Extract human-readable metadata from docker image inspect JSON."""
+        """Extract human-readable display metadata from ``docker image inspect`` JSON.
+
+        Returns the id/size/built/layers fields the progress display renders
+        inline. Schema-handshake labels are handled separately via
+        ``parse_image_stamp`` so the raw 64-char fingerprint never leaks into
+        the display metadata.
+        """
         try:
             data = json.loads(inspect_stdout)
             if not data:
@@ -1338,6 +1360,78 @@ class StudyRunner:
             return meta if meta else None
         except (json.JSONDecodeError, KeyError, IndexError):
             return None
+
+    def _finalise_image(
+        self,
+        backend: str,
+        image: str,
+        inspect_stdout: bytes,
+        *,
+        cached: bool,
+        elapsed: float,
+    ) -> Exception | None:
+        """Report an image-ready progress event and return any mismatch error.
+
+        Parses display metadata and the schema stamp from *inspect_stdout*,
+        classifies the schema status, renders it through
+        ``progress.image_ready`` so the backend row appears before any abort,
+        and returns the ``VersionMismatchError`` for the caller to raise.
+        """
+        metadata = self._parse_image_metadata(inspect_stdout) or {}
+        stamp = parse_image_stamp(inspect_stdout)
+        schema_status, mismatch_error = self._verify_image_fingerprint(backend, image, stamp)
+        metadata["schema"] = schema_status
+
+        if self._progress:
+            self._progress.image_ready(
+                backend, image, cached=cached, elapsed=elapsed, metadata=metadata
+            )
+        return mismatch_error
+
+    def _verify_image_fingerprint(
+        self,
+        backend: str,
+        image: str,
+        stamp: ImageStamp,
+    ) -> tuple[str, Exception | None]:
+        """Compare the host schema fingerprint to *stamp* and classify the result.
+
+        Returns ``(schema_status, error)`` where ``schema_status`` is the
+        short display string and ``error`` is a ``VersionMismatchError`` to
+        raise (or ``None``). Callers raise after rendering so the offending
+        backend appears in the terminal before the study aborts.
+        """
+        if skip_check_enabled():
+            return "bypassed", None
+
+        host_fp = compute_expconf_fingerprint()
+        status = classify_stamp(stamp, host_fp)
+
+        if status in (SchemaStatus.UNVERIFIED, SchemaStatus.UNREACHABLE):
+            logger.warning(
+                "Image %s has no %s label — schema skew check skipped "
+                "(image predates the handshake feature; rebuild to enable)",
+                image,
+                LABEL_SCHEMA_FINGERPRINT,
+            )
+            return "unverified (no labels)", None
+
+        if status is SchemaStatus.OK:
+            return "ok", None
+
+        assert stamp.expconf_fingerprint is not None  # MISMATCH implies non-None
+        error = VersionMismatchError(
+            f"Docker image '{image}' was built from llenergymeasure "
+            f"{stamp.pkg_version or 'unknown'} (schema {stamp.expconf_fingerprint[:12]}) "
+            f"but the host is running {_HOST_PKG_VERSION} (schema {host_fp[:12]}). "
+            f"The container will reject ExperimentConfig fields added on the host "
+            f"after the image was built.\n\n"
+            f"To fix:\n"
+            f"  {rebuild_hint(backend)}       # rebuild locally\n"
+            f"  make docker-pull                  # or pull a newer tagged release\n\n"
+            f"If you're certain the skew is harmless, set LLEM_SKIP_IMAGE_CHECK=1."
+        )
+        return "mismatch", error
 
     def _run_gap(self, seconds: float, label: str) -> None:
         """Run a thermal gap, rendering countdown in the live display or terminal."""

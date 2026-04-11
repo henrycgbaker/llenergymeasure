@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from llenergymeasure.domain.progress import ProgressCallback
 
+from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import (
     BACKEND_TENSORRT,
     CONTAINER_EXCHANGE_DIR,
@@ -682,14 +683,10 @@ class DockerRunner:
 
         result = ExperimentResult.model_validate(raw)
 
-        # Warn if the container ran a different package version than the host.
-        # This catches stale Docker images that predate new result fields.
-        from llenergymeasure._version import __version__
-
         container_version = result.llenergymeasure_version
         if container_version is None or container_version != __version__:
             logger.warning(
-                "Container result version %s differs from host %s - rebuild Docker images",
+                "Container result version %s differs from host %s — rebuild Docker images",
                 container_version,
                 __version__,
             )

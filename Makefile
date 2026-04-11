@@ -12,6 +12,13 @@
 export PUID := $(shell id -u)
 export PGID := $(shell id -g)
 
+# Host/container schema handshake stamps — surfaced to docker compose build
+# via docker-compose.yml's build.args block so every locally-built image is
+# labelled with the same fingerprint llem computes at runtime. Falls back to
+# "dev"/"unknown" on any error (e.g. missing venv).
+export LLEM_PKG_VERSION := $(shell python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo dev)
+export LLEM_EXPCONF_SCHEMA_FINGERPRINT := $(shell python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo unknown)
+
 # =============================================================================
 # Quick Start
 #   Local:  make setup       (pip install + pre-commit)

@@ -85,6 +85,13 @@ from llenergymeasure.cli.config_cmd import config_command as _config_cmd  # noqa
 
 app.command(name="config", help="Show environment and configuration status")(_config_cmd)
 
+from llenergymeasure.cli.doctor_cmd import doctor_command as _doctor_cmd  # noqa: E402
+
+app.command(
+    name="doctor",
+    help="Verify Docker images match the host ExperimentConfig schema",
+)(_doctor_cmd)
+
 __all__ = ["app"]
 
 if __name__ == "__main__":
