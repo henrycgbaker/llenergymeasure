@@ -749,6 +749,40 @@ class TestBaselineHostProgressEvents:
         events = _baseline_step_events(progress)
         assert events == []  # host emits nothing for fresh strategy
 
+    def test_measure_failure_emits_failure_substep(
+        self, tmp_path: Path, config_cached: ExperimentConfig
+    ):
+        """When _measure_baseline returns None (e.g. baseline container
+        dispatch crashed because the image is stale), the host must emit a
+        failure substep before on_step_done — otherwise the UI silently
+        shows ✓ and users mistake it for a successful measurement.
+        """
+        runner, progress = _make_runner_with_progress(tmp_path, config_cached)
+
+        with (
+            patch(_MEASURE, return_value=None),
+            patch(_RESOLVE_GPU, return_value=[0]),
+            patch(_SAVE) as mock_save,
+        ):
+            result = runner._get_baseline(config_cached)
+
+        assert result is None
+        mock_save.assert_not_called()  # nothing to persist when measurement failed
+
+        substep_calls = [
+            call
+            for call in progress.mock_calls
+            if call[0] == "on_substep" and call[1] and call[1][0] == "baseline"
+        ]
+        assert substep_calls, "baseline failure must surface as a substep"
+        assert "failed" in substep_calls[0][1][1].lower()
+
+        events = _baseline_step_events(progress)
+        names = [e[0] for e in events]
+        # on_step_done still fires (host UI gets a terminal event) even though
+        # the measurement itself failed — the substep carries the "why".
+        assert "on_step_done" in names
+
     def test_validated_spot_check_no_drift_emits_validating(
         self, tmp_path: Path, config_validated: ExperimentConfig
     ):

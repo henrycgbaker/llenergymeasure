@@ -891,7 +891,20 @@ class StudyRunner:
             save_baseline_cache(disk_path, measured)
 
         if self._progress is not None:
-            self._progress.on_step_done("baseline", time.perf_counter() - t0_meas)
+            elapsed = time.perf_counter() - t0_meas
+            if measured is None:
+                # Surface the failure in the UI so users don't see a silent ✓
+                # that hides a ~5s dispatch crash (e.g. stale image missing the
+                # baseline_measure entrypoint). The experiment container will
+                # fall back to measuring its own baseline; the substep tells
+                # the user *why* they see that second measurement.
+                self._progress.on_substep(
+                    "baseline",
+                    f"measurement failed after {elapsed:.1f}s — see log warnings "
+                    f"(experiment container will re-measure fresh)",
+                    elapsed,
+                )
+            self._progress.on_step_done("baseline", elapsed)
 
         return measured
 

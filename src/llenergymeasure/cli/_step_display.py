@@ -336,6 +336,14 @@ class StepDisplay:
     def on_step_start(self, step: str, description: str, detail: str = "") -> None:
         with self._lock:
             phase = self._ensure_step_registered(step)
+            # Clear any prior completion/skip/substeps for this step so a
+            # re-fire (e.g. host dispatch failed and the experiment container
+            # fell back to in-harness measurement) shows as an active spinner
+            # instead of being masked by stale completed state.
+            self._completed_steps.discard(step)
+            self._skipped_steps.discard(step)
+            self._step_data.pop(step, None)
+            self._substeps.pop(step, None)
             self._active_step = step
             self._active_label = description or STEP_LABELS.get(step, step)
             self._active_detail = detail
@@ -828,6 +836,15 @@ class StudyStepDisplay:
 
     def on_step_start(self, step: str, description: str, detail: str = "") -> None:
         with self._lock:
+            # Clear any prior completion/skip/substeps for this step. A re-fire
+            # means "this step is running again" (e.g. host dispatch failed and
+            # the experiment container fell back to in-harness measurement), so
+            # stale state from a prior attempt must not mask the new active
+            # spinner — the renderer checks completed_map before _inner_active
+            # and would otherwise hide the re-run.
+            self._inner_completed = [c for c in self._inner_completed if c[0] != step]
+            self._inner_skipped.pop(step, None)
+            self._inner_substeps.pop(step, None)
             label = description or STEP_LABELS.get(step, step)
             self._inner_active = (step, label, detail, time.monotonic())
         self._refresh()
