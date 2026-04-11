@@ -126,6 +126,16 @@ output:
 # Type-based disambiguation: list[scalar] = axis, list[dict] = group.
 # YAML anchors (&name) + merge keys (<<: *name) reduce repetition in groups.
 # See .product/designs/sweep-constraints.md for full design rationale.
+#
+# KNOWN-BAD CROSSES (do not add as independent axes):
+#   - pytorch.torch_compile=true  x  bitsandbytes load_in_{4,8}bit
+#     (dequant ops trigger per-call recompilation; see pytorch.compile_quant group)
+#   - pytorch.torch_compile_mode=max-autotune  x  pytorch.cache_implementation=static/sliding_window
+#     (per-shape kernel autotune on every cache reshape; slow but correct — follow-up)
+#   - Any backend x dataset.n_prompts > ~200 without raising
+#     study_execution.experiment_timeout_seconds above its 600s default
+# When in doubt, merge axes into a single group with hand-picked variants:
+# within-group variants are unioned (not crossed) while inter-group axes are.
 
 sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- Universal (applies to all three backends) ---
@@ -137,25 +147,30 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
 
   # --- PyTorch: dependent groups ─────────────────────────────────
 
-  # torch_compile_mode requires torch_compile: true
-  pytorch.compilation:
-    - pytorch.torch_compile: false
-    - pytorch.torch_compile: true
-      pytorch.torch_compile_backend: inductor
-      pytorch.torch_compile_mode: [default, reduce-overhead, max-autotune]
-
-  # load_in_4bit and load_in_8bit are mutually exclusive;
-  # bnb_4bit_* sub-params require load_in_4bit: true
-  pytorch.quantization:
-    - {}                                          # baseline: no quantisation
+  # torch.compile and bitsandbytes quantisation are merged into one group
+  # because their cross-product is pathological: bitsandbytes inserts dynamic
+  # dequant ops that trigger torch.compile recompilation on every call, and
+  # max-autotune compounds this with per-shape kernel search. Within-group
+  # variants are unioned (not crossed), so the variants below are exactly
+  # what runs — no bnb-with-compile cells exist.
+  pytorch.compile_quant:
+    # Baseline: no compile, no quantisation
+    - {}
+    # bitsandbytes 8-bit (no compile)
     - pytorch.load_in_8bit: true
+    # bitsandbytes 4-bit, nf4 and fp4 (no compile)
     - pytorch.load_in_4bit: true
       pytorch.bnb_4bit_compute_dtype: float16
       pytorch.bnb_4bit_quant_type: [nf4, fp4]
+    # bitsandbytes 4-bit + double-quant (no compile)
     - pytorch.load_in_4bit: true
       pytorch.bnb_4bit_compute_dtype: float16
       pytorch.bnb_4bit_quant_type: nf4
       pytorch.bnb_4bit_use_double_quant: true
+    # torch.compile on unquantised weights — all three modes safe here
+    - pytorch.torch_compile: true
+      pytorch.torch_compile_backend: inductor
+      pytorch.torch_compile_mode: [default, reduce-overhead, max-autotune]
 
   # cache_implementation requires use_cache: true
   pytorch.caching:
