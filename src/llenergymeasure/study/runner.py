@@ -826,6 +826,7 @@ class StudyRunner:
                     "Reusing",
                     f"cached {cached.power_w:.1f}W · {location}",
                 )
+                self._emit_baseline_result_substeps(cached, elapsed=0.0, mode="cached")
                 self._progress.on_step_done(STEP_BASELINE, 0.0)
             return cached
 
@@ -843,7 +844,10 @@ class StudyRunner:
             loaded = load_baseline_cache(disk_path, ttl=config.baseline.cache_ttl_seconds)
 
             if self._progress is not None:
-                self._progress.on_step_done(STEP_BASELINE, time.perf_counter() - t0_load)
+                load_elapsed = time.perf_counter() - t0_load
+                if loaded is not None:
+                    self._emit_baseline_result_substeps(loaded, elapsed=load_elapsed, mode="disk")
+                self._progress.on_step_done(STEP_BASELINE, load_elapsed)
 
             if loaded is not None:
                 if loaded.method is None:
@@ -861,7 +865,8 @@ class StudyRunner:
             )
             t0_meas = time.perf_counter()
 
-        measured = self._measure_baseline(config, cache_key)
+        on_stage = self._make_baseline_stage_callback() if self._progress is not None else None
+        measured = self._measure_baseline(config, cache_key, on_stage=on_stage)
 
         if measured is not None:
             measured.method = strategy
@@ -884,11 +889,123 @@ class StudyRunner:
                     f"(experiment container will re-measure fresh)",
                     elapsed,
                 )
+            elif cache_key == "local":
+                # No container subprocess → emit a retroactive sampling substep
+                # so the local path still gets a breakdown. The Docker path
+                # already emitted substeps live via the on_stage callback.
+                self._emit_baseline_result_substeps(
+                    measured,
+                    elapsed=elapsed,
+                    mode="fresh",
+                    is_containerised=False,
+                )
             self._progress.on_step_done(STEP_BASELINE, elapsed)
 
         return measured
 
-    def _measure_baseline(self, config: ExperimentConfig, cache_key: str) -> Any:
+    def _make_baseline_stage_callback(self) -> Any:
+        """Build a stage-marker callback that emits live baseline sub-bullets.
+
+        Each sub-bullet reports the duration of *that stage* (delta since the
+        previous marker), so users see "launch took Xs, CUDA init took Ys,
+        sampling took Zs" rather than ever-increasing cumulative totals.
+        ``container_ready`` is the exception — its elapsed IS the container
+        launch cost (no prior marker to diff against).
+        """
+        last_t = 0.0
+
+        def on_stage(name: str, elapsed: float, kv: dict[str, str]) -> None:
+            nonlocal last_t
+            if self._progress is None:
+                return
+            delta = max(0.0, elapsed - last_t)
+            last_t = elapsed
+            if name == "container_ready":
+                self._progress.on_substep(
+                    STEP_BASELINE,
+                    "dispatched baseline container · Python runtime ready",
+                    elapsed,
+                )
+            elif name == "cuda_primed":
+                self._progress.on_substep(
+                    STEP_BASELINE,
+                    "initialised CUDA runtime · seeded torch allocator",
+                    delta,
+                )
+            elif name == "sampling_done":
+                power_w = kv.get("power_w", "?")
+                samples = kv.get("samples", "?")
+                sampled = kv.get("duration", "?")
+                self._progress.on_substep(
+                    STEP_BASELINE,
+                    f"sampled idle GPU power · {sampled}s ({power_w}W · {samples} samples)",
+                    delta,
+                )
+            elif name == "result_written" and delta > 0.1:
+                self._progress.on_substep(
+                    STEP_BASELINE,
+                    "wrote result & container teardown",
+                    delta,
+                )
+
+        return on_stage
+
+    def _emit_baseline_result_substeps(
+        self,
+        baseline: Any,  # BaselineCache
+        *,
+        elapsed: float,
+        mode: str,  # "fresh" | "cached" | "disk"
+        is_containerised: bool = False,
+    ) -> None:
+        """Emit dim-bullet substeps explaining where the baseline time went.
+
+        For a fresh Docker measurement we split the wall-clock into container
+        launch/teardown (the residual) vs the NVML sampling window (recorded
+        inside ``measure_baseline_power``). This answers "why did a 30s
+        measurement take 37.7s?" without the user having to dig through logs.
+
+        For in-memory and disk-loaded reuse we only emit the result summary —
+        there is no sampling window to describe.
+        """
+        if self._progress is None:
+            return
+        if mode == "fresh" and is_containerised:
+            # Residual captures docker run startup + CUDA prime + result write
+            # + container teardown.
+            overhead = max(0.0, elapsed - baseline.duration_sec)
+            self._progress.on_substep(
+                STEP_BASELINE,
+                f"container launch + teardown: {overhead:.1f}s",
+                overhead,
+            )
+            self._progress.on_substep(
+                STEP_BASELINE,
+                f"sampling: {baseline.duration_sec:.1f}s "
+                f"({baseline.power_w:.1f}W · {baseline.sample_count} samples)",
+                baseline.duration_sec,
+            )
+        elif mode == "fresh":
+            self._progress.on_substep(
+                STEP_BASELINE,
+                f"sampling: {baseline.duration_sec:.1f}s "
+                f"({baseline.power_w:.1f}W · {baseline.sample_count} samples)",
+                baseline.duration_sec,
+            )
+        else:
+            source = "in-memory" if mode == "cached" else "disk"
+            self._progress.on_substep(
+                STEP_BASELINE,
+                f"reused from {source} cache: "
+                f"{baseline.power_w:.1f}W ({baseline.sample_count} samples)",
+            )
+
+    def _measure_baseline(
+        self,
+        config: ExperimentConfig,
+        cache_key: str,
+        on_stage: Any = None,  # StageCallback | None
+    ) -> Any:
         """Measure a fresh baseline on host or inside a baseline container.
 
         Local runner targets measure on host (no process boundary, no bias).
@@ -896,6 +1013,13 @@ class StudyRunner:
         image so the CUDA init state matches the experiment container. See
         ``.product/research/baseline-measurement-location.md`` for the
         empirical rationale (~8.7 W/GPU bias on A100).
+
+        Args:
+            config: Experiment config with baseline settings.
+            cache_key: "local" or "image_<slug>" — chooses dispatch path.
+            on_stage: Optional callback forwarded to ``run_baseline_container``
+                for streaming stage markers. Ignored on the local path (there
+                is no subprocess to stream from).
         """
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
@@ -921,6 +1045,7 @@ class StudyRunner:
             mode="measure",
             duration_sec=config.baseline.duration_seconds,
             gpu_indices=gpu_indices,
+            on_stage=on_stage,
         )
 
     def _spot_check_baseline(
