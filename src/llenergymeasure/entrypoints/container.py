@@ -104,6 +104,30 @@ class StreamProgressCallback:
             }
         )
 
+    def on_substep_start(self, step: str, text: str) -> None:
+        _write_progress_line(
+            {
+                "event": "substep_start",
+                "step": step,
+                "text": text,
+            }
+        )
+
+    def on_substep_done(
+        self,
+        step: str,
+        text: str | None = None,
+        elapsed_sec: float | None = None,
+    ) -> None:
+        _write_progress_line(
+            {
+                "event": "substep_done",
+                "step": step,
+                "text": text,
+                "elapsed_sec": elapsed_sec,
+            }
+        )
+
 
 def _write_progress_line(event: dict[str, object]) -> None:
     """Write a JSON progress line to stdout and flush immediately."""

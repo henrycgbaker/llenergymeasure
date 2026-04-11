@@ -522,6 +522,14 @@ class DockerRunner:
                             event.get("text", ""),
                             event.get("elapsed_sec", 0.0),
                         )
+                    elif event_type == "substep_start":
+                        progress.on_substep_start(step, event.get("text", ""))
+                    elif event_type == "substep_done":
+                        progress.on_substep_done(
+                            step,
+                            event.get("text"),
+                            event.get("elapsed_sec"),
+                        )
                 except (json.JSONDecodeError, KeyError):
                     logger.debug("Unparseable progress line: %s", stripped)
             else:

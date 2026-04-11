@@ -39,6 +39,14 @@ def test_protocol_is_runtime_checkable():
         def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
             pass
 
+        def on_substep_start(self, step: str, text: str) -> None:
+            pass
+
+        def on_substep_done(
+            self, step: str, text: str | None = None, elapsed_sec: float | None = None
+        ) -> None:
+            pass
+
     assert isinstance(Impl(), ProgressCallback)
 
 

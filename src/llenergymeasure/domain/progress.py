@@ -88,6 +88,40 @@ class ProgressCallback(Protocol):
         """
         ...
 
+    def on_substep_start(self, step: str, text: str) -> None:
+        """Start a live sub-operation within the active step.
+
+        The substep renders as a dim indented bullet with a spinner and
+        rising elapsed counter until ``on_substep_done`` arrives. Only one
+        active substep per parent step is supported — calling
+        ``on_substep_start`` again without a matching ``on_substep_done``
+        freezes the prior substep with the previous start's text and its
+        accumulated elapsed.
+
+        Args:
+            step: Parent step identifier (must match the active step).
+            text: Present-tense description (e.g. "launching baseline container").
+        """
+        ...
+
+    def on_substep_done(
+        self,
+        step: str,
+        text: str | None = None,
+        elapsed_sec: float | None = None,
+    ) -> None:
+        """Freeze the currently-active sub-operation of ``step``.
+
+        Args:
+            step: Parent step identifier.
+            text: Optional final text (e.g. "42.6W · 288 samples"). If
+                ``None``, the original ``on_substep_start`` text is kept.
+            elapsed_sec: Optional override for the recorded duration. If
+                ``None``, the monotonic delta since ``on_substep_start`` is
+                used.
+        """
+        ...
+
 
 @runtime_checkable
 class StudyProgressCallback(ProgressCallback, Protocol):

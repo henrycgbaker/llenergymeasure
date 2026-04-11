@@ -53,3 +53,48 @@ def test_stream_callback_step_done_writes_json():
     assert event["event"] == "step_done"
     assert event["step"] == "model"
     assert event["elapsed_sec"] == 42.3
+
+
+def test_stream_callback_substep_start_writes_json():
+    """on_substep_start writes a ``substep_start`` JSON line so the host
+    DockerRunner can forward it to the CLI's live heartbeat renderer."""
+    cb = StreamProgressCallback()
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        cb.on_substep_start("baseline", "launching separate vllm baseline container")
+
+    line = mock_stdout.getvalue().strip()
+    event = json.loads(line)
+    assert event["event"] == "substep_start"
+    assert event["step"] == "baseline"
+    assert event["text"] == "launching separate vllm baseline container"
+
+
+def test_stream_callback_substep_done_writes_json_with_optional_fields():
+    """on_substep_done emits ``substep_done`` with ``text`` / ``elapsed_sec``
+    both optional — the host side reuses the start's text + computed elapsed
+    when either is missing (None-safe over the wire)."""
+    cb = StreamProgressCallback()
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        cb.on_substep_done("baseline", "vllm baseline container ready", 2.5)
+
+    line = mock_stdout.getvalue().strip()
+    event = json.loads(line)
+    assert event["event"] == "substep_done"
+    assert event["step"] == "baseline"
+    assert event["text"] == "vllm baseline container ready"
+    assert event["elapsed_sec"] == 2.5
+
+
+def test_stream_callback_substep_done_null_fields_serialise():
+    """on_substep_done with no overrides must round-trip through JSON (None
+    values stay as nulls — consumer decodes them as missing)."""
+    cb = StreamProgressCallback()
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        cb.on_substep_done("baseline")
+
+    line = mock_stdout.getvalue().strip()
+    event = json.loads(line)
+    assert event["event"] == "substep_done"
+    assert event["step"] == "baseline"
+    assert event["text"] is None
+    assert event["elapsed_sec"] is None
