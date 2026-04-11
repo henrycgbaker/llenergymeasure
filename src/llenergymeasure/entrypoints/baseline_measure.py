@@ -48,7 +48,29 @@ from llenergymeasure.config.ssot import ENV_BASELINE_SPEC_PATH
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["_prime_cuda", "main", "run_baseline_measurement"]
+__all__ = ["_emit_stage", "_prime_cuda", "main", "run_baseline_measurement"]
+
+
+# Line prefix for stage markers emitted to stdout. The host dispatcher
+# (``study/baseline_container.py``) matches this prefix when streaming the
+# subprocess output line-by-line, so it can surface live sub-step progress
+# in the CLI instead of the user staring at a single spinner for ~30s.
+STAGE_LINE_PREFIX = "[llem.baseline]"
+
+
+def _emit_stage(name: str, **kv: object) -> None:
+    """Print a stage marker to stdout for the host to parse.
+
+    Wire format: ``[llem.baseline] stage=<name> [k=v ...]``. Keys and values
+    must be whitespace-free — this is a purpose-built internal protocol, not
+    a general key-value serialiser. ``flush=True`` is non-negotiable: without
+    it, container stdio buffering delays each marker until the pipe's 4-8KB
+    block fills, which hides the whole point of streaming.
+    """
+    parts = [f"stage={name}"]
+    for k, v in kv.items():
+        parts.append(f"{k}={v}")
+    print(f"{STAGE_LINE_PREFIX} " + " ".join(parts), flush=True)
 
 
 def _prime_cuda(gpu_indices: list[int]) -> None:
@@ -97,6 +119,11 @@ def run_baseline_measurement(spec_path: Path) -> Path:
         Any exception propagates up so ``main`` can serialise it into
         ``baseline_error.json``.
     """
+    # First line of output after Python has finished importing the package —
+    # the host interprets this as "container launched, runtime ready" and
+    # prints a dim sub-bullet with the elapsed time from subprocess start.
+    _emit_stage("container_ready")
+
     from llenergymeasure.harness.baseline import (
         measure_baseline_power,
         measure_spot_check,
@@ -113,11 +140,13 @@ def run_baseline_measurement(spec_path: Path) -> Path:
         )
 
     _prime_cuda(gpu_indices)
+    _emit_stage("cuda_primed")
 
     result_dir = spec_path.parent
     result_path = result_dir / "baseline_result.json"
 
     if mode == "measure":
+        _emit_stage("sampling_started", mode="measure", duration=f"{duration_sec:.1f}")
         measured = measure_baseline_power(
             gpu_indices=gpu_indices or None,
             duration_sec=duration_sec,
@@ -128,6 +157,12 @@ def run_baseline_measurement(spec_path: Path) -> Path:
                 "baseline_measure: measure_baseline_power returned None "
                 "(NVML unavailable or no samples collected)"
             )
+        _emit_stage(
+            "sampling_done",
+            power_w=f"{measured.power_w:.2f}",
+            samples=measured.sample_count,
+            duration=f"{measured.duration_sec:.2f}",
+        )
         payload = {
             "power_w": measured.power_w,
             "timestamp": measured.timestamp,
@@ -137,6 +172,7 @@ def run_baseline_measurement(spec_path: Path) -> Path:
             "mode": "measure",
         }
     else:
+        _emit_stage("sampling_started", mode="spot_check", duration=f"{duration_sec:.1f}")
         power_w = measure_spot_check(
             gpu_indices=gpu_indices or None,
             duration_sec=duration_sec,
@@ -148,6 +184,12 @@ def run_baseline_measurement(spec_path: Path) -> Path:
             )
         import time
 
+        _emit_stage(
+            "sampling_done",
+            power_w=f"{power_w:.2f}",
+            samples=0,
+            duration=f"{duration_sec:.2f}",
+        )
         payload = {
             "power_w": power_w,
             "timestamp": time.time(),
@@ -159,6 +201,7 @@ def run_baseline_measurement(spec_path: Path) -> Path:
 
     result_dir.mkdir(parents=True, exist_ok=True)
     result_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _emit_stage("result_written")
     return result_path
 
 
