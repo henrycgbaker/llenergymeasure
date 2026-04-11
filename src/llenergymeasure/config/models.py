@@ -659,6 +659,16 @@ class ExecutionConfig(BaseModel):
         gt=0.0,
         description="Study wall-clock timeout in hours. null = no limit.",
     )
+    experiment_timeout_seconds: float = Field(
+        default=600.0,
+        gt=0.0,
+        description=(
+            "Per-experiment wall-clock timeout in seconds. Applies to both the "
+            "local subprocess path and the Docker container path. Experiments "
+            "that exceed this budget are killed and recorded as TimeoutError; "
+            "the circuit breaker counts them toward max_consecutive_failures."
+        ),
+    )
 
 
 class StudyConfig(BaseModel):
