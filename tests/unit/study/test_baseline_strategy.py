@@ -644,7 +644,7 @@ def _baseline_step_events(progress: MagicMock) -> list[tuple[str, tuple, dict]]:
 class TestBaselineHostProgressEvents:
     """Verify host-side baseline events fire for cached/validated strategies."""
 
-    def test_local_fresh_measure_emits_measuring_start_and_done(
+    def test_local_fresh_measure_emits_calibrating_start_and_done(
         self, tmp_path: Path, config_cached: ExperimentConfig
     ):
         runner, progress = _make_runner_with_progress(tmp_path, config_cached)
@@ -661,9 +661,13 @@ class TestBaselineHostProgressEvents:
         names = [e[0] for e in events]
         assert "on_step_start" in names
         assert "on_step_done" in names
-        # First emission is start with "Measuring" verb.
+        # Fresh measurement uses "Calibrating" verb + "sampling idle GPU draw"
+        # detail. The label was refactored away from "Measuring ... idle power
+        # (30s)" to keep the parent line concise while the sub-bullets carry
+        # the breakdown.
         start_event = next(e for e in events if e[0] == "on_step_start")
-        assert start_event[1][1] == "Measuring"
+        assert start_event[1][1] == "Calibrating"
+        assert start_event[1][2] == "sampling idle GPU draw"
 
     def test_disk_load_emits_loading_event_when_file_exists(
         self, tmp_path: Path, config_cached: ExperimentConfig
@@ -703,7 +707,7 @@ class TestBaselineHostProgressEvents:
         events = _baseline_step_events(progress)
         verbs = [e[1][1] for e in events if e[0] == "on_step_start"]
         assert "Loading" not in verbs
-        assert "Measuring" in verbs
+        assert "Calibrating" in verbs
 
     def test_disk_load_sets_method_for_backward_compat(
         self, tmp_path: Path, config_cached: ExperimentConfig
@@ -753,9 +757,10 @@ class TestBaselineHostProgressEvents:
         self, tmp_path: Path, config_cached: ExperimentConfig
     ):
         """When _measure_baseline returns None (e.g. baseline container
-        dispatch crashed because the image is stale), the host must emit a
-        failure substep before on_step_done — otherwise the UI silently
-        shows ✓ and users mistake it for a successful measurement.
+        dispatch crashed because the image is stale), the host must freeze
+        the dangling live substep with a failure text before on_step_done —
+        otherwise the UI silently shows ✓ and users mistake it for a
+        successful measurement.
         """
         runner, progress = _make_runner_with_progress(tmp_path, config_cached)
 
@@ -769,13 +774,21 @@ class TestBaselineHostProgressEvents:
         assert result is None
         mock_save.assert_not_called()  # nothing to persist when measurement failed
 
-        substep_calls = [
+        # Failure surfaces via on_substep_done (freezes any live substep with
+        # the failure text) — never as on_substep which would leave the
+        # dangling "launching ..." heartbeat alive beside it.
+        done_calls = [
             call
             for call in progress.mock_calls
-            if call[0] == "on_substep" and call[1] and call[1][0] == "baseline"
+            if call[0] == "on_substep_done" and call[1] and call[1][0] == "baseline"
         ]
-        assert substep_calls, "baseline failure must surface as a substep"
-        assert "failed" in substep_calls[0][1][1].lower()
+        assert done_calls, "baseline failure must surface as on_substep_done"
+        # Final text is passed via kwarg (text=...) in runner.py
+        fail_texts = [
+            call.kwargs.get("text") or (call.args[1] if len(call.args) > 1 else "")
+            for call in done_calls
+        ]
+        assert any("failed" in (t or "").lower() for t in fail_texts)
 
         events = _baseline_step_events(progress)
         names = [e[0] for e in events]
@@ -786,15 +799,16 @@ class TestBaselineHostProgressEvents:
     def test_docker_fresh_emits_live_stage_substeps(
         self, tmp_path: Path, config_cached: ExperimentConfig
     ):
-        """Streamed stage markers from run_baseline_container become sub-bullets
-        under the active baseline step, with per-stage deltas rather than
-        ever-increasing cumulative totals.
+        """Streamed stage markers from run_baseline_container drive
+        ``on_substep_start`` / ``on_substep_done`` pairs under the active
+        baseline step, producing heartbeating sub-bullets that animate while
+        each stage is in flight and freeze with a dim tick on completion.
 
         This is the regression for "why did a 30s measurement take 37s?" —
-        the user now sees dispatched + CUDA init + sampling as separate dim
-        sub-bullets whose durations add up to the parent elapsed.
+        the user now sees a live breakdown of launching container → CUDA init
+        → sampling → teardown instead of one opaque parent step.
         """
-        spec = RunnerSpec(mode="docker", image="test/pytorch:v0", source="yaml")
+        spec = RunnerSpec(mode="docker", image="test/vllm:v0", source="yaml")
         runner, progress = _make_runner_with_progress(
             tmp_path, config_cached, runner_specs={"pytorch": spec}
         )
@@ -810,8 +824,6 @@ class TestBaselineHostProgressEvents:
 
         def _fake_run_container(*_args, on_stage=None, **_kwargs):
             captured_on_stage.append(on_stage)
-            # Simulate the container emitting its five stage markers, each
-            # roughly 1s apart except for the sampling window.
             if on_stage is not None:
                 on_stage("container_ready", 2.5, {})
                 on_stage("cuda_primed", 4.1, {})
@@ -832,24 +844,64 @@ class TestBaselineHostProgressEvents:
             result = runner._get_baseline(config_cached)
 
         assert result is fake_cache
-        # Callback was threaded through _measure_baseline → run_baseline_container.
         assert captured_on_stage and captured_on_stage[0] is not None
 
-        substeps = [
-            call
-            for call in progress.mock_calls
-            if call[0] == "on_substep" and call[1] and call[1][0] == "baseline"
+        # Helper to pull the text out of a callback record regardless of
+        # whether it was passed positionally or as a kwarg.
+        def _text(call) -> str:
+            if len(call.args) > 1 and call.args[1] is not None:
+                return call.args[1]
+            return call.kwargs.get("text") or ""
+
+        baseline_calls = [
+            c
+            for c in progress.mock_calls
+            if c[0] in ("on_substep_start", "on_substep_done")
+            and c.args
+            and c.args[0] == "baseline"
         ]
-        # Expect three visible substeps: dispatched (from container_ready),
-        # CUDA primed, sampled. result_written fires but its delta is <0.1s
-        # so the substep is suppressed. sampling_started never emits.
-        texts = [call[1][1] for call in substeps]
-        assert any("dispatched" in t for t in texts)
-        assert any("CUDA" in t for t in texts)
-        assert any("sampled" in t and "42.68" in t and "289" in t for t in texts)
-        # No retroactive "container launch + teardown" substep — those were
-        # the old retroactive pre-streaming labels.
-        assert not any("container launch + teardown" in t for t in texts)
+        starts = [c for c in baseline_calls if c[0] == "on_substep_start"]
+        dones = [c for c in baseline_calls if c[0] == "on_substep_done"]
+
+        start_texts = [_text(c) for c in starts]
+        done_texts = [_text(c) for c in dones]
+
+        # 1. The pre-dispatch substep name uses the image tag (user asked
+        #    for "the actual image/container name w/ slug") and explicitly
+        #    says "baseline container" so users know this is a short-lived
+        #    dedicated container, not the experiment one.
+        assert any(
+            "launching" in t and "test/vllm:v0" in t and "baseline container" in t
+            for t in start_texts
+        ), start_texts
+
+        # 2. Stage lifecycle: launching → ready → CUDA init → primed →
+        #    sampling → sampled → writing/teardown → cached/torn down.
+        assert any("baseline container ready" in t and "test/vllm:v0" in t for t in done_texts), (
+            done_texts
+        )
+        assert any("initialising CUDA runtime" in t for t in start_texts)
+        assert any("CUDA runtime primed" in t for t in done_texts)
+        assert any("sampling idle GPU draw" in t and "30s" in t for t in start_texts)
+        assert any("sampled idle GPU draw" in t and "42.68" in t and "289" in t for t in done_texts)
+        assert any(
+            "writing baseline result" in t and "tearing down" in t and "test/vllm:v0" in t
+            for t in start_texts
+        )
+        assert any(
+            "baseline result cached" in t and "torn down" in t and "test/vllm:v0" in t
+            for t in done_texts
+        )
+
+        # 3. No retroactive "container launch + teardown" substeps — those
+        #    were the pre-streaming labels from before stage markers existed.
+        all_texts = start_texts + done_texts
+        assert not any("container launch + teardown" in t for t in all_texts)
+
+        # 4. Start/done pairs are balanced (4 starts, 4 dones: launching,
+        #    CUDA init, sampling, teardown). This guarantees the UI never
+        #    has two live substeps animating at once.
+        assert len(starts) == len(dones) == 4, (start_texts, done_texts)
 
     def test_validated_spot_check_no_drift_emits_validating(
         self, tmp_path: Path, config_validated: ExperimentConfig

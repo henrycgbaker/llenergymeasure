@@ -530,6 +530,174 @@ def test_substep_non_tty_prints_immediately():
 
 
 # ---------------------------------------------------------------------------
+# Heartbeat substeps (on_substep_start / on_substep_done)
+# ---------------------------------------------------------------------------
+
+
+def test_step_display_substep_start_done_lifecycle_freezes_with_elapsed():
+    """on_substep_start registers an active substep; on_substep_done freezes
+    it into the completed list with a positive elapsed value."""
+    import time as _time
+
+    console, _ = _make_console()
+    display = StepDisplay(console=console)
+    display.register_steps(["baseline"])
+    display.on_step_start("baseline", "Calibrating", "sampling idle GPU draw")
+
+    display.on_substep_start("baseline", "launching separate vllm baseline container")
+    # Active substep is tracked by step name
+    assert "baseline" in display._active_substep
+    _time.sleep(0.01)
+    display.on_substep_done("baseline", "vllm baseline container ready")
+
+    # Active slot cleared, frozen list has one entry with positive elapsed.
+    assert "baseline" not in display._active_substep
+    frozen = display._substeps["baseline"]
+    assert len(frozen) == 1
+    assert frozen[0][0] == "vllm baseline container ready"
+    assert frozen[0][1] > 0.0  # computed from monotonic delta
+
+
+def test_step_display_substep_done_preserves_start_text_when_final_omitted():
+    """on_substep_done() with text=None keeps the original start text."""
+    import time as _time
+
+    console, _ = _make_console()
+    display = StepDisplay(console=console)
+    display.register_steps(["baseline"])
+    display.on_step_start("baseline", "Calibrating", "")
+
+    display.on_substep_start("baseline", "initialising CUDA runtime")
+    _time.sleep(0.005)
+    display.on_substep_done("baseline")  # no override text
+
+    frozen = display._substeps["baseline"]
+    assert frozen[-1][0] == "initialising CUDA runtime"
+    assert frozen[-1][1] > 0.0
+
+
+def test_step_display_substep_start_without_prior_done_freezes_previous():
+    """Calling on_substep_start twice without a done in between freezes the
+    prior substep (with its accumulated elapsed) so the UI never has two
+    live substeps at once."""
+    import time as _time
+
+    console, _ = _make_console()
+    display = StepDisplay(console=console)
+    display.register_steps(["baseline"])
+    display.on_step_start("baseline", "Calibrating", "")
+
+    display.on_substep_start("baseline", "launching container")
+    _time.sleep(0.005)
+    display.on_substep_start("baseline", "initialising CUDA runtime")
+
+    # The first is now frozen with its accumulated elapsed
+    frozen = display._substeps["baseline"]
+    assert len(frozen) == 1
+    assert frozen[0][0] == "launching container"
+    assert frozen[0][1] > 0.0
+    # The second is the new active slot
+    assert display._active_substep["baseline"][0] == "initialising CUDA runtime"
+
+
+def test_step_display_substep_done_without_start_appends_frozen():
+    """on_substep_done with no prior start still appends a frozen substep
+    (failure path where the runner has to surface a final text without a
+    matching live substep)."""
+    console, _ = _make_console()
+    display = StepDisplay(console=console)
+    display.register_steps(["baseline"])
+    display.on_step_start("baseline", "Calibrating", "")
+
+    display.on_substep_done("baseline", text="measurement failed", elapsed_sec=5.7)
+
+    frozen = display._substeps["baseline"]
+    assert frozen == [("measurement failed", 5.7)]
+
+
+def test_step_display_on_step_done_freezes_dangling_active_substep():
+    """If a step completes while a substep is still active, that substep is
+    frozen rather than left animating under a completed parent."""
+    import time as _time
+
+    console, _ = _make_console()
+    display = StepDisplay(console=console)
+    display.register_steps(["baseline"])
+    display.on_step_start("baseline", "Calibrating", "")
+
+    display.on_substep_start("baseline", "wedged stage")
+    _time.sleep(0.005)
+    display.on_step_done("baseline", 0.1)
+
+    assert "baseline" not in display._active_substep
+    frozen = display._substeps["baseline"]
+    assert len(frozen) == 1
+    assert frozen[0][0] == "wedged stage"
+    assert frozen[0][1] > 0.0
+
+
+def test_study_display_substep_start_done_lifecycle_freezes_with_elapsed():
+    """StudyStepDisplay exhibits the same start/done freeze semantics as
+    StepDisplay for the heartbeat substep pattern."""
+    import time as _time
+
+    console, _ = _make_console()
+    display = StudyStepDisplay(total_experiments=1, console=console, force_plain=True)
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", ["baseline"])
+    display.on_step_start("baseline", "Calibrating", "sampling idle GPU draw")
+
+    display.on_substep_start("baseline", "launching separate vllm baseline container")
+    assert "baseline" in display._inner_active_substep
+    _time.sleep(0.01)
+    display.on_substep_done("baseline", "vllm baseline container ready")
+
+    assert "baseline" not in display._inner_active_substep
+    frozen = display._inner_substeps["baseline"]
+    assert frozen[-1][0] == "vllm baseline container ready"
+    assert frozen[-1][1] > 0.0
+
+
+def test_study_display_on_step_start_refire_clears_active_substep():
+    """Re-firing on_step_start for the same step drops any prior active
+    substep so a retry doesn't carry stale heartbeat state from a failed
+    first attempt (e.g. baseline dispatch → container fallback)."""
+    console, _ = _make_console()
+    display = StudyStepDisplay(total_experiments=1, console=console, force_plain=True)
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", ["baseline"])
+
+    display.on_step_start("baseline", "Calibrating", "sampling idle GPU draw")
+    display.on_substep_start("baseline", "launching baseline container")
+    assert "baseline" in display._inner_active_substep
+
+    # Host dispatch failed; experiment container re-fires the step.
+    display.on_step_start("baseline", "Measuring", "in-container fallback")
+    assert "baseline" not in display._inner_active_substep
+    assert "baseline" not in display._inner_substeps
+
+
+def test_study_display_active_substep_renders_in_active_step_view():
+    """The render pipeline forwards the active substep to _render_substep_lines
+    for the active step, so a spinner line appears under the parent."""
+    import time as _time
+
+    console = Console(file=StringIO(), force_terminal=True, no_color=True, width=200)
+    display = StudyStepDisplay(total_experiments=1, console=console)
+    display.begin_experiment(1, "gpt2 / pytorch / bf16", ["baseline"])
+    display.on_step_start("baseline", "Calibrating", "sampling idle GPU draw")
+
+    display.on_substep_start("baseline", "launching separate vllm baseline container")
+    _time.sleep(0.02)
+
+    rendered = display._render_active_steps()
+    plain = rendered.plain
+    assert "launching separate vllm baseline container" in plain
+    # The active substep shows an elapsed counter (> 0.0s)
+    assert " · launching separate vllm baseline container" in plain
+
+    display.stop()
+
+
+# ---------------------------------------------------------------------------
 # Viewport behaviour
 # ---------------------------------------------------------------------------
 
