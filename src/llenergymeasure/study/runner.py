@@ -57,7 +57,6 @@ if TYPE_CHECKING:
 
 __all__ = [
     "StudyRunner",
-    "_calculate_timeout",
     "_kill_process_group",
     "_run_experiment_worker",
     "_save_and_record",
@@ -69,14 +68,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Module-level helpers
 # =============================================================================
-
-
-def _calculate_timeout(config: ExperimentConfig) -> int:
-    """Generous timeout heuristic: 2 seconds per prompt, minimum 10 minutes.
-
-    No model-size scaling — keep it simple.
-    """
-    return max(config.dataset.n_prompts * 2, 600)
 
 
 def _save_and_record(
@@ -365,7 +356,7 @@ def _collect_result(
     p: Any,  # multiprocessing.Process
     parent_conn: Any,  # multiprocessing.Connection (parent end)
     config: ExperimentConfig,
-    timeout: int,
+    timeout: float,
     pipe_payload: Any = _UNSET,
 ) -> Any:
     """Inspect process outcome and return either a result or a failure dict.
@@ -1091,7 +1082,7 @@ class StudyRunner:
                 config, spec, config_hash=config_hash, cycle=cycle, index=index
             )
 
-        timeout = _calculate_timeout(config)
+        timeout = self.study.study_execution.experiment_timeout_seconds
 
         # Signal study display: new experiment starting (subprocess = local steps)
         if self._progress:
@@ -1296,6 +1287,7 @@ class StudyRunner:
         Returns:
             ExperimentResult on success, or a failure dict on error.
         """
+        from llenergymeasure.infra.docker_errors import DockerTimeoutError
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.study.container_lifecycle import (
@@ -1334,7 +1326,7 @@ class StudyRunner:
 
         docker_runner = DockerRunner(
             image=image,
-            timeout=_calculate_timeout(config),
+            timeout=self.study.study_execution.experiment_timeout_seconds,
             source=spec.source,
             extra_mounts=extra_mounts,
             container_name=container_name,
@@ -1375,6 +1367,15 @@ class StudyRunner:
                 save_timeseries=self.study.output.save_timeseries,
                 skip_image_check=self._images_prepared,
             )
+        except DockerTimeoutError as exc:
+            # Normalise to "TimeoutError" so the circuit breaker sees the same
+            # failure class as the subprocess path (see _collect_result).
+            result = {
+                "type": "TimeoutError",
+                "message": str(exc),
+                "config_hash": config_hash,
+            }
+            self._persist_failure_artefacts(exc, config_hash, cycle, result)
         except DockerError as exc:
             # Use structured error payload from container entrypoint when available,
             # falling back to the exception type/message for stderr-based errors.

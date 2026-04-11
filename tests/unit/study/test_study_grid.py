@@ -81,6 +81,22 @@ class TestExecutionConfig:
         ec = ExecutionConfig(shuffle_seed=12345)
         assert ec.shuffle_seed == 12345
 
+    def test_experiment_timeout_default(self):
+        assert ExecutionConfig().experiment_timeout_seconds == 600.0
+
+    def test_experiment_timeout_zero_raises(self):
+        with pytest.raises(ValidationError):
+            ExecutionConfig(experiment_timeout_seconds=0.0)
+
+    def test_experiment_timeout_negative_raises(self):
+        with pytest.raises(ValidationError):
+            ExecutionConfig(experiment_timeout_seconds=-1.0)
+
+    def test_experiment_timeout_roundtrip_from_yaml(self):
+        yaml_text = "n_cycles: 2\nexperiment_timeout_seconds: 1800.0\n"
+        ec = ExecutionConfig(**yaml.safe_load(yaml_text))
+        assert ec.experiment_timeout_seconds == 1800.0
+
 
 # =============================================================================
 # StudyConfig model tests

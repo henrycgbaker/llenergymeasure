@@ -24,7 +24,6 @@ import pytest
 from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 from llenergymeasure.study.runner import (
     StudyRunner,
-    _calculate_timeout,
     _kill_process_group,
     _run_experiment_worker,
 )
@@ -39,16 +38,6 @@ from tests.conftest import TEST_CONFIG_HASH
 def basic_config() -> ExperimentConfig:
     """A minimal ExperimentConfig with n_prompts=100."""
     return ExperimentConfig(model="test/model", backend="pytorch")
-
-
-@pytest.fixture
-def large_config() -> ExperimentConfig:
-    """A minimal ExperimentConfig with n_prompts=1000."""
-    from llenergymeasure.config.models import DatasetConfig
-
-    return ExperimentConfig(
-        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=1000)
-    )
 
 
 @pytest.fixture
@@ -108,23 +97,6 @@ def _make_mock_context(
     ctx.Queue.return_value = queue.SimpleQueue()
 
     return ctx
-
-
-# =============================================================================
-# Task 1a: _calculate_timeout
-# =============================================================================
-
-
-def test_calculate_timeout_minimum(basic_config: ExperimentConfig) -> None:
-    """_calculate_timeout returns >= 600 for n_prompts=100."""
-    result = _calculate_timeout(basic_config)
-    assert result >= 600, f"Expected >= 600, got {result}"
-
-
-def test_calculate_timeout_scales_with_n(large_config: ExperimentConfig) -> None:
-    """_calculate_timeout returns >= 2000 for n_prompts=1000 (2s/prompt heuristic)."""
-    result = _calculate_timeout(large_config)
-    assert result >= 2000, f"Expected >= 2000 for n_prompts=1000, got {result}"
 
 
 # =============================================================================
@@ -995,6 +967,45 @@ def test_docker_error_caught_and_converted_to_failure_dict(
     # Manifest should record failure
     manifest.mark_failed.assert_called_once()
     manifest.mark_completed.assert_not_called()
+
+
+def test_docker_timeout_normalised_to_timeout_error(
+    study_config: StudyConfig,
+) -> None:
+    """DockerTimeoutError must be tagged as 'TimeoutError' so the circuit breaker
+    coalesces it with subprocess-path timeouts under one error class."""
+    manifest = MagicMock()
+    spec = _make_docker_runner_spec()
+    runner_specs = {"pytorch": spec}
+
+    from llenergymeasure.infra.docker_errors import DockerTimeoutError
+
+    def raise_docker_timeout(config, **kwargs):
+        raise DockerTimeoutError("Container exceeded 600s timeout")
+
+    fake_ctx = MagicMock()
+    fake_ctx.Process.side_effect = lambda **kwargs: MagicMock()
+
+    with (
+        patch("multiprocessing.get_context", return_value=fake_ctx),
+        patch(
+            "llenergymeasure.infra.docker_runner.DockerRunner.run",
+            side_effect=raise_docker_timeout,
+        ),
+        patch("llenergymeasure.study.gpu_memory.check_gpu_memory_residual"),
+        patch("llenergymeasure.study._progress.print_study_progress"),
+    ):
+        runner = StudyRunner(
+            study_config, manifest, Path("/tmp/test-docker-timeout"), runner_specs=runner_specs
+        )
+        with patch.object(runner, "_prepare_images"):
+            results = runner.run()
+
+    assert len(results) == 1
+    assert isinstance(results[0], dict)
+    assert results[0]["type"] == "TimeoutError", (
+        f"Docker timeout must normalise to 'TimeoutError', got {results[0]['type']!r}"
+    )
 
 
 # =============================================================================

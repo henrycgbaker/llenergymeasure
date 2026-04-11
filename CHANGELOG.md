@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Per-experiment timeout is now configurable** via `study_execution.experiment_timeout_seconds` (default 600s). Replaces the previous `max(n_prompts*2, 600)` heuristic. Both the local subprocess path and the Docker container path honour the same field, and Docker-path timeouts are normalised to `TimeoutError` so the circuit breaker counts them consistently across both paths.
+
+### Removed
+
+- Internal helper `llenergymeasure.study.runner._calculate_timeout` (replaced by direct config reads; also removes a layer-boundary import from `api/_impl.py`).
+
 ## [v2.0.0](https://github.com/henrycgbaker/LLenergyMeasure/releases/tag/v2.0.0) (2026-01-14)
 
 Refactored CLI-based tool with clean architecture, comprehensive documentation, and improved configuration UX.

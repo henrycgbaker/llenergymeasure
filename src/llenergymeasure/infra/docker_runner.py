@@ -120,7 +120,7 @@ class DockerRunner:
     def __init__(
         self,
         image: str,
-        timeout: int | None = None,
+        timeout: float | None = None,
         source: str = "unknown",
         extra_mounts: list[tuple[str, str]] | None = None,
         container_name: str | None = None,

@@ -535,6 +535,7 @@ def _run(
         "experiment_gap_seconds": study.study_execution.experiment_gap_seconds,
         "cycle_gap_seconds": study.study_execution.cycle_gap_seconds,
         "shuffle_seed": study.study_execution.shuffle_seed,
+        "experiment_timeout_seconds": study.study_execution.experiment_timeout_seconds,
     }
 
     summary = StudySummary(
@@ -603,16 +604,16 @@ def _run_in_process(
 
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
+        from llenergymeasure.infra.docker_errors import DockerTimeoutError
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.utils.exceptions import DockerError
 
         image = spec.image if spec.image is not None else get_default_image(config.backend)
-        from llenergymeasure.study.runner import _calculate_timeout
 
         docker_runner = DockerRunner(
             image=image,
-            timeout=_calculate_timeout(config),
+            timeout=study.study_execution.experiment_timeout_seconds,
             source=spec.source,
             extra_mounts=spec.extra_mounts,
         )
@@ -621,9 +622,21 @@ def _run_in_process(
             result, docker_ts_dir = docker_runner.run(
                 config, progress=progress, save_timeseries=save_ts
             )
+        except DockerTimeoutError as exc:
+            # Normalise to "TimeoutError" so the circuit breaker sees the same
+            # failure class as the subprocess path.
+            error_payload: dict[str, Any] = {
+                "type": "TimeoutError",
+                "message": str(exc),
+                "config_hash": config_hash,
+            }
+            manifest.mark_failed(
+                config_hash, cycle, error_payload["type"], error_payload["message"]
+            )
+            return [], [None], [error_payload["message"]]
         except DockerError as exc:
             # Convert to failure dict — manifest marks failed, study continues
-            error_payload: dict[str, Any] = {
+            error_payload = {
                 "type": type(exc).__name__,
                 "message": str(exc),
                 "config_hash": config_hash,

@@ -33,6 +33,7 @@ study_execution:
   max_consecutive_failures: 10    # Circuit breaker: 0=disabled, 1=fail-fast, N=threshold
   circuit_breaker_cooldown_seconds: 60.0  # Pause before half-open probe
   wall_clock_timeout_hours: null  # Hard time limit in hours (null = no limit)
+  experiment_timeout_seconds: 600.0  # Per-experiment kill timeout (10 min). Raise for large n_prompts or slow engine builds.
 
 # =====================================================================
 # Shared fields (experiment-level)
