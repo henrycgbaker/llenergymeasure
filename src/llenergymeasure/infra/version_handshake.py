@@ -1,26 +1,15 @@
 """Host/container schema-skew detection via OCI image labels.
 
-Images are stamped at build time with two identifiers baked in as OCI labels:
-
-- ``org.opencontainers.image.version`` — the llenergymeasure package version
-  (e.g. ``0.9.0``), sourced from ``_version.py``. Displayed alongside the
-  fingerprint in error messages for human readability. Not the blocking signal,
-  because during intra-version dev work both host and image report the same
-  version through an entire milestone of schema churn.
-- ``llem.expconf.schema.fingerprint`` — a SHA-256 hex digest of
-  ``ExperimentConfig.model_json_schema()`` serialised with ``sort_keys=True`` and
-  compact separators. This is the actual signal: it changes on every
-  ``ExperimentConfig`` (or nested model) structural change, catching the exact
-  failure mode where the host adds fields the container image does not know
-  about.
+Images are stamped at build time with ``org.opencontainers.image.version`` (the
+llenergymeasure package version, for display) and
+``llem.expconf.schema.fingerprint`` (a SHA-256 over
+``ExperimentConfig.model_json_schema()``, the actual blocking signal).
 
 The host computes its own fingerprint at runtime and compares it to the label
-baked into each resolved Docker image as part of ``StudyRunner._prepare_images``.
-A mismatch raises ``VersionMismatchError`` with an actionable rebuild hint
-before any experiment runs.
+on each resolved Docker image in ``StudyRunner._prepare_images``. A mismatch
+raises ``VersionMismatchError`` before any experiment runs.
 
-Bypass with ``LLEM_SKIP_IMAGE_CHECK=1`` when the skew is known harmless (e.g. a
-new optional field the container will silently ignore).
+Bypass with ``LLEM_SKIP_IMAGE_CHECK=1`` when the skew is known harmless.
 """
 
 from __future__ import annotations
@@ -31,8 +20,10 @@ import logging
 import os
 import subprocess
 from dataclasses import dataclass
+from functools import cache
 
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.ssot import TIMEOUT_DOCKER_INSPECT
 
 __all__ = [
     "ENV_SKIP_IMAGE_CHECK",
@@ -42,6 +33,8 @@ __all__ = [
     "VersionMismatchError",
     "compute_expconf_fingerprint",
     "inspect_image_stamp",
+    "parse_image_stamp",
+    "rebuild_hint",
     "skip_check_enabled",
 ]
 
@@ -50,10 +43,6 @@ logger = logging.getLogger(__name__)
 ENV_SKIP_IMAGE_CHECK = "LLEM_SKIP_IMAGE_CHECK"
 LABEL_SCHEMA_FINGERPRINT = "llem.expconf.schema.fingerprint"
 LABEL_IMAGE_VERSION = "org.opencontainers.image.version"
-
-# Docker inspect never takes long; keep the handshake tight so a dead docker
-# daemon doesn't stall study startup.
-_INSPECT_TIMEOUT_SEC = 10.0
 
 
 class VersionMismatchError(RuntimeError):
@@ -68,12 +57,15 @@ class ImageStamp:
     expconf_fingerprint: str | None
 
 
+_EMPTY_STAMP = ImageStamp(pkg_version=None, expconf_fingerprint=None)
+
+
+@cache
 def compute_expconf_fingerprint() -> str:
     """Return the SHA-256 hex digest of ``ExperimentConfig.model_json_schema()``.
 
-    Uses ``sort_keys=True`` and compact separators so the serialisation is
-    deterministic across Python processes and machines. The result is 64 hex
-    characters; callers typically display the first 12 for readability.
+    The schema is frozen per-process, so the result is memoised. Callers
+    typically display the first 12 hex characters for readability.
     """
     payload = json.dumps(
         ExperimentConfig.model_json_schema(),
@@ -83,12 +75,12 @@ def compute_expconf_fingerprint() -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def inspect_image_stamp(image: str, *, timeout: float = _INSPECT_TIMEOUT_SEC) -> ImageStamp:
+def inspect_image_stamp(image: str, *, timeout: float = TIMEOUT_DOCKER_INSPECT) -> ImageStamp:
     """Parse handshake labels from ``docker image inspect`` on *image*.
 
-    Returns ``ImageStamp(None, None)`` on any failure (docker not installed,
-    inspect timeout, JSON parse error, missing labels). The caller decides
-    whether the absence of labels is a warning or an error.
+    Returns an empty stamp on any failure (docker not installed, inspect
+    timeout, JSON parse error, missing labels). The caller decides whether the
+    absence of labels is a warning or an error.
     """
     try:
         result = subprocess.run(
@@ -98,7 +90,7 @@ def inspect_image_stamp(image: str, *, timeout: float = _INSPECT_TIMEOUT_SEC) ->
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
         logger.debug("docker image inspect failed for %s: %s", image, exc)
-        return ImageStamp(pkg_version=None, expconf_fingerprint=None)
+        return _EMPTY_STAMP
 
     if result.returncode != 0:
         logger.debug(
@@ -107,18 +99,19 @@ def inspect_image_stamp(image: str, *, timeout: float = _INSPECT_TIMEOUT_SEC) ->
             image,
             result.stderr.decode("utf-8", errors="replace") if result.stderr else "",
         )
-        return ImageStamp(pkg_version=None, expconf_fingerprint=None)
+        return _EMPTY_STAMP
 
-    return _parse_stamp_from_inspect_json(result.stdout)
+    return parse_image_stamp(result.stdout)
 
 
-def _parse_stamp_from_inspect_json(inspect_stdout: bytes) -> ImageStamp:
+def parse_image_stamp(inspect_stdout: bytes) -> ImageStamp:
+    """Extract an ``ImageStamp`` from raw ``docker image inspect`` JSON."""
     try:
         data = json.loads(inspect_stdout)
     except (json.JSONDecodeError, ValueError):
-        return ImageStamp(pkg_version=None, expconf_fingerprint=None)
+        return _EMPTY_STAMP
     if not data:
-        return ImageStamp(pkg_version=None, expconf_fingerprint=None)
+        return _EMPTY_STAMP
     labels = data[0].get("Config", {}).get("Labels") or {}
     return ImageStamp(
         pkg_version=labels.get(LABEL_IMAGE_VERSION),
@@ -126,12 +119,12 @@ def _parse_stamp_from_inspect_json(inspect_stdout: bytes) -> ImageStamp:
     )
 
 
-def skip_check_enabled() -> bool:
-    """True iff the user has set ``LLEM_SKIP_IMAGE_CHECK`` to a truthy value.
+def rebuild_hint(backend: str) -> str:
+    """Return the user-facing rebuild command for *backend*."""
+    return f"make docker-build-{backend}"
 
-    Accepts ``1``, ``true``, ``yes`` (case-insensitive) as on; anything else is
-    treated as off. The variable exists as a break-glass bypass — no CLI flag
-    yet because we want to see whether it's ever needed before promoting it.
-    """
+
+def skip_check_enabled() -> bool:
+    """True iff ``LLEM_SKIP_IMAGE_CHECK`` is set to ``1``/``true``/``yes``."""
     raw = os.environ.get(ENV_SKIP_IMAGE_CHECK, "")
     return raw.strip().lower() in {"1", "true", "yes"}

@@ -1771,8 +1771,8 @@ class TestParseImageMetadata:
         data = b"[{}]"
         assert StudyRunner._parse_image_metadata(data) is None
 
-    def test_labels_extracted_under_llem_keys(self) -> None:
-        """Schema-handshake labels surface as llem_* keys for the verify step."""
+    def test_handshake_labels_do_not_leak_into_display_metadata(self) -> None:
+        """Display metadata never carries the raw 64-char fingerprint label."""
         data = (
             b'[{"Id": "sha256:abc123def456789", "Size": 1073741824, '
             b'"Config": {"Labels": {'
@@ -1782,8 +1782,10 @@ class TestParseImageMetadata:
         )
         meta = StudyRunner._parse_image_metadata(data)
         assert meta is not None
-        assert meta["llem_expconf_fingerprint"] == "a" * 64
-        assert meta["llem_pkg_version"] == "0.9.0"
+        assert "llem_expconf_fingerprint" not in meta
+        assert "llem_pkg_version" not in meta
+        # The display fields (id/size) still come through.
+        assert meta["id"] == "abc123def456"
 
 
 # =============================================================================
