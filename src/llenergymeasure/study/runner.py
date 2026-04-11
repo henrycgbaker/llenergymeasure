@@ -44,7 +44,7 @@ from llenergymeasure.config.ssot import (
     TIMEOUT_SIGTERM_GRACE,
     TIMEOUT_THREAD_JOIN,
 )
-from llenergymeasure.domain.progress import STEPS_LOCAL, docker_steps
+from llenergymeasure.domain.progress import STEP_BASELINE, STEPS_LOCAL, docker_steps
 from llenergymeasure.study.gaps import run_gap
 
 if TYPE_CHECKING:
@@ -512,16 +512,9 @@ class StudyRunner:
         self._cycle_counters: dict[str, int] = {}
         # Study-level environment snapshot cache — collected once, reused across experiments
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
-        # Study-level baseline power cache — measured once per runner target,
-        # shared across experiments with the same cache key.
-        # Keys: "local" for host-side, "image:<sanitized>" for Docker backends.
-        # Per-target keying avoids cross-contamination in multi-backend studies
-        # where different images may have different CUDA init footprints.
-        # See .product/research/baseline-measurement-location.md.
+        # Study-level baseline cache, keyed per runner target ("local" or
+        # "image_<sanitized>") so multi-backend studies don't cross-contaminate.
         self._baselines: dict[str, Any] = {}  # dict[str, BaselineCache]
-        # Disk paths for baseline cache (shared with Docker containers), per cache key.
-        self._baseline_cache_paths: dict[str, Path] = {}
-        # Counter for validation interval (strategy='validated'), per cache key.
         self._experiments_since_validation: dict[str, int] = {}
         # Study-level image preparation: True after _prepare_images() succeeds
         self._images_prepared: bool = False
@@ -787,37 +780,20 @@ class StudyRunner:
     def _get_baseline(self, config: ExperimentConfig) -> Any:
         """Return baseline power according to the configured strategy.
 
-        Strategy behaviour:
-            cached: Measure once per runner target, persist to disk, reuse within TTL.
-            validated: Same as cached but spot-checks periodically for drift.
-            fresh: Always returns None (each experiment measures its own in-container).
+        Strategies: ``cached`` (measure once per runner target, persist to disk,
+        reuse within TTL), ``validated`` (same, with periodic drift spot-check),
+        and ``fresh`` (returns None; harness measures in-container per experiment).
 
-        For Docker targets, the measurement runs inside a short-lived container of
-        the same backend image so the CUDA state (initialised runtime + seeded
-        torch memory pool) matches the experiment container — eliminating a
-        ~8.7 W/GPU host-vs-container bias. See the research doc.
-
-        Progress events for the cached/validated strategies are emitted by this
-        method. The harness does not emit a baseline step for these paths —
-        see the §5.5.1 comment in ``harness/__init__.py``.
-
-        Args:
-            config: Experiment config providing baseline settings and GPU indices.
-
-        Returns:
-            BaselineCache or None if measurement failed, baseline is disabled,
-            or strategy is 'fresh'.
+        For Docker targets the measurement runs inside a short-lived container
+        of the same backend image, so the CUDA init state matches the experiment
+        container (see ``.product/research/baseline-measurement-location.md``).
         """
         strategy = config.baseline.strategy
 
-        # fresh: harness Branch B measures in-container per experiment — no host events
         if strategy == "fresh":
             return None
 
         cache_key = self._baseline_cache_key(config)
-        # Short location label for progress detail strings — tells the user
-        # whether the measurement runs on the host or in a dedicated baseline
-        # container (see two-container architecture notes in methodology.md).
         location = "host" if cache_key == "local" else "baseline container"
         cached = self._baselines.get(cache_key)
 
@@ -846,11 +822,11 @@ class StudyRunner:
         if cached is not None:
             if self._progress is not None:
                 self._progress.on_step_start(
-                    "baseline",
+                    STEP_BASELINE,
                     "Reusing",
                     f"cached {cached.power_w:.1f}W · {location}",
                 )
-                self._progress.on_step_done("baseline", 0.0)
+                self._progress.on_step_done(STEP_BASELINE, 0.0)
             return cached
 
         # Try loading from disk first (handles mid-study restarts)
@@ -859,16 +835,17 @@ class StudyRunner:
             from llenergymeasure.harness.baseline import load_baseline_cache
 
             if self._progress is not None:
-                self._progress.on_step_start("baseline", "Loading", f"baseline cache · {location}")
+                self._progress.on_step_start(
+                    STEP_BASELINE, "Loading", f"baseline cache · {location}"
+                )
                 t0_load = time.perf_counter()
 
             loaded = load_baseline_cache(disk_path, ttl=config.baseline.cache_ttl_seconds)
 
             if self._progress is not None:
-                self._progress.on_step_done("baseline", time.perf_counter() - t0_load)
+                self._progress.on_step_done(STEP_BASELINE, time.perf_counter() - t0_load)
 
             if loaded is not None:
-                # Backward-compat: old cache files lacking method get the current strategy
                 if loaded.method is None:
                     loaded.method = strategy
                 self._baselines[cache_key] = loaded
@@ -880,7 +857,7 @@ class StudyRunner:
         dur = config.baseline.duration_seconds
         if self._progress is not None:
             self._progress.on_step_start(
-                "baseline", "Measuring", f"{location} · idle power ({dur:.0f}s)"
+                STEP_BASELINE, "Measuring", f"{location} · idle power ({dur:.0f}s)"
             )
             t0_meas = time.perf_counter()
 
@@ -898,18 +875,16 @@ class StudyRunner:
         if self._progress is not None:
             elapsed = time.perf_counter() - t0_meas
             if measured is None:
-                # Surface the failure in the UI so users don't see a silent ✓
-                # that hides a ~5s dispatch crash (e.g. stale image missing the
-                # baseline_measure entrypoint). The experiment container will
-                # fall back to measuring its own baseline; the substep tells
-                # the user *why* they see that second measurement.
+                # Surface the failure so users don't see a silent tick hiding a
+                # dispatch crash. The experiment container falls back to measuring
+                # its own baseline; the substep tells the user *why*.
                 self._progress.on_substep(
-                    "baseline",
+                    STEP_BASELINE,
                     f"measurement failed after {elapsed:.1f}s — see log warnings "
                     f"(experiment container will re-measure fresh)",
                     elapsed,
                 )
-            self._progress.on_step_done("baseline", elapsed)
+            self._progress.on_step_done(STEP_BASELINE, elapsed)
 
         return measured
 
@@ -934,16 +909,11 @@ class StudyRunner:
                 gpu_indices=gpu_indices,
             )
 
-        # Docker: dispatch baseline container of the same backend image.
-        spec = self._runner_specs.get(config.backend) if self._runner_specs else None
-        if spec is None or spec.image is None:
-            # Defensive — cache_key says Docker but spec doesn't line up.
-            logger.warning(
-                "Baseline cache_key=%s but no matching Docker runner spec; returning None",
-                cache_key,
-            )
-            return None
-
+        # Docker: _baseline_cache_key already guaranteed a resolved image when
+        # it returned a non-"local" key.
+        assert self._runner_specs is not None
+        spec = self._runner_specs[config.backend]
+        assert spec.image is not None
         from llenergymeasure.study.baseline_container import run_baseline_container
 
         return run_baseline_container(
@@ -1003,7 +973,9 @@ class StudyRunner:
         location = "host" if cache_key == "local" else "baseline container"
 
         if self._progress is not None:
-            self._progress.on_step_start("baseline", "Validating", f"{location} · drift check (5s)")
+            self._progress.on_step_start(
+                STEP_BASELINE, "Validating", f"{location} · drift check (5s)"
+            )
             t0 = time.perf_counter()
 
         spot = self._spot_check_baseline(config, cache_key, gpu_indices)
@@ -1012,7 +984,7 @@ class StudyRunner:
         if spot is None:
             logger.warning("Baseline validation: spot-check measurement failed")
             if self._progress is not None:
-                self._progress.on_step_done("baseline", time.perf_counter() - t0)
+                self._progress.on_step_done(STEP_BASELINE, time.perf_counter() - t0)
             return
 
         drift = abs(spot - cached.power_w) / cached.power_w
@@ -1028,7 +1000,7 @@ class StudyRunner:
             )
             if self._progress is not None:
                 self._progress.on_step_update(
-                    "baseline",
+                    STEP_BASELINE,
                     f"{location} · drift {drift * 100:.1f}% > "
                     f"{config.baseline.drift_threshold * 100:.0f}%, "
                     f"re-measuring ({dur:.0f}s)",
@@ -1048,23 +1020,17 @@ class StudyRunner:
             )
 
         if self._progress is not None:
-            self._progress.on_step_done("baseline", time.perf_counter() - t0)
+            self._progress.on_step_done(STEP_BASELINE, time.perf_counter() - t0)
 
     def _get_baseline_cache_path(self, cache_key: str) -> Path:
         """Return the disk path for the baseline cache file keyed by runner target.
 
-        The file lives at
-        ``{study_dir}/_study-artefacts/baseline_cache_{cache_key}.json``. Creates
-        the artefacts directory if needed.
+        File lives at ``{study_dir}/_study-artefacts/baseline_cache_{cache_key}.json``.
+        Creates the artefacts directory if needed.
         """
-        if cache_key in self._baseline_cache_paths:
-            return self._baseline_cache_paths[cache_key]
-
         artefacts_dir = self.study_dir / "_study-artefacts"
         artefacts_dir.mkdir(parents=True, exist_ok=True)
-        path = artefacts_dir / f"baseline_cache_{cache_key}.json"
-        self._baseline_cache_paths[cache_key] = path
-        return path
+        return artefacts_dir / f"baseline_cache_{cache_key}.json"
 
     def _prepare_images(self) -> None:
         """Check/pull Docker images for all Docker backends before experiments.
@@ -1475,22 +1441,11 @@ class StudyRunner:
         container_name = generate_container_name(study_id, index)
         labels = generate_container_labels(study_id)
 
-        # Signal study display: new experiment starting (Docker steps).
-        # IMPORTANT: begin_experiment MUST run before _get_baseline so that
-        # the baseline step events fire against a registered experiment index.
-        # The local path (above) already orders begin_experiment first.
+        # begin_experiment MUST run before _get_baseline so baseline step events
+        # fire against a registered experiment index.
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
-            # Where STEP_BASELINE appears depends on the baseline strategy:
-            #   - cached/validated: baseline runs in a short-lived baseline
-            #     container BEFORE the experiment container → baseline
-            #     precedes container_start in the registered list so events
-            #     arrive in the same order the renderer iterates.
-            #   - fresh: harness Branch B measures baseline inside the
-            #     experiment container AFTER container_preflight.
-            # docker_steps() also drops image_check/pull when images were
-            # verified at study level (images_prepared=True).
             host_baseline = config.baseline.enabled and config.baseline.strategy != "fresh"
             steps = docker_steps(
                 images_prepared=self._images_prepared,
@@ -1505,18 +1460,14 @@ class StudyRunner:
             # Host-side preflight doesn't run in Docker path — checked inside container
             self._progress.on_step_skip("preflight", "checked inside container")
 
-        # Measure baseline (in a short-lived baseline container of the same image
-        # so the CUDA init state matches the experiment container — eliminates a
-        # ~8.7 W/GPU host-vs-container bias on A100). See
-        # .product/research/baseline-measurement-location.md.
         extra_mounts = list(spec.extra_mounts) if spec.extra_mounts else []
         cache_key = self._baseline_cache_key(config)
         baseline = self._get_baseline(config) if config.baseline.enabled else None
-        baseline_cache_path = self._get_baseline_cache_path(cache_key)
-        if baseline is not None and baseline_cache_path.exists():
-            # Experiment container still reads a single /run/llem/baseline_cache.json;
-            # the host picks the right per-cache-key file at dispatch time.
-            # Docker parses relative bind-mount sources as named volumes; resolve first.
+        if baseline is not None:
+            # Experiment container reads /run/llem/baseline_cache.json; the host
+            # picks the right per-cache-key file at dispatch time. Docker parses
+            # relative bind-mount sources as named volumes, so resolve first.
+            baseline_cache_path = self._get_baseline_cache_path(cache_key)
             extra_mounts.append(
                 (
                     str(baseline_cache_path.resolve()),

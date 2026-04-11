@@ -36,10 +36,12 @@ logger = logging.getLogger(__name__)
 __all__ = ["build_baseline_docker_cmd", "run_baseline_container"]
 
 
+BASELINE_SPEC_FILENAME = "baseline_spec.json"
+
+
 def build_baseline_docker_cmd(
     image: str,
     exchange_dir: str,
-    spec_filename: str,
     gpu_indices: list[int],
 ) -> list[str]:
     """Build the ``docker run`` command list for a baseline-only container.
@@ -48,7 +50,7 @@ def build_baseline_docker_cmd(
     command shape without mocking subprocess internals.
     """
     cuda_visible = ",".join(str(i) for i in gpu_indices) if gpu_indices else ""
-    spec_container_path = f"{CONTAINER_EXCHANGE_DIR}/{spec_filename}"
+    spec_container_path = f"{CONTAINER_EXCHANGE_DIR}/{BASELINE_SPEC_FILENAME}"
     return [
         "docker",
         "run",
@@ -104,8 +106,7 @@ def run_baseline_container(
         timeout_sec = max(duration_sec * 2.0 + 60.0, 120.0)
 
     exchange_dir = Path(tempfile.mkdtemp(prefix=f"{TEMP_PREFIX_EXCHANGE}baseline-"))
-    spec_filename = "baseline_spec.json"
-    spec_path = exchange_dir / spec_filename
+    spec_path = exchange_dir / BASELINE_SPEC_FILENAME
     result_path = exchange_dir / "baseline_result.json"
     error_path = exchange_dir / "baseline_error.json"
 
@@ -119,7 +120,6 @@ def run_baseline_container(
     cmd = build_baseline_docker_cmd(
         image=image,
         exchange_dir=str(exchange_dir),
-        spec_filename=spec_filename,
         gpu_indices=list(gpu_indices),
     )
 
@@ -134,7 +134,8 @@ def run_baseline_container(
     try:
         completed = subprocess.run(
             cmd,
-            capture_output=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=timeout_sec,
             check=False,

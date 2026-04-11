@@ -45,7 +45,6 @@ class TestBuildBaselineDockerCmd:
         cmd = baseline_container.build_baseline_docker_cmd(
             image="ghcr.io/foo/bar:v1",
             exchange_dir=str(tmp_path),
-            spec_filename="baseline_spec.json",
             gpu_indices=[0, 2],
         )
         assert cmd[0] == "docker"
@@ -66,7 +65,6 @@ class TestBuildBaselineDockerCmd:
         cmd = baseline_container.build_baseline_docker_cmd(
             image="img:latest",
             exchange_dir=str(tmp_path),
-            spec_filename="baseline_spec.json",
             gpu_indices=[],
         )
         assert any("CUDA_VISIBLE_DEVICES=" in part for part in cmd)

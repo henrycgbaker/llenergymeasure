@@ -502,13 +502,6 @@ class TestBaselineCachePath:
         runner._get_baseline_cache_path(_LOCAL_KEY)
         assert (tmp_path / "_study-artefacts").is_dir()
 
-    def test_path_cached_on_runner(self, tmp_path: Path, config_cached: ExperimentConfig):
-        """Second call returns the same Path object (no redundant mkdir)."""
-        runner = _make_runner(tmp_path, config_cached)
-        first = runner._get_baseline_cache_path(_LOCAL_KEY)
-        second = runner._get_baseline_cache_path(_LOCAL_KEY)
-        assert first is second
-
 
 # =============================================================================
 # Docker baseline mount
