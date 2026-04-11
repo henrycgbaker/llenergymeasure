@@ -247,22 +247,25 @@ docker-builder-setup:
 docker-builder-rm:
 	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
+CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
+
 # Build all backends (pytorch, vllm, tensorrt) — local images
 docker-build-all:
-	@echo "First build pulls ~5-15 GB of cache layers from ghcr.io (warm rebuilds: <5 min)"
+	$(CACHE_HINT)
 	docker compose build pytorch vllm tensorrt
 
 # Build PyTorch backend (default, recommended for most users)
 docker-build-pytorch:
-	@echo "First build pulls ~5 GB of cache layers from ghcr.io (warm rebuilds: <5 min)"
+	$(CACHE_HINT)
 	docker compose build pytorch
+
 # Build specific backends — local images
 docker-build-vllm:
-	@echo "First build pulls ~10 GB of cache layers from ghcr.io (warm rebuilds: <5 min)"
+	$(CACHE_HINT)
 	docker compose build vllm
 
 docker-build-tensorrt:
-	@echo "First build pulls ~15 GB of cache layers from ghcr.io (warm rebuilds: <5 min)"
+	$(CACHE_HINT)
 	docker compose build tensorrt
 
 # Pull versioned registry images (ghcr.io) instead of building locally

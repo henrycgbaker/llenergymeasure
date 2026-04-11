@@ -15,7 +15,7 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 - **Multi-backend inference** — PyTorch, vLLM, TensorRT-LLM, SGLang (planned)
 - **GPU energy measurement** — NVML, Zeus, CodeCarbon, others 
 - **Smart sweep system** — define parameter grids, run Cartesian product experiments automatically; intelligently managed sweep hierarchy scopes available config fields to appropriate backend/component, and ensures invalid combinations are removed
-- **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each backend in registry with full runnder configurability and local mode also available. Every study pre-flight now verifies that each image's `ExperimentConfig` schema fingerprint matches the host's, aborting with an actionable rebuild hint on drift (`llem doctor` for a one-shot check). Rebuilds warm layer cache from GHCR automatically (<5 min warm vs ~20 min cold).
+- **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each backend in registry with full runnder configurability and local mode also available. Every study pre-flight now verifies that each image's `ExperimentConfig` schema fingerprint matches the host's, aborting with an actionable rebuild hint on drift (`llem doctor` for a one-shot check).
 - **Reproducibility** — fixed seeds, cycle ordering, thermal management, environment snapshots, effective config recorded (add others)
 - **Built-in datasets** — AI Energy Score benchmark prompts included; custom JSONL datasets also supported
 
