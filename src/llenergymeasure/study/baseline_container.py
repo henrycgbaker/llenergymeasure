@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 
@@ -174,11 +175,8 @@ def run_baseline_container(
         gpu_indices,
     )
 
-    # Popen + line-buffered iteration gives the CLI a chance to emit live
-    # sub-step progress as the container transitions stages. stderr is merged
-    # into stdout so a single iterator covers both streams — avoids the risk
-    # of stderr's pipe buffer filling up and deadlocking the child while we
-    # drain stdout, and keeps the stage-marker parser simple.
+    # stderr merged into stdout so one iterator covers both streams and stderr's
+    # pipe buffer can't fill up and deadlock the child.
     try:
         process = subprocess.Popen(
             cmd,
@@ -193,12 +191,15 @@ def run_baseline_container(
         return None
 
     start = time.monotonic()
-    output_lines: list[str] = []
+    # Bounded tail — only the last 10 lines are logged on failure; torch/CUDA
+    # init can emit thousands of lines we never read.
+    output_tail: deque[str] = deque(maxlen=64)
 
     try:
-        assert process.stdout is not None
+        if process.stdout is None:
+            raise RuntimeError("Popen returned no stdout pipe")
         for line in process.stdout:
-            output_lines.append(line)
+            output_tail.append(line)
             stripped = line.rstrip("\n")
             parsed = parse_stage_line(stripped)
             if parsed is not None and on_stage is not None:
@@ -212,9 +213,7 @@ def run_baseline_container(
                         "baseline on_stage callback raised; continuing",
                         exc_info=True,
                     )
-            # Deadline check inside the read loop so a wedged container
-            # (e.g. stuck in CUDA init) is still killed when the budget
-            # expires, not only when the kernel delivers the next line.
+            # Kill a wedged container mid-stream rather than only when wait() fires.
             if (time.monotonic() - start) > timeout_sec:
                 process.kill()
                 with contextlib.suppress(Exception):
@@ -228,7 +227,8 @@ def run_baseline_container(
                     exchange_dir,
                 )
                 return None
-        returncode = process.wait(timeout=max(5.0, timeout_sec))
+        # Stdout closed → child is essentially done; a small grace is enough.
+        returncode = process.wait(timeout=5.0)
     except subprocess.TimeoutExpired:
         process.kill()
         with contextlib.suppress(Exception):
@@ -244,7 +244,7 @@ def run_baseline_container(
         return None
 
     if returncode != 0:
-        tail = [line.rstrip("\n") for line in output_lines[-10:]]
+        tail = [line.rstrip("\n") for line in list(output_tail)[-10:]]
         logger.warning(
             "Baseline container exited non-zero (code=%d, image=%s, mode=%s). "
             "Output tail: %s. Exchange dir preserved at %s.",

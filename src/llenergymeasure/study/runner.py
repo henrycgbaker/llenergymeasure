@@ -890,17 +890,15 @@ class StudyRunner:
                     elapsed,
                 )
             elif cache_key == "local":
-                # No container subprocess → no streamed stage markers; emit a
-                # retroactive sampling substep so the local path is not left
-                # without any breakdown.
+                # No container subprocess → emit a retroactive sampling substep
+                # so the local path still gets a breakdown. The Docker path
+                # already emitted substeps live via the on_stage callback.
                 self._emit_baseline_result_substeps(
                     measured,
                     elapsed=elapsed,
                     mode="fresh",
                     is_containerised=False,
                 )
-            # Docker path: substeps were already emitted live by the on_stage
-            # callback as each stage completed inside the container.
             self._progress.on_step_done(STEP_BASELINE, elapsed)
 
         return measured
@@ -908,25 +906,20 @@ class StudyRunner:
     def _make_baseline_stage_callback(self) -> Any:
         """Build a stage-marker callback that emits live baseline sub-bullets.
 
-        The returned closure receives ``(stage_name, elapsed_since_popen,
-        kv_tags)`` from ``run_baseline_container`` and translates each stage
-        transition into a dim sub-bullet under the active ``baseline`` step.
         Each sub-bullet reports the duration of *that stage* (delta since the
-        previous marker), not the cumulative elapsed — so users read the
-        breakdown as "launch took Xs, CUDA init took Ys, sampling took Zs"
-        instead of ever-increasing totals.
-
-        ``container_ready`` is the exception: its elapsed is reported as
-        time-since-subprocess-start because there is no prior marker to diff
-        against, and that number IS the container launch cost.
+        previous marker), so users see "launch took Xs, CUDA init took Ys,
+        sampling took Zs" rather than ever-increasing cumulative totals.
+        ``container_ready`` is the exception — its elapsed IS the container
+        launch cost (no prior marker to diff against).
         """
-        last_t = [0.0]
+        last_t = 0.0
 
         def on_stage(name: str, elapsed: float, kv: dict[str, str]) -> None:
-            if self._progress is None:  # defensive — caller already checks
+            nonlocal last_t
+            if self._progress is None:
                 return
-            delta = max(0.0, elapsed - last_t[0])
-            last_t[0] = elapsed
+            delta = max(0.0, elapsed - last_t)
+            last_t = elapsed
             if name == "container_ready":
                 self._progress.on_substep(
                     STEP_BASELINE,
@@ -939,10 +932,6 @@ class StudyRunner:
                     "initialised CUDA runtime · seeded torch allocator",
                     delta,
                 )
-            elif name == "sampling_started":
-                # Wait for sampling_done so the sub-bullet carries sampled
-                # duration + power + sample count.
-                pass
             elif name == "sampling_done":
                 power_w = kv.get("power_w", "?")
                 samples = kv.get("samples", "?")
