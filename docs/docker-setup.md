@@ -378,6 +378,44 @@ runners:
 SGLang (M5) images will follow the same naming convention, resolution logic, and auto-pull
 behaviour. No additional setup is needed when SGLang ships.
 
+### Layer cache sharing via GHCR registry
+
+Every `docker compose build` pulls pre-computed BuildKit layers from
+`ghcr.io/henrycgbaker/llenergymeasure/{backend}:latest` (and the matching
+versioned tag when available). CI populates the cache with
+`cache-to=type=registry,mode=max,ref=…:latest` on each release, which exports
+all intermediate layers — including the heavy flash-attn FA2+FA3 compile on
+the PyTorch image — so downstream builders can consume them without
+recompiling.
+
+```
++----------------+              +------------------+              +------------------+
+| CI (release)   |  cache-to    | GHCR :latest     |  cache-from  | Local / other CI |
+| build-push-act | -----------> | mode=max layers  | -----------> | docker compose   |
++----------------+              +------------------+              +------------------+
+```
+
+Key points:
+
+- `cache-to` pushes only to `:latest` (never to immutable version tags), so
+  storage growth is bounded by image drift between releases.
+- `cache-from` reads from both `:${LLEM_PKG_VERSION}` (strongest hit during a
+  dev cycle) and `:latest` (fallback for fresh branches).
+- `LLEM_PKG_VERSION` is the cache key. Phase PRs do not bump version, so the
+  cache is shared across an entire milestone of schema churn and only
+  re-baselined at milestone releases — the correct granularity.
+- No dedicated `:buildcache` tag: the runtime image already carries the layer
+  manifest BuildKit needs, so one tag set serves both purposes.
+
+Inspect what's cached on the active builder:
+
+```bash
+docker buildx du --builder llem-builder
+```
+
+If you need to reset the builder (rare), see
+`make docker-builder-rm && make docker-builder-setup` in the Makefile.
+
 ### Image labels and versioning
 
 Every backend image is stamped at build time with OCI labels that llem reads at

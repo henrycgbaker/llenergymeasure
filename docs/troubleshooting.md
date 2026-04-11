@@ -257,6 +257,36 @@ Notes:
 
 ---
 
+## Docker rebuild is slow / recompiling flash-attn
+
+**Symptom:** `make docker-build-pytorch` takes 15-20 minutes and BuildKit logs
+show `flash-attn` source downloads and nvcc compilation for every build.
+
+**Cause:** BuildKit's `cache_from` registry pull was skipped. Either (a) you
+are on a fresh buildx builder with no local cache, (b) you are offline or
+GHCR is unreachable, or (c) your `LLEM_PKG_VERSION` does not match any tag in
+`ghcr.io/henrycgbaker/llenergymeasure/{backend}:*`, so neither
+`:${LLEM_PKG_VERSION}` nor `:latest` had usable layers.
+
+**Fix:**
+
+1. Inspect the builder cache: `docker buildx du --builder llem-builder`. If
+   it's near-empty, BuildKit has nothing to reuse locally and will pull from
+   the registry.
+2. Verify network: `curl -I https://ghcr.io/v2/henrycgbaker/llenergymeasure/pytorch/manifests/latest`
+   should return 200 or 401 (both fine; 000/timeout means no connectivity).
+3. If you recently bumped version but CI hasn't published yet, fall back to
+   `:latest` by unsetting `LLEM_PKG_VERSION` for the build:
+   `LLEM_PKG_VERSION= docker compose build pytorch`.
+4. If the cache is corrupt, recreate the builder:
+   `make docker-builder-rm && make docker-builder-setup`. Note this discards
+   all local layer cache; the first subsequent build will repopulate from
+   GHCR.
+5. Offline is expected-slow. BuildKit degrades gracefully to a cold build —
+   no errors, just minutes.
+
+---
+
 ## Schema skew between host and Docker image
 
 **Symptom:** `llem run study.yaml` aborts before any experiment with a message

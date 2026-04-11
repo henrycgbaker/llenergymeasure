@@ -68,3 +68,13 @@ jobs:
           build-args: |
             LLEM_PKG_VERSION=${{ inputs.version }}
             LLEM_EXPCONF_SCHEMA_FINGERPRINT=${{ steps.fingerprint.outputs.value }}
+          # Share BuildKit layer cache across machines via GHCR. Pulling the
+          # :latest layers turns a cold flash-attn FA2+FA3 rebuild (~15 min)
+          # into a warm rebuild (<5 min) on any dev box or fresh runner.
+          # mode=max exports intermediate layers too (including the heavy
+          # flash-attn compile) so downstream builders actually hit them.
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository }}/${{ matrix.backend }}:latest
+            type=registry,ref=ghcr.io/${{ github.repository }}/${{ matrix.backend }}:${{ inputs.version }}
+          cache-to: |
+            type=registry,ref=ghcr.io/${{ github.repository }}/${{ matrix.backend }}:latest,mode=max

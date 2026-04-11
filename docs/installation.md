@@ -130,61 +130,60 @@ for the full resolution chain.
 | `make docker-images` | Show which image each backend resolves to (local vs registry) |
 | `make docker-check` | Validate `docker-compose.yml` configuration |
 
-### Build Cache (recommended)
+### Fast rebuilds and first-pull cost
 
-Docker image builds can be slow without caching. To speed them up, pull pre-compiled layers
-from GHCR:
+Every backend image declares `cache_from` entries pointing at the published
+GHCR tags. CI populates the cache on each release with
+`cache-to=type=registry,mode=max`, which exports intermediate layers — including
+the ~15-min flash-attn FA2+FA3 compile — so any fresh machine warm-builds in
+minutes instead of re-compiling from source.
 
-| Backend | Image Size | Cold Build | Cached Rebuild |
-|---------|-----------|------------|----------------|
-| PyTorch (FA3 on) | ~8.5 GB | ~30 min | ~30 sec |
-| vLLM | ~17 GB | ~30 min | ~5 min |
-| TensorRT-LLM | ~54 GB | ~40 min | ~10 min |
+| Backend | Image Size | Cold Build (no cache) | Warm Rebuild |
+|---------|-----------|-----------------------|--------------|
+| PyTorch (FA3 on) | ~6 GB | ~15-20 min | <5 min |
+| vLLM | ~10 GB | ~20-30 min | <5 min |
+| TensorRT-LLM | ~15 GB | ~30-40 min | <5 min |
 
-Cold build = no cache, compiling from scratch. Cached rebuild = `COMPOSE_BAKE=true` with
-local BuildKit cache populated. Times depend on network speed and hardware.
+"Cold build" = fresh buildx builder, no layers cached anywhere. "Warm rebuild"
+= same builder, local image wiped, cache pulled from GHCR.
 
-**1. Enable COMPOSE_BAKE in your `.env`:**
-
-```bash
-COMPOSE_BAKE=true
-```
-
-This is already set in `.env.example`. It tells Docker Compose to delegate builds to
-BuildKit's [bake](https://docs.docker.com/build/bake/) engine, which has full support for
-registry-based build cache.
-
-**2. Build as normal:**
+**Build as normal:**
 
 ```bash
-docker compose build pytorch
+make docker-build-pytorch        # or -vllm / -tensorrt
 ```
 
-Compose will pull cached layers from GHCR (written by CI on each release) and only rebuild
-layers that have changed locally. A cached PyTorch build completes in under a minute
-instead of ~30 minutes.
+On first invocation, BuildKit pulls cached layers from
+`ghcr.io/henrycgbaker/llenergymeasure/{backend}:latest` (and the exact version
+tag when available). Subsequent rebuilds only re-execute layers whose source
+changed.
 
 **How it works:**
 
-- CI pushes build cache to GHCR on each release (`ghcr.io/henrycgbaker/llenergymeasure/{backend}:buildcache`)
-- `docker-compose.yml` has `cache_from` entries that pull from these cache images
-- `COMPOSE_BAKE=true` enables BuildKit bake delegation, which supports registry cache
-- Users only pull cache - no write access or authentication is needed for public packages
-- If cache is unavailable (network issues, not yet published), the build proceeds
-  normally without errors
+- CI's `docker-publish.yml` runs `build-push-action` with
+  `cache-to=type=registry,...,mode=max` on `:latest`, exporting full layer
+  graphs to GHCR.
+- `docker-compose.yml` has `cache_from` entries for each backend pointing at
+  both `:${LLEM_PKG_VERSION}` and `:latest`.
+- `LLEM_PKG_VERSION` is the cache key: cache is shared across an entire
+  0.X.Y dev cycle and only re-baselined at milestone releases. This is the
+  correct granularity — we don't want to invalidate the flash-attn layer
+  every time `ExperimentConfig` gains a field.
+- Users only pull cache — no write access or authentication is needed for
+  public packages.
 
-**Authentication:** The build cache packages are public. No `docker login` is required to
-pull them. If you are behind a corporate proxy or encounter rate limits, logging in with
-`docker login ghcr.io` (using a
-[personal access token](https://github.com/settings/tokens) with `read:packages` scope)
-may help.
+**Authentication:** GHCR packages are public. No `docker login` is required to
+pull them. If you hit rate limits or are behind a corporate proxy,
+`docker login ghcr.io` with a
+[personal access token](https://github.com/settings/tokens) (scope
+`read:packages`) may help.
 
-**Requirements:** Docker Compose v2.32+ and Docker Buildx v0.17+ (`docker compose version`
-and `docker buildx version` to check). If you have older versions, see the upgrade
-instructions in the [Docker Setup Guide](docker-setup.md#step-1-install-docker).
+**Offline builds:** BuildKit degrades gracefully. When the registry is
+unreachable the `cache_from` entries are skipped and the build falls back to
+local layer cache (cold on a fresh builder). No errors, just slower.
 
-**Without COMPOSE_BAKE:** Builds work normally but don't use registry cache. The `cache_from`
-entries in `docker-compose.yml` are silently ignored. No errors, just slower builds.
+**First-pull cost:** the first build on any new machine downloads the full
+cache graph (sizes above). Subsequent builds are incremental.
 
 ### FlashAttention-3
 
