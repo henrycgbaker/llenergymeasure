@@ -894,10 +894,12 @@ class TestBaselineCacheKey:
             tmp_path, config_cached, runner_specs={"pytorch": spec}
         )
         key = runner._baseline_cache_key(config_cached)
-        assert key.startswith("image:")
-        assert "/" not in key.removeprefix("image:")
-        assert ":" not in key.removeprefix("image:")
-        assert "@" not in key.removeprefix("image:")
+        # Key must contain no chars that would break either a filesystem path
+        # or a Docker bind-mount source string (`:` is the mount-mode separator).
+        assert key.startswith("image_")
+        assert ":" not in key
+        assert "/" not in key
+        assert "@" not in key
 
     def test_cache_key_image_length_clipped(self, tmp_path: Path, config_cached: ExperimentConfig):
         long_image = "a" * 500
@@ -906,16 +908,19 @@ class TestBaselineCacheKey:
             tmp_path, config_cached, runner_specs={"pytorch": spec}
         )
         key = runner._baseline_cache_key(config_cached)
-        sanitized = key.removeprefix("image:")
+        sanitized = key.removeprefix("image_")
         assert len(sanitized) <= 128
 
     def test_disk_path_per_cache_key(self, tmp_path: Path, config_cached: ExperimentConfig):
         runner = _make_runner(tmp_path, config_cached)
         p1 = runner._get_baseline_cache_path("local")
-        p2 = runner._get_baseline_cache_path("image:test_img_v1")
+        p2 = runner._get_baseline_cache_path("image_test_img_v1")
         assert p1 != p2
         assert p1.name == "baseline_cache_local.json"
-        assert p2.name == "baseline_cache_image:test_img_v1.json"
+        assert p2.name == "baseline_cache_image_test_img_v1.json"
+        # Regression: the filename must not contain ':' — Docker's bind-mount
+        # parser treats it as the mode separator and rejects the mount.
+        assert ":" not in p2.name
 
 
 # =============================================================================

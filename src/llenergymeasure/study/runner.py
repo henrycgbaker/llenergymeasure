@@ -773,11 +773,16 @@ class StudyRunner:
         Baselines are keyed per runner target because the container's CUDA init
         footprint (~8.7 W/GPU on A100) is process-local and may differ between
         backend images. See ``.product/research/baseline-measurement-location.md``.
+
+        The ``image_`` prefix uses an underscore (not ``:``) so the key is
+        safe to embed directly in both filesystem paths and Docker bind-mount
+        sources. A ``:`` in the mount source string would be parsed by Docker
+        as the mount-mode separator and fail with ``invalid mode``.
         """
         spec = self._runner_specs.get(config.backend) if self._runner_specs else None
         if spec is None or spec.mode != RUNNER_DOCKER or not spec.image:
             return "local"
-        return f"image:{_sanitize_image_for_filename(spec.image)}"
+        return f"image_{_sanitize_image_for_filename(spec.image)}"
 
     def _get_baseline(self, config: ExperimentConfig) -> Any:
         """Return baseline power according to the configured strategy.
