@@ -214,6 +214,24 @@ class _QueueProgressCallback:
     def on_substep(self, step: str, text: str, elapsed_sec: float = 0.0) -> None:
         self._put({"event": "substep", "step": step, "text": text, "elapsed_sec": elapsed_sec})
 
+    def on_substep_start(self, step: str, text: str) -> None:
+        self._put({"event": "substep_start", "step": step, "text": text})
+
+    def on_substep_done(
+        self,
+        step: str,
+        text: str | None = None,
+        elapsed_sec: float | None = None,
+    ) -> None:
+        self._put(
+            {
+                "event": "substep_done",
+                "step": step,
+                "text": text,
+                "elapsed_sec": elapsed_sec,
+            }
+        )
+
 
 # =============================================================================
 # Worker function (runs inside child process)
@@ -355,6 +373,12 @@ def _consume_progress_events(
         elif event_type == "substep":
             study_progress.on_substep(
                 event["step"], event.get("text", ""), event.get("elapsed_sec", 0)
+            )
+        elif event_type == "substep_start":
+            study_progress.on_substep_start(event["step"], event.get("text", ""))
+        elif event_type == "substep_done":
+            study_progress.on_substep_done(
+                event["step"], event.get("text"), event.get("elapsed_sec")
             )
 
 
@@ -859,13 +883,30 @@ class StudyRunner:
 
         # Measure fresh baseline (in-container for Docker targets)
         dur = config.baseline.duration_seconds
+        # Resolve a short human-readable label for the baseline target. For
+        # Docker runs we prefer the image tag (e.g. "llenergymeasure:vllm")
+        # because it disambiguates local-build vs registry pulls and tells
+        # the user exactly which container is being waited on. Falls back to
+        # the backend name when no spec/image is available.
+        spec = self._runner_specs.get(config.backend) if self._runner_specs else None
+        target_label = (spec.image if spec and spec.image else config.backend) or "baseline"
         if self._progress is not None:
-            self._progress.on_step_start(
-                STEP_BASELINE, "Measuring", f"{location} · idle power ({dur:.0f}s)"
-            )
+            self._progress.on_step_start(STEP_BASELINE, "Calibrating", "sampling idle GPU draw")
             t0_meas = time.perf_counter()
+            # Seed the first live substep before dispatch so the CLI shows
+            # "launching container" *while* docker run is warming up, not
+            # only once the container reaches its first stage marker.
+            if cache_key != "local":
+                self._progress.on_substep_start(
+                    STEP_BASELINE,
+                    f"launching separate {target_label} baseline container",
+                )
 
-        on_stage = self._make_baseline_stage_callback() if self._progress is not None else None
+        on_stage = (
+            self._make_baseline_stage_callback(duration_sec=dur, target_label=target_label)
+            if self._progress is not None
+            else None
+        )
         measured = self._measure_baseline(config, cache_key, on_stage=on_stage)
 
         if measured is not None:
@@ -880,14 +921,15 @@ class StudyRunner:
         if self._progress is not None:
             elapsed = time.perf_counter() - t0_meas
             if measured is None:
-                # Surface the failure so users don't see a silent tick hiding a
-                # dispatch crash. The experiment container falls back to measuring
-                # its own baseline; the substep tells the user *why*.
-                self._progress.on_substep(
+                # Freeze any live substep with the failure text + accurate
+                # elapsed so users don't see a silent tick hiding a crash.
+                self._progress.on_substep_done(
                     STEP_BASELINE,
-                    f"measurement failed after {elapsed:.1f}s — see log warnings "
-                    f"(experiment container will re-measure fresh)",
-                    elapsed,
+                    text=(
+                        f"measurement failed after {elapsed:.1f}s — see log warnings "
+                        f"(experiment container will re-measure fresh)"
+                    ),
+                    elapsed_sec=elapsed,
                 )
             elif cache_key == "local":
                 # No container subprocess → emit a retroactive sampling substep
@@ -903,49 +945,55 @@ class StudyRunner:
 
         return measured
 
-    def _make_baseline_stage_callback(self) -> Any:
-        """Build a stage-marker callback that emits live baseline sub-bullets.
+    def _make_baseline_stage_callback(
+        self, *, duration_sec: float, target_label: str = "baseline"
+    ) -> Any:
+        """Build a stage-marker callback that drives live baseline sub-bullets.
 
-        Each sub-bullet reports the duration of *that stage* (delta since the
-        previous marker), so users see "launch took Xs, CUDA init took Ys,
-        sampling took Zs" rather than ever-increasing cumulative totals.
-        ``container_ready`` is the exception — its elapsed IS the container
-        launch cost (no prior marker to diff against).
+        Each stage transition ``on_substep_done``s the previous live substep
+        (freezing it with its final text + a tick) and ``on_substep_start``s
+        the next one (which begins animating with a dim spinner + counter).
+        The result is a heartbeating breakdown of "launching container → CUDA
+        init → sampling" that answers "why did a 30s measurement take 37s?"
+        without the user having to dig through logs.
+
+        The very first substep ("launching <target_label> container") is
+        started in ``_get_baseline`` just before ``subprocess.Popen`` fires —
+        so even the docker-run cold-start is visible.
         """
-        last_t = 0.0
+        dur_label = f"{duration_sec:.0f}s"
 
         def on_stage(name: str, elapsed: float, kv: dict[str, str]) -> None:
-            nonlocal last_t
             if self._progress is None:
                 return
-            delta = max(0.0, elapsed - last_t)
-            last_t = elapsed
             if name == "container_ready":
-                self._progress.on_substep(
-                    STEP_BASELINE,
-                    "dispatched baseline container · Python runtime ready",
-                    elapsed,
+                self._progress.on_substep_done(
+                    STEP_BASELINE, f"{target_label} baseline container ready"
+                )
+                self._progress.on_substep_start(
+                    STEP_BASELINE, "initialising CUDA runtime inside baseline container"
                 )
             elif name == "cuda_primed":
-                self._progress.on_substep(
-                    STEP_BASELINE,
-                    "initialised CUDA runtime · seeded torch allocator",
-                    delta,
+                self._progress.on_substep_done(STEP_BASELINE, "CUDA runtime primed")
+                self._progress.on_substep_start(
+                    STEP_BASELINE, f"sampling idle GPU draw ({dur_label})"
                 )
             elif name == "sampling_done":
                 power_w = kv.get("power_w", "?")
                 samples = kv.get("samples", "?")
                 sampled = kv.get("duration", "?")
-                self._progress.on_substep(
+                self._progress.on_substep_done(
                     STEP_BASELINE,
-                    f"sampled idle GPU power · {sampled}s ({power_w}W · {samples} samples)",
-                    delta,
+                    f"sampled idle GPU draw · {sampled}s ({power_w}W · {samples} samples)",
                 )
-            elif name == "result_written" and delta > 0.1:
-                self._progress.on_substep(
+                self._progress.on_substep_start(
                     STEP_BASELINE,
-                    "wrote result & container teardown",
-                    delta,
+                    f"writing baseline result · tearing down {target_label} baseline container",
+                )
+            elif name == "result_written":
+                self._progress.on_substep_done(
+                    STEP_BASELINE,
+                    f"baseline result cached · {target_label} baseline container torn down",
                 )
 
         return on_stage

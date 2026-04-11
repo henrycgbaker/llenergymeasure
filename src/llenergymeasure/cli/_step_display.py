@@ -116,15 +116,29 @@ def _render_substep_lines(
     lines: Text,
     substeps: list[tuple[str, float]],
     indent: str = "              ",
+    active: tuple[str, float] | None = None,
 ) -> None:
     """Append substep lines (dim · prefix) to a Rich Text renderable.
 
     Shared between StepDisplay and StudyStepDisplay to avoid duplication.
+    Frozen substeps render as dim ``· text ✓ elapsed``; the optional
+    ``active`` substep (``(text, start_monotonic)``) renders with a dim
+    spinner and rising elapsed counter so Rich Live animates it each frame.
     """
     for sub_text, sub_elapsed in substeps:
         lines.append(f"{indent}· {sub_text}", style="dim")
         if sub_elapsed > 0:
+            lines.append("  \u2713", style="dim")
             lines.append(f"  {_format_elapsed(sub_elapsed)}", style="dim")
+        lines.append("\n")
+    if active is not None:
+        sub_text, start_ts = active
+        elapsed = time.monotonic() - start_ts
+        frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
+        spinner = _SPINNER_FRAMES[frame_idx]
+        lines.append(f"{indent}· {sub_text}", style="dim")
+        lines.append(f"  {spinner}", style="dim")
+        lines.append(f"  {_format_elapsed(elapsed)}", style="dim")
         lines.append("\n")
 
 
@@ -234,6 +248,10 @@ class StepDisplay:
 
         # Substeps per step: list of (text, elapsed_sec) tuples
         self._substeps: dict[str, list[tuple[str, float]]] = {}
+        # Active substep per step: (text, start_monotonic) — drives the
+        # heartbeat spinner for long-running sub-operations (e.g. CUDA init
+        # inside the baseline container) so Rich Live animates them.
+        self._active_substep: dict[str, tuple[str, float]] = {}
 
         # Active step
         self._active_step: str | None = None
@@ -344,6 +362,7 @@ class StepDisplay:
             self._skipped_steps.discard(step)
             self._step_data.pop(step, None)
             self._substeps.pop(step, None)
+            self._active_substep.pop(step, None)
             self._active_step = step
             self._active_label = description or STEP_LABELS.get(step, step)
             self._active_detail = detail
@@ -374,6 +393,14 @@ class StepDisplay:
             self._completed_steps.add(step)
             if self._active_step == step:
                 self._active_step = None
+            # Freeze any dangling active substep so it doesn't keep animating
+            # under a completed step. Uses its accumulated elapsed.
+            dangling = self._active_substep.pop(step, None)
+            if dangling is not None:
+                d_text, d_start = dangling
+                self._substeps.setdefault(step, []).append(
+                    (d_text, max(0.0, time.monotonic() - d_start))
+                )
         if not self._is_tty:
             self._print_completed_step(step, label, detail, elapsed_sec)
         self._refresh()
@@ -403,6 +430,50 @@ class StepDisplay:
             self._substeps[step].append((text, elapsed_sec))
         if not self._is_tty:
             self._print_substep_line(step, text, elapsed_sec)
+        self._refresh()
+
+    def on_substep_start(self, step: str, text: str) -> None:
+        """Begin a live sub-operation rendered with a dim spinner + counter."""
+        with self._lock:
+            # If a prior active substep for this step never got a matching
+            # done, freeze it so the new active substep doesn't overwrite
+            # silently. Uses its accumulated elapsed.
+            prior = self._active_substep.pop(step, None)
+            if prior is not None:
+                prior_text, prior_start = prior
+                self._substeps.setdefault(step, []).append(
+                    (prior_text, max(0.0, time.monotonic() - prior_start))
+                )
+            self._active_substep[step] = (text, time.monotonic())
+        if not self._is_tty:
+            self._print_substep_line(step, text, 0.0)
+        self._refresh()
+
+    def on_substep_done(
+        self,
+        step: str,
+        text: str | None = None,
+        elapsed_sec: float | None = None,
+    ) -> None:
+        """Freeze the currently-active substep with final text + elapsed."""
+        with self._lock:
+            active = self._active_substep.pop(step, None)
+            if active is None:
+                # No matching start — fall through as a regular completed substep.
+                final_text = text or ""
+                final_elapsed = elapsed_sec if elapsed_sec is not None else 0.0
+            else:
+                start_text, start_ts = active
+                final_text = text if text is not None else start_text
+                final_elapsed = (
+                    elapsed_sec
+                    if elapsed_sec is not None
+                    else max(0.0, time.monotonic() - start_ts)
+                )
+            if final_text:
+                self._substeps.setdefault(step, []).append((final_text, final_elapsed))
+        if not self._is_tty and final_text:
+            self._print_substep_line(step, final_text, final_elapsed)
         self._refresh()
 
     # -- Heartbeat (non-TTY only) --
@@ -494,7 +565,11 @@ class StepDisplay:
                         lines.append(prefix)
                         lines.append("  ✓", style="bold green")
                         lines.append(f"  {_format_elapsed(elapsed)}\n")
-                        _render_substep_lines(lines, self._substeps.get(step, []))
+                        _render_substep_lines(
+                            lines,
+                            self._substeps.get(step, []),
+                            active=self._active_substep.get(step),
+                        )
                     elif step in self._skipped_steps:
                         label, reason, _ = self._step_data[step]
                         prefix = _step_line_prefix(idx, phase_total, label, reason)
@@ -511,7 +586,11 @@ class StepDisplay:
                         lines.append(prefix)
                         lines.append(f"  {spinner}", style="yellow")
                         lines.append(f"  {_format_elapsed(elapsed)}\n")
-                        _render_substep_lines(lines, self._substeps.get(step, []))
+                        _render_substep_lines(
+                            lines,
+                            self._substeps.get(step, []),
+                            active=self._active_substep.get(step),
+                        )
                     # Pending steps: NOT shown (Docker BuildKit-style progressive output)
 
         return lines
@@ -621,6 +700,9 @@ class StudyStepDisplay:
         self._inner_steps: list[str] = []
         self._inner_skipped: dict[str, str] = {}  # step -> reason
         self._inner_substeps: dict[str, list[tuple[str, float]]] = {}
+        # Active substep per step: (text, start_monotonic) — same spinner
+        # heartbeat treatment as StepDisplay, used for live baseline stages.
+        self._inner_active_substep: dict[str, tuple[str, float]] = {}
         self._runner_info: dict[str, str | None] | None = None
 
         # Per-experiment save paths: (index, host_path, container_path | None)
@@ -716,6 +798,7 @@ class StudyStepDisplay:
             self._inner_steps = steps
             self._inner_skipped = {}
             self._inner_substeps = {}
+            self._inner_active_substep = {}
             self._runner_info = runner_info
         self._refresh()
 
@@ -845,6 +928,7 @@ class StudyStepDisplay:
             self._inner_completed = [c for c in self._inner_completed if c[0] != step]
             self._inner_skipped.pop(step, None)
             self._inner_substeps.pop(step, None)
+            self._inner_active_substep.pop(step, None)
             label = description or STEP_LABELS.get(step, step)
             self._inner_active = (step, label, detail, time.monotonic())
         self._refresh()
@@ -862,6 +946,14 @@ class StudyStepDisplay:
                 detail = self._inner_active[2]
                 self._inner_completed.append((step, label, detail, elapsed_sec))
                 self._inner_active = None
+            # Freeze any dangling active substep so it doesn't keep animating
+            # under a completed step.
+            dangling = self._inner_active_substep.pop(step, None)
+            if dangling is not None:
+                d_text, d_start = dangling
+                self._inner_substeps.setdefault(step, []).append(
+                    (d_text, max(0.0, time.monotonic() - d_start))
+                )
         self._refresh()
 
     def on_step_skip(self, step: str, reason: str = "") -> None:
@@ -876,6 +968,42 @@ class StudyStepDisplay:
             if step not in self._inner_substeps:
                 self._inner_substeps[step] = []
             self._inner_substeps[step].append((text, elapsed_sec))
+        self._refresh()
+
+    def on_substep_start(self, step: str, text: str) -> None:
+        """Begin a live sub-operation rendered with a dim spinner + counter."""
+        with self._lock:
+            prior = self._inner_active_substep.pop(step, None)
+            if prior is not None:
+                prior_text, prior_start = prior
+                self._inner_substeps.setdefault(step, []).append(
+                    (prior_text, max(0.0, time.monotonic() - prior_start))
+                )
+            self._inner_active_substep[step] = (text, time.monotonic())
+        self._refresh()
+
+    def on_substep_done(
+        self,
+        step: str,
+        text: str | None = None,
+        elapsed_sec: float | None = None,
+    ) -> None:
+        """Freeze the currently-active substep with final text + elapsed."""
+        with self._lock:
+            active = self._inner_active_substep.pop(step, None)
+            if active is None:
+                final_text = text or ""
+                final_elapsed = elapsed_sec if elapsed_sec is not None else 0.0
+            else:
+                start_text, start_ts = active
+                final_text = text if text is not None else start_text
+                final_elapsed = (
+                    elapsed_sec
+                    if elapsed_sec is not None
+                    else max(0.0, time.monotonic() - start_ts)
+                )
+            if final_text:
+                self._inner_substeps.setdefault(step, []).append((final_text, final_elapsed))
         self._refresh()
 
     def on_experiment_saved(
@@ -1115,7 +1243,10 @@ class StudyStepDisplay:
                 lines.append("  \u2713", style="bold green")
                 lines.append(f"  {_format_elapsed(elapsed)}\n")
                 _render_substep_lines(
-                    lines, self._inner_substeps.get(step, []), indent="                    "
+                    lines,
+                    self._inner_substeps.get(step, []),
+                    indent="                    ",
+                    active=self._inner_active_substep.get(step),
                 )
             elif step in self._inner_skipped:
                 idx += 1
@@ -1139,7 +1270,10 @@ class StudyStepDisplay:
                 lines.append(f"  {spinner}", style="yellow")
                 lines.append(f"  {_format_elapsed(elapsed)}\n")
                 _render_substep_lines(
-                    lines, self._inner_substeps.get(step, []), indent="                    "
+                    lines,
+                    self._inner_substeps.get(step, []),
+                    indent="                    ",
+                    active=self._inner_active_substep.get(step),
                 )
             # Pending steps: not shown (Docker BuildKit-style progressive output)
 
