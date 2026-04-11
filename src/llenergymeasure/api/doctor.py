@@ -8,31 +8,28 @@ from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import BACKEND_PYTORCH, BACKEND_TENSORRT, BACKEND_VLLM
 from llenergymeasure.infra.image_registry import get_default_image
 from llenergymeasure.infra.version_handshake import (
-    ImageStamp,
+    SchemaStatus,
+    classify_stamp,
     compute_expconf_fingerprint,
     inspect_image_stamp,
     rebuild_hint,
     skip_check_enabled,
 )
-from llenergymeasure.utils.compat import StrEnum
 
 __all__ = [
     "BackendDoctorResult",
     "DoctorReport",
-    "DoctorStatus",
+    "SchemaStatus",
     "run_doctor_checks",
 ]
 
 SUPPORTED_BACKENDS: tuple[str, ...] = (BACKEND_PYTORCH, BACKEND_VLLM, BACKEND_TENSORRT)
 
-
-class DoctorStatus(StrEnum):
-    """Per-backend image status."""
-
-    OK = "OK"
-    MISMATCH = "MISMATCH"
-    UNVERIFIED = "UNVERIFIED"
-    UNREACHABLE = "UNREACHABLE"
+_DETAIL_FOR_STATUS: dict[SchemaStatus, str] = {
+    SchemaStatus.OK: "",
+    SchemaStatus.UNVERIFIED: "image predates schema-fingerprint label — rebuild to verify",
+    SchemaStatus.UNREACHABLE: "no labels (image missing or built pre-handshake)",
+}
 
 
 @dataclass(frozen=True)
@@ -43,7 +40,7 @@ class BackendDoctorResult:
     image: str
     pkg_version: str | None
     image_fingerprint: str | None
-    status: DoctorStatus
+    status: SchemaStatus
     detail: str = ""
 
 
@@ -58,20 +55,13 @@ class DoctorReport:
 
     @property
     def any_mismatch(self) -> bool:
-        return any(r.status is DoctorStatus.MISMATCH for r in self.results)
+        return any(r.status is SchemaStatus.MISMATCH for r in self.results)
 
 
-def _classify(backend: str, stamp: ImageStamp, host_fp: str) -> tuple[DoctorStatus, str]:
-    if stamp.expconf_fingerprint is None and stamp.pkg_version is None:
-        return DoctorStatus.UNREACHABLE, "no labels (image missing or built pre-handshake)"
-    if stamp.expconf_fingerprint is None:
-        return (
-            DoctorStatus.UNVERIFIED,
-            "image predates schema-fingerprint label — rebuild to verify",
-        )
-    if stamp.expconf_fingerprint == host_fp:
-        return DoctorStatus.OK, ""
-    return DoctorStatus.MISMATCH, f"rebuild: {rebuild_hint(backend)}"
+def _detail_for(backend: str, status: SchemaStatus) -> str:
+    if status is SchemaStatus.MISMATCH:
+        return f"rebuild: {rebuild_hint(backend)}"
+    return _DETAIL_FOR_STATUS.get(status, "")
 
 
 def run_doctor_checks(
@@ -89,7 +79,7 @@ def run_doctor_checks(
     for backend in backends:
         image = get_default_image(backend)
         stamp = inspect_image_stamp(image)
-        status, detail = _classify(backend, stamp, host_fp)
+        status = classify_stamp(stamp, host_fp)
         results.append(
             BackendDoctorResult(
                 backend=backend,
@@ -97,7 +87,7 @@ def run_doctor_checks(
                 pkg_version=stamp.pkg_version,
                 image_fingerprint=stamp.expconf_fingerprint,
                 status=status,
-                detail=detail,
+                detail=_detail_for(backend, status),
             )
         )
 

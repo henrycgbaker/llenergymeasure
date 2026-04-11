@@ -49,7 +49,9 @@ from llenergymeasure.domain.progress import STEP_BASELINE, STEPS_LOCAL, docker_s
 from llenergymeasure.infra.version_handshake import (
     LABEL_SCHEMA_FINGERPRINT,
     ImageStamp,
+    SchemaStatus,
     VersionMismatchError,
+    classify_stamp,
     compute_expconf_fingerprint,
     parse_image_stamp,
     rebuild_hint,
@@ -1243,19 +1245,9 @@ class StudyRunner:
 
             if check is not None and check.returncode == 0:
                 elapsed = time.monotonic() - t0
-                metadata = self._parse_image_metadata(check.stdout)
-                stamp = parse_image_stamp(check.stdout)
-                schema_status, mismatch_error = self._verify_image_fingerprint(
-                    backend, image, stamp
+                mismatch_error = self._finalise_image(
+                    backend, image, check.stdout, cached=True, elapsed=elapsed
                 )
-                if metadata is None:
-                    metadata = {"schema": schema_status}
-                else:
-                    metadata["schema"] = schema_status
-                if self._progress:
-                    self._progress.image_ready(
-                        backend, image, cached=True, elapsed=elapsed, metadata=metadata
-                    )
                 if mismatch_error is not None:
                     if self._progress:
                         self._progress.end_image_prep()
@@ -1300,21 +1292,13 @@ class StudyRunner:
                     capture_output=True,
                     timeout=TIMEOUT_DOCKER_INSPECT,
                 )
-                metadata = self._parse_image_metadata(inspect.stdout)
-                stamp = parse_image_stamp(inspect.stdout)
+                inspect_stdout = inspect.stdout if inspect.returncode == 0 else b""
             except Exception:
-                metadata = None
-                stamp = ImageStamp(pkg_version=None, expconf_fingerprint=None)
+                inspect_stdout = b""
 
-            schema_status, mismatch_error = self._verify_image_fingerprint(backend, image, stamp)
-            if metadata is None:
-                metadata = {"schema": schema_status}
-            else:
-                metadata["schema"] = schema_status
-            if self._progress:
-                self._progress.image_ready(
-                    backend, image, cached=False, elapsed=elapsed, metadata=metadata
-                )
+            mismatch_error = self._finalise_image(
+                backend, image, inspect_stdout, cached=False, elapsed=elapsed
+            )
             if mismatch_error is not None:
                 if self._progress:
                     self._progress.end_image_prep()
@@ -1377,6 +1361,33 @@ class StudyRunner:
         except (json.JSONDecodeError, KeyError, IndexError):
             return None
 
+    def _finalise_image(
+        self,
+        backend: str,
+        image: str,
+        inspect_stdout: bytes,
+        *,
+        cached: bool,
+        elapsed: float,
+    ) -> Exception | None:
+        """Report an image-ready progress event and return any mismatch error.
+
+        Parses display metadata and the schema stamp from *inspect_stdout*,
+        classifies the schema status, renders it through
+        ``progress.image_ready`` so the backend row appears before any abort,
+        and returns the ``VersionMismatchError`` for the caller to raise.
+        """
+        metadata = self._parse_image_metadata(inspect_stdout) or {}
+        stamp = parse_image_stamp(inspect_stdout)
+        schema_status, mismatch_error = self._verify_image_fingerprint(backend, image, stamp)
+        metadata["schema"] = schema_status
+
+        if self._progress:
+            self._progress.image_ready(
+                backend, image, cached=cached, elapsed=elapsed, metadata=metadata
+            )
+        return mismatch_error
+
     def _verify_image_fingerprint(
         self,
         backend: str,
@@ -1386,15 +1397,17 @@ class StudyRunner:
         """Compare the host schema fingerprint to *stamp* and classify the result.
 
         Returns ``(schema_status, error)`` where ``schema_status`` is the
-        short display string ("ok" / "mismatch" / "bypassed" / "unverified …")
-        and ``error`` is a ``VersionMismatchError`` to raise (or ``None``).
-        Callers raise after rendering so the offending backend appears in the
-        terminal before the study aborts.
+        short display string and ``error`` is a ``VersionMismatchError`` to
+        raise (or ``None``). Callers raise after rendering so the offending
+        backend appears in the terminal before the study aborts.
         """
         if skip_check_enabled():
             return "bypassed", None
 
-        if stamp.expconf_fingerprint is None:
+        host_fp = compute_expconf_fingerprint()
+        status = classify_stamp(stamp, host_fp)
+
+        if status in (SchemaStatus.UNVERIFIED, SchemaStatus.UNREACHABLE):
             logger.warning(
                 "Image %s has no %s label — schema skew check skipped "
                 "(image predates the handshake feature; rebuild to enable)",
@@ -1403,10 +1416,10 @@ class StudyRunner:
             )
             return "unverified (no labels)", None
 
-        host_fp = compute_expconf_fingerprint()
-        if stamp.expconf_fingerprint == host_fp:
+        if status is SchemaStatus.OK:
             return "ok", None
 
+        assert stamp.expconf_fingerprint is not None  # MISMATCH implies non-None
         error = VersionMismatchError(
             f"Docker image '{image}' was built from llenergymeasure "
             f"{stamp.pkg_version or 'unknown'} (schema {stamp.expconf_fingerprint[:12]}) "

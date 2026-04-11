@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
-"""Compute the ExperimentConfig schema fingerprint for Docker build stamping.
+"""Print the ExperimentConfig schema fingerprint for Docker build stamping.
 
-Prints a 64-character SHA-256 hex digest of
-``ExperimentConfig.model_json_schema()`` serialised with
-``sort_keys=True, separators=(',', ':')``. Used by:
-
-- ``Makefile`` as ``LLEM_EXPCONF_SCHEMA_FINGERPRINT`` build-arg source.
-- ``.github/workflows/docker-publish.yml`` so published images carry the same
-  fingerprint that host-side ``StudyRunner._prepare_images`` will compare
-  against at run time.
-
-This script is intentionally tiny and dependency-free beyond ``pydantic``
-(implicit via the package) so it can run in any environment where
-llenergymeasure is installed or its source tree is on ``PYTHONPATH``.
+Emits a 64-character SHA-256 hex digest of the ExperimentConfig JSON schema
+serialised deterministically. Intended as a build-arg so Docker images
+can be compared against the running host's fingerprint at study start.
 """
 
 from __future__ import annotations

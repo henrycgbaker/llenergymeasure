@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 from llenergymeasure.api.doctor import (
     BackendDoctorResult,
     DoctorReport,
-    DoctorStatus,
+    SchemaStatus,
 )
 from llenergymeasure.cli import app
 
@@ -39,7 +39,7 @@ def test_all_ok_exits_zero() -> None:
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
-                status=DoctorStatus.OK,
+                status=SchemaStatus.OK,
             )
         ]
     )
@@ -58,7 +58,7 @@ def test_mismatch_exits_nonzero() -> None:
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="b" * 64,
-                status=DoctorStatus.MISMATCH,
+                status=SchemaStatus.MISMATCH,
                 detail="rebuild: make docker-build-pytorch",
             ),
             BackendDoctorResult(
@@ -66,7 +66,7 @@ def test_mismatch_exits_nonzero() -> None:
                 image="llenergymeasure:vllm",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
-                status=DoctorStatus.OK,
+                status=SchemaStatus.OK,
             ),
         ]
     )
@@ -85,7 +85,7 @@ def test_unreachable_is_not_mismatch() -> None:
                 image="llenergymeasure:pytorch",
                 pkg_version=None,
                 image_fingerprint=None,
-                status=DoctorStatus.UNREACHABLE,
+                status=SchemaStatus.UNREACHABLE,
                 detail="no labels",
             )
         ]
@@ -104,7 +104,7 @@ def test_skip_check_warning_rendered() -> None:
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
-                status=DoctorStatus.OK,
+                status=SchemaStatus.OK,
             )
         ],
         skip_active=True,
@@ -123,11 +123,11 @@ def test_host_footer_rendered() -> None:
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
-                status=DoctorStatus.OK,
+                status=SchemaStatus.OK,
             )
         ]
     )
     with patch("llenergymeasure.api.doctor.run_doctor_checks", return_value=report):
         result = runner.invoke(app, ["doctor"])
     assert "Host llenergymeasure version: 0.9.0" in result.output
-    assert "Host ExperimentConfig fingerprint:" in result.output
+    assert "Host ExperimentConfig SHA-256:" in result.output

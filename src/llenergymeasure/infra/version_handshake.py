@@ -22,15 +22,17 @@ import subprocess
 from dataclasses import dataclass
 from functools import cache
 
-from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.config.ssot import TIMEOUT_DOCKER_INSPECT
+from llenergymeasure.utils.compat import StrEnum
 
 __all__ = [
     "ENV_SKIP_IMAGE_CHECK",
     "LABEL_IMAGE_VERSION",
     "LABEL_SCHEMA_FINGERPRINT",
     "ImageStamp",
+    "SchemaStatus",
     "VersionMismatchError",
+    "classify_stamp",
     "compute_expconf_fingerprint",
     "inspect_image_stamp",
     "parse_image_stamp",
@@ -60,19 +62,47 @@ class ImageStamp:
 _EMPTY_STAMP = ImageStamp(pkg_version=None, expconf_fingerprint=None)
 
 
+class SchemaStatus(StrEnum):
+    """Outcome of comparing a Docker image's stamp to the host fingerprint."""
+
+    OK = "OK"
+    MISMATCH = "MISMATCH"
+    UNVERIFIED = "UNVERIFIED"
+    UNREACHABLE = "UNREACHABLE"
+    BYPASSED = "BYPASSED"
+
+
 @cache
 def compute_expconf_fingerprint() -> str:
-    """Return the SHA-256 hex digest of ``ExperimentConfig.model_json_schema()``.
+    """Return the SHA-256 hex digest of the ExperimentConfig JSON schema.
 
     The schema is frozen per-process, so the result is memoised. Callers
     typically display the first 12 hex characters for readability.
     """
+    from llenergymeasure.config.introspection import get_experiment_config_schema
+
     payload = json.dumps(
-        ExperimentConfig.model_json_schema(),
+        get_experiment_config_schema(),
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def classify_stamp(stamp: ImageStamp, host_fingerprint: str) -> SchemaStatus:
+    """Classify an image stamp against the host fingerprint.
+
+    Pure: does not read environment or log. Callers that honour the
+    ``LLEM_SKIP_IMAGE_CHECK`` bypass should short-circuit to
+    :attr:`SchemaStatus.BYPASSED` themselves before calling this.
+    """
+    if stamp.expconf_fingerprint is None and stamp.pkg_version is None:
+        return SchemaStatus.UNREACHABLE
+    if stamp.expconf_fingerprint is None:
+        return SchemaStatus.UNVERIFIED
+    if stamp.expconf_fingerprint == host_fingerprint:
+        return SchemaStatus.OK
+    return SchemaStatus.MISMATCH
 
 
 def inspect_image_stamp(image: str, *, timeout: float = TIMEOUT_DOCKER_INSPECT) -> ImageStamp:

@@ -21,7 +21,7 @@ def doctor_command() -> None:
 
     header = (
         f"{'Backend':<10s}  {'Image':<50s}  "
-        f"{'Pkg ver':<10s}  {'Img FP':<14s}  {'Host FP':<14s}  {'Status':<10s}"
+        f"{'Pkg ver':<10s}  {'Img SHA-256':<14s}  {'Host SHA-256':<14s}  {'Status':<12s}"
     )
     typer.echo(header)
     typer.echo("-" * len(header))
@@ -34,7 +34,7 @@ def doctor_command() -> None:
         status_text = row.status.value
         line = (
             f"{row.backend:<10s}  {img:<50s}  "
-            f"{pkg:<10s}  {img_fp:<14s}  {host_fp_short:<14s}  {status_text:<10s}"
+            f"{pkg:<10s}  {img_fp:<14s}  {host_fp_short:<14s}  {status_text:<12s}"
         )
         typer.echo(line)
         if row.detail:
@@ -42,7 +42,7 @@ def doctor_command() -> None:
 
     typer.echo("")
     typer.echo(f"Host llenergymeasure version: {report.host_pkg_version}")
-    typer.echo(f"Host ExperimentConfig fingerprint: {report.host_fingerprint}")
+    typer.echo(f"Host ExperimentConfig SHA-256: {report.host_fingerprint}")
     if report.skip_check_active:
         typer.echo(
             "WARNING: LLEM_SKIP_IMAGE_CHECK=1 is active — runtime schema handshake is bypassed."
