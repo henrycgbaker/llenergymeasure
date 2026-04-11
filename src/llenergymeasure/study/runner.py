@@ -883,19 +883,14 @@ class StudyRunner:
 
         # Measure fresh baseline (in-container for Docker targets)
         dur = config.baseline.duration_seconds
-        # Resolve a short human-readable label for the baseline target. For
-        # Docker runs we prefer the image tag (e.g. "llenergymeasure:vllm")
-        # because it disambiguates local-build vs registry pulls and tells
-        # the user exactly which container is being waited on. Falls back to
-        # the backend name when no spec/image is available.
+        # Prefer the image tag over backend name so users see which container
+        # is running in multi-backend studies.
         spec = self._runner_specs.get(config.backend) if self._runner_specs else None
         target_label = (spec.image if spec and spec.image else config.backend) or "baseline"
         if self._progress is not None:
             self._progress.on_step_start(STEP_BASELINE, "Calibrating", "sampling idle GPU draw")
             t0_meas = time.perf_counter()
-            # Seed the first live substep before dispatch so the CLI shows
-            # "launching container" *while* docker run is warming up, not
-            # only once the container reaches its first stage marker.
+            # Seed first substep before Popen so the docker cold-start is visible.
             if cache_key != "local":
                 self._progress.on_substep_start(
                     STEP_BASELINE,
@@ -950,16 +945,10 @@ class StudyRunner:
     ) -> Any:
         """Build a stage-marker callback that drives live baseline sub-bullets.
 
-        Each stage transition ``on_substep_done``s the previous live substep
-        (freezing it with its final text + a tick) and ``on_substep_start``s
-        the next one (which begins animating with a dim spinner + counter).
-        The result is a heartbeating breakdown of "launching container → CUDA
-        init → sampling" that answers "why did a 30s measurement take 37s?"
-        without the user having to dig through logs.
-
-        The very first substep ("launching <target_label> container") is
-        started in ``_get_baseline`` just before ``subprocess.Popen`` fires —
-        so even the docker-run cold-start is visible.
+        Each transition ``on_substep_done``s the prior substep (freezing with
+        a tick) and ``on_substep_start``s the next one. The very first substep
+        ("launching <target_label> container") is seeded in ``_get_baseline``
+        before ``subprocess.Popen`` so the docker cold-start is visible.
         """
         dur_label = f"{duration_sec:.0f}s"
 

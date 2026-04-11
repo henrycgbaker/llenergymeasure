@@ -32,6 +32,7 @@ from llenergymeasure.utils.formatting import truncate_detail as _truncate_detail
 
 # Braille spinner frames (same as Docker BuildKit / ora)
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_SPINNER_FPS = 8
 
 # Heartbeat interval for non-TTY mode (seconds)
 _HEARTBEAT_INTERVAL = 5.0
@@ -134,7 +135,7 @@ def _render_substep_lines(
     if active is not None:
         sub_text, start_ts = active
         elapsed = time.monotonic() - start_ts
-        frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
+        frame_idx = int(elapsed * _SPINNER_FPS) % len(_SPINNER_FRAMES)
         spinner = _SPINNER_FRAMES[frame_idx]
         lines.append(f"{indent}· {sub_text}", style="dim")
         lines.append(f"  {spinner}", style="dim")
@@ -578,7 +579,7 @@ class StepDisplay:
                         lines.append("\n")
                     elif step == self._active_step:
                         elapsed = time.monotonic() - self._active_start
-                        frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
+                        frame_idx = int(elapsed * _SPINNER_FPS) % len(_SPINNER_FRAMES)
                         spinner = _SPINNER_FRAMES[frame_idx]
                         prefix = _step_line_prefix(
                             idx, phase_total, self._active_label, self._active_detail
@@ -1262,7 +1263,7 @@ class StudyStepDisplay:
                 idx += 1
                 _step, label, detail, start = self._inner_active
                 elapsed = time.monotonic() - start
-                frame_idx = int(elapsed * 8) % len(_SPINNER_FRAMES)
+                frame_idx = int(elapsed * _SPINNER_FPS) % len(_SPINNER_FRAMES)
                 spinner = _SPINNER_FRAMES[frame_idx]
                 counter = f"[{idx}/{inner_total}]"
                 trunc_detail = _truncate_detail(detail)
