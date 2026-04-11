@@ -12,7 +12,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
-- **Docker rebuilds now warm layer cache from published GHCR images** via BuildKit `cache_from` (compose) and `cache-to=type=registry,mode=max` (publish workflow). Typical warm rebuild is under 5 min vs ~15-20 min cold, with the flash-attn FA2+FA3 compile pulled pre-built. Cache is keyed on `LLEM_PKG_VERSION` so it survives intra-milestone schema churn and only re-baselines at releases.
+- **Docker rebuilds pull BuildKit layer cache from GHCR.** Publish workflow uses `cache-to=type=registry,mode=max` and `docker-compose.yml` consumes it via `cache_from`, cutting warm rebuilds from ~15-20 min to under 5 min (flash-attn compile included). Cache is keyed on `LLEM_PKG_VERSION`.
 - **Per-experiment timeout is now configurable** via `study_execution.experiment_timeout_seconds` (default 600s). Replaces the previous `max(n_prompts*2, 600)` heuristic. Both the local subprocess path and the Docker container path honour the same field, and Docker-path timeouts are normalised to `TimeoutError` so the circuit breaker counts them consistently across both paths.
 
 ### Removed

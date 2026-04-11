@@ -25,6 +25,24 @@
 #   docker compose --profile dev run --rm vllm-dev /bin/bash
 #   docker compose --profile dev run --rm tensorrt-dev /bin/bash
 
+# Per-backend BuildKit layer cache (shared across runtime + dev services).
+# When LLEM_PKG_VERSION is unset the first entry collapses to :latest and
+# buildx dedups against the second — no-op, not a bug.
+x-cache-pytorch: &cache-pytorch
+  cache_from:
+    - ghcr.io/henrycgbaker/llenergymeasure/pytorch:${LLEM_PKG_VERSION:-latest}
+    - ghcr.io/henrycgbaker/llenergymeasure/pytorch:latest
+
+x-cache-vllm: &cache-vllm
+  cache_from:
+    - ghcr.io/henrycgbaker/llenergymeasure/vllm:${LLEM_PKG_VERSION:-latest}
+    - ghcr.io/henrycgbaker/llenergymeasure/vllm:latest
+
+x-cache-tensorrt: &cache-tensorrt
+  cache_from:
+    - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:${LLEM_PKG_VERSION:-latest}
+    - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:latest
+
 # Shared configuration anchor
 x-common: &common
   # PUID/PGID pattern for host permission mapping (like LinuxServer.io)
@@ -87,15 +105,13 @@ services:
       # Named volumes: container-managed (no permission issues)
       - hf-cache:/app/.cache/huggingface
     build:
+      <<: *cache-pytorch
       context: .
       dockerfile: docker/Dockerfile.pytorch
       target: runtime
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-      cache_from:
-        - ghcr.io/henrycgbaker/llenergymeasure/pytorch:${LLEM_PKG_VERSION:-latest}
-        - ghcr.io/henrycgbaker/llenergymeasure/pytorch:latest
     image: llenergymeasure:pytorch
 
   pytorch-dev:
@@ -105,15 +121,13 @@ services:
       - hf-cache:/app/.cache/huggingface
     profiles: ["dev"]
     build:
+      <<: *cache-pytorch
       context: .
       dockerfile: docker/Dockerfile.pytorch
       target: dev
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-      cache_from:
-        - ghcr.io/henrycgbaker/llenergymeasure/pytorch:${LLEM_PKG_VERSION:-latest}
-        - ghcr.io/henrycgbaker/llenergymeasure/pytorch:latest
     image: llenergymeasure:pytorch-dev
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
@@ -134,15 +148,13 @@ services:
       # Named volumes: container-managed (no permission issues)
       - hf-cache:/app/.cache/huggingface
     build:
+      <<: *cache-vllm
       context: .
       dockerfile: docker/Dockerfile.vllm
       target: runtime
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-      cache_from:
-        - ghcr.io/henrycgbaker/llenergymeasure/vllm:${LLEM_PKG_VERSION:-latest}
-        - ghcr.io/henrycgbaker/llenergymeasure/vllm:latest
     image: llenergymeasure:vllm
 
   vllm-dev:
@@ -154,15 +166,13 @@ services:
       - hf-cache:/app/.cache/huggingface
     profiles: ["dev"]
     build:
+      <<: *cache-vllm
       context: .
       dockerfile: docker/Dockerfile.vllm
       target: dev
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-      cache_from:
-        - ghcr.io/henrycgbaker/llenergymeasure/vllm:${LLEM_PKG_VERSION:-latest}
-        - ghcr.io/henrycgbaker/llenergymeasure/vllm:latest
     image: llenergymeasure:vllm-dev
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
@@ -184,15 +194,13 @@ services:
       - hf-cache:/app/.cache/huggingface
       - trt-engine-cache:/app/.cache/tensorrt-engines
     build:
+      <<: *cache-tensorrt
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: runtime
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-      cache_from:
-        - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:${LLEM_PKG_VERSION:-latest}
-        - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:latest
     image: llenergymeasure:tensorrt
 
   tensorrt-dev:
@@ -205,15 +213,13 @@ services:
       - trt-engine-cache:/app/.cache/tensorrt-engines
     profiles: ["dev"]
     build:
+      <<: *cache-tensorrt
       context: .
       dockerfile: docker/Dockerfile.tensorrt
       target: dev
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-      cache_from:
-        - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:${LLEM_PKG_VERSION:-latest}
-        - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:latest
     image: llenergymeasure:tensorrt-dev
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
