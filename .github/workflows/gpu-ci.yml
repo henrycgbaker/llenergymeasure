@@ -6,7 +6,7 @@ name: GPU CI
 #
 # Triggers:
 #   1. Manual:     workflow_dispatch with optional job selector (pytorch, vllm, all)
-#                  `gh workflow run gpu-ci.yml`                    # all backends
+#                  `gh workflow run gpu-ci.yml`                    # all engines
 #                  `gh workflow run gpu-ci.yml --field job=pytorch` # pytorch only
 #                  `gh workflow run gpu-ci.yml --field job=vllm`    # vllm only
 #   2. Release:    called by release.yml as reusable workflow (gates GitHub Release)

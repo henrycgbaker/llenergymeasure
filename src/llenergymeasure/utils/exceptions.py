@@ -9,8 +9,8 @@ class ConfigError(LLEMError):
     """Invalid or missing configuration."""
 
 
-class BackendError(LLEMError):
-    """Error from an inference backend (load, run, timeout)."""
+class EngineError(LLEMError):
+    """Error from an inference engine (load, run, timeout)."""
 
 
 class PreFlightError(LLEMError):

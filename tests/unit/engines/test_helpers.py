@@ -1,4 +1,4 @@
-"""Unit tests for backends/_helpers.py — shared backend utilities.
+"""Unit tests for engines/_helpers.py — shared engine utilities.
 
 All tests run GPU-free. warmup_until_converged is now in harness.warmup;
 this file tests the remaining helpers: compute_cv, warmup_single_token

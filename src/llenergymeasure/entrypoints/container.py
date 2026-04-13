@@ -139,7 +139,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     """Read config JSON, run experiment via library API, write result JSON.
 
     Uses the same execution path as the StudyRunner worker
-    (``core.backends.get_backend`` + ``orchestration.preflight.run_preflight``)
+    (``engines.get_engine`` + ``orchestration.preflight.run_preflight``)
     so measurement behaviour is identical whether the experiment runs locally
     or inside a container.
 
@@ -154,14 +154,14 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
         Path to the written result JSON file.
 
     Raises:
-        Any exception from pre-flight or backend execution propagates up so
+        Any exception from pre-flight or engine execution propagates up so
         ``main()`` can catch it and write an error payload.
     """
     # Lazy imports — only needed at runtime, not import time
-    from llenergymeasure.backends import get_backend
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.device.gpu_info import _resolve_gpu_indices
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.engines import get_engine
     from llenergymeasure.harness import MeasurementHarness
     from llenergymeasure.harness.preflight import run_preflight
     from llenergymeasure.infra.version_handshake import compute_expconf_fingerprint
@@ -206,11 +206,11 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     run_preflight(config)
     progress.on_step_done("preflight", time.perf_counter() - t0)
 
-    backend = get_backend(config.backend)
+    engine = get_engine(config.engine)
     harness = MeasurementHarness()
     gpu_indices = _resolve_gpu_indices(config)
     result = harness.run(
-        backend,
+        engine,
         config,
         gpu_indices=gpu_indices,
         progress=progress,

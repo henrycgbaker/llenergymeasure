@@ -8,10 +8,10 @@ Tests cover Phase 3 and Phase 4 (Plan 03) success criteria:
 5. __version__ matches pyproject.toml
 6. run_study raises NotImplementedError with M2 message
 7. _run() calls run_preflight once per experiment config
-8. _run() calls get_backend with correct backend name
+8. _run() calls get_engine with correct engine name
 9. _run() returns StudyResult with experiment results
-10. _run() propagates PreFlightError and BackendError unchanged
-11. run_experiment end-to-end with mocked backend returns ExperimentResult
+10. _run() propagates PreFlightError and EngineError unchanged
+11. run_experiment end-to-end with mocked engine returns ExperimentResult
 12. All test cases pass without GPU hardware (uses monkeypatching)
 """
 
@@ -31,7 +31,7 @@ from llenergymeasure import (
     run_study,
 )
 from llenergymeasure.domain.experiment import StudySummary
-from llenergymeasure.utils.exceptions import BackendError, PreFlightError
+from llenergymeasure.utils.exceptions import EngineError, PreFlightError
 from tests.conftest import make_config, make_result, make_study_result, make_user_config
 
 # =============================================================================
@@ -227,12 +227,12 @@ def test_run_experiment_path_object_form(tmp_path, monkeypatch):
 
 
 # =============================================================================
-# Test 12: kwargs form — backend kwarg passed through
+# Test 12: kwargs form — engine kwarg passed through
 # =============================================================================
 
 
-def test_run_experiment_kwargs_backend(monkeypatch):
-    """run_experiment kwargs form passes backend to ExperimentConfig."""
+def test_run_experiment_kwargs_engine(monkeypatch):
+    """run_experiment kwargs form passes engine to ExperimentConfig."""
     import llenergymeasure.api._impl as api_module
 
     captured_study = {}
@@ -243,9 +243,9 @@ def test_run_experiment_kwargs_backend(monkeypatch):
 
     monkeypatch.setattr(api_module, "_run", mock_run)
 
-    run_experiment(model="gpt2", backend="pytorch")
+    run_experiment(model="gpt2", engine="pytorch")
 
-    assert captured_study["value"].experiments[0].backend == "pytorch"
+    assert captured_study["value"].experiments[0].engine == "pytorch"
 
 
 # =============================================================================
@@ -254,9 +254,9 @@ def test_run_experiment_kwargs_backend(monkeypatch):
 
 
 class _MockBackend:
-    """Minimal BackendPlugin for _run() tests.
+    """Minimal EnginePlugin for _run() tests.
 
-    Implements the 4-method BackendPlugin protocol. Tests that use this mock
+    Implements the 4-method EnginePlugin protocol. Tests that use this mock
     also patch MeasurementHarness.run to return the pre-built result directly,
     so only load_model/warmup/run_inference/cleanup stubs are needed here.
     """
@@ -280,7 +280,7 @@ class _MockBackend:
         )
 
     def run_inference(self, config: ExperimentConfig, model, prompts: list[str] | None = None):
-        from llenergymeasure.backends.protocol import InferenceOutput
+        from llenergymeasure.engines.protocol import InferenceOutput
 
         self.run_inference_calls.append(config)
         return InferenceOutput(
@@ -299,28 +299,28 @@ def _mock_preflight_return(study, **kw):
     """Mock preflight that returns (runner_specs, system_overrides) tuple."""
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
-    backends = {exp.backend for exp in study.experiments}
-    specs = {b: RunnerSpec(mode="local", image=None, source="test") for b in backends}
+    engines = {exp.engine for exp in study.experiments}
+    specs = {b: RunnerSpec(mode="local", image=None, source="test") for b in engines}
     return specs, {}
 
 
 def _patch_harness(monkeypatch, result: ExperimentResult) -> None:
     """Patch MeasurementHarness.run to return a pre-built result.
 
-    Used by tests that verify _api.py wiring (preflight, get_backend) without
+    Used by tests that verify _api.py wiring (preflight, get_engine) without
     running the actual measurement lifecycle.
     """
     import llenergymeasure.harness as harness_module
 
     monkeypatch.setattr(
-        harness_module.MeasurementHarness, "run", lambda self, backend, config, **kw: result
+        harness_module.MeasurementHarness, "run", lambda self, engine, config, **kw: result
     )
 
 
 def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     """_run() calls run_preflight once for the single in-process experiment."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
@@ -330,11 +330,11 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
         preflight_calls.append(config)
 
     mock_result = make_result()
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", mock_preflight)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -357,25 +357,25 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
     assert preflight_calls[0].model == "gpt2"
 
 
-def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
-    """_run() calls get_backend with the experiment's backend name."""
+def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
+    """_run() calls get_engine with the experiment's engine name."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = make_result()
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
-    backend_calls: list[str] = []
+    engine_calls: list[str] = []
 
-    def mock_get_backend(name: str):
-        backend_calls.append(name)
-        return mock_backend
+    def mock_get_engine(name: str):
+        engine_calls.append(name)
+        return mock_engine
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
-    monkeypatch.setattr(backends_module, "get_backend", mock_get_backend)
+    monkeypatch.setattr(engines_module, "get_engine", mock_get_engine)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -389,28 +389,28 @@ def test_run_calls_get_backend_with_correct_name(monkeypatch, tmp_path):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    config = ExperimentConfig(model="gpt2", backend="pytorch")
+    config = ExperimentConfig(model="gpt2", engine="pytorch")
     study = StudyConfig(experiments=[config])
 
     api_module._run(study)
 
-    assert len(backend_calls) == 1
-    assert backend_calls[0] == "pytorch"
+    assert len(engine_calls) == 1
+    assert engine_calls[0] == "pytorch"
 
 
 def test_run_returns_study_result(monkeypatch, tmp_path):
     """_run() returns a StudyResult containing the experiment results."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = make_result(experiment_id="wired-001")
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -438,7 +438,7 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
 def test_run_propagates_preflight_error(monkeypatch, tmp_path):
     """_run() propagates PreFlightError without catching it."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
@@ -451,7 +451,7 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
     mock_result = make_result()
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: _MockBackend(mock_result))
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: _MockBackend(mock_result))
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -465,23 +465,23 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
         api_module._run(study)
 
 
-def test_run_propagates_backend_error(monkeypatch, tmp_path):
-    """_run() propagates BackendError without catching it."""
+def test_run_propagates_engine_error(monkeypatch, tmp_path):
+    """_run() propagates EngineError without catching it."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness as harness_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
-    def _failing_harness_run(self, backend, config, **kw):
-        raise BackendError("GPU out of memory")
+    def _failing_harness_run(self, engine, config, **kw):
+        raise EngineError("GPU out of memory")
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: _MockBackend(make_result()))
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: _MockBackend(make_result()))
     monkeypatch.setattr(harness_module.MeasurementHarness, "run", _failing_harness_run)
     monkeypatch.setattr(
         "llenergymeasure.study.manifest.create_study_dir",
@@ -491,22 +491,22 @@ def test_run_propagates_backend_error(monkeypatch, tmp_path):
     config = ExperimentConfig(model="gpt2")
     study = StudyConfig(experiments=[config])
 
-    with pytest.raises(BackendError, match="GPU out of memory"):
+    with pytest.raises(EngineError, match="GPU out of memory"):
         api_module._run(study)
 
 
 def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
-    """run_experiment() flows through the real _run() pipeline (mocked backend) and returns ExperimentResult."""
-    import llenergymeasure.backends as backends_module
+    """run_experiment() flows through the real _run() pipeline (mocked engine) and returns ExperimentResult."""
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
     expected_result = make_result(experiment_id="e2e-test")
-    mock_backend = _MockBackend(expected_result)
+    mock_engine = _MockBackend(expected_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -534,16 +534,16 @@ def test_run_experiment_end_to_end_mocked(monkeypatch, tmp_path):
 
 def test_run_study_accepts_study_config(monkeypatch, tmp_path):
     """run_study(StudyConfig) returns StudyResult with populated summary."""
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
     mock_result = make_result(experiment_id="study-test")
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -568,7 +568,7 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
 
 def test_run_study_accepts_path(tmp_path, monkeypatch):
     """run_study(str path) loads YAML and returns StudyResult."""
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
@@ -577,11 +577,11 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
     yaml_path.write_text(yaml_content)
 
     mock_result = make_result(experiment_id="path-test")
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -603,13 +603,13 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
 def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
     """Single experiment + n_cycles=1 bypasses StudyRunner (in-process path)."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.study.runner import StudyRunner
 
     mock_result = make_result(experiment_id="inproc-test")
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
     runner_created = []
     original_runner_init = StudyRunner.__init__
@@ -620,7 +620,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
     monkeypatch.setattr(study_pf_module, "run_study_preflight", _mock_preflight_return)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
@@ -710,10 +710,10 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     monkeypatch.setattr(api_module, "_run_via_runner", mock_run_via_runner)
 
     # Use a 2-experiment study to force _run_via_runner path (not _run_in_process)
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
 
-    mock_backend = _MockBackend(mock_result)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    mock_engine = _MockBackend(mock_result)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
 
     # Mock StudyRunner.run() to avoid real subprocess spawning
@@ -723,8 +723,8 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
 
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="gpt2", backend="pytorch"),
-            ExperimentConfig(model="gpt2-medium", backend="pytorch"),
+            ExperimentConfig(model="gpt2", engine="pytorch"),
+            ExperimentConfig(model="gpt2-medium", engine="pytorch"),
         ]
     )
 
@@ -742,7 +742,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
 def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
     """_run_in_process() calls check_gpu_memory_residual before running the experiment."""
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
 
     gpu_check_calls: list[int] = []
@@ -751,10 +751,10 @@ def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
         gpu_check_calls.append(device_index)
 
     mock_result = make_result(experiment_id="gpu-check-test")
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.study.gpu_memory.check_gpu_memory_residual",
@@ -771,7 +771,7 @@ def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
 
     mock_manifest = MagicMock(spec=ManifestWriter)
 
-    config = ExperimentConfig(model="gpt2", backend="pytorch")
+    config = ExperimentConfig(model="gpt2", engine="pytorch")
     study = StudyConfig(experiments=[config])
 
     api_module._run_in_process(study, mock_manifest, tmp_path, runner_specs=None)
@@ -786,7 +786,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     import logging
 
     import llenergymeasure.api._impl as api_module
-    import llenergymeasure.backends as backends_module
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
     from llenergymeasure.infra.runner_resolution import RunnerSpec
@@ -797,13 +797,13 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     }
 
     mock_result = make_result()
-    mock_backend = _MockBackend(mock_result)
+    mock_engine = _MockBackend(mock_result)
 
     monkeypatch.setattr(
         study_pf_module, "run_study_preflight", lambda study, **kw: (mixed_specs, {})
     )
     monkeypatch.setattr(pf_module, "run_preflight", lambda config: None)
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: mock_backend)
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: mock_engine)
     _patch_harness(monkeypatch, mock_result)
     monkeypatch.setattr(
         "llenergymeasure.config.user_config.load_user_config",
@@ -911,10 +911,10 @@ class TestResolveGpuIndices:
 
     def _make_pytorch_config(self, device_map: str | None = None) -> ExperimentConfig:
         """Build a minimal PyTorch ExperimentConfig."""
-        from llenergymeasure.config.backend_configs import PyTorchConfig
+        from llenergymeasure.config.engine_configs import PyTorchConfig
 
         pytorch_cfg = PyTorchConfig(device_map=device_map)
-        return ExperimentConfig(model="gpt2", backend="pytorch", pytorch=pytorch_cfg)
+        return ExperimentConfig(model="gpt2", engine="pytorch", pytorch=pytorch_cfg)
 
     def _make_mock_pynvml(self, device_count: int):
         """Build a minimal pynvml mock with nvmlInit, nvmlDeviceGetCount, nvmlShutdown."""
@@ -927,7 +927,7 @@ class TestResolveGpuIndices:
         return mod
 
     def test_pytorch_no_device_map_returns_zero(self):
-        """PyTorch backend with device_map=None always returns [0]."""
+        """PyTorch engine with device_map=None always returns [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
         config = self._make_pytorch_config(device_map=None)
@@ -969,32 +969,32 @@ class TestResolveGpuIndices:
         config = self._make_pytorch_config(device_map="auto")
         assert _resolve_gpu_indices(config) == [0]
 
-    def test_non_pytorch_non_vllm_backend_returns_zero(self):
-        """Unknown backends return [0]."""
+    def test_non_pytorch_non_vllm_engine_returns_zero(self):
+        """Unknown engines return [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = ExperimentConfig.model_construct(model="gpt2", backend="tensorrt")
+        config = ExperimentConfig.model_construct(model="gpt2", engine="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
 
-    def test_pytorch_backend_no_pytorch_block_returns_zero(self):
-        """PyTorch backend with pytorch=None (no pytorch block) returns [0]."""
+    def test_pytorch_engine_no_pytorch_block_returns_zero(self):
+        """PyTorch engine with pytorch=None (no pytorch block) returns [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = ExperimentConfig.model_construct(model="gpt2", backend="pytorch", pytorch=None)
+        config = ExperimentConfig.model_construct(model="gpt2", engine="pytorch", pytorch=None)
         assert _resolve_gpu_indices(config) == [0]
 
-    # ── vLLM backend tests ──
+    # ── vLLM engine tests ──
 
     def _make_vllm_config(self, tp: int | None = None, pp: int | None = None) -> ExperimentConfig:
         """Build a minimal vLLM ExperimentConfig with TP/PP settings."""
-        from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+        from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
         engine = VLLMEngineConfig(
             tensor_parallel_size=tp,
             pipeline_parallel_size=pp,
         )
         vllm_cfg = VLLMConfig(engine=engine)
-        return ExperimentConfig(model="gpt2", backend="vllm", vllm=vllm_cfg)
+        return ExperimentConfig(model="gpt2", engine="vllm", vllm=vllm_cfg)
 
     def test_vllm_tp2_returns_two_gpus(self):
         """vLLM with tensor_parallel_size=2 returns [0, 1]."""
@@ -1027,16 +1027,16 @@ class TestResolveGpuIndices:
     def test_vllm_no_engine_block_returns_single_gpu(self):
         """vLLM with no engine config returns [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
-        from llenergymeasure.config.backend_configs import VLLMConfig
+        from llenergymeasure.config.engine_configs import VLLMConfig
 
-        config = ExperimentConfig(model="gpt2", backend="vllm", vllm=VLLMConfig())
+        config = ExperimentConfig(model="gpt2", engine="vllm", vllm=VLLMConfig())
         assert _resolve_gpu_indices(config) == [0]
 
     def test_vllm_no_vllm_block_returns_single_gpu(self):
-        """vLLM backend with vllm=None returns [0]."""
+        """vLLM engine with vllm=None returns [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = ExperimentConfig(model="gpt2", backend="vllm")
+        config = ExperimentConfig(model="gpt2", engine="vllm")
         assert _resolve_gpu_indices(config) == [0]
 
 
@@ -1059,35 +1059,35 @@ class TestResolveGpuIndicesTensorrt:
         """tp_size=1 -> [0] (single GPU)."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(backend="tensorrt", tensorrt={"tp_size": 1})
+        config = make_config(engine="tensorrt", tensorrt={"tp_size": 1})
         assert _resolve_gpu_indices(config) == [0]
 
     def test_tensorrt_tp2_returns_two_indices(self):
         """tp_size=2 -> [0, 1] (two GPUs for energy monitoring)."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(backend="tensorrt", tensorrt={"tp_size": 2})
+        config = make_config(engine="tensorrt", tensorrt={"tp_size": 2})
         assert _resolve_gpu_indices(config) == [0, 1]
 
     def test_tensorrt_tp4_returns_four_indices(self):
         """tp_size=4 -> [0, 1, 2, 3]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(backend="tensorrt", tensorrt={"tp_size": 4})
+        config = make_config(engine="tensorrt", tensorrt={"tp_size": 4})
         assert _resolve_gpu_indices(config) == [0, 1, 2, 3]
 
     def test_tensorrt_tp_none_returns_single_index(self):
         """tp_size=None (default) -> [0] (single GPU)."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(backend="tensorrt", tensorrt={})
+        config = make_config(engine="tensorrt", tensorrt={})
         assert _resolve_gpu_indices(config) == [0]
 
     def test_tensorrt_no_config_returns_single_index(self):
-        """backend=tensorrt but tensorrt=None -> [0] (fallback)."""
+        """engine=tensorrt but tensorrt=None -> [0] (fallback)."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = make_config(backend="tensorrt")
+        config = make_config(engine="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
 
 

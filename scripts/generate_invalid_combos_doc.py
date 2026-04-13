@@ -35,14 +35,14 @@ except ImportError:
     USE_INTROSPECTION = False
 
 # Invalid combinations extracted from validators and test results
-# Format: (backend, parameter/combo, reason, resolution)
+# Format: (engine, parameter/combo, reason, resolution)
 INVALID_COMBOS: list[tuple[str, str, str, str]] = [
-    # Cross-backend validation rules (from ExperimentConfig validator)
+    # Cross-engine validation rules (from ExperimentConfig validator)
     (
         "pytorch",
         "parallelism.strategy=pipeline_parallel",
         "PyTorch's generate() requires full model access for autoregressive generation",
-        "Use backend='vllm' or backend='tensorrt' for pipeline parallel",
+        "Use engine='vllm' or engine='tensorrt' for pipeline parallel",
     ),
     (
         "vllm",
@@ -90,7 +90,7 @@ INVALID_COMBOS: list[tuple[str, str, str, str]] = [
 ]
 
 # Streaming mode constraints (params affected by streaming=True)
-# Format: (backend, parameter, behaviour with streaming, impact)
+# Format: (engine, parameter, behaviour with streaming, impact)
 STREAMING_CONSTRAINTS: list[tuple[str, str, str, str]] = [
     (
         "all",
@@ -140,15 +140,15 @@ RUNTIME_LIMITATIONS: list[tuple[str, str, str, str]] = [
     ),
     (
         "vllm",
-        "vllm.attention.backend=FLASHINFER",
+        "vllm.attention.engine=FLASHINFER",
         "FlashInfer requires JIT compilation on first use",
-        "Use attention.backend='auto' or 'FLASH_ATTN'",
+        "Use attention.engine='auto' or 'FLASH_ATTN'",
     ),
     (
         "vllm",
-        "vllm.attention.backend=TORCH_SDPA",
+        "vllm.attention.engine=TORCH_SDPA",
         "TORCH_SDPA not registered in vLLM attention backends",
-        "Use attention.backend='auto' or 'FLASH_ATTN'",
+        "Use attention.engine='auto' or 'FLASH_ATTN'",
     ),
     (
         "vllm",
@@ -192,7 +192,7 @@ def generate_markdown() -> str:
         "",
         "These combinations are rejected at config load time with a clear error message.",
         "",
-        "| Backend | Invalid Combination | Reason | Resolution |",
+        "| Engine | Invalid Combination | Reason | Resolution |",
         "|---------|---------------------|--------|------------|",
     ]
 
@@ -201,12 +201,12 @@ def generate_markdown() -> str:
         validation_rules = get_validation_rules()
         for rule in validation_rules:
             lines.append(
-                f"| {rule['backend']} | `{rule['combination']}` | "
+                f"| {rule['engine']} | `{rule['combination']}` | "
                 f"{rule['reason']} | {rule['resolution']} |"
             )
     else:
-        for backend, combo, reason, resolution in INVALID_COMBOS:
-            lines.append(f"| {backend} | `{combo}` | {reason} | {resolution} |")
+        for engine, combo, reason, resolution in INVALID_COMBOS:
+            lines.append(f"| {engine} | `{combo}` | {reason} | {resolution} |")
 
     # Streaming constraints section
     lines.extend(
@@ -217,7 +217,7 @@ def generate_markdown() -> str:
             "When `streaming=True`, certain parameters are ignored or behave differently",
             "because streaming requires sequential per-request processing to measure TTFT/ITL.",
             "",
-            "| Backend | Parameter | Behaviour with streaming=True | Impact |",
+            "| Engine | Parameter | Behaviour with streaming=True | Impact |",
             "|---------|-----------|------------------------------|--------|",
         ]
     )
@@ -226,15 +226,15 @@ def generate_markdown() -> str:
     if USE_INTROSPECTION:
         introspection_constraints = get_streaming_constraints()
         for param, explanation in introspection_constraints.items():
-            backend = (
+            engine = (
                 "pytorch"
                 if param.startswith("pytorch.")
                 else ("vllm" if param.startswith("vllm.") else "all")
             )
-            lines.append(f"| {backend} | `{param}` | {explanation} | See docs |")
+            lines.append(f"| {engine} | `{param}` | {explanation} | See docs |")
     else:
-        for backend, param, behaviour, impact in STREAMING_CONSTRAINTS:
-            lines.append(f"| {backend} | `{param}` | {behaviour} | {impact} |")
+        for engine, param, behaviour, impact in STREAMING_CONSTRAINTS:
+            lines.append(f"| {engine} | `{param}` | {behaviour} | {impact} |")
 
     lines.extend(
         [
@@ -259,18 +259,18 @@ def generate_markdown() -> str:
             "These combinations pass config validation but may fail at runtime",
             "due to hardware, model, or package requirements.",
             "",
-            "| Backend | Parameter | Limitation | Resolution |",
+            "| Engine | Parameter | Limitation | Resolution |",
             "|---------|-----------|------------|------------|",
         ]
     )
 
-    for backend, param, limitation, resolution in RUNTIME_LIMITATIONS:
-        lines.append(f"| {backend} | `{param}` | {limitation} | {resolution} |")
+    for engine, param, limitation, resolution in RUNTIME_LIMITATIONS:
+        lines.append(f"| {engine} | `{param}` | {limitation} | {resolution} |")
 
     lines.extend(
         [
             "",
-            "## Backend Capability Matrix",
+            "## Engine Capability Matrix",
             "",
         ]
     )
@@ -306,7 +306,7 @@ def generate_markdown() -> str:
             "",
             "### Memory-Constrained (Consumer GPU)",
             "```yaml",
-            "backend: pytorch",
+            "engine: pytorch",
             "quantization:",
             "  load_in_4bit: true",
             "  bnb_4bit_quant_type: nf4",
@@ -314,7 +314,7 @@ def generate_markdown() -> str:
             "",
             "### High Throughput (Production)",
             "```yaml",
-            "backend: vllm",
+            "engine: vllm",
             "vllm:",
             "  gpu_memory_utilization: 0.9",
             "  enable_prefix_caching: true",
@@ -322,7 +322,7 @@ def generate_markdown() -> str:
             "",
             "### Maximum Performance (Ampere+)",
             "```yaml",
-            "backend: tensorrt",
+            "engine: tensorrt",
             "fp_precision: float16",
             "tensorrt:",
             "  quantization:",

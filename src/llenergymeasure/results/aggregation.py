@@ -157,7 +157,7 @@ class AggregationContext:
     # -- Output ----------------------------------------------------------
     results_dir: Path | None = None
     strict: bool = True
-    allow_mixed_backends: bool = False
+    allow_mixed_engines: bool = False
 
     # -- Timeseries + warnings ---------------------------------------------
     timeseries: str | None = None
@@ -191,7 +191,7 @@ def aggregate_results(
 
     Raises:
         AggregationError: If raw_results is empty, strict and incomplete,
-            or mixed backends without allow_mixed_backends=True.
+            or mixed engines without allow_mixed_engines=True.
     """
     if not raw_results:
         raise AggregationError("Cannot aggregate empty results list")
@@ -199,20 +199,20 @@ def aggregate_results(
     warnings: list[str] = list(ctx.measurement_warnings or [])
     num_processes = len(raw_results)
 
-    # Backend consistency validation
-    backends = {r.backend for r in raw_results}
-    if len(backends) > 1:
-        backend_list = ", ".join(sorted(backends))
+    # Engine consistency validation
+    engines = {r.engine for r in raw_results}
+    if len(engines) > 1:
+        engine_list = ", ".join(sorted(engines))
         msg = (
-            f"Mixed backends detected: {backend_list}. "
-            "Aggregating results from different backends produces statistically invalid comparisons."
+            f"Mixed engines detected: {engine_list}. "
+            "Aggregating results from different engines produces statistically invalid comparisons."
         )
-        if not ctx.allow_mixed_backends:
+        if not ctx.allow_mixed_engines:
             raise AggregationError(
-                f"{msg} Use --allow-mixed-backends to override (not recommended)."
+                f"{msg} Use --allow-mixed-engines to override (not recommended)."
             )
         warnings.append(msg)
-        logger.warning("Proceeding with mixed-backend aggregation: %s", backend_list)
+        logger.warning("Proceeding with mixed-engine aggregation: %s", engine_list)
 
     # Completeness validation
     if ctx.expected_processes is not None and ctx.results_dir is not None:
@@ -318,9 +318,9 @@ def aggregate_results(
         latency_stats=latency_stats,
     )
 
-    # Resolve backend and model_name from first result if not provided
-    backend = raw_results[0].backend if raw_results else "pytorch"
-    backend_version: str | None = raw_results[0].backend_version if raw_results else None
+    # Resolve engine and model_name from first result if not provided
+    engine = raw_results[0].engine if raw_results else "pytorch"
+    engine_version: str | None = raw_results[0].engine_version if raw_results else None
     model_name = raw_results[0].model_name if raw_results else "unknown"
 
     # Energy breakdown: sum raw_j and adjusted_j across processes (if not provided)
@@ -377,8 +377,8 @@ def aggregate_results(
         experiment_id=ctx.experiment_id,
         measurement_config_hash=ctx.measurement_config_hash,
         llenergymeasure_version=__version__,
-        backend=backend,
-        backend_version=backend_version,
+        engine=engine,
+        engine_version=engine_version,
         model_name=model_name,
         measurement_methodology=ctx.measurement_methodology,
         steady_state_window=ctx.steady_state_window,

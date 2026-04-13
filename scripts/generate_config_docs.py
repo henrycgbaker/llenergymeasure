@@ -90,12 +90,12 @@ _SECTION_ORDER = [
     ("decoder", "Decoder / Sampling (`decoder:`)"),
     ("warmup", "Warmup (`warmup:`)"),
     ("baseline", "Baseline (`baseline:`)"),
-    ("pytorch", "PyTorch Backend (`pytorch:`)"),
+    ("pytorch", "PyTorch Engine (`pytorch:`)"),
     ("vllm_engine", "vLLM Engine (`vllm.engine:`)"),
     ("vllm_sampling", "vLLM Sampling (`vllm.sampling:`)"),
     ("vllm_beam_search", "vLLM Beam Search (`vllm.beam_search:`)"),
     ("vllm_attention", "vLLM Attention (`vllm.engine.attention:`)"),
-    ("tensorrt", "TensorRT-LLM Backend (`tensorrt:`)"),
+    ("tensorrt", "TensorRT-LLM Engine (`tensorrt:`)"),
 ]
 
 # Map from JSON schema $defs key to our section key

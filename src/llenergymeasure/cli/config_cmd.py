@@ -1,6 +1,6 @@
 """llem config command — environment and configuration display.
 
-Prints GPU info, installed backends, energy sampler status, and user config
+Prints GPU info, installed engines, energy sampler status, and user config
 path. Designed to be the first thing a researcher runs to verify their
 environment is correctly set up.
 
@@ -16,10 +16,10 @@ from typing import Annotated, Any
 import typer
 
 from llenergymeasure.config.ssot import (
-    BACKEND_PACKAGES,
-    BACKEND_PYTORCH,
-    BACKEND_TENSORRT,
-    BACKEND_VLLM,
+    ENGINE_PACKAGES,
+    ENGINE_PYTORCH,
+    ENGINE_TENSORRT,
+    ENGINE_VLLM,
 )
 
 # ---------------------------------------------------------------------------
@@ -49,18 +49,18 @@ def _probe_gpu() -> list[dict[str, Any]] | None:
         return None
 
 
-def _probe_backend_version(backend: str) -> str | None:
-    """Try to retrieve version string for an installed inference backend."""
+def _probe_engine_version(engine: str) -> str | None:
+    """Try to retrieve version string for an installed inference engine."""
     try:
-        if backend == BACKEND_PYTORCH:
+        if engine == ENGINE_PYTORCH:
             import torch
 
             return str(torch.__version__)
-        elif backend == BACKEND_VLLM:
+        elif engine == ENGINE_VLLM:
             import vllm
 
             return str(vllm.__version__)
-        elif backend == BACKEND_TENSORRT:
+        elif engine == ENGINE_TENSORRT:
             import tensorrt_llm
 
             return str(tensorrt_llm.__version__)
@@ -107,19 +107,19 @@ def config_command(
     else:
         print("  No GPU detected")
 
-    # --- Inference backends ---
-    print("Backends")
-    for backend, package in BACKEND_PACKAGES.items():
+    # --- Inference engines ---
+    print("Engines")
+    for engine, package in ENGINE_PACKAGES.items():
         installed = importlib.util.find_spec(package) is not None
         if installed:
-            print(f"  {backend}: installed", end="")
+            print(f"  {engine}: installed", end="")
             if verbose > 0:
-                version = _probe_backend_version(backend)
+                version = _probe_engine_version(engine)
                 if version:
                     print(f"  ({version})", end="")
             print()
         else:
-            print(f"  {backend}: not installed  (pip install llenergymeasure[{backend}])")
+            print(f"  {engine}: not installed  (pip install llenergymeasure[{engine}])")
 
     # --- Energy backends ---
     print("Energy")

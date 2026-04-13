@@ -128,8 +128,8 @@ config = ExperimentConfig(
 **Sub-configurations:**
 - `DatasetConfig` - source, n_prompts, order (nested sub-object)
 - `DecoderConfig` - temperature, sampling presets, repetition control
-- `PyTorchConfig` - PyTorch backend options
-- `VLLMConfig` - vLLM backend options
+- `PyTorchConfig` - PyTorch engine options
+- `VLLMConfig` - vLLM engine options
 - `TensorRTConfig` - TensorRT-LLM backend options
 
 **Cross-boundary contract:** `ExperimentConfig.model_json_schema()` is the
@@ -203,7 +203,7 @@ decoder:
 ### Seed Handling for Reproducibility
 
 `random_seed` is the single seed source for all per-experiment stochasticity:
-- Backend inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
+- Engine inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
 - Dataset prompt ordering (when `dataset.order: shuffled`)
 
 Study-level cycle shuffling uses a separate `shuffle_seed` (defaults to `study_design_hash`).
@@ -255,9 +255,9 @@ gpus: [0, 1, 2, 3]
 
 **Use cases**:
 - Model too large for single GPU but TP not supported
-- Simple multi-GPU inference without specialised backends
+- Simple multi-GPU inference without specialised engines
 
-**Note**: For production serving with optimised batching and continuous batching, consider using the vLLM backend (when available).
+**Note**: For production serving with optimised batching and continuous batching, consider using the vLLM engine (when available).
 
 ### Parallelism Parameter Reference
 
@@ -288,7 +288,7 @@ The validator (`validate_config()`) checks for problematic configurations and re
 | Batching | Dynamic strategy without `max_tokens_per_batch` | info | Will use max_input_tokens as token budget |
 | Batching | Dynamic strategy with non-default `batch_size` | warning | batch_size is ignored for dynamic strategies |
 | Batching | Sorted strategy with `batch_size=1` | info | Sorting provides no benefit with batch_size=1 |
-| Parallelism | `data_parallel` with vLLM backend | error | data_parallel not supported for vLLM |
+| Parallelism | `data_parallel` with vLLM engine | error | data_parallel not supported for vLLM |
 | Parallelism | `degree > len(gpus)` | error | degree exceeds available GPUs |
 | Sharding | `num_shards > len(gpus)` | error | num_shards exceeds available GPUs |
 | Sharding | Sharding strategy with single GPU | info | Sharding provides no benefit with single GPU |
@@ -369,7 +369,7 @@ lem config new --preset benchmark
 | `config_name` | - | str | Required | Unique identifier |
 | `model_name` | `--model / -m` | str | Required | HuggingFace model path |
 | `adapter` | - | str\|None | None | LoRA adapter (HF Hub ID or local path) |
-| `backend` | `--backend` | str | pytorch | Inference backend (pytorch/vllm/tensorrt) |
+| `engine` | `--engine` | str | pytorch | Inference engine (pytorch/vllm/tensorrt) |
 | `max_input_tokens` | - | int | 512 | Max input tokens |
 | `max_output_tokens` | `--max-tokens` | int | 128 | Max generated tokens |
 | `min_output_tokens` | - | int | 0 | Min generated tokens |
@@ -411,18 +411,18 @@ lem config new --preset benchmark
 | Field | Default | Options |
 |-------|---------|---------|
 | `dtype` | bfloat16 | float32, float16, bfloat16 |
-| `backend` | pytorch | pytorch, tensorrt, vllm |
+| `engine` | pytorch | pytorch, tensorrt, vllm |
 
 ### Reproducibility
 | Field | Default | Description |
 |-------|---------|-------------|
 | `random_seed` | None | Random seed (None = non-deterministic) |
 
-## Backend-Specific Configuration
+## Engine-Specific Configuration
 
-Each inference backend exposes its own configuration section for advanced optimisation. These are defined in `backend_configs.py` and set via `vllm:` or `pytorch:` blocks in YAML.
+Each inference engine exposes its own configuration section for advanced optimisation. These are defined in `engine_configs.py` and set via `vllm:` or `pytorch:` blocks in YAML.
 
-**Important:** Backend-specific settings are IN ADDITION to shared config (model, batching, decoder, etc.). Some shared settings map to backend params, others may be overridden:
+**Important:** Engine-specific settings are IN ADDITION to shared config (model, batching, decoder, etc.). Some shared settings map to engine params, others may be overridden:
 
 | Shared Config | vLLM Mapping | Notes |
 |--------------|--------------|-------|
@@ -432,16 +432,16 @@ Each inference backend exposes its own configuration section for advanced optimi
 | `quantization.*` | May be overridden | `vllm.quantization_method` takes precedence |
 
 ```yaml
-# vLLM backend
-backend: vllm
+# vLLM engine
+engine: vllm
 vllm:
   gpu_memory_utilization: 0.9   # Most important: controls KV cache size
   max_num_seqs: 256             # Max concurrent sequences (replaces batch_size)
   enable_prefix_caching: true   # 30-50% throughput gain for repeated prefixes
   kv_cache_dtype: fp8           # Memory-efficient KV cache
 
-# PyTorch backend (default)
-backend: pytorch
+# PyTorch engine (default)
+engine: pytorch
 pytorch:
   attn_implementation: flash_attention_2
   torch_compile: reduce-overhead
@@ -449,7 +449,7 @@ pytorch:
 
 **Most users only need:** `gpu_memory_utilization`, `max_num_seqs`, `enable_prefix_caching`
 
-### backend_configs.py
+### engine_configs.py
 
 | Config Class | Purpose |
 |--------------|---------|
@@ -463,7 +463,7 @@ pytorch:
 | `TensorRTQuantizationConfig` | TensorRT quantization (FP8/INT8/INT4) |
 | `TensorRTCalibrationConfig` | INT8 calibration data settings |
 
-**Full documentation:** See [docs/backends.md](../../../docs/backends.md) for comprehensive parameter reference.
+**Full documentation:** See [docs/engines.md](../../../docs/engines.md) for comprehensive parameter reference.
 
 ## I/O Configuration
 

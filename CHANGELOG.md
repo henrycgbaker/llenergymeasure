@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`backend:` → `engine:` rename (YAML / CLI / API).** The experiment configuration field, CLI flag, and all public symbols now use "engine" instead of "backend" throughout. This aligns terminology with how vLLM, TRT-LLM, and HuggingFace themselves use "engine" (EngineArgs, LLM engine, etc.) and removes ambiguity with tensor/compute/attention backends.
+
+  **Migrate YAML configs** (one-liner):
+  ```bash
+  sed -i 's/^\(\s*\)backend:/\1engine:/g' your-study.yaml
+  ```
+
+  **Affected identifiers:**
+  - YAML field: `backend: pytorch/vllm/tensorrt` → `engine: pytorch/vllm/tensorrt`
+  - CLI flag: `llem run --backend` → `llem run --engine` (short: `-b` → `-e`)
+  - Result JSON fields: `"backend"` / `"backend_version"` → `"engine"` / `"engine_version"`
+  - Python symbols: `BackendPlugin` → `EnginePlugin`, `BackendError` → `EngineError`, `BACKEND_*` constants → `ENGINE_*`, `get_backend()` → `get_engine()`, `detect_default_backend()` → `detect_default_engine()`
+
+  **Preserved** (these are kernel/compute backends, not inference engines — unchanged):
+  - `vllm.attention.backend` — vLLM's attention kernel selector (Flash/FlashInfer/SDPA)
+  - `pytorch.torch_compile_backend` — PyTorch `torch.compile(backend=...)` parameter
+  - `TensorRTConfig.backend` — TRT-LLM's internal `LLM(backend=...)` parameter
+  - Energy measurement backends (Zeus, NVML, CodeCarbon)
+
 ### Added
 
 - **Host/container schema fingerprint verification.** Docker images are now stamped at build time with a `llem.expconf.schema.fingerprint` OCI label (SHA-256 of `ExperimentConfig.model_json_schema()`) plus `org.opencontainers.image.version`. `StudyRunner._prepare_images` compares the label to the host fingerprint before any experiment runs and aborts with an actionable rebuild hint on mismatch. The check is bypassable via `LLEM_SKIP_IMAGE_CHECK=1`.

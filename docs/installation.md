@@ -6,19 +6,19 @@
 |-------------|---------|-------|
 | Python | 3.10+ | Hard requirement (TensorRT-LLM compatibility) |
 | OS | Linux | Required for vLLM and TensorRT-LLM backends |
-| GPU | NVIDIA with CUDA 12.x | Required for all inference backends |
+| GPU | NVIDIA with CUDA 12.x | Required for all inference engines |
 | CUDA (host) | 12.x | For container image compatibility |
 | Docker + NVIDIA Container Toolkit | Latest | Required for vLLM and TensorRT-LLM |
 | Docker Compose | v2.32+ recommended | Required for build cache (see below). v2.11+ minimum |
 | Docker Buildx | v0.17+ recommended | Required for build cache. Bundled with Docker Engine 24+ |
 
-**macOS/Windows:** PyTorch backend only. Docker-based backends (vLLM, TensorRT-LLM) require Linux.
+**macOS/Windows:** PyTorch engine only. Docker-based engines (vLLM, TensorRT-LLM) require Linux.
 
 ---
 
 ## Install
 
-The base package includes no inference backend. Install with the extras for your use case.
+The base package includes no inference engine. Install with the extras for your use case.
 
 ```bash
 pip install "llenergymeasure[pytorch]"
@@ -40,7 +40,7 @@ Install multiple extras together:
 pip install "llenergymeasure[pytorch,zeus]"
 ```
 
-The base install (`pip install llenergymeasure`) includes no inference backend and cannot run experiments.
+The base install (`pip install llenergymeasure`) includes no inference engine and cannot run experiments.
 
 ---
 
@@ -73,7 +73,7 @@ For vLLM or TensorRT-LLM backends, Docker with NVIDIA Container Toolkit is requi
 
 Before building Docker images locally, set up a dedicated BuildKit builder with sufficient
 cache space. Without this, the default builder may evict cached layers when building
-multiple backends, causing expensive recompilation.
+multiple engines, causing expensive recompilation.
 
 ```bash
 make docker-builder-setup
@@ -90,10 +90,10 @@ The pre-built images from GHCR work for most users. If you need to rebuild image
 (e.g. after modifying the source code), use the Make targets:
 
 ```bash
-# Build all backends (pytorch, vllm, tensorrt)
+# Build all engines (pytorch, vllm, tensorrt)
 make docker-build-all
 
-# Build a specific backend
+# Build a specific engine
 make docker-build-pytorch
 make docker-build-vllm
 make docker-build-tensorrt
@@ -113,12 +113,12 @@ docker build -f docker/Dockerfile.vllm -t llenergymeasure:vllm .
 docker build -f docker/Dockerfile.tensorrt -t llenergymeasure:tensorrt .
 ```
 
-Local builds produce images tagged `llenergymeasure:{backend}`. When present, `llem`
+Local builds produce images tagged `llenergymeasure:{engine}`. When present, `llem`
 prefers these over registry images. See [Image Management](docker-setup.md#image-management)
 for the full resolution chain.
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
-> modify config models, backends, or the container entrypoint, you must rebuild for changes
+> modify config models, engines, or the container entrypoint, you must rebuild for changes
 > to take effect inside containers. Local-runner experiments (PyTorch) use the installed
 > source directly and do not need a rebuild.
 
@@ -127,7 +127,7 @@ for the full resolution chain.
 | Target | Description |
 |--------|-------------|
 | `make docker-pull` | Pull all registry images for your installed version |
-| `make docker-images` | Show which image each backend resolves to (local vs registry) |
+| `make docker-images` | Show which image each engine resolves to (local vs registry) |
 | `make docker-check` | Validate `docker-compose.yml` configuration |
 
 ### Build Cache (recommended)
@@ -135,7 +135,7 @@ for the full resolution chain.
 Docker image builds can be slow without caching. To speed them up, pull pre-compiled layers
 from GHCR:
 
-| Backend | Image Size | Cold Build | Cached Rebuild |
+| Engine | Image Size | Cold Build | Cached Rebuild |
 |---------|-----------|------------|----------------|
 | PyTorch (FA3 on) | ~8.5 GB | ~30 min | ~30 sec |
 | vLLM | ~17 GB | ~30 min | ~5 min |
@@ -166,7 +166,7 @@ instead of ~30 minutes.
 
 **How it works:**
 
-- CI pushes build cache to GHCR on each release (`ghcr.io/henrycgbaker/llenergymeasure/{backend}:buildcache`)
+- CI pushes build cache to GHCR on each release (`ghcr.io/henrycgbaker/llenergymeasure/{engine}:buildcache`)
 - `docker-compose.yml` has `cache_from` entries that pull from these cache images
 - `COMPOSE_BAKE=true` enables BuildKit bake delegation, which supports registry cache
 - Users only pull cache - no write access or authentication is needed for public packages
@@ -244,7 +244,7 @@ Example output:
 ```
 GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
-Backends
+Engines
   pytorch: installed
   vllm: not installed  (pip install llenergymeasure[vllm])
   tensorrt: not installed  (pip install llenergymeasure[tensorrt])
@@ -260,12 +260,12 @@ Python
 What each section means:
 
 - **GPU** — NVIDIA GPU detected via pynvml. If this shows "No GPU detected", experiments will fail.
-- **Backends** — Which inference backends are installed. You need at least one to run experiments.
+- **Engines** — Which inference engines are installed. You need at least one to run experiments.
 - **Energy** — Active energy measurement backend. `nvml` (pynvml) is the default and ships with the base install.
 - **Config** — Path to the user config file. "Using defaults" is normal for new installs.
 - **Python** — Python version in use.
 
-Run `llem config --verbose` for driver version, backend versions, and full config values.
+Run `llem config --verbose` for driver version, engine versions, and full config values.
 
 ---
 

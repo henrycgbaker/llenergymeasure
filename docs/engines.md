@@ -1,42 +1,42 @@
-# Backend Configuration
+# Engine Configuration
 
-`llenergymeasure` supports multiple inference backends. Each backend uses a different runtime
+`llenergymeasure` supports multiple inference engines. each engine uses a different runtime
 and requires different setup. Currently active: **PyTorch** (local), **vLLM** (Docker), and
 **TensorRT-LLM** (Docker). Planned: SGLang (M5).
 
 ---
 
-## Backend Overview
+## Engine Overview
 
-| Backend | Runner | GPU Required | Status |
+| Engine | Runner | GPU Required | Status |
 |---------|--------|--------------|--------|
 | PyTorch | local | Yes | Active |
 | vLLM | docker | Yes | Active |
 | TensorRT-LLM | docker | Yes | Active |
 | SGLang | docker | Yes | Planned (M5) |
 
-**Runner** determines where the backend executes: `local` runs directly on the host,
+**Runner** determines where the engine executes: `local` runs directly on the host,
 `docker` launches an isolated container.
 
 ---
 
 ## PyTorch (Local)
 
-The default backend. Runs the HuggingFace `transformers` AutoModelForCausalLM stack directly
+The default engine. Runs the HuggingFace `transformers` AutoModelForCausalLM stack directly
 on the host. No Docker required.
 
 **Minimal config:**
 
 ```yaml
 model: gpt2
-backend: pytorch
+engine: pytorch
 ```
 
 **With PyTorch-specific options:**
 
 ```yaml
 model: gpt2
-backend: pytorch
+engine: pytorch
 n: 100
 dtype: bfloat16
 pytorch:
@@ -48,7 +48,7 @@ pytorch:
 
 ### PyTorch Parameters
 
-All `pytorch:` fields default to `null` — `null` means "use the backend's own default".
+All `pytorch:` fields default to `null` — `null` means "use the engine's own default".
 Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
 
 **Batching:**
@@ -142,7 +142,7 @@ device placement. When `tp_plan='auto'`, `device_map` is automatically omitted.
 
 ## vLLM (Docker)
 
-A high-throughput inference backend using PagedAttention and continuous batching. Requires
+A high-throughput inference engine using PagedAttention and continuous batching. Requires
 Docker with NVIDIA Container Toolkit. See [Docker Setup Guide](docker-setup.md) for
 installation instructions.
 
@@ -150,7 +150,7 @@ installation instructions.
 
 ```yaml
 model: gpt2
-backend: vllm
+engine: vllm
 runners:
   vllm: docker
 ```
@@ -159,7 +159,7 @@ runners:
 
 ```yaml
 model: gpt2
-backend: vllm
+engine: vllm
 n: 100
 runners:
   vllm: docker
@@ -239,7 +239,7 @@ initialisation time. All fields default to `null` (use vLLM's own default).
 
 `vllm.sampling:` fields map to vLLM-specific `SamplingParams` extensions.
 Universal sampling parameters (temperature, top_p, top_k, repetition_penalty) live in
-`decoder:` and are shared across all backends.
+`decoder:` and are shared across all engines.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -284,7 +284,7 @@ vllm:
 
 ## TensorRT-LLM (Docker)
 
-A maximum-performance inference backend using NVIDIA TensorRT engine compilation. TRT-LLM
+A maximum-performance inference engine using NVIDIA TensorRT engine compilation. TRT-LLM
 compiles a model into an optimised TensorRT engine on first use, then runs inference
 against that engine. Engines are cached on disk so subsequent runs skip compilation.
 Requires Docker with NVIDIA Container Toolkit. See [Docker Setup Guide](docker-setup.md)
@@ -294,7 +294,7 @@ for installation instructions.
 
 ```yaml
 model: meta-llama/Llama-2-7b-hf
-backend: tensorrt
+engine: tensorrt
 runners:
   tensorrt: docker
 ```
@@ -303,7 +303,7 @@ runners:
 
 ```yaml
 model: meta-llama/Llama-2-7b-hf
-backend: tensorrt
+engine: tensorrt
 n: 50
 dtype: bfloat16
 runners:
@@ -335,7 +335,7 @@ Changing any **[recompile]** field invalidates the cached engine and triggers a 
 | `max_seq_len` | int | 2048 | Maximum total sequence length (input + output). **[recompile]** |
 | `dtype` | `float16` \| `bfloat16` | auto | Model compute dtype. TRT-LLM is optimised for fp16/bf16; fp32 is not supported. **[recompile]** |
 | `fast_build` | bool | false | Enable fast engine build mode (reduced optimisation, faster compilation). **[recompile]** |
-| `backend` | `trt` | `trt` | TRT-LLM internal backend selector. This is the `LLM(backend=...)` parameter, not the `llem` backend field. Leave unset unless you have a specific reason to override. |
+| `engine` | `trt` | `trt` | TRT-LLM internal backend selector. This is the `LLM(backend=...)` parameter, not the `llem` engine field. Leave unset unless you have a specific reason to override. |
 | `engine_path` | str | null | Path to a pre-compiled engine directory. When set, skips compilation and loads the engine directly. All compile-time parameters and `build_cache` are ignored. See [Pre-Compiled Engine Loading](#pre-compiled-engine-loading) below. |
 
 ### tensorrt.quant: Quantization
@@ -463,7 +463,7 @@ tensorrt:
 
 These are TRT-LLM-specific extensions to `SamplingParams`. Universal sampling parameters
 (temperature, top_p, top_k, repetition_penalty) live in `decoder:` and are shared across
-all backends.
+all engines.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -476,15 +476,15 @@ For advanced TRT-LLM parameters, see the [TensorRT-LLM documentation](https://nv
 
 ---
 
-## Switching Between Backends
+## Switching Between Engines
 
-Change the `backend:` field and add the required runner config. The model and measurement
+Change the `engine:` field and add the required runner config. The model and measurement
 parameters stay the same.
 
 ```yaml
 # Same experiment — PyTorch (local)
 model: gpt2
-backend: pytorch
+engine: pytorch
 n: 100
 dtype: bfloat16
 ```
@@ -492,7 +492,7 @@ dtype: bfloat16
 ```yaml
 # Same experiment — vLLM (Docker)
 model: gpt2
-backend: vllm
+engine: vllm
 n: 100
 dtype: bfloat16
 runners:
@@ -502,22 +502,21 @@ runners:
 ```yaml
 # Same experiment — TensorRT-LLM (Docker)
 model: gpt2
-backend: tensorrt
+engine: tensorrt
 n: 100
 dtype: bfloat16
 runners:
   tensorrt: docker
 ```
 
-Changing `backend:` switches the inference engine. Backend-specific sections (`pytorch:`,
-`vllm:`, `tensorrt:`) are ignored when not running that backend. Universal parameters (`n`,
-`dtype`, `decoder:`, etc.) apply to all backends.
-
+Changing `engine:` switches the inference engine. Engine-specific sections (`pytorch:`,
+`vllm:`, `tensorrt:`) are ignored when not running that engine. Universal parameters (`n`,
+`dtype`, `decoder:`, etc.) apply to all engines.
 ---
 
 ## Runner Configuration
 
-The runner determines where each backend executes. Configure runners in three ways
+The runner determines where each engine executes. Configure runners in three ways
 (listed in precedence order, highest first):
 
 **1. Environment variable** — overrides all other settings:
@@ -544,13 +543,13 @@ runners:
   vllm: docker       # always use Docker for vLLM
 ```
 
-**4. Default** — `local` for all backends if no runner is configured.
+**4. Default** — `local` for all engines if no runner is configured.
 
-**Auto-elevation.** A study that mixes backends (e.g., `pytorch` local + `vllm` local) is
+**Auto-elevation.** A study that mixes engines (e.g., `pytorch` local + `vllm` local) is
 automatically elevated to use Docker for vLLM when Docker is available. This is logged at
 info level and requires no user action.
 
-**Multi-backend without Docker is an error.** If a study requires Docker runners and Docker
+**Multi-engine without Docker is an error.** If a study requires Docker runners and Docker
 is not set up, `llem` fails at pre-flight with a clear error before running any experiments.
 
 ---
@@ -559,18 +558,18 @@ is not set up, `llem` fails at pre-flight with a clear error before running any 
 
 <!-- Parameter matrix — regenerate from GPU test results: uv run python scripts/generate_param_matrix.py -->
 
-This matrix shows which parameters are supported by each backend. Derived from the Pydantic
+This matrix shows which parameters are supported by each engine. Derived from the Pydantic
 config models. Full runtime verification (with GPU test results) can be generated with
 `uv run python scripts/generate_param_matrix.py` after running GPU tests.
 
-### Universal Parameters (all backends)
+### Universal Parameters (all engines)
 
-These parameters live in `ExperimentConfig` and are shared across all backends:
+These parameters live in `ExperimentConfig` and are shared across all engines:
 
 | Parameter | PyTorch | vLLM | TensorRT-LLM | Notes |
 |-----------|---------|------|--------------|-------|
 | `model` | Yes | Yes | Yes | HuggingFace model ID or local path |
-| `backend` | Yes | Yes | Yes | Selects the inference engine |
+| `engine` | Yes | Yes | Yes | Selects the inference engine |
 | `dataset.n_prompts` | Yes | Yes | Yes | Number of prompts |
 | `dtype` | Yes | Yes | Yes | `fp32`, `fp16`, `bf16` |
 | `dataset.source` | Yes | Yes | Yes | Dataset source (built-in alias or .jsonl path) |

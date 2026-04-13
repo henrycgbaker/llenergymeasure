@@ -7,8 +7,8 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from llenergymeasure.api.doctor import (
-    BackendDoctorResult,
     DoctorReport,
+    EngineDoctorResult,
     SchemaStatus,
 )
 from llenergymeasure.cli import app
@@ -17,7 +17,7 @@ runner = CliRunner()
 
 
 def _report(
-    results: list[BackendDoctorResult],
+    results: list[EngineDoctorResult],
     *,
     host_fp: str = "a" * 64,
     host_pkg: str = "0.9.0",
@@ -34,8 +34,8 @@ def _report(
 def test_all_ok_exits_zero() -> None:
     report = _report(
         [
-            BackendDoctorResult(
-                backend="pytorch",
+            EngineDoctorResult(
+                engine="pytorch",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
@@ -53,16 +53,16 @@ def test_all_ok_exits_zero() -> None:
 def test_mismatch_exits_nonzero() -> None:
     report = _report(
         [
-            BackendDoctorResult(
-                backend="pytorch",
+            EngineDoctorResult(
+                engine="pytorch",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="b" * 64,
                 status=SchemaStatus.MISMATCH,
                 detail="rebuild: make docker-build-pytorch",
             ),
-            BackendDoctorResult(
-                backend="vllm",
+            EngineDoctorResult(
+                engine="vllm",
                 image="llenergymeasure:vllm",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
@@ -80,8 +80,8 @@ def test_mismatch_exits_nonzero() -> None:
 def test_unreachable_is_not_mismatch() -> None:
     report = _report(
         [
-            BackendDoctorResult(
-                backend="pytorch",
+            EngineDoctorResult(
+                engine="pytorch",
                 image="llenergymeasure:pytorch",
                 pkg_version=None,
                 image_fingerprint=None,
@@ -99,8 +99,8 @@ def test_unreachable_is_not_mismatch() -> None:
 def test_skip_check_warning_rendered() -> None:
     report = _report(
         [
-            BackendDoctorResult(
-                backend="pytorch",
+            EngineDoctorResult(
+                engine="pytorch",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
@@ -118,8 +118,8 @@ def test_skip_check_warning_rendered() -> None:
 def test_host_footer_rendered() -> None:
     report = _report(
         [
-            BackendDoctorResult(
-                backend="pytorch",
+            EngineDoctorResult(
+                engine="pytorch",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,

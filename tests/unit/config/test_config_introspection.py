@@ -11,8 +11,8 @@ import pytest
 
 from llenergymeasure.config.introspection import (
     get_all_params,
-    get_backend_params,
     get_display_label,
+    get_engine_params,
     get_experiment_config_schema,
     get_field_role,
     get_param_test_values,
@@ -26,35 +26,35 @@ from llenergymeasure.config.ssot import DTYPE_SUPPORT
 from tests.conftest import make_config
 
 # ---------------------------------------------------------------------------
-# get_backend_params
+# get_engine_params
 # ---------------------------------------------------------------------------
 
 
-def test_get_backend_params_returns_pytorch_params():
-    """get_backend_params('pytorch') returns a dict with batch_size field."""
-    params = get_backend_params("pytorch")
+def test_get_engine_params_returns_pytorch_params():
+    """get_engine_params('pytorch') returns a dict with batch_size field."""
+    params = get_engine_params("pytorch")
     assert isinstance(params, dict)
     assert "pytorch.batch_size" in params
 
 
-def test_get_backend_params_pytorch_has_backend_support():
-    """Each pytorch param has backend_support=['pytorch']."""
-    params = get_backend_params("pytorch")
+def test_get_engine_params_pytorch_has_engine_support():
+    """Each pytorch param has engine_support=['pytorch']."""
+    params = get_engine_params("pytorch")
     for param_path, meta in params.items():
-        assert "backend_support" in meta, f"Missing backend_support on {param_path}"
-        assert "pytorch" in meta["backend_support"]
+        assert "engine_support" in meta, f"Missing engine_support on {param_path}"
+        assert "pytorch" in meta["engine_support"]
 
 
-def test_get_backend_params_vllm_returns_params():
-    """get_backend_params('vllm') returns params including vllm.engine.max_num_seqs."""
-    params = get_backend_params("vllm")
+def test_get_engine_params_vllm_returns_params():
+    """get_engine_params('vllm') returns params including vllm.engine.max_num_seqs."""
+    params = get_engine_params("vllm")
     assert isinstance(params, dict)
     assert "vllm.engine.max_num_seqs" in params
 
 
-def test_get_backend_params_tensorrt_returns_params():
-    """get_backend_params('tensorrt') returns params including nested sub-config paths."""
-    params = get_backend_params("tensorrt")
+def test_get_engine_params_tensorrt_returns_params():
+    """get_engine_params('tensorrt') returns params including nested sub-config paths."""
+    params = get_engine_params("tensorrt")
     assert isinstance(params, dict)
     assert "tensorrt.max_batch_size" in params
     # Verify expanded nested sub-config params are registered
@@ -66,10 +66,10 @@ def test_get_backend_params_tensorrt_returns_params():
     assert len(params) >= 20
 
 
-def test_get_backend_params_unknown_backend_raises():
-    """get_backend_params with unknown backend raises ValueError."""
-    with pytest.raises(ValueError, match="Unknown backend"):
-        get_backend_params("nonexistent_backend")
+def test_get_engine_params_unknown_engine_raises():
+    """get_engine_params with unknown engine raises ValueError."""
+    with pytest.raises(ValueError, match="Unknown engine"):
+        get_engine_params("nonexistent_backend")
 
 
 # ---------------------------------------------------------------------------
@@ -109,12 +109,12 @@ def test_get_shared_params_contains_decoder_temperature():
     assert "decoder.temperature" in params
 
 
-def test_get_shared_params_all_have_backend_support():
-    """Every shared param has backend_support list."""
+def test_get_shared_params_all_have_engine_support():
+    """Every shared param has engine_support list."""
     params = get_shared_params()
     for param_path, meta in params.items():
-        assert "backend_support" in meta, f"Missing backend_support on {param_path}"
-        assert isinstance(meta["backend_support"], list)
+        assert "engine_support" in meta, f"Missing engine_support on {param_path}"
+        assert isinstance(meta["engine_support"], list)
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +137,11 @@ def test_get_experiment_config_schema_contains_model_field():
     assert "model" in properties
 
 
-def test_get_experiment_config_schema_contains_backend_field():
-    """Schema contains 'backend' property definition."""
+def test_get_experiment_config_schema_contains_engine_field():
+    """Schema contains 'engine' property definition."""
     schema = get_experiment_config_schema()
     properties = schema.get("properties", {})
-    assert "backend" in properties
+    assert "engine" in properties
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +180,7 @@ def test_get_param_test_values_unknown_param_returns_empty():
 # ---------------------------------------------------------------------------
 
 
-def test_get_all_params_covers_all_backends():
+def test_get_all_params_covers_all_engines():
     """get_all_params() returns dict with 'pytorch', 'vllm', 'tensorrt' keys."""
     all_params = get_all_params()
     assert "pytorch" in all_params
@@ -221,16 +221,16 @@ def test_list_all_param_paths_contains_known_paths():
     assert "dtype" in paths
 
 
-def test_list_all_param_paths_filtered_by_backend():
-    """list_all_param_paths(backend='pytorch') returns only pytorch paths."""
-    paths = list_all_param_paths(backend="pytorch")
+def test_list_all_param_paths_filtered_by_engine():
+    """list_all_param_paths(engine='pytorch') returns only pytorch paths."""
+    paths = list_all_param_paths(engine="pytorch")
     assert all(p.startswith("pytorch.") for p in paths)
 
 
-def test_list_all_param_paths_unknown_backend_raises():
-    """list_all_param_paths with unknown backend raises ValueError."""
-    with pytest.raises(ValueError, match="Unknown backend"):
-        list_all_param_paths(backend="nonexistent")
+def test_list_all_param_paths_unknown_engine_raises():
+    """list_all_param_paths with unknown engine raises ValueError."""
+    with pytest.raises(ValueError, match="Unknown engine"):
+        list_all_param_paths(engine="nonexistent")
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ def test_ssot_dtype_values_match_param_test_values():
 
 
 def test_get_validation_rules_returns_list():
-    """get_validation_rules() returns a list containing the backend mismatch rule."""
+    """get_validation_rules() returns a list containing the engine mismatch rule."""
     rules = get_validation_rules()
     assert isinstance(rules, list)
     combinations = [r["combination"] for r in rules]
@@ -267,17 +267,17 @@ def test_get_validation_rules_returns_list():
 
 
 def test_get_validation_rules_each_has_required_keys():
-    """Each validation rule has backend, combination, reason, resolution keys."""
+    """Each validation rule has engine, combination, reason, resolution keys."""
     rules = get_validation_rules()
     for rule in rules:
-        assert "backend" in rule, f"Rule missing 'backend': {rule}"
+        assert "engine" in rule, f"Rule missing 'engine': {rule}"
         assert "combination" in rule, f"Rule missing 'combination': {rule}"
         assert "reason" in rule, f"Rule missing 'reason': {rule}"
         assert "resolution" in rule, f"Rule missing 'resolution': {rule}"
 
 
-def test_get_validation_rules_contains_backend_section_mismatch_rule():
-    """Validation rules include the backend section mismatch rule."""
+def test_get_validation_rules_contains_engine_section_mismatch_rule():
+    """Validation rules include the engine section mismatch rule."""
     rules = get_validation_rules()
     combinations = [r["combination"] for r in rules]
     assert any("mismatch" in c for c in combinations)
@@ -351,31 +351,31 @@ def test_get_swept_field_paths_nested_field():
     assert "dataset.n_prompts" in result
 
 
-def test_get_swept_field_paths_multi_backend_none_subconfigs():
-    """Multi-backend study where optional sub-configs are None must not crash.
+def test_get_swept_field_paths_multi_engine_none_subconfigs():
+    """Multi-engine study where optional sub-configs are None must not crash.
 
-    In a multi-backend study, pytorch experiments have vllm=None and vice versa.
+    In a multi-engine study, pytorch experiments have vllm=None and vice versa.
     get_swept_field_paths must handle None values in optional sub-config lists
     rather than raising AttributeError.
     """
-    from llenergymeasure.config.backend_configs import PyTorchConfig, VLLMConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig, VLLMConfig
 
     exp_pt = ExperimentConfig(
         model="gpt2",
-        backend="pytorch",
+        engine="pytorch",
         dtype="float16",
         pytorch=PyTorchConfig(batch_size=4),
     )
     exp_vllm = ExperimentConfig(
         model="gpt2",
-        backend="vllm",
+        engine="vllm",
         dtype="float16",
         vllm=VLLMConfig(),
     )
     # Must not raise AttributeError
     result = get_swept_field_paths([exp_pt, exp_vllm])
-    # Backend itself varies
-    assert "backend" in result
+    # Engine itself varies
+    assert "engine" in result
     # Optional sub-configs that are None on some experiments should be swept
     assert "pytorch" in result
     assert "vllm" in result

@@ -1,6 +1,6 @@
 name: Docker Build Check
 
-# Validates all backend Docker images build successfully (no push).
+# Validates all engine Docker images build successfully (no push).
 # Catches broken Dockerfiles before release. Uses registry cache for speed.
 
 on:
@@ -20,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [pytorch, vllm, tensorrt]
+        engine: [pytorch, vllm, tensorrt]
         include:
-          - backend: pytorch
+          - engine: pytorch
             build-args: INSTALL_FA3=false
     runs-on: ubuntu-latest
     permissions:
@@ -39,12 +39,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build ${{ matrix.backend }} image
+      - name: Build ${{ matrix.engine }} image
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: docker/Dockerfile.${{ matrix.backend }}
+          file: docker/Dockerfile.${{ matrix.engine }}
           target: runtime
           push: false
           build-args: ${{ matrix.build-args }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.backend }}:buildcache
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.engine }}:buildcache

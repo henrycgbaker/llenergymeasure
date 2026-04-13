@@ -58,12 +58,12 @@ the system never stabilises.
 The thermal floor wait occurs *after* warmup, not before. This ensures the GPU has
 reached operating temperature from warmup but has stabilised before measurement starts.
 
-### Backend-specific behaviour
+### Engine-specific behaviour
 
-For **vLLM** and **TRT-LLM** backends, warmup is a single kernel warmup call that
+For **vLLM** and **TRT-LLM** engines, warmup is a single kernel warmup call that
 returns `first_latency=0.0`. These engines perform their own internal warmup during
 server startup (CUDA graph capture, kernel compilation). The warmup phase for these
-backends confirms the engine is ready, rather than iterating multiple inference passes.
+engines confirms the engine is ready, rather than iterating multiple inference passes.
 
 ### Default values
 
@@ -118,7 +118,7 @@ For publication-quality results, always include baseline in your reported energy
 Baseline idle power is measured in the same CUDA environment as the inference
 work it will be subtracted from. For local (host) runs that is the host
 process itself. For Docker runs, the baseline is measured inside a short-lived
-container of the same backend image, with the CUDA runtime initialised and
+container of the same engine image, with the CUDA runtime initialised and
 the torch memory pool seeded — matching the state the experiment container
 will be in just before inference starts.
 
@@ -138,41 +138,41 @@ experiment and statistics.
 | `cached`    | Host, once per TTL window         | Short-lived baseline container, once          |
 | `validated` | Host, once + periodic spot-check  | Short-lived baseline / spot-check containers  |
 
-**Cross-backend comparisons:** each backend image gets its own baseline cache.
-If your study mixes backends, each backend's adjusted energy is computed
-against a baseline measured in that backend's environment — cross-backend
+**Cross-engine comparisons:** each engine image gets its own baseline cache.
+If your study mixes engines, each engine's adjusted energy is computed
+against a baseline measured in that engine's environment — cross-engine
 energy comparisons remain apples-to-apples.
 
-### Multi-backend studies: per-backend scoping
+### Multi-engine studies: per-engine scoping
 
 Baseline caches, TTL expiry, and the `validated` strategy's spot-check
-counter are all keyed per backend target (``local`` for host runs,
-``image:<sanitised-tag>`` for each Docker image). In a mixed-backend
+counter are all keyed per engine target (``local`` for host runs,
+``image:<sanitised-tag>`` for each Docker image). In a mixed-engine
 study — for example 300 experiments randomly interleaving PyTorch, vLLM,
-and TensorRT-LLM — each backend behaves as if it had its own independent
+and TensorRT-LLM — each engine behaves as if it had its own independent
 baseline session:
 
-- **`cached` TTL:** each backend's baseline ages out independently after
+- **`cached` TTL:** each engine's baseline ages out independently after
   `baseline.cache_ttl_seconds`. A stale pytorch cache does not force a
   re-measure of vllm, and vice versa. Cache files live at
   `{study_dir}/_study-artefacts/baseline_cache_{key}.json`.
 - **`validated` interval:** `baseline.validation_interval` counts
-  experiments *per backend*, not across the whole study. If the interval
-  is 50 and the study interleaves three backends, each backend triggers
-  its own drift check after 50 experiments against *that* backend's
+  experiments *per engine*, not across the whole study. If the interval
+  is 50 and the study interleaves three engines, each engine triggers
+  its own drift check after 50 experiments against *that* engine's
   cached baseline — regardless of how many experiments ran against the
-  other backends in between.
-- **Drift threshold:** a drift detected on one backend only re-measures
-  that backend's baseline. The other backends' caches are untouched.
+  other engines in between.
+- **Drift threshold:** a drift detected on one engine only re-measures
+  that engine's baseline. The other engines' caches are untouched.
 
-This scoping makes randomised multi-backend studies safe to run without
+This scoping makes randomised Multi-engine studies safe to run without
 baseline interference — interleaving does not corrupt the statistical
-independence of each backend's adjusted energy figures.
+independence of each engine's adjusted energy figures.
 
 ### Two-container architecture (Docker runs)
 
 For `cached` / `validated` strategies, a Docker experiment is dispatched
-as **two sequential containers** of the same backend image:
+as **two sequential containers** of the same engine image:
 
 ```text
           ┌────────────────────────────────────────────────┐
@@ -209,7 +209,7 @@ as **two sequential containers** of the same backend image:
   is blocking) before Container B is started. The two containers never
   execute concurrently, even though the CLI display may briefly show
   overlapping updates during the ~100 ms handover.
-- **Same image, same CUDA state.** Using the backend image for Container A
+- **Same image, same CUDA state.** Using the engine image for Container A
   guarantees the baseline is measured in the same CUDA runtime, same
   Python interpreter, and same torch allocator footprint that Container B
   will inherit. This is what eliminates the ~8.7 W/GPU host-vs-container
@@ -227,8 +227,8 @@ as **two sequential containers** of the same backend image:
 would force every experiment in a cached or validated study to pay the
 full `duration_seconds` (typically 30 s) up front, cancelling the main
 benefit of caching. The two-container design pays that cost once per
-backend per TTL window and then reuses the result — a 300-experiment
-mixed-backend study pays ~3 × 30 s of baseline measurement instead of
+engine per TTL window and then reuses the result — a 300-experiment
+mixed-engine study pays ~3 × 30 s of baseline measurement instead of
 300 × 30 s.
 
 ---
@@ -338,7 +338,7 @@ scopes:
 
 **`random_seed`** (ExperimentConfig) — per-experiment stochasticity:
 
-- Backend inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
+- Engine inference RNG (`torch.manual_seed`, vLLM `seed=`, TRT-LLM `random_seed=`)
 - Dataset prompt ordering (when `dataset.order: shuffled`)
 
 **`shuffle_seed`** (ExecutionConfig) — study-level scheduling:
@@ -378,7 +378,7 @@ To maximise reproducibility across runs and machines:
 
 5. **Report the effective config.** llenergymeasure stores the full resolved experiment
    config in `effective_config` in the result JSON. This captures every parameter value
-   used, including backend defaults. Sharing the result JSON is sufficient for full
+   used, including engine defaults. Sharing the result JSON is sufficient for full
    reproduction.
 
 6. **Pin model revision.** HuggingFace models update. To ensure the same weights across
@@ -399,18 +399,18 @@ Each experiment result JSON includes:
 
 ---
 
-## Universal-to-Backend Parameter Mapping
+## Universal-to-Engine Parameter Mapping
 
-llenergymeasure uses backend-native field names wherever possible. Each backend library
+llenergymeasure uses engine-native field names wherever possible. each engine library
 (HuggingFace Transformers, vLLM, TensorRT-LLM) has its own naming conventions. A thin
 mapping layer translates the handful of universal `ExperimentConfig` and `DecoderConfig`
-fields to each backend's native API parameters.
+fields to each engine's native API parameters.
 
 ### Design principle
 
-Backend-specific configuration sections (`pytorch:`, `vllm:`, `tensorrt:`) always use the
-backend library's native names directly - no translation. The mapping layer only applies to
-shared (universal) fields that have identical semantics across all backends but different
+Engine-specific configuration sections (`pytorch:`, `vllm:`, `tensorrt:`) always use the
+engine library's native names directly - no translation. The mapping layer only applies to
+shared (universal) fields that have identical semantics across all engines but different
 API names.
 
 ### Complete mapping table
@@ -433,11 +433,11 @@ API names.
 
 Everything else passes through without translation:
 
-- **Backend-specific configs** (`pytorch.batch_size`, `vllm.engine.max_num_seqs`,
+- **Engine-specific configs** (`pytorch.batch_size`, `vllm.engine.max_num_seqs`,
   `tensorrt.max_batch_size`, etc.) use native names - no mapping.
 - **Sub-configs** (`warmup`, `baseline`, `energy`) are consumed by the measurement harness,
-  not by backends.
-- **`lora`** is defined in config but not yet implemented in any backend.
+  not by engines.
+- **`lora`** is defined in config but not yet implemented in any engine.
 
 ---
 

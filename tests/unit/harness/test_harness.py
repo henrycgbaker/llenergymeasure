@@ -1,6 +1,6 @@
 """Unit tests for MeasurementHarness.
 
-Tests use a FakeBackend that implements BackendPlugin with controllable outputs.
+Tests use a FakeBackend that implements EnginePlugin with controllable outputs.
 No GPU required - all hardware dependencies are mocked.
 """
 
@@ -13,30 +13,30 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.domain.metrics import WarmupResult
+from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.harness import MeasurementHarness
 
 # ---------------------------------------------------------------------------
-# FakeBackend - minimal BackendPlugin implementation for tests
+# FakeBackend - minimal EnginePlugin implementation for tests
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class FakeBackend:
-    """Minimal BackendPlugin for testing MeasurementHarness lifecycle.
+    """Minimal EnginePlugin for testing MeasurementHarness lifecycle.
 
     All methods record calls for assertion in tests.
     """
 
-    backend_name: str = "fake"
+    engine_name: str = "fake"
     call_log: list[str] = field(default_factory=list)
     inference_output: InferenceOutput | None = None
     fail_on_run_inference: bool = False
 
     @property
     def name(self) -> str:
-        return self.backend_name
+        return self.engine_name
 
     def load_model(self, config: Any, **kwargs: Any) -> dict:
         self.call_log.append("load_model")
@@ -88,7 +88,7 @@ def minimal_config():
 
     return ExperimentConfig(
         model="fake/model",
-        backend="pytorch",
+        engine="pytorch",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
@@ -146,98 +146,98 @@ def _apply_patches():
     return stack
 
 
-def test_harness_calls_backend_lifecycle_in_order(minimal_config):
+def test_harness_calls_engine_lifecycle_in_order(minimal_config):
     """load_model, run_warmup_prompt, run_inference, cleanup must be called in that order.
 
     The harness now calls run_warmup_prompt() directly (not warmup()). The warmup
     convergence loop is owned by the harness via warmup_until_converged().
     """
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
-        harness.run(backend, minimal_config)
+        harness.run(engine, minimal_config)
 
-    assert "load_model" in backend.call_log
-    assert "run_warmup_prompt" in backend.call_log
-    assert "run_inference" in backend.call_log
-    assert "cleanup" in backend.call_log
+    assert "load_model" in engine.call_log
+    assert "run_warmup_prompt" in engine.call_log
+    assert "run_inference" in engine.call_log
+    assert "cleanup" in engine.call_log
     # Order: load_model before run_warmup_prompt, run_warmup_prompt before run_inference
-    lm_idx = backend.call_log.index("load_model")
-    wp_idx = backend.call_log.index("run_warmup_prompt")
-    ri_idx = backend.call_log.index("run_inference")
+    lm_idx = engine.call_log.index("load_model")
+    wp_idx = engine.call_log.index("run_warmup_prompt")
+    ri_idx = engine.call_log.index("run_inference")
     assert lm_idx < wp_idx < ri_idx
 
 
 def test_harness_cleanup_called_on_inference_error(minimal_config):
     """cleanup() must be called even when run_inference raises an exception."""
-    backend = FakeBackend(fail_on_run_inference=True)
+    engine = FakeBackend(fail_on_run_inference=True)
     harness = MeasurementHarness()
 
     with _apply_patches(), pytest.raises(RuntimeError, match="Fake inference failure"):
-        harness.run(backend, minimal_config)
+        harness.run(engine, minimal_config)
 
-    assert "cleanup" in backend.call_log
-    assert "run_inference" in backend.call_log
+    assert "cleanup" in engine.call_log
+    assert "run_inference" in engine.call_log
 
 
 def test_harness_returns_experiment_result(minimal_config):
-    """harness.run() must return an ExperimentResult with the correct backend field."""
+    """harness.run() must return an ExperimentResult with the correct engine field."""
     from llenergymeasure.domain.experiment import ExperimentResult
 
-    backend = FakeBackend(backend_name="fake")
+    engine = FakeBackend(engine_name="fake")
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert isinstance(result, ExperimentResult)
-    assert result.backend == "fake"
+    assert result.engine == "fake"
 
 
 def test_harness_sets_llenergymeasure_version(minimal_config):
     """harness.run() populates llenergymeasure_version from _version.__version__."""
     from llenergymeasure._version import __version__
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.llenergymeasure_version == __version__
 
 
-def test_harness_sets_backend_version_from_backend(minimal_config):
-    """harness.run() populates backend_version via getattr(backend, 'version')."""
-    backend = FakeBackend()
-    backend.version = "1.2.3"  # type: ignore[attr-defined]
+def test_harness_sets_engine_version_from_engine(minimal_config):
+    """harness.run() populates engine_version via getattr(engine, 'version')."""
+    engine = FakeBackend()
+    engine.version = "1.2.3"  # type: ignore[attr-defined]
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
-    assert result.backend_version == "1.2.3"
+    assert result.engine_version == "1.2.3"
 
 
-def test_harness_backend_version_none_when_missing(minimal_config):
-    """backend_version is None when backend has no version property."""
-    backend = FakeBackend()
+def test_harness_engine_version_none_when_missing(minimal_config):
+    """engine_version is None when engine has no version property."""
+    engine = FakeBackend()
     # FakeBackend has no .version attribute by default
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
-    assert result.backend_version is None
+    assert result.engine_version is None
 
 
 def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
-    """thermal_floor_wait_s on WarmupResult must be set by harness (not by backend).
+    """thermal_floor_wait_s on WarmupResult must be set by harness (not by engine).
 
     The harness creates WarmupResult and sets thermal_floor_wait_s from thermal_floor_wait().
     """
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -247,7 +247,7 @@ def test_harness_thermal_floor_wait_set_on_warmup_result(minimal_config):
             return_value=30.0,
         ),
     ):
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     # thermal_floor_wait_s must be set in the result's warmup_result
     assert result.warmup_result is not None
@@ -260,7 +260,7 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
     The harness creates WarmupResult after calling run_warmup_prompt(), then sets
     thermal_floor_wait_s from the return value of thermal_floor_wait().
     """
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -270,7 +270,7 @@ def test_harness_sets_warmup_result_thermal_floor(minimal_config):
             return_value=45.0,
         ),
     ):
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     # The harness must set thermal_floor_wait_s on the WarmupResult
     assert result.warmup_result is not None
@@ -299,7 +299,7 @@ def _make_mock_pts(*, samples: list | None = None):
 
 def test_harness_passes_gpu_indices_to_energy_sampler(minimal_config):
     """harness.run(gpu_indices=[0, 1]) passes gpu_indices to select_energy_sampler."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -320,7 +320,7 @@ def test_harness_passes_gpu_indices_to_energy_sampler(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(backend, minimal_config, gpu_indices=[0, 1])
+        harness.run(engine, minimal_config, gpu_indices=[0, 1])
 
     mock_seb.assert_called_once()
     _, kwargs = mock_seb.call_args
@@ -329,7 +329,7 @@ def test_harness_passes_gpu_indices_to_energy_sampler(minimal_config):
 
 def test_harness_passes_gpu_indices_to_thermal_sampler(minimal_config):
     """harness.run(gpu_indices=[0, 1]) instantiates PowerThermalSampler with those indices."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     mock_pts_cls = _make_mock_pts()
@@ -352,7 +352,7 @@ def test_harness_passes_gpu_indices_to_thermal_sampler(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(backend, minimal_config, gpu_indices=[0, 1])
+        harness.run(engine, minimal_config, gpu_indices=[0, 1])
 
     mock_pts_cls.assert_called_once()
     _, kwargs = mock_pts_cls.call_args
@@ -365,14 +365,14 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
 
     config_with_baseline = ExperimentConfig(
         model="fake/model",
-        backend="pytorch",
+        engine="pytorch",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
         baseline={"enabled": True, "duration_seconds": 5.0},
     )
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -393,7 +393,7 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(backend, config_with_baseline, gpu_indices=[0, 1])
+        harness.run(engine, config_with_baseline, gpu_indices=[0, 1])
 
     mock_mbp.assert_called_once()
     _, kwargs = mock_mbp.call_args
@@ -402,7 +402,7 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
 
 def test_harness_defaults_to_no_gpu_indices(minimal_config):
     """harness.run() without gpu_indices passes None to subsystems (defaults to [0] internally)."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     mock_pts_cls = _make_mock_pts()
@@ -425,7 +425,7 @@ def test_harness_defaults_to_no_gpu_indices(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(backend, minimal_config)
+        harness.run(engine, minimal_config)
 
     # gpu_indices should be None (not a missing kwarg error)
     _, seb_kwargs = mock_seb.call_args
@@ -457,11 +457,11 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
         call_order.append("thermal_floor_wait")
         return 0.0
 
-    def fake_select_energy_sampler(backend_name, *, gpu_indices=None):  # type: ignore[no-untyped-def]
+    def fake_select_energy_sampler(engine_name, *, gpu_indices=None):  # type: ignore[no-untyped-def]
         call_order.append("select_energy_sampler")
         return None  # No tracker; avoids MagicMock total_j > 0 comparison in _build_result
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -488,7 +488,7 @@ def test_harness_start_tracking_called_after_thermal_floor_wait(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(backend, minimal_config)
+        harness.run(engine, minimal_config)
 
     # Both must have been called
     assert "thermal_floor_wait" in call_order, "thermal_floor_wait was never called"
@@ -590,9 +590,9 @@ def test_capture_model_memory_mb_defaults_to_gpu_zero(minimal_config):
 def test_harness_sets_inference_time_sec(minimal_config):
     """Harness must override output.inference_time_sec with perf_counter delta.
 
-    The backend returns elapsed_time_sec=99.0 (intentionally different).
+    The engine returns elapsed_time_sec=99.0 (intentionally different).
     The harness must set inference_time_sec to a real perf_counter delta,
-    NOT the backend's elapsed_time_sec.
+    NOT the engine's elapsed_time_sec.
     """
     custom_output = InferenceOutput(
         elapsed_time_sec=99.0,  # Backend's own timer — harness must NOT use this
@@ -601,17 +601,17 @@ def test_harness_sets_inference_time_sec(minimal_config):
         peak_memory_mb=512.0,
         model_memory_mb=256.0,
     )
-    backend = FakeBackend(inference_output=custom_output)
+    engine = FakeBackend(inference_output=custom_output)
     harness = MeasurementHarness()
 
     with _apply_patches():
-        harness.run(backend, minimal_config)
+        harness.run(engine, minimal_config)
 
     # Harness must have written a non-zero value
     assert custom_output.inference_time_sec > 0, "harness must set inference_time_sec > 0"
-    # Must NOT be the backend's elapsed_time_sec (proves harness override, not passthrough)
+    # Must NOT be the engine's elapsed_time_sec (proves harness override, not passthrough)
     assert custom_output.inference_time_sec != 99.0, (
-        "inference_time_sec must be perf_counter delta, not backend's elapsed_time_sec"
+        "inference_time_sec must be perf_counter delta, not engine's elapsed_time_sec"
     )
 
 
@@ -619,7 +619,7 @@ def test_inference_time_sec_used_in_result(minimal_config):
     """total_inference_time_sec in ExperimentResult must come from harness perf_counter delta.
 
     We mock time.perf_counter to return controlled values (100.0 then 105.0 → 5.0s delta).
-    The backend returns elapsed_time_sec=99.0. The result must show 5.0, not 99.0.
+    The engine returns elapsed_time_sec=99.0. The result must show 5.0, not 99.0.
     """
     custom_output = InferenceOutput(
         elapsed_time_sec=99.0,
@@ -628,7 +628,7 @@ def test_inference_time_sec_used_in_result(minimal_config):
         peak_memory_mb=512.0,
         model_memory_mb=256.0,
     )
-    backend = FakeBackend(inference_output=custom_output)
+    engine = FakeBackend(inference_output=custom_output)
     harness = MeasurementHarness()
 
     perf_counter_values = iter([100.0, 105.0])  # start=100, end=105 → delta=5.0
@@ -638,7 +638,7 @@ def test_inference_time_sec_used_in_result(minimal_config):
         patch("llenergymeasure.harness.time") as mock_time,
     ):
         mock_time.perf_counter.side_effect = lambda: next(perf_counter_values)
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.total_inference_time_sec == pytest.approx(5.0), (
         f"Expected 5.0 from perf_counter delta, got {result.total_inference_time_sec}"
@@ -649,11 +649,11 @@ def test_datetime_still_used_for_wall_clock(minimal_config):
     """ExperimentResult.start_time and end_time must be datetime objects, not perf_counter values."""
     from datetime import datetime as dt
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert isinstance(result.start_time, dt), (
         f"start_time must be datetime, got {type(result.start_time)}"
@@ -674,7 +674,7 @@ def test_harness_warmup_result_wired_to_experiment_result(minimal_config):
     The harness owns warmup result creation (via run_warmup_prompt + warmup_until_converged)
     and sets thermal_floor_wait_s from thermal_floor_wait().
     """
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -684,7 +684,7 @@ def test_harness_warmup_result_wired_to_experiment_result(minimal_config):
             return_value=15.0,
         ),
     ):
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.warmup_result is not None
     assert result.warmup_result.converged is True
@@ -705,7 +705,7 @@ def test_harness_per_gpu_j_wired_to_energy_per_device_j(minimal_config):
     mock_energy_sampler.start_tracking.return_value = MagicMock()
     mock_energy_sampler.stop_tracking.return_value = fake_energy_measurement
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -726,7 +726,7 @@ def test_harness_per_gpu_j_wired_to_energy_per_device_j(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.energy_per_device_j == [70.0, 80.0]
     assert result.multi_gpu is not None
@@ -749,7 +749,7 @@ def test_harness_single_gpu_no_multi_gpu_metrics(minimal_config):
     mock_energy_sampler.start_tracking.return_value = MagicMock()
     mock_energy_sampler.stop_tracking.return_value = fake_energy_measurement
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -770,7 +770,7 @@ def test_harness_single_gpu_no_multi_gpu_metrics(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.energy_per_device_j == [100.0]
     assert result.multi_gpu is None
@@ -783,11 +783,11 @@ def test_harness_single_gpu_no_multi_gpu_metrics(minimal_config):
 
 def test_harness_energy_sampler_none_placeholder(minimal_config):
     """When select_energy_sampler returns None, result still has zero energy (placeholder)."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     # select_energy_sampler returns None in _apply_patches, so total_energy_j should be 0.0
     assert result.total_energy_j == pytest.approx(0.0)
@@ -800,7 +800,7 @@ def test_harness_stop_tracking_raises_cleanup_still_called(minimal_config):
     mock_energy.start_tracking.return_value = MagicMock()
     mock_energy.stop_tracking.side_effect = RuntimeError("NVML error")
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -819,15 +819,15 @@ def test_harness_stop_tracking_raises_cleanup_still_called(minimal_config):
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
         pytest.raises(RuntimeError, match="NVML error"),
     ):
-        harness.run(backend, minimal_config)
+        harness.run(engine, minimal_config)
 
     # cleanup was called despite the exception (try/finally in harness)
-    assert "cleanup" in backend.call_log
+    assert "cleanup" in engine.call_log
 
 
 def test_harness_flops_estimation_raises_returns_zero_flops(minimal_config):
     """If FLOPs estimation raises, total_flops should be 0, not crash."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -848,7 +848,7 @@ def test_harness_flops_estimation_raises_returns_zero_flops(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.total_flops == pytest.approx(0.0)
 
@@ -857,11 +857,11 @@ def test_harness_energy_none_still_produces_valid_result(minimal_config):
     """Full lifecycle with None energy produces a valid ExperimentResult."""
     from llenergymeasure.domain.experiment import ExperimentResult
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert isinstance(result, ExperimentResult)
     assert result.total_tokens > 0
@@ -870,22 +870,22 @@ def test_harness_energy_none_still_produces_valid_result(minimal_config):
 
 def test_build_result_includes_model_name(minimal_config):
     """_build_result() populates model_name from config.model."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.model_name == minimal_config.model
 
 
 def test_build_result_populates_mj_per_tok(minimal_config):
     """_build_result() sets mj_per_tok_total when total_tokens > 0."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with _apply_patches():
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     # FakeBackend returns total_tokens = input(10) + output(20) = 30
     assert result.total_tokens > 0
@@ -898,7 +898,7 @@ def test_build_result_populates_mj_per_tok(minimal_config):
 
 def test_harness_flops_none_result_has_none_derived(minimal_config):
     """When FLOPs estimation returns None, derived fields are None."""
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -919,7 +919,7 @@ def test_harness_flops_none_result_has_none_derived(minimal_config):
         ),
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        result = harness.run(backend, minimal_config)
+        result = harness.run(engine, minimal_config)
 
     assert result.total_flops == pytest.approx(0.0)
     assert result.flops_per_output_token is None
@@ -937,13 +937,13 @@ def test_harness_save_timeseries_false_skips_parquet(tmp_path):
 
     config = ExperimentConfig(
         model="fake/model",
-        backend="pytorch",
+        engine="pytorch",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
     )
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -961,7 +961,7 @@ def test_harness_save_timeseries_false_skips_parquet(tmp_path):
         ) as mock_write_ts,
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        result = harness.run(backend, config, output_dir=str(tmp_path), save_timeseries=False)
+        result = harness.run(engine, config, output_dir=str(tmp_path), save_timeseries=False)
 
     mock_write_ts.assert_not_called()
     assert result.timeseries is None
@@ -973,13 +973,13 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
 
     config = ExperimentConfig(
         model="fake/model",
-        backend="pytorch",
+        engine="pytorch",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
     )
 
-    backend = FakeBackend()
+    engine = FakeBackend()
     harness = MeasurementHarness()
 
     with (
@@ -999,6 +999,6 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
         ) as mock_write_ts,
         patch("llenergymeasure.harness.collect_measurement_warnings", return_value=[]),
     ):
-        harness.run(backend, config, output_dir=str(tmp_path), save_timeseries=True)
+        harness.run(engine, config, output_dir=str(tmp_path), save_timeseries=True)
 
     mock_write_ts.assert_called_once()

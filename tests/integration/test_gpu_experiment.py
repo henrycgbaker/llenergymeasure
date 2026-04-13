@@ -14,11 +14,11 @@ import pytest
 _REPLAY_DIR = Path("/app/results/replay")
 
 
-def _save_replay(result, model: str, backend: str) -> None:
+def _save_replay(result, model: str, engine: str) -> None:
     """Save ExperimentResult JSON as a replay fixture for offline unit tests."""
     _REPLAY_DIR.mkdir(parents=True, exist_ok=True)
     slug = model.replace("/", "-").lower()
-    filename = f"{slug}_{backend}_v{result.schema_version}.json"
+    filename = f"{slug}_{engine}_v{result.schema_version}.json"
     (_REPLAY_DIR / filename).write_text(result.model_dump_json(indent=2), encoding="utf-8")
 
 
@@ -27,7 +27,7 @@ class TestM1ExitCriteria:
     """Validates M1 success criteria with a real GPU experiment."""
 
     def test_run_experiment_gpt2_pytorch(self, tmp_path):
-        """M1 primary exit criterion: llem run --model gpt2 --backend pytorch
+        """M1 primary exit criterion: llem run --model gpt2 --engine pytorch
         produces a valid ExperimentResult.
 
         Validates STU-05: single experiment runs in-process (no subprocess).
@@ -37,7 +37,7 @@ class TestM1ExitCriteria:
 
         config = ExperimentConfig(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             dataset=DatasetConfig(n_prompts=5),  # small for speed
             output_dir=str(tmp_path),
         )
@@ -73,7 +73,7 @@ class TestM1ExitCriteria:
 
         config = ExperimentConfig(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             dataset=DatasetConfig(n_prompts=5),
             output_dir=str(tmp_path),
         )
@@ -86,7 +86,7 @@ class TestM1ExitCriteria:
         assert len(parquet_files) >= 1
 
     def test_cli_run_produces_valid_output(self, tmp_path):
-        """llem run --model gpt2 --backend pytorch via CLI produces valid output."""
+        """llem run --model gpt2 --engine pytorch via CLI produces valid output."""
         from typer.testing import CliRunner
 
         from llenergymeasure.cli import app
@@ -98,7 +98,7 @@ class TestM1ExitCriteria:
                 "run",
                 "--model",
                 "gpt2",
-                "--backend",
+                "--engine",
                 "pytorch",
                 "--output",
                 str(tmp_path),
@@ -107,7 +107,7 @@ class TestM1ExitCriteria:
         assert result.exit_code == 0
 
     def test_cli_config_shows_gpu_info(self):
-        """llem config shows GPU and backend information."""
+        """llem config shows GPU and engine information."""
         from typer.testing import CliRunner
 
         from llenergymeasure.cli import app

@@ -8,15 +8,15 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, computed_field
 
 # =============================================================================
-# Precision Metadata - For cross-backend comparisons
+# Precision Metadata - For cross-engine comparisons
 # =============================================================================
 
 
 class PrecisionMetadata(BaseModel):
-    """Precision metadata for cross-backend efficiency comparisons.
+    """Precision metadata for cross-engine efficiency comparisons.
 
     Tracks the actual precision used for weights, activations, and compute
-    operations. This enables normalised efficiency comparisons across backends
+    operations. This enables normalised efficiency comparisons across engines
     using different quantization methods.
 
     Precision factors for effective FLOPs:
@@ -370,7 +370,7 @@ class MemoryEfficiencyMetrics(BaseModel):
             "Inference-only memory: peak minus model baseline (MB). "
             "Derived: max(0.0, peak_memory_mb - model_memory_mb). "
             "Represents KV cache + activations + batch buffers allocated during inference. "
-            "Computed by backend _build_result(), not by the caller. "
+            "Computed by harness _build_result(), not by the caller. "
             "0.0 = not measured or not computable."
         ),
     )
@@ -425,7 +425,7 @@ class BatchEfficiencyMetrics(BaseModel):
 class KVCacheEfficiencyMetrics(BaseModel):
     """KV cache efficiency metrics.
 
-    vLLM-specific. Always null for PyTorch/TensorRT backends.
+    vLLM-specific. Always null for PyTorch/TensorRT engines.
     """
 
     kv_cache_hit_rate: float | None = Field(
@@ -464,7 +464,7 @@ class ExtendedEfficiencyMetrics(BaseModel):
 
     Design principles:
     - Graceful degradation: null values, never errors
-    - Backend-agnostic where possible
+    - Engine-agnostic where possible
     - Late aggregation: raw samples stored, stats computed at aggregation
     """
 
@@ -509,7 +509,7 @@ class ExtendedEfficiencyMetrics(BaseModel):
 class LatencyMeasurementMode(Enum):
     """How latency measurements were obtained.
 
-    Different backends have different latency measurement capabilities:
+    Different engines have different latency measurement capabilities:
     - PyTorch: True per-token timestamps via TextIteratorStreamer
     - vLLM/TensorRT: May use proportional estimation from total time
 
@@ -520,7 +520,7 @@ class LatencyMeasurementMode(Enum):
     """Actual per-token timestamps captured via streaming API.
 
     Most accurate method. Each token timestamp represents when that
-    specific token was generated. PyTorch backend achieves this via
+    specific token was generated. PyTorch engine achieves this via
     TextIteratorStreamer callback.
     """
 
@@ -608,7 +608,7 @@ def collect_itl_measurements(
 ) -> tuple[list[float], list[float], int]:
     """Calculate ITL metrics from per-token timestamps.
 
-    Standard implementation used by all backends for consistent ITL calculation.
+    Standard implementation used by all engines for consistent ITL calculation.
     Extracts inter-token latencies from timestamp lists, optionally trimming
     first/last intervals per request for cleaner statistics.
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llenergymeasure.config.backend_configs import (
+from llenergymeasure.config.engine_configs import (
     TensorRTBuildCacheConfig,
     TensorRTCalibConfig,
     TensorRTConfig,
@@ -283,10 +283,10 @@ class TestExperimentConfigIntegration:
     """Tests for TensorRTConfig integration with ExperimentConfig."""
 
     def test_experiment_config_with_full_tensorrt(self):
-        """ExperimentConfig with backend='tensorrt' and full tensorrt section validates."""
+        """ExperimentConfig with engine='tensorrt' and full tensorrt section validates."""
         config = ExperimentConfig(
             model="gpt2",
-            backend="tensorrt",
+            engine="tensorrt",
             tensorrt={
                 "tp_size": 2,
                 "max_batch_size": 8,
@@ -317,7 +317,7 @@ class TestExperimentConfigIntegration:
                 },
             },
         )
-        assert config.backend == "tensorrt"
+        assert config.engine == "tensorrt"
         assert config.tensorrt is not None
         assert config.tensorrt.tp_size == 2
         assert config.tensorrt.quant is not None

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# PyTorch backend — llenergymeasure on top of official PyTorch image
+# PyTorch engine — llenergymeasure on top of official PyTorch image
 # ============================================================
 # Extends pytorch/pytorch with llenergymeasure installed.
 # CUDA and PyTorch compatibility is guaranteed by the upstream image.

@@ -83,7 +83,7 @@ def config_cached() -> ExperimentConfig:
     """ExperimentConfig with strategy='cached' (default)."""
     return ExperimentConfig(
         model="test/model",
-        backend="pytorch",
+        engine="pytorch",
         baseline=BaselineConfig(strategy="cached", duration_seconds=30.0),
     )
 
@@ -92,7 +92,7 @@ def config_cached() -> ExperimentConfig:
 def config_fresh() -> ExperimentConfig:
     return ExperimentConfig(
         model="test/model",
-        backend="pytorch",
+        engine="pytorch",
         baseline=BaselineConfig(strategy="fresh"),
     )
 
@@ -101,7 +101,7 @@ def config_fresh() -> ExperimentConfig:
 def config_validated() -> ExperimentConfig:
     return ExperimentConfig(
         model="test/model",
-        backend="pytorch",
+        engine="pytorch",
         baseline=BaselineConfig(
             strategy="validated",
             validation_interval=3,
@@ -254,7 +254,7 @@ class TestStrategyCached:
         """In-memory baseline is re-measured when TTL expires."""
         config = ExperimentConfig(
             model="test/model",
-            backend="pytorch",
+            engine="pytorch",
             baseline=BaselineConfig(strategy="cached", cache_ttl_seconds=3600.0),
         )
         runner = _make_runner(tmp_path, config)

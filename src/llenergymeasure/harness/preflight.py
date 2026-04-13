@@ -5,7 +5,7 @@ single PreFlightError so the user sees all problems at once.
 
 Boundary:
     Pydantic handles schema validation (types, enums, missing fields).
-    Pre-flight handles runtime checks: backend installed? model accessible? CUDA available?
+    Pre-flight handles runtime checks: engine installed? model accessible? CUDA available?
 """
 
 import importlib.util
@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.ssot import BACKEND_PACKAGES
+from llenergymeasure.config.ssot import ENGINE_PACKAGES
 from llenergymeasure.utils.exceptions import PreFlightError
 
 logger = logging.getLogger(__name__)
@@ -36,11 +36,11 @@ def _check_cuda_available() -> bool:
     return bool(torch.cuda.is_available())
 
 
-def _check_backend_installed(backend: str) -> bool:
-    """Return True if the package that provides *backend* is importable."""
-    package = BACKEND_PACKAGES.get(backend)
+def _check_engine_installed(engine: str) -> bool:
+    """Return True if the package that provides *engine* is importable."""
+    package = ENGINE_PACKAGES.get(engine)
     if package is None:
-        # Unknown backend — Pydantic already blocked invalid values; treat as missing.
+        # Unknown engine — Pydantic already blocked invalid values; treat as missing.
         return False
     return importlib.util.find_spec(package) is not None
 
@@ -129,11 +129,11 @@ def run_preflight(config: ExperimentConfig) -> None:
     if not _check_cuda_available():
         failures.append("CUDA not available — is a GPU present and CUDA installed?")
 
-    # Check 2: Backend installed
-    if not _check_backend_installed(config.backend):
-        package = BACKEND_PACKAGES.get(config.backend, config.backend)
+    # Check 2: Engine installed
+    if not _check_engine_installed(config.engine):
+        package = ENGINE_PACKAGES.get(config.engine, config.engine)
         failures.append(
-            f"{config.backend} not installed — pip install llenergymeasure[{config.backend}]"
+            f"{config.engine} not installed — pip install llenergymeasure[{config.engine}]"
             f" (missing: {package})"
         )
 
@@ -142,15 +142,15 @@ def run_preflight(config: ExperimentConfig) -> None:
     if model_error is not None:
         failures.append(model_error)
 
-    # Check 4: Backend config validation (hardware x config cross-checks)
+    # Check 4: Engine config validation (hardware x config cross-checks)
     try:
-        from llenergymeasure.backends import get_backend
+        from llenergymeasure.engines import get_engine
 
-        backend = get_backend(config.backend)
-        backend_errors = backend.validate_config(config)
-        failures.extend(backend_errors)
+        engine_plugin = get_engine(config.engine)
+        engine_errors = engine_plugin.validate_config(config)
+        failures.extend(engine_errors)
     except Exception:
-        pass  # get_backend may fail if backend not installed — already caught by Check 2
+        pass  # get_engine may fail if engine not installed — already caught by Check 2
 
     if failures:
         n = len(failures)

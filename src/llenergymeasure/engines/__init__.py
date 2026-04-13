@@ -1,59 +1,59 @@
-"""Inference backends for llenergymeasure."""
+"""Inference engines for llenergymeasure."""
 
-from llenergymeasure.backends.protocol import BackendPlugin
-from llenergymeasure.config.backend_detection import is_backend_available
-from llenergymeasure.config.ssot import BACKEND_PYTORCH, BACKEND_TENSORRT, BACKEND_VLLM
-from llenergymeasure.utils.exceptions import BackendError
+from llenergymeasure.config.engine_detection import is_engine_available
+from llenergymeasure.config.ssot import ENGINE_PYTORCH, ENGINE_TENSORRT, ENGINE_VLLM
+from llenergymeasure.engines.protocol import EnginePlugin
+from llenergymeasure.utils.exceptions import EngineError
 
-__all__ = ["BackendPlugin", "detect_default_backend", "get_backend"]
+__all__ = ["EnginePlugin", "detect_default_engine", "get_engine"]
 
 
-def detect_default_backend() -> str:
-    """Detect the default available backend.
+def detect_default_engine() -> str:
+    """Detect the default available inference engine.
 
     Returns 'pytorch' if transformers is installed, 'tensorrt' if tensorrt_llm is
     installed (and not transformers), 'vllm' if vllm is installed.
     Priority: pytorch > tensorrt > vllm.
 
     Raises:
-        BackendError: If no supported backend is installed.
+        EngineError: If no supported engine is installed.
     """
-    if is_backend_available(BACKEND_PYTORCH):
-        return BACKEND_PYTORCH
-    if is_backend_available(BACKEND_TENSORRT):
-        return BACKEND_TENSORRT
-    if is_backend_available(BACKEND_VLLM):
-        return BACKEND_VLLM
-    raise BackendError(
-        "No inference backend installed. Install one with: "
+    if is_engine_available(ENGINE_PYTORCH):
+        return ENGINE_PYTORCH
+    if is_engine_available(ENGINE_TENSORRT):
+        return ENGINE_TENSORRT
+    if is_engine_available(ENGINE_VLLM):
+        return ENGINE_VLLM
+    raise EngineError(
+        "No inference engine installed. Install one with: "
         "pip install llenergymeasure[pytorch], "
         "pip install llenergymeasure[vllm], or "
         "pip install llenergymeasure[tensorrt]"
     )
 
 
-def get_backend(name: str) -> BackendPlugin:
-    """Get an inference backend instance by name.
+def get_engine(name: str) -> EnginePlugin:
+    """Get an inference engine instance by name.
 
     Args:
-        name: Backend name ('pytorch', 'vllm', 'tensorrt').
+        name: Engine name ('pytorch', 'vllm', 'tensorrt').
 
     Returns:
-        A BackendPlugin instance.
+        An EnginePlugin instance.
 
     Raises:
-        BackendError: If the backend name is unknown.
+        EngineError: If the engine name is unknown.
     """
-    if name == BACKEND_PYTORCH:
-        from llenergymeasure.backends.pytorch import PyTorchBackend
+    if name == ENGINE_PYTORCH:
+        from llenergymeasure.engines.pytorch import PyTorchEngine
 
-        return PyTorchBackend()
-    if name == BACKEND_VLLM:
-        from llenergymeasure.backends.vllm import VLLMBackend
+        return PyTorchEngine()
+    if name == ENGINE_VLLM:
+        from llenergymeasure.engines.vllm import VLLMEngine
 
-        return VLLMBackend()
-    if name == BACKEND_TENSORRT:
-        from llenergymeasure.backends.tensorrt import TensorRTBackend
+        return VLLMEngine()
+    if name == ENGINE_TENSORRT:
+        from llenergymeasure.engines.tensorrt import TensorRTEngine
 
-        return TensorRTBackend()
-    raise BackendError(f"Unknown backend: {name!r}. Available: pytorch, vllm, tensorrt")
+        return TensorRTEngine()
+    raise EngineError(f"Unknown engine: {name!r}. Available: pytorch, vllm, tensorrt")

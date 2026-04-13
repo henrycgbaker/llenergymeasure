@@ -2,7 +2,7 @@
 """Generate docs/generated/parameter-support-matrix.md from test results.
 
 This script reads test results JSON files and generates a parameter support
-matrix showing which parameters work with which backends.
+matrix showing which parameters work with which engines.
 
 Run: python scripts/generate_param_matrix.py [--results-dir results/]
 
@@ -12,7 +12,7 @@ The script expects test results in the format output by tests/runtime/test_all_p
 - results/test_results_tensorrt.json
 
 Generate test results with:
-    python -m tests.runtime.test_all_params --backend pytorch --output results/test_results_pytorch.json
+    python -m tests.runtime.test_all_params --engine pytorch --output results/test_results_pytorch.json
 """
 
 from __future__ import annotations
@@ -29,14 +29,14 @@ def load_test_results(results_dir: Path) -> dict[str, list[dict[str, Any]]]:
     """Load test results from JSON files."""
     results: dict[str, list[dict[str, Any]]] = {}
 
-    for backend in ["pytorch", "vllm", "tensorrt"]:
-        result_file = results_dir / f"test_results_{backend}.json"
+    for engine in ["pytorch", "vllm", "tensorrt"]:
+        result_file = results_dir / f"test_results_{engine}.json"
         if result_file.exists():
             with open(result_file) as f:
                 data = json.load(f)
-                results[backend] = data.get("results", [])
+                results[engine] = data.get("results", [])
         else:
-            results[backend] = []
+            results[engine] = []
 
     return results
 
@@ -47,11 +47,11 @@ def extract_parameter_status(
     """Extract parameter status from test results.
 
     Returns:
-        Dict mapping parameter -> backend -> {status, error, validation_status}
+        Dict mapping parameter -> engine -> {status, error, validation_status}
     """
     params: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
 
-    for backend, tests in results.items():
+    for engine, tests in results.items():
         for test in tests:
             # Handle test_all_params.py output format
             param = test.get("parameter_varied", "")
@@ -71,7 +71,7 @@ def extract_parameter_status(
                 else "UNKNOWN"
             )
 
-            params[param_key][backend] = {
+            params[param_key][engine] = {
                 "passed": passed,
                 "error": error[:100] if error else "",
                 "validation": validation,
@@ -83,7 +83,7 @@ def extract_parameter_status(
 def categorise_parameters(
     params: dict[str, dict[str, dict[str, Any]]],
 ) -> dict[str, dict[str, dict[str, dict[str, Any]]]]:
-    """Categorise parameters by type (shared vs backend-specific)."""
+    """Categorise parameters by type (shared vs engine-specific)."""
     categories: dict[str, dict[str, dict[str, dict[str, Any]]]] = {
         "Core Settings": {},
         "Batching": {},
@@ -96,27 +96,27 @@ def categorise_parameters(
         "TensorRT-specific": {},
     }
 
-    for param, backends in params.items():
+    for param, engines_map in params.items():
         param_lower = param.lower()
 
         if param_lower.startswith("pytorch."):
-            categories["PyTorch-specific"][param] = backends
+            categories["PyTorch-specific"][param] = engines_map
         elif param_lower.startswith("vllm."):
-            categories["vLLM-specific"][param] = backends
+            categories["vLLM-specific"][param] = engines_map
         elif param_lower.startswith("tensorrt."):
-            categories["TensorRT-specific"][param] = backends
+            categories["TensorRT-specific"][param] = engines_map
         elif "batching" in param_lower or "batch" in param_lower:
-            categories["Batching"][param] = backends
+            categories["Batching"][param] = engines_map
         elif "decoder" in param_lower or "beam" in param_lower:
-            categories["Decoder/Generation"][param] = backends
+            categories["Decoder/Generation"][param] = engines_map
         elif "parallel" in param_lower:
-            categories["Parallelism"][param] = backends
+            categories["Parallelism"][param] = engines_map
         elif "quantization" in param_lower or "load_in" in param_lower:
-            categories["Quantization"][param] = backends
+            categories["Quantization"][param] = engines_map
         elif "streaming" in param_lower or "traffic" in param_lower:
-            categories["Streaming & Simulation"][param] = backends
+            categories["Streaming & Simulation"][param] = engines_map
         else:
-            categories["Core Settings"][param] = backends
+            categories["Core Settings"][param] = engines_map
 
     # Remove empty categories
     return {k: v for k, v in categories.items() if v}
@@ -138,8 +138,8 @@ def generate_markdown(
     ]
 
     # Summary stats
-    for backend in ["pytorch", "vllm", "tensorrt"]:
-        tests = results.get(backend, [])
+    for engine in ["pytorch", "vllm", "tensorrt"]:
+        tests = results.get(engine, [])
         if tests:
             # Note: test_all_params.py uses "status" field with values "passed"/"failed"/"skipped"
             passed = sum(1 for t in tests if t.get("status") == "passed")
@@ -148,7 +148,7 @@ def generate_markdown(
             total = len(tests)
             pct = (passed / total * 100) if total > 0 else 0
             lines.append(
-                f"- **{backend.upper()}**: {passed}/{total} ({pct:.1f}%) [failed: {failed}, skipped: {skipped}]"
+                f"- **{engine.upper()}**: {passed}/{total} ({pct:.1f}%) [failed: {failed}, skipped: {skipped}]"
             )
 
     lines.extend(
@@ -161,7 +161,7 @@ def generate_markdown(
             "| ✅ | Passed - parameter works correctly |",
             "| ❌ | Failed - parameter not supported or error |",
             "| ⚠️ | Passed but validation uncertain |",
-            "| ➖ | Not tested for this backend |",  # noqa: RUF001
+            "| ➖ | Not tested for this engine |",  # noqa: RUF001
             "",
         ]
     )
@@ -180,13 +180,13 @@ def generate_markdown(
             ]
         )
 
-        for param, backends in sorted(params.items()):
+        for param, engines_map in sorted(params.items()):
             row = [f"`{param}`"]
 
             notes = []
-            for backend in ["pytorch", "vllm", "tensorrt"]:
-                if backend in backends:
-                    status = backends[backend]
+            for engine in ["pytorch", "vllm", "tensorrt"]:
+                if engine in engines_map:
+                    status = engines_map[engine]
                     if status["passed"]:
                         if status["validation"] == "VERIFIED":
                             row.append("✅")
@@ -195,7 +195,7 @@ def generate_markdown(
                     else:
                         row.append("❌")
                         if status["error"]:
-                            notes.append(f"{backend}: {status['error']}")
+                            notes.append(f"{engine}: {status['error']}")
                 else:
                     row.append("➖")  # noqa: RUF001
 
@@ -211,11 +211,11 @@ def generate_markdown(
     # Add recommendations section
     lines.extend(
         [
-            "## Backend Recommendations",
+            "## Engine Recommendations",
             "",
             "### By Use Case",
             "",
-            "| Use Case | Recommended Backend | Reason |",
+            "| Use Case | Recommended Engine | Reason |",
             "|----------|---------------------|--------|",
             "| Memory-constrained | PyTorch | BitsAndBytes 4/8-bit quantization |",
             "| High throughput | vLLM | Continuous batching, PagedAttention |",

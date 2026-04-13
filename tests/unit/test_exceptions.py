@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 
 from llenergymeasure.utils.exceptions import (
-    BackendError,
     ConfigError,
+    EngineError,
     ExperimentError,
     InvalidStateTransitionError,
     LLEMError,
@@ -38,9 +38,9 @@ def test_config_error_inherits_llem_error():
     assert issubclass(ConfigError, LLEMError)
 
 
-def test_backend_error_inherits_llem_error():
-    """BackendError is a subclass of LLEMError."""
-    assert issubclass(BackendError, LLEMError)
+def test_engine_error_inherits_llem_error():
+    """EngineError is a subclass of LLEMError."""
+    assert issubclass(EngineError, LLEMError)
 
 
 def test_preflight_error_inherits_llem_error():
@@ -88,7 +88,7 @@ def test_all_errors_catchable_via_llem_error():
     """Catching LLEMError catches all 5 direct subclass instances."""
     subclasses = [
         ConfigError("config"),
-        BackendError("backend"),
+        EngineError("engine"),
         PreFlightError("preflight"),
         ExperimentError("experiment"),
         StudyError("study"),
@@ -131,7 +131,7 @@ def test_invalid_state_transition_catchable_via_experiment_error():
 
 def test_error_messages_preserved():
     """Constructing with a message preserves str(e)."""
-    for cls in [ConfigError, BackendError, PreFlightError, ExperimentError, StudyError]:
+    for cls in [ConfigError, EngineError, PreFlightError, ExperimentError, StudyError]:
         msg = f"test message for {cls.__name__}"
         exc = cls(msg)
         assert str(exc) == msg

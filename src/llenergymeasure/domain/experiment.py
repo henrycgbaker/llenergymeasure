@@ -70,9 +70,9 @@ class RawProcessResult(BaseModel):
 
     schema_version: str = Field(default="3.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
-    backend: str = Field(default="pytorch", description="Inference backend used")
-    backend_version: str | None = Field(
-        default=None, description="Backend version string for reproducibility"
+    engine: str = Field(default="pytorch", description="Inference engine used")
+    engine_version: str | None = Field(
+        default=None, description="Engine version string for reproducibility"
     )
     process_index: int = Field(..., description="Process rank in distributed setup")
     gpu_id: int = Field(..., description="GPU device index")
@@ -155,10 +155,10 @@ class ExperimentResult(BaseModel):
         default=None, description="Package version that produced this result"
     )
 
-    # Backend
-    backend: str = Field(default="pytorch", description="Inference backend used")
-    backend_version: str | None = Field(
-        default=None, description="Backend version string for reproducibility"
+    # Engine
+    engine: str = Field(default="pytorch", description="Inference engine used")
+    engine_version: str | None = Field(
+        default=None, description="Engine version string for reproducibility"
     )
     model_name: str = Field(default="unknown", description="Model name/path used")
 

@@ -4,7 +4,7 @@ Provides:
 - thermal_floor_wait(): sleep after warmup for thermal stabilisation
 - warmup_until_converged(): convergence loop with per-iteration on_substep callbacks
 
-Backends implement run_warmup_prompt() as a thin inference primitive.
+Engines implement run_warmup_prompt() as a thin inference primitive.
 The harness owns the convergence detection loop (CV thresholds, iteration limits).
 """
 
@@ -52,7 +52,7 @@ def warmup_until_converged(
     """Run warmup prompts until latency CV stabilises below threshold.
 
     Owns the convergence detection loop (CV thresholds, iteration limits).
-    Backends provide run_warmup_prompt() as a thin inference primitive.
+    Engines provide run_warmup_prompt() as a thin inference primitive.
 
     Args:
         run_single_inference: Callable that runs one warmup prompt and
@@ -76,7 +76,7 @@ def warmup_until_converged(
             max_prompts=config.max_prompts,
         )
 
-    from llenergymeasure.backends._helpers import compute_cv
+    from llenergymeasure.engines._helpers import compute_cv
 
     latencies: list[float] = []
     converged = False

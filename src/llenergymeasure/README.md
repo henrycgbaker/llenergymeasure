@@ -9,7 +9,7 @@ llenergymeasure/
 ├── __init__.py         # Public API (run_experiment, run_study)
 ├── _version.py         # Package version (zero internal imports)
 ├── api/                # Public Python API (_impl.py)
-├── backends/           # Backend plugins (pytorch, vllm, tensorrt) + protocol
+├── engines/           # Engine plugins (pytorch, vllm, tensorrt) + protocol
 ├── cli/                # Typer CLI (run, config)
 ├── config/             # Configuration system (SSOT models)
 ├── datasets/           # Built-in prompt datasets
@@ -31,7 +31,7 @@ Layer 8: cli/ | entrypoints/  - Typer CLI (llem run, llem config) + Docker conta
 Layer 7: api/                 - Public Python API (run_experiment, run_study)
 Layer 6: study/               - Study runner, grid expansion, manifest, study preflight
 Layer 5: harness/ | results/  - MeasurementHarness, experiment preflight, env snapshot; results persistence
-Layer 4: backends/ | energy/ | datasets/  - Backend plugins, energy samplers, prompt loading
+Layer 4: engines/ | energy/ | datasets/  - Engine plugins, energy samplers, prompt loading
 Layer 3: infra/               - Docker runner, image registry, runner resolution
 Layer 2: device/              - GPU info, NVML, power/thermal, gpu_indices, env metadata collection
 Layer 1: config/ | domain/    - Config models, domain result models (pure Pydantic)
@@ -53,17 +53,17 @@ Public Python API entry point:
 ### cli/
 Modular Typer CLI with two commands:
 - `llem run [config.yaml]` — run single experiment or multi-experiment study
-- `llem config [-v]` — show environment, GPU, backend, and energy status
+- `llem config [-v]` — show environment, GPU, engine, and energy status
 - Uses `_version.py` directly for version string (not the package root)
 
 ### entrypoints/ (Layer 8)
 - `container.py` — Docker container entry point (was `infra/container_entrypoint.py`)
-- Imports from `api/`, `backends/`, `harness/`, `device/` — all valid downward from the top layer
+- Imports from `api/`, `engines/`, `harness/`, `device/` — all valid downward from the top layer
 
 ### utils/exceptions.py
 Exception hierarchy rooted at `LLEMError`:
 - `ConfigError` — config loading/validation
-- `BackendError` — inference backend failures
+- `EngineError` — inference engine failures
 - `PreFlightError` — pre-flight check failures
 - `ExperimentError` — experiment execution errors
 - `StudyError` — study orchestration errors
@@ -79,7 +79,7 @@ Security utilities:
 | Module          | Description                                                      |
 |-----------------|------------------------------------------------------------------|
 | `api/`          | Public Python API (run_experiment, run_study)                    |
-| `backends/`     | Inference backend plugins (pytorch, vllm, tensorrt)              |
+| `engines/`     | Inference engine plugins (pytorch, vllm, tensorrt)              |
 | `cli/`          | Typer CLI commands (run, config)                                 |
 | `config/`       | Configuration loading, SSOT models, introspection                |
 | `datasets/`     | Built-in prompt datasets                                         |
@@ -96,7 +96,7 @@ Security utilities:
 ## Layer-by-Layer Notes
 
 ### `cli/` and `entrypoints/` (Layer 8)
-- `cli/` imports only from `api/`. Must not import harness, backends, energy, infra, study, or
+- `cli/` imports only from `api/`. Must not import harness, engines, energy, infra, study, or
   results directly.
 - `cli/__init__.py` imports version from `_version.py` directly (not the package root), avoiding
   the heavy `__init__.py` import chain.
@@ -108,21 +108,21 @@ Security utilities:
 
 ### `study/` (Layer 6)
 - `runner.py` — orchestrates multi-experiment sweeps
-- `preflight.py` — study-level pre-flight validation (multi-backend Docker requirements)
+- `preflight.py` — study-level pre-flight validation (multi-engine Docker requirements)
 - `_progress.py` — progress display (belongs here, not in cli/)
 
 ### `harness/` and `results/` (Layer 5)
 - `harness/__init__.py` — `MeasurementHarness`, `select_energy_sampler()`
-- `harness/preflight.py` — experiment-level pre-flight checks (CUDA, backend, model)
+- `harness/preflight.py` — experiment-level pre-flight checks (CUDA, engine, model)
 - `harness/environment.py` — environment snapshot collection
 - `harness/warmup.py` — thermal floor wait and warmup utilities
 - `results/persistence.py` — `save_result()` / `load_result()` repository functions
 - `results/extended_metrics.py` — efficiency metrics computation (tokens/joule, joules/token, etc.)
 - Harness owns the NVML measurement window; engine compilation must never occur inside it
 
-### `backends/` (Layer 4)
-- `protocol.py` — `BackendPlugin` protocol
-- `pytorch.py`, `vllm.py`, `tensorrt.py` — backend implementations
+### `engines/` (Layer 4)
+- `protocol.py` — `EnginePlugin` protocol
+- `pytorch.py`, `vllm.py`, `tensorrt.py` — engine implementations
 - `_helpers.py` — shared warmup utilities
 
 ### `energy/` (Layer 4)

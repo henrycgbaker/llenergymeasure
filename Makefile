@@ -71,24 +71,24 @@ test-all:
 
 # Runtime tests with Docker container dispatch
 # These tests use SSOT introspection to discover ALL params, then dispatch
-# each test to the correct backend container (pytorch, vllm, tensorrt).
+# each test to the correct engine container (pytorch, vllm, tensorrt).
 # Uses the same dispatch pattern as `lem campaign`.
 
 test-runtime:
-	python scripts/runtime-test-orchestrator.py --backend pytorch
+	python scripts/runtime-test-orchestrator.py --engine pytorch
 
 test-runtime-vllm:
-	python scripts/runtime-test-orchestrator.py --backend vllm
+	python scripts/runtime-test-orchestrator.py --engine vllm
 
 test-runtime-tensorrt:
-	python scripts/runtime-test-orchestrator.py --backend tensorrt
+	python scripts/runtime-test-orchestrator.py --engine tensorrt
 
-# Run all backends - discovers params via SSOT, dispatches to correct containers
+# Run all engines - discovers params via SSOT, dispatches to correct containers
 test-runtime-all:
-	python scripts/runtime-test-orchestrator.py --backend all
+	python scripts/runtime-test-orchestrator.py --engine all
 
 test-runtime-quick:
-	python scripts/runtime-test-orchestrator.py --backend pytorch --quick
+	python scripts/runtime-test-orchestrator.py --engine pytorch --quick
 
 # Check Docker setup and list params without running
 test-runtime-check:
@@ -99,7 +99,7 @@ test-runtime-list:
 
 # Build missing images automatically before running
 test-runtime-docker:
-	python scripts/runtime-test-orchestrator.py --backend pytorch --build
+	python scripts/runtime-test-orchestrator.py --engine pytorch --build
 
 install:
 	uv sync
@@ -247,14 +247,14 @@ docker-builder-setup:
 docker-builder-rm:
 	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
-# Build all backends (pytorch, vllm, tensorrt) — local images
+# Build all engines (pytorch, vllm, tensorrt) — local images
 docker-build-all:
 	docker compose build pytorch vllm tensorrt
 
-# Build PyTorch backend (default, recommended for most users)
+# Build PyTorch engine (default, recommended for most users)
 docker-build-pytorch:
 	docker compose build pytorch
-# Build specific backends — local images
+# Build specific engines — local images
 docker-build-vllm:
 	docker compose build vllm
 
@@ -264,9 +264,9 @@ docker-build-tensorrt:
 # Pull versioned registry images (ghcr.io) instead of building locally
 docker-pull:
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "latest"); \
-	for backend in pytorch vllm tensorrt; do \
-		echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/$$backend:v$$version"; \
-		docker pull "ghcr.io/henrycgbaker/llenergymeasure/$$backend:v$$version"; \
+	for engine in pytorch vllm tensorrt; do \
+		echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
+		docker pull "ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
 	done
 
 # Show which images llem will use (local vs registry)

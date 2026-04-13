@@ -1,28 +1,28 @@
-# backends/ - Inference Backend Plugins
+# engines/ - Inference Engine Plugins
 
-Thin inference backend plugins implementing the `BackendPlugin` protocol. Layer 2 in the six-layer architecture.
+Thin inference engine plugins implementing the `EnginePlugin` protocol. Layer 2 in the six-layer architecture.
 
 ## Purpose
 
-Each backend owns only inference: load model, run warmup, run inference, clean up. The `MeasurementHarness` (layer 3) owns everything else: energy tracking, FLOPs estimation, CUDA sync, result assembly.
+Each engine owns only inference: load model, run warmup, run inference, clean up. The `MeasurementHarness` (layer 3) owns everything else: energy tracking, FLOPs estimation, CUDA sync, result assembly.
 
 ## Modules
 
 | Module | Description |
 |--------|-------------|
-| `protocol.py` | `BackendPlugin` protocol and `InferenceOutput` dataclass |
-| `pytorch.py` | HuggingFace Transformers backend |
-| `vllm.py` | vLLM backend (Docker-only in production) |
-| `tensorrt.py` | TensorRT-LLM backend (NGC Docker) |
+| `protocol.py` | `EnginePlugin` protocol and `InferenceOutput` dataclass |
+| `pytorch.py` | HuggingFace Transformers engine |
+| `vllm.py` | vLLM engine (Docker-only in production) |
+| `tensorrt.py` | TensorRT-LLM engine (NGC Docker) |
 | `_helpers.py` | Shared helpers (dataset loading, token counting) |
-| `__init__.py` | `get_backend(name)` factory, `detect_default_backend()` |
+| `__init__.py` | `get_engine(name)` factory, `detect_default_engine()` |
 
-## BackendPlugin protocol
+## EnginePlugin protocol
 
 ```python
-from llenergymeasure.backends.protocol import BackendPlugin, InferenceOutput
+from llenergymeasure.engines.protocol import EnginePlugin, InferenceOutput
 
-class MyBackend:
+class MyEngine:
     @property
     def name(self) -> str: ...
 
@@ -39,7 +39,7 @@ class MyBackend:
 
 ```python
 InferenceOutput(
-    elapsed_time_sec=...,  # backend-measured (overridden by harness perf_counter)
+    elapsed_time_sec=...,  # engine-measured (overridden by harness perf_counter)
     input_tokens=512,
     output_tokens=256,
     peak_memory_mb=14000.0,
@@ -49,25 +49,25 @@ InferenceOutput(
 )
 ```
 
-## Backend factory
+## Engine factory
 
 ```python
-from llenergymeasure.backends import get_backend, detect_default_backend
+from llenergymeasure.engines import get_engine, detect_default_engine
 
-backend = get_backend("pytorch")   # PyTorchBackend
-backend = get_backend("vllm")      # VLLMBackend
-backend = get_backend("tensorrt")  # TensorRTBackend
+engine = get_engine("pytorch")   # PyTorchEngine
+engine = get_engine("vllm")      # VLLMEngine
+engine = get_engine("tensorrt")  # TensorRTEngine
 
-default = detect_default_backend()  # "pytorch" if transformers installed, etc.
+default = detect_default_engine()  # "pytorch" if transformers installed, etc.
 ```
 
 Priority for auto-detection: pytorch > tensorrt > vllm.
 
 ## Installation extras
 
-Zero backend deps at base. Each backend requires an install extra:
+Zero engine deps at base. Each engine requires an install extra:
 
-| Backend | Install extra | Required package |
+| Engine | Install extra | Required package |
 |---------|--------------|-----------------|
 | `pytorch` | `pip install llenergymeasure[pytorch]` | `transformers` |
 | `vllm` | `pip install llenergymeasure[vllm]` | `vllm` |
@@ -81,6 +81,6 @@ Zero backend deps at base. Each backend requires an install extra:
 
 ## Related
 
-- See `../harness/` for the measurement lifecycle that drives these backends
+- See `../harness/` for the measurement lifecycle that drives these engines
 - See `../config/README.md` for `PyTorchConfig`, `VLLMConfig`, `TensorRTConfig`
-- See `../api/preflight.py` for backend pre-flight checks
+- See `../api/preflight.py` for engine pre-flight checks

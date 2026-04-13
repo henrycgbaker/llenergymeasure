@@ -1,8 +1,8 @@
-"""Protocol conformance tests for EnergySampler and BackendPlugin.
+"""Protocol conformance tests for EnergySampler and EnginePlugin.
 
 Tests that FakeEnergySampler satisfies the runtime_checkable EnergySampler
 Protocol interface defined in llenergymeasure.energy.base, and that the
-BackendPlugin protocol has the expected methods.
+EnginePlugin protocol has the expected methods.
 
 INF-10 compliance: no unittest.mock.patch on internal modules. Fakes are
 injected via constructor args and satisfy isinstance() checks at runtime.
@@ -10,8 +10,8 @@ injected via constructor args and satisfy isinstance() checks at runtime.
 
 from __future__ import annotations
 
-from llenergymeasure.backends.protocol import BackendPlugin
 from llenergymeasure.energy.base import EnergySampler
+from llenergymeasure.engines.protocol import EnginePlugin
 from tests.fakes import FakeEnergySampler
 
 # ---------------------------------------------------------------------------
@@ -57,17 +57,17 @@ def test_fake_energy_sampler_start_tracking_returns_handle():
 
 
 # ---------------------------------------------------------------------------
-# BackendPlugin protocol checks
+# EnginePlugin protocol checks
 # ---------------------------------------------------------------------------
 
 
-def test_backend_plugin_has_run_warmup_prompt():
-    """BackendPlugin protocol includes run_warmup_prompt method."""
-    assert "run_warmup_prompt" in dir(BackendPlugin)
+def test_engine_plugin_has_run_warmup_prompt():
+    """EnginePlugin protocol includes run_warmup_prompt method."""
+    assert "run_warmup_prompt" in dir(EnginePlugin)
 
 
-def test_backend_plugin_protocol_methods():
-    """BackendPlugin protocol has all expected methods."""
+def test_engine_plugin_protocol_methods():
+    """EnginePlugin protocol has all expected methods."""
     expected_methods = [
         "name",
         "load_model",
@@ -77,4 +77,4 @@ def test_backend_plugin_protocol_methods():
         "validate_config",
     ]
     for method in expected_methods:
-        assert method in dir(BackendPlugin), f"BackendPlugin missing: {method}"
+        assert method in dir(EnginePlugin), f"EnginePlugin missing: {method}"

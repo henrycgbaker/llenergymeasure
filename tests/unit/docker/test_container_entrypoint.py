@@ -1,7 +1,7 @@
 """Tests for the container entrypoint module.
 
 All tests run without GPU hardware or real Docker containers.
-Backend execution is replaced via unittest.mock.patch targeting
+Engine execution is replaced via unittest.mock.patch targeting
 the source modules (since container_entrypoint uses lazy local imports).
 """
 
@@ -19,7 +19,7 @@ from tests.conftest import make_config, make_result
 # Patch targets: patch the source modules, not container_entrypoint references,
 # because container_entrypoint imports these inside function scope.
 _PATCH_PREFLIGHT = "llenergymeasure.harness.preflight.run_preflight"
-_PATCH_GET_BACKEND = "llenergymeasure.backends.get_backend"
+_PATCH_GET_ENGINE = "llenergymeasure.engines.get_engine"
 _PATCH_HARNESS_RUN = "llenergymeasure.harness.MeasurementHarness.run"
 
 
@@ -31,7 +31,7 @@ _PATCH_HARNESS_RUN = "llenergymeasure.harness.MeasurementHarness.run"
 @pytest.fixture
 def config(tmp_path: Path):
     """A minimal ExperimentConfig serialised to a JSON file."""
-    cfg = make_config(model="gpt2", backend="pytorch")
+    cfg = make_config(model="gpt2", engine="pytorch")
     config_json = tmp_path / "abc123_config.json"
     config_json.write_text(cfg.model_dump_json(), encoding="utf-8")
     return cfg, config_json
@@ -58,11 +58,11 @@ class TestRunContainerExperiment:
 
         with (
             patch(_PATCH_PREFLIGHT) as mock_preflight,
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
             mock_preflight.return_value = None
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             from llenergymeasure.entrypoints.container import run_container_experiment
 
@@ -79,32 +79,32 @@ class TestRunContainerExperiment:
         data = json.loads(result_path.read_text())
         assert "experiment_id" in data
 
-    def test_calls_preflight_before_backend(self, config, result_dir: Path):
+    def test_calls_preflight_before_engine(self, config, result_dir: Path):
         _cfg, config_path = config
         fake_result = make_result()
         call_order = []
 
         with (
             patch(_PATCH_PREFLIGHT) as mock_preflight,
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
 
             def track_preflight(c):
                 call_order.append("preflight")
 
-            def track_get_backend(name):
-                call_order.append("get_backend")
+            def track_get_engine(name):
+                call_order.append("get_engine")
                 return MagicMock()
 
             mock_preflight.side_effect = track_preflight
-            mock_get_backend.side_effect = track_get_backend
+            mock_get_engine.side_effect = track_get_engine
 
             from llenergymeasure.entrypoints.container import run_container_experiment
 
             run_container_experiment(config_path, result_dir)
 
-        assert call_order == ["preflight", "get_backend"]
+        assert call_order == ["preflight", "get_engine"]
 
     def test_result_dir_created_if_missing(self, config, tmp_path: Path):
         _cfg, config_path = config
@@ -113,10 +113,10 @@ class TestRunContainerExperiment:
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             from llenergymeasure.entrypoints.container import run_container_experiment
 
@@ -125,15 +125,15 @@ class TestRunContainerExperiment:
         assert new_result_dir.exists()
         assert result_path.exists()
 
-    def test_backend_failure_propagates(self, config, result_dir: Path):
+    def test_engine_failure_propagates(self, config, result_dir: Path):
         _cfg, config_path = config
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, side_effect=RuntimeError("GPU exploded")),
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             from llenergymeasure.entrypoints.container import run_container_experiment
 
@@ -148,7 +148,7 @@ class TestRunContainerExperiment:
 
 class TestMainErrorHandling:
     def test_main_writes_error_json_on_failure(self, tmp_path: Path, monkeypatch):
-        cfg = make_config(model="gpt2", backend="pytorch")
+        cfg = make_config(model="gpt2", engine="pytorch")
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
 
@@ -156,10 +156,10 @@ class TestMainErrorHandling:
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, side_effect=ValueError("model not found")),
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             from llenergymeasure.entrypoints.container import main
 
@@ -185,10 +185,10 @@ class TestMainErrorHandling:
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result),
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             from llenergymeasure.entrypoints.container import main
 
@@ -214,10 +214,10 @@ class TestMainErrorHandling:
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, side_effect=Exception("boom")),
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             from llenergymeasure.entrypoints.container import main
 
@@ -254,12 +254,12 @@ class TestContainerBaselineLoading:
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
             patch(_PATCH_LOAD_BASELINE, return_value=fake_baseline) as mock_load,
             patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             # Make the baseline cache path report as existing
             mock_cache_path = MagicMock()
@@ -289,11 +289,11 @@ class TestContainerBaselineLoading:
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
             patch(_PATCH_LOAD_BASELINE) as mock_load,
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
 
             from llenergymeasure.entrypoints.container import run_container_experiment
 
@@ -306,19 +306,19 @@ class TestContainerBaselineLoading:
 
     def test_no_baseline_when_disabled(self, tmp_path: Path, result_dir: Path):
         """Baseline not loaded even if cache exists when baseline.enabled=False."""
-        cfg = make_config(model="gpt2", backend="pytorch", baseline={"enabled": False})
+        cfg = make_config(model="gpt2", engine="pytorch", baseline={"enabled": False})
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
         fake_result = make_result()
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
             patch(_PATCH_LOAD_BASELINE) as mock_load,
             patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
             mock_cache_path = MagicMock()
             mock_cache_path.exists.return_value = True
 
@@ -341,7 +341,7 @@ class TestContainerBaselineLoading:
         """load_baseline_cache is called with the config's cache_ttl_seconds."""
         cfg = make_config(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             baseline={"enabled": True, "cache_ttl_seconds": 900.0},
         )
         config_path = tmp_path / "abc123_config.json"
@@ -350,12 +350,12 @@ class TestContainerBaselineLoading:
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result),
             patch(_PATCH_LOAD_BASELINE, return_value=MagicMock()) as mock_load,
             patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
             mock_cache_path = MagicMock()
             mock_cache_path.exists.return_value = True
 
@@ -376,19 +376,19 @@ class TestContainerBaselineLoading:
 
     def test_expired_cache_passes_none_baseline(self, tmp_path: Path, result_dir: Path):
         """When disk cache is expired (load returns None), baseline=None."""
-        cfg = make_config(model="gpt2", backend="pytorch")
+        cfg = make_config(model="gpt2", engine="pytorch")
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
         fake_result = make_result()
 
         with (
             patch(_PATCH_PREFLIGHT),
-            patch(_PATCH_GET_BACKEND) as mock_get_backend,
+            patch(_PATCH_GET_ENGINE) as mock_get_engine,
             patch(_PATCH_HARNESS_RUN, return_value=fake_result) as mock_run,
             patch(_PATCH_LOAD_BASELINE, return_value=None),
             patch("llenergymeasure.entrypoints.container.Path") as mock_path_cls,
         ):
-            mock_get_backend.return_value = MagicMock()
+            mock_get_engine.return_value = MagicMock()
             mock_cache_path = MagicMock()
             mock_cache_path.exists.return_value = True
 

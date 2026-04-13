@@ -1,18 +1,18 @@
-"""Unit tests for VLLMBackend.
+"""Unit tests for VLLMEngine.
 
 All tests run without GPU hardware and without vLLM installed.
-vLLM imports inside VLLMBackend methods are lazy — the module is importable on
+vLLM imports inside VLLMEngine methods are lazy — the module is importable on
 any host. Tests that exercise SamplingParams construction pass a mock class so
 no real vLLM import occurs.
 
 Coverage:
-  - Protocol compliance and get_backend() registration
+  - Protocol compliance and get_engine() registration
   - Precision mapping (fp32/fp16/bf16 → float32/float16/bfloat16)
   - _build_llm_kwargs: minimal defaults + all VLLMConfig fields + None omission
   - _build_sampling_params: greedy, sampling, top_k sentinel mapping
   - No streaming code (CM-07 structurally resolved)
   - --shm-size 8g present in DockerRunner._build_docker_cmd (VLLM-03)
-  - Prompt loading (covered by tests/unit/test_datasets.py; harness passes prompts to backends)
+  - Prompt loading (covered by tests/unit/test_datasets.py; harness passes prompts to engines)
 """
 
 from __future__ import annotations
@@ -21,8 +21,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from llenergymeasure.backends.vllm import VLLMBackend
-from llenergymeasure.config.backend_configs import (
+from llenergymeasure.config.engine_configs import (
     VLLMAttentionConfig,
     VLLMBeamSearchConfig,
     VLLMConfig,
@@ -30,14 +29,15 @@ from llenergymeasure.config.backend_configs import (
     VLLMSamplingConfig,
 )
 from llenergymeasure.config.models import DecoderConfig
-from llenergymeasure.utils.exceptions import BackendError
+from llenergymeasure.engines.vllm import VLLMEngine
+from llenergymeasure.utils.exceptions import EngineError
 from tests.conftest import make_config
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
-_VLLM_DEFAULTS = {"model": "test-model", "backend": "vllm"}
+_VLLM_DEFAULTS = {"model": "test-model", "engine": "vllm"}
 
 
 @dataclass
@@ -82,39 +82,39 @@ class _FakeBeamSearchParams:
 
 
 class TestProtocolCompliance:
-    def test_vllm_backend_name(self):
-        """VLLMBackend.name returns 'vllm'."""
-        backend = VLLMBackend()
-        assert backend.name == "vllm"
+    def test_vllm_engine_name(self):
+        """VLLMEngine.name returns 'vllm'."""
+        engine = VLLMEngine()
+        assert engine.name == "vllm"
 
-    def test_vllm_backend_satisfies_plugin_protocol(self):
-        """VLLMBackend satisfies the runtime_checkable BackendPlugin protocol."""
-        from llenergymeasure.backends.protocol import BackendPlugin
+    def test_vllm_engine_satisfies_plugin_protocol(self):
+        """VLLMEngine satisfies the runtime_checkable EnginePlugin protocol."""
+        from llenergymeasure.engines.protocol import EnginePlugin
 
-        backend = VLLMBackend()
-        assert isinstance(backend, BackendPlugin)
+        engine = VLLMEngine()
+        assert isinstance(engine, EnginePlugin)
 
-    def test_get_backend_returns_vllm_instance(self):
-        """get_backend('vllm') returns a VLLMBackend with name 'vllm'."""
-        from llenergymeasure.backends import get_backend
+    def test_get_engine_returns_vllm_instance(self):
+        """get_engine('vllm') returns a VLLMEngine with name 'vllm'."""
+        from llenergymeasure.engines import get_engine
 
-        backend = get_backend("vllm")
-        assert backend.name == "vllm"
-        assert isinstance(backend, VLLMBackend)
+        engine = get_engine("vllm")
+        assert engine.name == "vllm"
+        assert isinstance(engine, VLLMEngine)
 
-    def test_get_backend_unknown_mentions_vllm_in_error(self):
-        """get_backend('unknown') error message lists vllm as available."""
-        from llenergymeasure.backends import get_backend
+    def test_get_engine_unknown_mentions_vllm_in_error(self):
+        """get_engine('unknown') error message lists vllm as available."""
+        from llenergymeasure.engines import get_engine
 
-        with pytest.raises(BackendError, match="vllm"):
-            get_backend("unknown")
+        with pytest.raises(EngineError, match="vllm"):
+            get_engine("unknown")
 
-    def test_get_backend_unknown_raises_backend_error(self):
-        """get_backend with unknown name raises BackendError (not KeyError, etc.)."""
-        from llenergymeasure.backends import get_backend
+    def test_get_engine_unknown_raises_engine_error(self):
+        """get_engine with unknown name raises EngineError (not KeyError, etc.)."""
+        from llenergymeasure.engines import get_engine
 
-        with pytest.raises(BackendError, match="Unknown backend"):
-            get_backend("does_not_exist")
+        with pytest.raises(EngineError, match="Unknown engine"):
+            get_engine("does_not_exist")
 
 
 # =============================================================================
@@ -126,8 +126,8 @@ class TestBuildLlmKwargs:
     def test_minimal_config_has_required_keys(self):
         """With no VLLMConfig, kwargs contains model, dtype, trust_remote_code, seed."""
         config = make_config(**_VLLM_DEFAULTS)
-        backend = VLLMBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = VLLMEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["model"] == "test-model"
         assert kwargs["trust_remote_code"] is True
@@ -137,8 +137,8 @@ class TestBuildLlmKwargs:
     def test_minimal_config_dtype_passthrough(self):
         """Default dtype (bfloat16) passes through in kwargs."""
         config = make_config(**_VLLM_DEFAULTS)
-        backend = VLLMBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = VLLMEngine()
+        kwargs = engine._build_llm_kwargs(config)
         assert kwargs["dtype"] == "bfloat16"
 
     def test_vllm_config_fields_applied_when_not_none(self):
@@ -153,8 +153,8 @@ class TestBuildLlmKwargs:
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        backend = VLLMBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = VLLMEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["tensor_parallel_size"] == 2
         assert kwargs["gpu_memory_utilization"] == 0.85
@@ -163,11 +163,11 @@ class TestBuildLlmKwargs:
         assert kwargs["quantization"] == "awq"
 
     def test_none_vllm_config_fields_are_omitted(self):
-        """None VLLMEngineConfig fields are NOT added to kwargs — backend uses its own default."""
+        """None VLLMEngineConfig fields are NOT added to kwargs — engine uses its own default."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(tensor_parallel_size=2))  # only TP set
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        backend = VLLMBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = VLLMEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["tensor_parallel_size"] == 2
         assert "gpu_memory_utilization" not in kwargs
@@ -178,53 +178,53 @@ class TestBuildLlmKwargs:
     def test_no_vllm_section_produces_no_extra_keys(self):
         """When config.vllm is None, only the 4 base keys are present."""
         config = make_config(**_VLLM_DEFAULTS)  # vllm=None by default
-        backend = VLLMBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = VLLMEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert set(kwargs.keys()) == {"model", "dtype", "trust_remote_code", "seed"}
 
     def test_dtype_float32_in_kwargs(self):
         """dtype='float32' passes through to vLLM."""
         config = make_config(**_VLLM_DEFAULTS, dtype="float32")
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "float32"
 
     def test_dtype_float16_in_kwargs(self):
         """dtype='float16' passes through to vLLM."""
         config = make_config(**_VLLM_DEFAULTS, dtype="float16")
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "float16"
 
     def test_dtype_bfloat16_in_kwargs(self):
         """dtype='bfloat16' passes through to vLLM."""
         config = make_config(**_VLLM_DEFAULTS, dtype="bfloat16")
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "bfloat16"
 
     def test_seed_from_config_random_seed(self):
         """kwargs['seed'] matches config.random_seed."""
         config = make_config(**_VLLM_DEFAULTS, random_seed=1337)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["seed"] == 1337
 
     def test_model_name_propagated(self):
         """kwargs['model'] matches config.model."""
         config = make_config(**{**_VLLM_DEFAULTS, "model": "meta-llama/Llama-3.1-8B"})
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["model"] == "meta-llama/Llama-3.1-8B"
 
     def test_quantization_gptq(self):
         """VLLMEngineConfig.quantization='gptq' is forwarded correctly."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(quantization="gptq"))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["quantization"] == "gptq"
 
     def test_quantization_fp8(self):
         """VLLMEngineConfig.quantization='fp8' is forwarded correctly."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(quantization="fp8"))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["quantization"] == "fp8"
 
 
@@ -238,7 +238,7 @@ class TestBuildSamplingParams:
         """temperature=0.0 triggers greedy mode: temperature=0.0, only max_tokens set."""
         decoder = DecoderConfig(temperature=0.0, do_sample=False)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder, max_output_tokens=64)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == 0.0
         assert params._kwargs["max_tokens"] == 64
@@ -250,7 +250,7 @@ class TestBuildSamplingParams:
         """do_sample=False overrides temperature to produce greedy mode."""
         decoder = DecoderConfig(temperature=0.8, do_sample=False)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == 0.0
 
@@ -258,7 +258,7 @@ class TestBuildSamplingParams:
         """Non-zero temperature with do_sample=True sets temperature in kwargs."""
         decoder = DecoderConfig(temperature=0.7, do_sample=True)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == pytest.approx(0.7)
 
@@ -266,7 +266,7 @@ class TestBuildSamplingParams:
         """top_p from DecoderConfig propagates to SamplingParams kwargs."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, top_p=0.9)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_p"] == pytest.approx(0.9)
 
@@ -274,7 +274,7 @@ class TestBuildSamplingParams:
         """Our top_k=0 (disabled) maps to vLLM's top_k=-1 (disabled sentinel)."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, top_k=0)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_k"] == -1
 
@@ -282,7 +282,7 @@ class TestBuildSamplingParams:
         """Non-zero top_k passes through unchanged."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, top_k=40)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_k"] == 40
 
@@ -290,7 +290,7 @@ class TestBuildSamplingParams:
         """repetition_penalty from DecoderConfig is forwarded."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, repetition_penalty=1.1)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["repetition_penalty"] == pytest.approx(1.1)
 
@@ -298,7 +298,7 @@ class TestBuildSamplingParams:
         """max_tokens kwarg matches config.max_output_tokens."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder, max_output_tokens=256)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["max_tokens"] == 256
 
@@ -306,7 +306,7 @@ class TestBuildSamplingParams:
         """min_p is added to kwargs when provided in DecoderConfig."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.05)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert "min_p" in params._kwargs
         assert params._kwargs["min_p"] == pytest.approx(0.05)
@@ -315,7 +315,7 @@ class TestBuildSamplingParams:
         """min_p is NOT in kwargs when DecoderConfig.min_p is None."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=None)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert "min_p" not in params._kwargs
 
@@ -327,16 +327,16 @@ class TestBuildSamplingParams:
 
 class TestNoStreamingCode:
     def test_no_run_streaming_method(self):
-        """VLLMBackend has no _run_streaming method — offline batch path only (CM-07)."""
-        assert not hasattr(VLLMBackend, "_run_streaming"), (
-            "VLLMBackend must not have a _run_streaming method — streaming is resolved "
+        """VLLMEngine has no _run_streaming method — offline batch path only (CM-07)."""
+        assert not hasattr(VLLMEngine, "_run_streaming"), (
+            "VLLMEngine must not have a _run_streaming method — streaming is resolved "
             "structurally by using offline batch inference exclusively"
         )
 
     def test_no_async_engine_attribute(self):
-        """VLLMBackend has no async_engine attribute — no streaming engine (CM-07)."""
-        assert not hasattr(VLLMBackend, "async_engine"), (
-            "VLLMBackend must not have an async_engine attribute — offline batch only"
+        """VLLMEngine has no async_engine attribute — no streaming engine (CM-07)."""
+        assert not hasattr(VLLMEngine, "async_engine"), (
+            "VLLMEngine must not have an async_engine attribute — offline batch only"
         )
 
 
@@ -351,7 +351,7 @@ class TestShmSizeInDockerRunner:
         from unittest.mock import MagicMock
 
         config = MagicMock()
-        config.backend = "vllm"
+        config.engine = "vllm"
         config.tensorrt = None
         return config
 
@@ -396,14 +396,14 @@ class TestEngineConfigFields:
         """enforce_eager=True in VLLMEngineConfig → kwargs['enforce_eager'] is True."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(enforce_eager=True))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["enforce_eager"] is True
 
     def test_block_size_wires_to_kwargs(self):
         """block_size=16 in VLLMEngineConfig → kwargs['block_size'] == 16."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(block_size=16))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["block_size"] == 16
 
     def test_speculative_model_produces_speculative_config_dict(self):
@@ -412,7 +412,7 @@ class TestEngineConfigFields:
             engine=VLLMEngineConfig(speculative_model="draft-model", num_speculative_tokens=5)
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert "speculative_model" not in kwargs
         assert kwargs["speculative_config"] == {
             "model": "draft-model",
@@ -440,7 +440,7 @@ class TestEngineConfigFields:
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["gpu_memory_utilization"] == 0.9
         assert kwargs["swap_space"] == 4.0
         assert kwargs["cpu_offload_gb"] == 2.0
@@ -467,35 +467,35 @@ class TestSamplingConfigOverrides:
         """VLLMSamplingConfig.max_tokens overrides ExperimentConfig.max_output_tokens."""
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(max_tokens=256))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg, max_output_tokens=128)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["max_tokens"] == 256  # override wins
 
     def test_sampling_presence_penalty_applied(self):
         """VLLMSamplingConfig.presence_penalty appears in SamplingParams kwargs."""
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(presence_penalty=0.5))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["presence_penalty"] == pytest.approx(0.5)
 
     def test_sampling_frequency_penalty_applied(self):
         """VLLMSamplingConfig.frequency_penalty appears in SamplingParams kwargs."""
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(frequency_penalty=0.3))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["frequency_penalty"] == pytest.approx(0.3)
 
     def test_sampling_min_tokens_applied(self):
         """VLLMSamplingConfig.min_tokens appears in SamplingParams kwargs."""
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(min_tokens=10))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["min_tokens"] == 10
 
     def test_sampling_ignore_eos_applied(self):
         """VLLMSamplingConfig.ignore_eos=True appears in SamplingParams kwargs."""
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(ignore_eos=True))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["ignore_eos"] is True
 
     def test_sampling_overrides_applied_to_greedy_path(self):
@@ -505,7 +505,7 @@ class TestSamplingConfigOverrides:
         config = make_config(
             **_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg, max_output_tokens=128
         )
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["temperature"] == 0.0
         assert params._kwargs["max_tokens"] == 512  # override wins on greedy path
 
@@ -514,7 +514,7 @@ class TestSamplingConfigOverrides:
         config = make_config(**_VLLM_DEFAULTS)  # vllm=None by default
         decoder = DecoderConfig(temperature=1.0, do_sample=True)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert "presence_penalty" not in params._kwargs
         assert "frequency_penalty" not in params._kwargs
         assert "ignore_eos" not in params._kwargs
@@ -530,43 +530,43 @@ class TestNewEngineFields:
         """disable_custom_all_reduce=True -> kwargs['disable_custom_all_reduce'] is True."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(disable_custom_all_reduce=True))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["disable_custom_all_reduce"] is True
 
     def test_kv_cache_memory_bytes_wired(self):
         """kv_cache_memory_bytes=2**30 -> kwargs['kv_cache_memory_bytes'] == 2**30."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(kv_cache_memory_bytes=2**30))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["kv_cache_memory_bytes"] == 2**30
 
     def test_offload_params_list_to_set_conversion(self):
         """offload_params=['weight', 'bias'] -> kwargs['offload_params'] == {'weight', 'bias'}."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(offload_params=["weight", "bias"]))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["offload_params"] == {"weight", "bias"}
 
     def test_offload_group_size_wired(self):
         """offload_group_size=4 -> kwargs['offload_group_size'] == 4."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(offload_group_size=4))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["offload_group_size"] == 4
 
     def test_compilation_config_dict_passthrough(self):
         """compilation_config dict passes through as-is to kwargs."""
-        comp = {"mode": "default", "backend": "inductor"}
+        comp = {"mode": "default", "engine": "inductor"}
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig(compilation_config=comp))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
-        assert kwargs["compilation_config"] == {"mode": "default", "backend": "inductor"}
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
+        assert kwargs["compilation_config"] == {"mode": "default", "engine": "inductor"}
 
     def test_none_new_fields_omitted(self):
         """When new fields are None, they are NOT in kwargs."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig())
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         for key in [
             "disable_custom_all_reduce",
             "kv_cache_memory_bytes",
@@ -589,7 +589,7 @@ class TestAttentionConfigWiring:
             engine=VLLMEngineConfig(attention=VLLMAttentionConfig(backend="flash_attn"))
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["attention_backend"] == "flash_attn"
 
     def test_attention_boolean_fields_wired(self):
@@ -603,7 +603,7 @@ class TestAttentionConfigWiring:
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["use_cudnn_prefill"] is True
         assert kwargs["disable_flashinfer_prefill"] is True
 
@@ -615,14 +615,14 @@ class TestAttentionConfigWiring:
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["future_attn_opt"] == 42
 
     def test_no_attention_config_no_attention_keys(self):
         """When engine.attention is None, no attention-related keys in kwargs."""
         vllm_cfg = VLLMConfig(engine=VLLMEngineConfig())
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert "attention_backend" not in kwargs
         assert "use_cudnn_prefill" not in kwargs
 
@@ -639,7 +639,7 @@ class TestPassthroughKwargs:
             engine=VLLMEngineConfig(**{"gpu_memory_utilization": 0.9, "some_future_param": "value"})
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["some_future_param"] == "value"
         assert kwargs["gpu_memory_utilization"] == 0.9  # explicit still works
 
@@ -647,14 +647,14 @@ class TestPassthroughKwargs:
         """Unknown sampling fields pass through to SamplingParams kwargs."""
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(**{"some_future_sampling_param": True}))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["some_future_sampling_param"] is True
 
     def test_sampling_n_field_forwarded(self):
         """VLLMSamplingConfig.n=4 -> kwargs['n'] == 4."""
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(n=4))
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["n"] == 4
 
     def test_engine_extra_overrides_explicit_when_colliding(self):
@@ -664,7 +664,7 @@ class TestPassthroughKwargs:
             engine=VLLMEngineConfig(**{"enforce_eager": True, "enforce_eager_override": "test"})
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["enforce_eager"] is True  # from explicit field
         assert kwargs["enforce_eager_override"] == "test"  # from model_extra
 
@@ -730,29 +730,29 @@ class TestMinNewTokensMapping:
         """decoder.min_new_tokens=5 flows through to kwargs['min_tokens']=5 (sampling path)."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=5)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs.get("min_tokens") == 5
 
     def test_min_new_tokens_maps_to_min_tokens_greedy(self):
         """decoder.min_new_tokens=3 flows through to kwargs['min_tokens']=3 (greedy path)."""
         decoder = DecoderConfig(temperature=0.0, do_sample=False, min_new_tokens=3)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs.get("min_tokens") == 3
 
     def test_min_new_tokens_absent_when_none(self):
         """When decoder.min_new_tokens is None, min_tokens is NOT in kwargs."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=None)
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert "min_tokens" not in params._kwargs
 
     def test_vllm_sampling_min_tokens_overrides_decoder_min_new_tokens(self):
-        """vllm.sampling.min_tokens=10 overrides decoder.min_new_tokens=5 (backend-specific wins)."""
+        """vllm.sampling.min_tokens=10 overrides decoder.min_new_tokens=5 (engine-specific wins)."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=5)
         vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(min_tokens=10))
         config = make_config(**_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg)
-        params = VLLMBackend._build_sampling_params(config, _FakeSamplingParams)
+        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs.get("min_tokens") == 10
 
 
@@ -852,9 +852,9 @@ class TestVramCurrentDevice:
         """
         import inspect
 
-        import llenergymeasure.backends.vllm as vllm_mod
+        import llenergymeasure.engines.vllm as vllm_mod
 
-        source = inspect.getsource(vllm_mod.VLLMBackend.run_inference)
+        source = inspect.getsource(vllm_mod.VLLMEngine.run_inference)
         assert "current_device()" in source, (
             "run_inference must call torch.cuda.current_device() for VRAM query, not hardcode 0"
         )
@@ -877,7 +877,7 @@ class TestFlashAttnFieldsWired:
             engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=3))
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_version"] == 3
 
     def test_flash_attn_max_num_splits_wired(self):
@@ -888,7 +888,7 @@ class TestFlashAttnFieldsWired:
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 8
 
     def test_flash_attn_version_none_omitted(self):
@@ -897,7 +897,7 @@ class TestFlashAttnFieldsWired:
             engine=VLLMEngineConfig(attention=VLLMAttentionConfig(flash_attn_version=None))
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert "flash_attn_version" not in kwargs
 
     def test_flash_attn_max_splits_none_omitted(self):
@@ -908,7 +908,7 @@ class TestFlashAttnFieldsWired:
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert "flash_attn_max_num_splits_for_cuda_graph" not in kwargs
 
     def test_both_flash_attn_fields_together(self):
@@ -922,7 +922,7 @@ class TestFlashAttnFieldsWired:
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
-        kwargs = VLLMBackend()._build_llm_kwargs(config)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_version"] == 2
         assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 16
 
@@ -947,7 +947,7 @@ class TestBeamSearchMinP:
         monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
 
         beam_cfg = config.vllm.beam_search
-        return VLLMBackend._build_beam_search_params(config, beam_cfg)
+        return VLLMEngine._build_beam_search_params(config, beam_cfg)
 
     def test_min_p_forwarded_to_beam_search_params(self, monkeypatch):
         """min_p=0.05 from DecoderConfig appears in BeamSearchParams kwargs."""

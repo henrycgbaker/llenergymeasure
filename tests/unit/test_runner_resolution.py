@@ -4,7 +4,7 @@ Tests cover:
   - parse_runner_value: "local", "docker", "docker:image" forms
   - is_docker_available: PATH inspection for docker + NVIDIA CT tools
   - resolve_runner: full precedence chain (env > yaml > user_config > auto > default)
-  - resolve_study_runners: multi-backend resolution
+  - resolve_study_runners: multi-engine resolution
 """
 
 from __future__ import annotations
@@ -181,8 +181,8 @@ class TestResolveRunner:
         assert spec.mode == "docker"
         assert spec.image == "ghcr.io/myorg/vllm:latest"
 
-    def test_yaml_runners_missing_backend_falls_through(self):
-        """If backend not in yaml_runners, falls through to lower layers."""
+    def test_yaml_runners_missing_engine_falls_through(self):
+        """If engine not in yaml_runners, falls through to lower layers."""
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
@@ -330,8 +330,8 @@ class TestResolveRunner:
 
 
 class TestResolveStudyRunners:
-    def test_resolves_each_backend(self):
-        """resolve_study_runners returns spec for each backend."""
+    def test_resolves_each_engine(self):
+        """resolve_study_runners returns spec for each engine."""
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
@@ -341,8 +341,8 @@ class TestResolveStudyRunners:
         assert set(result.keys()) == {"pytorch", "vllm"}
         assert all(isinstance(v, RunnerSpec) for v in result.values())
 
-    def test_yaml_runners_applied_per_backend(self):
-        """yaml_runners are applied to each backend correctly."""
+    def test_yaml_runners_applied_per_engine(self):
+        """yaml_runners are applied to each engine correctly."""
         yaml_runners = {"pytorch": "local", "vllm": "docker:myimg"}
 
         with patch(
@@ -356,11 +356,11 @@ class TestResolveStudyRunners:
         assert result["vllm"].mode == "docker"
         assert result["vllm"].image == "myimg"
 
-    def test_empty_backends_list_returns_empty_dict(self):
+    def test_empty_engines_list_returns_empty_dict(self):
         result = resolve_study_runners([])
         assert result == {}
 
-    def test_single_backend(self):
+    def test_single_engine(self):
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
@@ -370,11 +370,11 @@ class TestResolveStudyRunners:
         assert "tensorrt" in result
         assert result["tensorrt"].source == "auto_detected"
 
-    def test_mixed_auto_and_explicit_per_backend(self):
-        """Study with one backend explicitly set and another using auto-detection.
+    def test_mixed_auto_and_explicit_per_engine(self):
+        """Study with one engine explicitly set and another using auto-detection.
 
         Simulates a researcher who forces pytorch=local but lets vllm auto-detect
-        to Docker. Each backend resolves independently through the precedence chain.
+        to Docker. Each engine resolves independently through the precedence chain.
         """
         user_config = UserRunnersConfig(pytorch="local", vllm="auto", tensorrt="auto")
 

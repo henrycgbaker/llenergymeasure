@@ -1,6 +1,6 @@
 """Unit tests for ExperimentConfig Pydantic validation.
 
-Tests v2.0 field renames, extra=forbid, backend composition, cross-validators,
+Tests v2.0 field renames, extra=forbid, engine composition, cross-validators,
 and schema-driven dtype validation using SSOT constants.
 """
 
@@ -19,16 +19,16 @@ from tests.conftest import make_config
 
 
 def test_minimal_valid_config():
-    """ExperimentConfig(model='gpt2', backend='pytorch') succeeds."""
-    config = ExperimentConfig(model="gpt2", backend="pytorch")
+    """ExperimentConfig(model='gpt2', engine='pytorch') succeeds."""
+    config = ExperimentConfig(model="gpt2", engine="pytorch")
     assert config.model == "gpt2"
-    assert config.backend == "pytorch"
+    assert config.engine == "pytorch"
 
 
 def test_model_only_uses_pytorch_default():
-    """ExperimentConfig with only model= uses backend='pytorch' default."""
+    """ExperimentConfig with only model= uses engine='pytorch' default."""
     config = ExperimentConfig(model="gpt2")
-    assert config.backend == "pytorch"
+    assert config.engine == "pytorch"
 
 
 # ---------------------------------------------------------------------------
@@ -39,13 +39,13 @@ def test_model_only_uses_pytorch_default():
 def test_extra_fields_forbidden():
     """Unknown top-level fields are rejected with ValidationError (extra='forbid')."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", backend="pytorch", unknown_field="x")
+        ExperimentConfig(model="gpt2", engine="pytorch", unknown_field="x")
 
 
 def test_multiple_extra_fields_all_rejected():
     """Multiple unknown fields are all rejected."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", backend="pytorch", foo="a", bar="b")
+        ExperimentConfig(model="gpt2", engine="pytorch", foo="a", bar="b")
 
 
 # ---------------------------------------------------------------------------
@@ -86,44 +86,44 @@ def test_v1x_field_fp_precision_rejected():
 
 
 # ---------------------------------------------------------------------------
-# Backend validation
+# Engine validation
 # ---------------------------------------------------------------------------
 
 
-def test_invalid_backend_raises_validation_error():
-    """Unknown backend value raises ValidationError."""
+def test_invalid_engine_raises_validation_error():
+    """Unknown engine value raises ValidationError."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", backend="invalid_backend")
+        ExperimentConfig(model="gpt2", engine="invalid_backend")
 
 
-def test_default_backend_is_pytorch():
-    """Default backend is 'pytorch' when not specified."""
+def test_default_engine_is_pytorch():
+    """Default engine is 'pytorch' when not specified."""
     config = ExperimentConfig(model="gpt2")
-    assert config.backend == "pytorch"
+    assert config.engine == "pytorch"
 
 
-def test_vllm_backend_accepted():
-    """backend='vllm' is accepted."""
-    config = ExperimentConfig(model="gpt2", backend="vllm")
-    assert config.backend == "vllm"
+def test_vllm_engine_accepted():
+    """engine='vllm' is accepted."""
+    config = ExperimentConfig(model="gpt2", engine="vllm")
+    assert config.engine == "vllm"
 
 
-def test_tensorrt_backend_accepted():
-    """backend='tensorrt' is accepted."""
-    config = ExperimentConfig(model="gpt2", backend="tensorrt")
-    assert config.backend == "tensorrt"
+def test_tensorrt_engine_accepted():
+    """engine='tensorrt' is accepted."""
+    config = ExperimentConfig(model="gpt2", engine="tensorrt")
+    assert config.engine == "tensorrt"
 
 
 # ---------------------------------------------------------------------------
-# Backend section composition
+# Engine section composition
 # ---------------------------------------------------------------------------
 
 
 def test_pytorch_config_section_composition():
-    """config with pytorch={batch_size: 4} backend section is accepted."""
+    """config with pytorch={batch_size: 4} engine section is accepted."""
     config = ExperimentConfig(
         model="gpt2",
-        backend="pytorch",
+        engine="pytorch",
         pytorch={"batch_size": 4},
     )
     assert config.pytorch is not None
@@ -137,7 +137,7 @@ def test_pytorch_config_section_composition():
 
 def test_pytorch_config_has_no_num_processes_field():
     """PyTorchConfig does not have a num_processes field (removed in M3 audit)."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     assert "num_processes" not in PyTorchConfig.model_fields
 
@@ -149,7 +149,7 @@ def test_pytorch_config_num_processes_not_a_declared_field():
     num_processes as an extra kwarg does not raise a ValidationError, but it
     is NOT a typed model field and will not be type-checked or validated.
     """
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     # Verify it is absent from the declared model fields
     assert "num_processes" not in PyTorchConfig.model_fields
@@ -159,32 +159,32 @@ def test_pytorch_config_num_processes_not_a_declared_field():
     assert "num_processes" not in type(config).model_fields
 
 
-def test_pytorch_section_with_wrong_backend_rejected():
-    """pytorch: section with backend='vllm' raises ValidationError (cross-validator)."""
-    with pytest.raises(ValidationError, match=r"pytorch.*config section provided.*backend"):
+def test_pytorch_section_with_wrong_engine_rejected():
+    """pytorch: section with engine='vllm' raises ValidationError (cross-validator)."""
+    with pytest.raises(ValidationError, match=r"pytorch.*config section provided.*engine"):
         ExperimentConfig(
             model="gpt2",
-            backend="vllm",
+            engine="vllm",
             pytorch={"batch_size": 4},
         )
 
 
-def test_vllm_section_with_pytorch_backend_rejected():
-    """vllm: section with backend='pytorch' raises ValidationError (cross-validator)."""
-    with pytest.raises(ValidationError, match=r"vllm.*config section provided.*backend"):
+def test_vllm_section_with_pytorch_engine_rejected():
+    """vllm: section with engine='pytorch' raises ValidationError (cross-validator)."""
+    with pytest.raises(ValidationError, match=r"vllm.*config section provided.*engine"):
         ExperimentConfig(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             vllm={"engine": {"max_num_seqs": 16}},
         )
 
 
-def test_tensorrt_section_with_wrong_backend_rejected():
-    """tensorrt: section with backend='pytorch' raises ValidationError."""
-    with pytest.raises(ValidationError, match=r"tensorrt.*config section provided.*backend"):
+def test_tensorrt_section_with_wrong_engine_rejected():
+    """tensorrt: section with engine='pytorch' raises ValidationError."""
+    with pytest.raises(ValidationError, match=r"tensorrt.*config section provided.*engine"):
         ExperimentConfig(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             tensorrt={"max_batch_size": 8},
         )
 
@@ -259,7 +259,7 @@ def test_make_config_helper_returns_valid_config():
     config = make_config()
     assert isinstance(config, ExperimentConfig)
     assert config.model == "gpt2"
-    assert config.backend == "pytorch"
+    assert config.engine == "pytorch"
 
 
 def test_make_config_override():
@@ -286,14 +286,14 @@ def test_energy_sampler_null_disables() -> None:
     assert cfg.energy_sampler is None
 
 
-def test_energy_sampler_valid_backends() -> None:
+def test_energy_sampler_valid_engines() -> None:
     """All energy_sampler literal values are accepted."""
-    for backend in ("auto", "nvml", "zeus", "codecarbon"):
-        cfg = ExperimentConfig(model="gpt2", energy_sampler=backend)
-        assert cfg.energy_sampler == backend
+    for engine in ("auto", "nvml", "zeus", "codecarbon"):
+        cfg = ExperimentConfig(model="gpt2", energy_sampler=engine)
+        assert cfg.energy_sampler == engine
 
 
-def test_energy_sampler_invalid_backend() -> None:
+def test_energy_sampler_invalid_engine() -> None:
     """Unknown energy_sampler values raise ValidationError."""
     with pytest.raises(ValidationError):
         ExperimentConfig(model="gpt2", energy_sampler="unknown_backend")
@@ -329,7 +329,7 @@ def test_save_timeseries_false_accepted() -> None:
 
 def test_pytorch_config_tp_plan_accepts_auto():
     """PyTorchConfig(tp_plan='auto') succeeds."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     cfg = PyTorchConfig(tp_plan="auto")
     assert cfg.tp_plan == "auto"
@@ -337,7 +337,7 @@ def test_pytorch_config_tp_plan_accepts_auto():
 
 def test_pytorch_config_tp_plan_rejects_invalid():
     """PyTorchConfig(tp_plan='custom') raises ValidationError (Literal enforcement)."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     with pytest.raises(ValidationError):
         PyTorchConfig(tp_plan="custom")  # type: ignore[arg-type]
@@ -345,7 +345,7 @@ def test_pytorch_config_tp_plan_rejects_invalid():
 
 def test_pytorch_config_tp_size_accepts_positive():
     """PyTorchConfig(tp_plan='auto', tp_size=4) succeeds."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     cfg = PyTorchConfig(tp_plan="auto", tp_size=4)
     assert cfg.tp_plan == "auto"
@@ -354,7 +354,7 @@ def test_pytorch_config_tp_size_accepts_positive():
 
 def test_pytorch_config_tp_size_rejects_zero():
     """PyTorchConfig(tp_size=0) raises ValidationError (ge=1)."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     with pytest.raises(ValidationError):
         PyTorchConfig(tp_size=0)
@@ -362,7 +362,7 @@ def test_pytorch_config_tp_size_rejects_zero():
 
 def test_pytorch_config_tp_plan_device_map_exclusive():
     """PyTorchConfig(tp_plan='auto', device_map='auto') raises ValidationError."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     with pytest.raises(ValidationError, match="mutually exclusive"):
         PyTorchConfig(tp_plan="auto", device_map="auto")
@@ -370,7 +370,7 @@ def test_pytorch_config_tp_plan_device_map_exclusive():
 
 def test_pytorch_config_tp_plan_without_device_map_ok():
     """PyTorchConfig(tp_plan='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     cfg = PyTorchConfig(tp_plan="auto")
     assert cfg.tp_plan == "auto"
@@ -379,7 +379,7 @@ def test_pytorch_config_tp_plan_without_device_map_ok():
 
 def test_pytorch_config_device_map_without_tp_plan_ok():
     """PyTorchConfig(device_map='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     cfg = PyTorchConfig(device_map="auto")
     assert cfg.device_map == "auto"
@@ -393,12 +393,12 @@ def test_pytorch_config_device_map_without_tp_plan_ok():
 
 def test_vllm_fp8_float32_rejected():
     """fp8 quantization with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     with pytest.raises(ValidationError, match=r"fp8.*incompatible.*float32"):
         ExperimentConfig(
             model="gpt2",
-            backend="vllm",
+            engine="vllm",
             dtype="float32",
             vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
         )
@@ -406,11 +406,11 @@ def test_vllm_fp8_float32_rejected():
 
 def test_vllm_fp8_float16_accepted():
     """fp8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="vllm",
+        engine="vllm",
         dtype="float16",
         vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
     )
@@ -419,11 +419,11 @@ def test_vllm_fp8_float16_accepted():
 
 def test_vllm_fp8_bfloat16_accepted():
     """fp8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="vllm",
+        engine="vllm",
         dtype="bfloat16",
         vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
     )
@@ -432,11 +432,11 @@ def test_vllm_fp8_bfloat16_accepted():
 
 def test_vllm_non_fp8_float32_accepted():
     """Non-fp8 quantization (awq) with dtype=float32 is accepted."""
-    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="vllm",
+        engine="vllm",
         dtype="float32",
         vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="awq")),
     )
@@ -445,11 +445,11 @@ def test_vllm_non_fp8_float32_accepted():
 
 def test_vllm_no_quantization_float32_accepted():
     """No quantization set with dtype=float32 is accepted."""
-    from llenergymeasure.config.backend_configs import VLLMConfig, VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="vllm",
+        engine="vllm",
         dtype="float32",
         vllm=VLLMConfig(engine=VLLMEngineConfig()),
     )
@@ -463,7 +463,7 @@ def test_vllm_no_quantization_float32_accepted():
 
 def test_vllm_batched_tokens_less_than_model_len_rejected():
     """max_num_batched_tokens < max_model_len raises ValidationError at parse time."""
-    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMEngineConfig
 
     with pytest.raises(ValidationError, match=r"max_num_batched_tokens.*must be >="):
         VLLMEngineConfig(max_num_batched_tokens=512, max_model_len=1024)
@@ -471,7 +471,7 @@ def test_vllm_batched_tokens_less_than_model_len_rejected():
 
 def test_vllm_batched_tokens_equal_model_len_accepted():
     """max_num_batched_tokens == max_model_len is accepted."""
-    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMEngineConfig
 
     cfg = VLLMEngineConfig(max_num_batched_tokens=1024, max_model_len=1024)
     assert cfg.max_num_batched_tokens == 1024
@@ -480,7 +480,7 @@ def test_vllm_batched_tokens_equal_model_len_accepted():
 
 def test_vllm_batched_tokens_greater_accepted():
     """max_num_batched_tokens > max_model_len is accepted."""
-    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMEngineConfig
 
     cfg = VLLMEngineConfig(max_num_batched_tokens=2048, max_model_len=1024)
     assert cfg.max_num_batched_tokens == 2048
@@ -488,7 +488,7 @@ def test_vllm_batched_tokens_greater_accepted():
 
 def test_vllm_batched_tokens_one_none_accepted():
     """Only one of max_num_batched_tokens / max_model_len set is accepted."""
-    from llenergymeasure.config.backend_configs import VLLMEngineConfig
+    from llenergymeasure.config.engine_configs import VLLMEngineConfig
 
     cfg = VLLMEngineConfig(max_num_batched_tokens=512)
     assert cfg.max_num_batched_tokens == 512
@@ -502,12 +502,12 @@ def test_vllm_batched_tokens_one_none_accepted():
 
 def test_pytorch_flash_attn2_float32_rejected():
     """flash_attention_2 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     with pytest.raises(ValidationError, match=r"flash_attention_2.*requires.*float16"):
         ExperimentConfig(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             dtype="float32",
             pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
         )
@@ -515,12 +515,12 @@ def test_pytorch_flash_attn2_float32_rejected():
 
 def test_pytorch_flash_attn3_float32_rejected():
     """flash_attention_3 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     with pytest.raises(ValidationError, match=r"flash_attention_3.*requires.*float16"):
         ExperimentConfig(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             dtype="float32",
             pytorch=PyTorchConfig(attn_implementation="flash_attention_3"),
         )
@@ -528,11 +528,11 @@ def test_pytorch_flash_attn3_float32_rejected():
 
 def test_pytorch_flash_attn2_bfloat16_accepted():
     """flash_attention_2 with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="pytorch",
+        engine="pytorch",
         dtype="bfloat16",
         pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
     )
@@ -541,11 +541,11 @@ def test_pytorch_flash_attn2_bfloat16_accepted():
 
 def test_pytorch_eager_float32_accepted():
     """attn_implementation=eager with dtype=float32 is accepted."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="pytorch",
+        engine="pytorch",
         dtype="float32",
         pytorch=PyTorchConfig(attn_implementation="eager"),
     )
@@ -554,11 +554,11 @@ def test_pytorch_eager_float32_accepted():
 
 def test_pytorch_no_attn_impl_float32_accepted():
     """No attn_implementation set with dtype=float32 is accepted."""
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="pytorch",
+        engine="pytorch",
         dtype="float32",
         pytorch=PyTorchConfig(),
     )
@@ -572,12 +572,12 @@ def test_pytorch_no_attn_impl_float32_accepted():
 
 def test_trt_fp8_rejects_float32() -> None:
     """FP8 quantization with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 
     with pytest.raises(ValidationError, match=r"FP8.*incompatible.*float32"):
         ExperimentConfig(
             model="gpt2",
-            backend="tensorrt",
+            engine="tensorrt",
             dtype="float32",
             tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
         )
@@ -585,11 +585,11 @@ def test_trt_fp8_rejects_float32() -> None:
 
 def test_trt_fp8_accepts_float16() -> None:
     """FP8 quantization with dtype=float16 is accepted."""
-    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="tensorrt",
+        engine="tensorrt",
         dtype="float16",
         tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
     )
@@ -598,11 +598,11 @@ def test_trt_fp8_accepts_float16() -> None:
 
 def test_trt_fp8_accepts_bfloat16() -> None:
     """FP8 quantization with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="tensorrt",
+        engine="tensorrt",
         dtype="bfloat16",
         tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
     )
@@ -611,11 +611,11 @@ def test_trt_fp8_accepts_bfloat16() -> None:
 
 def test_trt_non_fp8_accepts_float32() -> None:
     """Non-FP8 quantization (INT8) with dtype=float32 is accepted (only FP8 is incompatible)."""
-    from llenergymeasure.config.backend_configs import TensorRTConfig, TensorRTQuantConfig
+    from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        backend="tensorrt",
+        engine="tensorrt",
         dtype="float32",
         tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8")),
     )

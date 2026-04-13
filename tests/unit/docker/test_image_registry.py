@@ -94,12 +94,12 @@ class TestGetDefaultImage:
 
         assert image.endswith(":vlatest")
 
-    def test_backend_name_included_in_image(self):
+    def test_engine_name_included_in_image(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        for backend in ("pytorch", "vllm", "tensorrt"):
-            image = get_default_image(backend)
-            assert backend in image, f"Expected backend {backend!r} in image {image!r}"
+        for engine in ("pytorch", "vllm", "tensorrt"):
+            image = get_default_image(engine)
+            assert engine in image, f"Expected engine {engine!r} in image {image!r}"
 
     def test_ghcr_image_includes_package_version(self):
         from llenergymeasure import __version__
@@ -119,7 +119,7 @@ class TestGetDefaultImage:
 
 
 class TestShowImageResolution:
-    def test_prints_all_backends(self, capsys):
+    def test_prints_all_engines(self, capsys):
         from llenergymeasure.infra.image_registry import show_image_resolution
 
         with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
@@ -231,7 +231,7 @@ class TestResolveImage:
         assert image.startswith("ghcr.io/henrycgbaker/llenergymeasure/vllm:v")
         assert source == "registry"
 
-    def test_env_var_case_insensitive_backend(self, monkeypatch):
+    def test_env_var_case_insensitive_engine(self, monkeypatch):
         from llenergymeasure.infra.image_registry import resolve_image
 
         monkeypatch.setenv(f"{ENV_IMAGE_PREFIX}PYTORCH", "my/pytorch:v1")
@@ -239,7 +239,7 @@ class TestResolveImage:
         assert image == "my/pytorch:v1"
         assert source == "env"
 
-    def test_yaml_images_ignores_other_backends(self):
+    def test_yaml_images_ignores_other_engines(self):
         from llenergymeasure.infra.image_registry import resolve_image
 
         with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):

@@ -34,9 +34,9 @@ if TYPE_CHECKING:
 
 from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import (
-    BACKEND_TENSORRT,
     CONTAINER_EXCHANGE_DIR,
     DOCKER_PULL_TIMEOUT,
+    ENGINE_TENSORRT,
     ENV_CONFIG_PATH,
     ENV_HF_TOKEN,
     ENV_OUTPUT_DIR,
@@ -577,7 +577,7 @@ class DockerRunner:
 
         Args:
             config:       ExperimentConfig for the current experiment. Used to
-                          detect TRT-LLM backend and read ``tensorrt.tp_size``.
+                          detect TRT-LLM engine and read ``tensorrt.tp_size``.
             config_hash:  Hash prefix for config/result file names.
             exchange_dir: Host path of the temporary exchange directory.
             env_path:     Path to a temp env-file (written by ``_env_file``), or None.
@@ -607,7 +607,7 @@ class DockerRunner:
             cmd.extend(["--env-file", str(env_path)])
 
         # TRT-LLM engine cache: persist compiled engines across ephemeral containers
-        if config.backend == BACKEND_TENSORRT:
+        if config.engine == ENGINE_TENSORRT:
             cache_host = str(Path.home() / ".cache" / "trt-llm")
             cache_container = "/root/.cache/trt-llm"
             # Only add if not already in extra_mounts (user may override path)
@@ -627,7 +627,7 @@ class DockerRunner:
 
         # Determine TRT-LLM tensor parallel size for MPI injection
         tp_size = None
-        if config.backend == "tensorrt" and config.tensorrt is not None:
+        if config.engine == "tensorrt" and config.tensorrt is not None:
             tp_size = config.tensorrt.tp_size
 
         cmd.append(self.image)

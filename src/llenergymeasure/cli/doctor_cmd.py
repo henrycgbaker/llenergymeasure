@@ -1,7 +1,7 @@
 """``llem doctor`` — verify that Docker images match the host schema.
 
 Focused purely on image health (host/container schema-fingerprint handshake).
-The existing ``llem config`` command still covers env / GPU / backend probes;
+The existing ``llem config`` command still covers env / GPU / engine probes;
 ``doctor`` is the pre-flight diagnostic for the new fingerprint handshake and
 exits non-zero on mismatch so CI and scripts can gate on it.
 """
@@ -14,13 +14,13 @@ __all__ = ["doctor_command"]
 
 
 def doctor_command() -> None:
-    """Report per-backend image schema status and exit non-zero on mismatch."""
+    """Report per-engine image schema status and exit non-zero on mismatch."""
     from llenergymeasure.api.doctor import run_doctor_checks
 
     report = run_doctor_checks()
 
     header = (
-        f"{'Backend':<10s}  {'Image':<50s}  "
+        f"{'Engine':<10s}  {'Image':<50s}  "
         f"{'Pkg ver':<10s}  {'Img SHA-256':<14s}  {'Host SHA-256':<14s}  {'Status':<12s}"
     )
     typer.echo(header)
@@ -33,7 +33,7 @@ def doctor_command() -> None:
         img_fp = (row.image_fingerprint or "-")[:12]
         status_text = row.status.value
         line = (
-            f"{row.backend:<10s}  {img:<50s}  "
+            f"{row.engine:<10s}  {img:<50s}  "
             f"{pkg:<10s}  {img_fp:<14s}  {host_fp_short:<14s}  {status_text:<12s}"
         )
         typer.echo(line)

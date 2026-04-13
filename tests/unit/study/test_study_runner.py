@@ -37,7 +37,7 @@ from tests.conftest import TEST_CONFIG_HASH
 @pytest.fixture
 def basic_config() -> ExperimentConfig:
     """A minimal ExperimentConfig with n_prompts=100."""
-    return ExperimentConfig(model="test/model", backend="pytorch")
+    return ExperimentConfig(model="test/model", engine="pytorch")
 
 
 @pytest.fixture
@@ -289,12 +289,8 @@ def _make_ordering_study(
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
     from llenergymeasure.config.models import DatasetConfig
 
-    exp_a = ExperimentConfig(
-        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
-    exp_b = ExperimentConfig(
-        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
+    exp_a = ExperimentConfig(model="model-a", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
+    exp_b = ExperimentConfig(model="model-b", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
     ordered = apply_cycles(
         [exp_a, exp_b], n_cycles, ExperimentOrder(experiment_order), "aaaa0000bbbb1111"
     )
@@ -411,7 +407,7 @@ def _make_sigint_study() -> StudyConfig:
     return StudyConfig(
         experiments=[
             ExperimentConfig(
-                model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+                model="test/model", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
             )
         ],
         study_name="sigint-test",
@@ -464,10 +460,10 @@ def test_sigint_during_gap_exits_immediately() -> None:
     study = StudyConfig(
         experiments=[
             ExperimentConfig(
-                model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+                model="model-a", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
             ),
             ExperimentConfig(
-                model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+                model="model-b", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
             ),
         ],
         study_name="gap-interrupt-test",
@@ -533,15 +529,15 @@ def test_worker_no_longer_stub(monkeypatch) -> None:
     from tests.conftest import make_result
 
     config = ExperimentConfig(
-        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        model="test/model", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
     )
     fake_result = make_result()
 
-    monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: MagicMock())
+    monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: MagicMock())
     monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.harness.MeasurementHarness.run",
-        lambda self, backend, config, **kwargs: fake_result,
+        lambda self, engine, config, **kwargs: fake_result,
     )
 
     mock_conn = MagicMock()
@@ -552,8 +548,8 @@ def test_worker_no_longer_stub(monkeypatch) -> None:
     mock_conn.send.assert_called_once()
 
 
-def test_worker_calls_get_backend(monkeypatch) -> None:
-    """_run_experiment_worker calls get_backend with the config's backend name.
+def test_worker_calls_get_engine(monkeypatch) -> None:
+    """_run_experiment_worker calls get_engine with the config's engine name.
 
     Uses a mock conn (not a real Pipe) so MagicMock results don't need pickling.
     """
@@ -561,22 +557,22 @@ def test_worker_calls_get_backend(monkeypatch) -> None:
     from tests.conftest import make_result
 
     config = ExperimentConfig(
-        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        model="test/model", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
     )
 
-    backend_calls: list[str] = []
+    engine_calls: list[str] = []
     sent_results: list = []
     fake_result = make_result()
 
-    def fake_get_backend(name: str):
-        backend_calls.append(name)
+    def fake_get_engine(name: str):
+        engine_calls.append(name)
         return MagicMock()
 
-    monkeypatch.setattr("llenergymeasure.backends.get_backend", fake_get_backend)
+    monkeypatch.setattr("llenergymeasure.engines.get_engine", fake_get_engine)
     monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.harness.MeasurementHarness.run",
-        lambda self, backend, config, snapshot=None, **kw: fake_result,
+        lambda self, engine, config, snapshot=None, **kw: fake_result,
     )
 
     # Use a mock connection to avoid pickling MagicMock through a real Pipe
@@ -587,8 +583,8 @@ def test_worker_calls_get_backend(monkeypatch) -> None:
 
     _run_experiment_worker(config, mock_conn, progress_q)
 
-    assert len(backend_calls) == 1, f"Expected 1 get_backend call, got {backend_calls}"
-    assert backend_calls[0] == "pytorch"
+    assert len(engine_calls) == 1, f"Expected 1 get_engine call, got {engine_calls}"
+    assert engine_calls[0] == "pytorch"
 
     # Worker should have sent the fake result via conn.send()
     assert len(sent_results) == 1, "Worker did not call conn.send()"
@@ -609,12 +605,8 @@ def test_multi_cycle_correct_experiment_count() -> None:
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
     from llenergymeasure.config.models import DatasetConfig
 
-    exp_a = ExperimentConfig(
-        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
-    exp_b = ExperimentConfig(
-        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
+    exp_a = ExperimentConfig(model="model-a", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
+    exp_b = ExperimentConfig(model="model-b", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
 
@@ -667,12 +659,8 @@ def test_cycle_counter_increments_per_config_hash() -> None:
     from llenergymeasure.config.models import DatasetConfig
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
-    exp_a = ExperimentConfig(
-        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
-    exp_b = ExperimentConfig(
-        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
+    exp_a = ExperimentConfig(model="model-a", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
+    exp_b = ExperimentConfig(model="model-b", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
     hash_a = compute_measurement_config_hash(exp_a)
     hash_b = compute_measurement_config_hash(exp_b)
 
@@ -828,7 +816,7 @@ def _make_local_runner_spec(source: str = "default"):
 def test_docker_runner_spec_dispatches_to_docker(
     study_config: StudyConfig, basic_config: ExperimentConfig
 ) -> None:
-    """When runner_specs has docker mode for backend, _run_one_docker is called instead of subprocess."""
+    """When runner_specs has docker mode for engine, _run_one_docker is called instead of subprocess."""
     manifest = MagicMock()
     spec = _make_docker_runner_spec()
     runner_specs = {"pytorch": spec}
@@ -875,14 +863,14 @@ def test_docker_runner_spec_dispatches_to_docker(
     )
     # Docker run should have been called
     assert len(docker_run_calls) == 1
-    assert docker_run_calls[0].backend == "pytorch"
+    assert docker_run_calls[0].engine == "pytorch"
     assert len(results) == 1
 
 
 def test_local_runner_spec_uses_subprocess_path(
     study_config: StudyConfig, basic_config: ExperimentConfig
 ) -> None:
-    """When runner_specs has local mode for backend, subprocess dispatch is used (backward compat)."""
+    """When runner_specs has local mode for engine, subprocess dispatch is used (backward compat)."""
     manifest = MagicMock()
     spec = _make_local_runner_spec()
     runner_specs = {"pytorch": spec}
@@ -1141,7 +1129,7 @@ def test_worker_calls_setpgrp(monkeypatch) -> None:
     from tests.conftest import make_result
 
     config = ExperimentConfig(
-        model="test/model", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+        model="test/model", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
     )
     fake_result = make_result()
 
@@ -1151,11 +1139,11 @@ def test_worker_calls_setpgrp(monkeypatch) -> None:
         setpgrp_calls.append(1)
 
     monkeypatch.setattr("llenergymeasure.study.runner.os.setpgrp", fake_setpgrp)
-    monkeypatch.setattr("llenergymeasure.backends.get_backend", lambda name: MagicMock())
+    monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: MagicMock())
     monkeypatch.setattr("llenergymeasure.harness.preflight.run_preflight", lambda c: None)
     monkeypatch.setattr(
         "llenergymeasure.harness.MeasurementHarness.run",
-        lambda self, backend, config, **kwargs: fake_result,
+        lambda self, engine, config, **kwargs: fake_result,
     )
 
     mock_conn = MagicMock()
@@ -1635,8 +1623,8 @@ class TestPrepareImages:
         assert not runner._images_prepared
         progress.image_failed.assert_called_once()
 
-    def test_multi_backend_all_cached(self, study_config: StudyConfig, tmp_path: Path) -> None:
-        """Multiple Docker backends, all found locally."""
+    def test_multi_engine_all_cached(self, study_config: StudyConfig, tmp_path: Path) -> None:
+        """Multiple Docker engines, all found locally."""
         import subprocess
 
         progress = MagicMock()
@@ -1889,7 +1877,7 @@ class TestSchemaFingerprintHandshake:
             runner._prepare_images()
 
         # image_ready must fire *before* the exception so the terminal
-        # shows which backend was stale.
+        # shows which engine was stale.
         progress.image_ready.assert_called_once()
         progress.end_image_prep.assert_called_once()
         rendered_meta = (
@@ -1978,7 +1966,7 @@ def _make_multi_experiment_study(n: int = 3) -> StudyConfig:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            model=f"test/model-{i}", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
         )
         for i in range(n)
     ]
@@ -2050,7 +2038,7 @@ def test_circuit_breaker_trips_and_marks_remaining_skipped() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            model=f"test/model-{i}", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
         )
         for i in range(4)
     ]
@@ -2088,7 +2076,7 @@ def test_circuit_breaker_probe_success_resets_state() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            model=f"test/model-{i}", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
         )
         for i in range(4)
     ]
@@ -2127,7 +2115,7 @@ def test_wall_clock_timeout_marks_remaining_skipped() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            model=f"test/model-{i}", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
         )
         for i in range(3)
     ]
@@ -2175,7 +2163,7 @@ def test_fail_fast_aborts_after_first_failure() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
+            model=f"test/model-{i}", engine="pytorch", dataset=DatasetConfig(n_prompts=10)
         )
         for i in range(3)
     ]

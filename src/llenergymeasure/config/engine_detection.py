@@ -1,30 +1,30 @@
-"""Runtime backend availability detection."""
+"""Runtime engine availability detection."""
 
 from __future__ import annotations
 
-from llenergymeasure.config.ssot import BACKEND_PYTORCH, BACKEND_TENSORRT, BACKEND_VLLM
+from llenergymeasure.config.ssot import ENGINE_PYTORCH, ENGINE_TENSORRT, ENGINE_VLLM
 
-KNOWN_BACKENDS: list[str] = [BACKEND_PYTORCH, BACKEND_VLLM, BACKEND_TENSORRT]
+KNOWN_ENGINES: list[str] = [ENGINE_PYTORCH, ENGINE_VLLM, ENGINE_TENSORRT]
 
 
-def is_backend_available(backend: str) -> bool:
-    """Check if a backend is available (installed and importable).
+def is_engine_available(engine: str) -> bool:
+    """Check if an engine is available (installed and importable).
 
     Args:
-        backend: Backend name ("pytorch", "vllm", or "tensorrt").
+        engine: Engine name ("pytorch", "vllm", or "tensorrt").
 
     Returns:
-        True if backend is importable, False otherwise.
+        True if engine is importable, False otherwise.
     """
     try:
-        if backend == BACKEND_PYTORCH:
+        if engine == ENGINE_PYTORCH:
             import torch  # noqa: F401
-        elif backend == BACKEND_VLLM:
+        elif engine == ENGINE_VLLM:
             import vllm  # noqa: F401
-        elif backend == BACKEND_TENSORRT:
+        elif engine == ENGINE_TENSORRT:
             import tensorrt_llm  # noqa: F401
         else:
-            # Unknown backend
+            # Unknown engine
             return False
         return True
     except (ImportError, OSError, Exception):
@@ -34,27 +34,27 @@ def is_backend_available(backend: str) -> bool:
         return False
 
 
-def get_available_backends() -> list[str]:
-    """Get list of all available backends on the system.
+def get_available_engines() -> list[str]:
+    """Get list of all available engines on the system.
 
     Returns:
-        List of backend names that are installed and importable.
+        List of engine names that are installed and importable.
     """
-    return [b for b in KNOWN_BACKENDS if is_backend_available(b)]
+    return [e for e in KNOWN_ENGINES if is_engine_available(e)]
 
 
-def get_backend_install_hint(backend: str) -> str:
-    """Get installation command for a backend.
+def get_engine_install_hint(engine: str) -> str:
+    """Get installation command for an engine.
 
     Args:
-        backend: Backend name.
+        engine: Engine name.
 
     Returns:
-        pip install command string for the backend.
+        pip install command string for the engine.
     """
     hints = {
         "pytorch": "pip install llenergymeasure",
         "vllm": "Docker recommended — see docs/deployment.md",
         "tensorrt": "Docker recommended — see docs/deployment.md",
     }
-    return hints.get(backend, f"pip install llenergymeasure[{backend}]")
+    return hints.get(engine, f"pip install llenergymeasure[{engine}]")

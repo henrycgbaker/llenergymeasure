@@ -133,8 +133,8 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["llenergymeasure"]
 omit = [
-    "*/backends/vllm.py",
-    "*/backends/tensorrt.py",
+    "*/engines/vllm.py",
+    "*/engines/tensorrt.py",
     "*/infra/docker_runner.py",
     "*/entrypoints/container.py",
 ]
@@ -164,7 +164,7 @@ layers = [
     "llenergymeasure.api",
     "llenergymeasure.study",
     "llenergymeasure.harness | llenergymeasure.results",
-    "llenergymeasure.backends | llenergymeasure.energy | llenergymeasure.datasets",
+    "llenergymeasure.engines | llenergymeasure.energy | llenergymeasure.datasets",
     "llenergymeasure.infra",
     "llenergymeasure.device",
     "llenergymeasure.config | llenergymeasure.domain",
@@ -178,7 +178,7 @@ type = "forbidden"
 source_modules = ["llenergymeasure.cli"]
 forbidden_modules = [
     "llenergymeasure.harness",
-    "llenergymeasure.backends",
+    "llenergymeasure.engines",
     "llenergymeasure.energy",
     "llenergymeasure.infra",
     "llenergymeasure.study",
@@ -188,7 +188,7 @@ forbidden_modules = [
 ]
 allow_indirect_imports = true
 # No ignore_imports needed.
-# CLI imports from llenergymeasure.api (Layer 7) which internally reaches harness/backends.
+# CLI imports from llenergymeasure.api (Layer 7) which internally reaches harness/engines.
 # allow_indirect_imports = true means only DIRECT imports are forbidden.
 # cli/run.py uses `from llenergymeasure.api import run_experiment` and
 # `from llenergymeasure import run_study` (root re-export); no direct lower-layer imports.
@@ -210,7 +210,7 @@ forbidden_modules = [
     "llenergymeasure.api",
     "llenergymeasure.study",
     "llenergymeasure.harness",
-    "llenergymeasure.backends",
+    "llenergymeasure.engines",
     "llenergymeasure.energy",
     "llenergymeasure.infra",
     "llenergymeasure.results",

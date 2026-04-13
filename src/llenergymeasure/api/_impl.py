@@ -53,7 +53,7 @@ def run_experiment(
     config: None = None,
     *,
     model: str,
-    backend: str | None = None,
+    engine: str | None = None,
     n_prompts: int = _N_PROMPTS_DEFAULT,
     dataset: str = "aienergyscore",
     skip_preflight: bool = ...,
@@ -67,7 +67,7 @@ def run_experiment(
     config: str | Path | ExperimentConfig | None = None,
     *,
     model: str | None = None,
-    backend: str | None = None,
+    engine: str | None = None,
     n_prompts: int = _N_PROMPTS_DEFAULT,
     dataset: str = "aienergyscore",
     skip_preflight: bool = False,
@@ -80,12 +80,12 @@ def run_experiment(
     Three call forms:
         run_experiment("config.yaml")              # YAML path
         run_experiment(ExperimentConfig(...))       # config object
-        run_experiment(model="gpt2", backend="Y")  # kwargs convenience
+        run_experiment(model="gpt2", engine="Y")   # kwargs convenience
 
     Args:
         config: YAML file path, ExperimentConfig object, or None (use kwargs).
         model: Model name/path (kwargs form only).
-        backend: Inference backend (kwargs form only, defaults to ExperimentConfig default).
+        engine: Inference engine (kwargs form only, defaults to ExperimentConfig default).
         n_prompts: Number of prompts (kwargs form only, default 100).
         dataset: Dataset source name (kwargs form only, default "aienergyscore").
         skip_preflight: Skip Docker pre-flight checks (GPU visibility, CUDA/driver compat).
@@ -103,7 +103,7 @@ def run_experiment(
         pydantic.ValidationError: Invalid field values (passes through unchanged).
     """
     study = _to_study_config(
-        config, model=model, backend=backend, n_prompts=n_prompts, dataset=dataset, **kwargs
+        config, model=model, engine=engine, n_prompts=n_prompts, dataset=dataset, **kwargs
     )
     if output_dir is not None:
         study.output = study.output.model_copy(update={"results_dir": str(output_dir)})
@@ -170,7 +170,7 @@ def run_study(
 
     Raises:
         ConfigError: Invalid config path or parse error.
-        PreFlightError: Multi-backend study without Docker.
+        PreFlightError: Multi-engine study without Docker.
         StudyError: No resumable study found (when resume=True).
         StudyError: Config drift detected (study_design_hash changed).
         pydantic.ValidationError: Invalid field values (passes through unchanged).
@@ -227,7 +227,7 @@ def _to_study_config(
     config: str | Path | ExperimentConfig | None,
     *,
     model: str | None = None,
-    backend: str | None = None,
+    engine: str | None = None,
     n_prompts: int = _N_PROMPTS_DEFAULT,
     dataset: str = "aienergyscore",
     **kwargs: Any,
@@ -249,8 +249,8 @@ def _to_study_config(
             "model": model,
             "dataset": DatasetConfig(source=dataset, n_prompts=n_prompts),
         }
-        if backend is not None:
-            ec_kwargs["backend"] = backend
+        if engine is not None:
+            ec_kwargs["engine"] = engine
         ec_kwargs.update(kwargs)
         experiment = ExperimentConfig(**ec_kwargs)
     else:
@@ -301,8 +301,8 @@ def _run(
     """Dispatcher: single experiment runs in-process; multi-experiment uses StudyRunner.
 
     Always:
-    - Calls run_study_preflight() first (multi-backend guard and Docker pre-flight checks)
-    - Resolves runner specs for all backends in the study
+    - Calls run_study_preflight() first (multi-engine guard and Docker pre-flight checks)
+    - Resolves runner specs for all engines in the study
     - Creates study output directory and ManifestWriter
     - Returns fully populated StudyResult
 
@@ -321,9 +321,9 @@ def _run(
     # ensuring preflight uses the same runner resolution as the actual dispatch path.
     user_config = load_user_config()
 
-    # Multi-backend guard — raises PreFlightError for multi-backend studies without
+    # Multi-engine guard — raises PreFlightError for multi-engine studies without
     # Docker, or auto-elevates to Docker when available. Also runs Docker pre-flight
-    # checks when any backend resolves to a Docker runner.
+    # checks when any engine resolves to a Docker runner.
     # Preflight returns resolved runner specs so we don't resolve them twice.
     if progress:
         progress.on_step_start("preflight", "Checking", "environment and Docker")
@@ -349,7 +349,7 @@ def _run(
     if len(modes) > 1:
         _api_logger.warning(
             "Mixed runners detected. For consistent measurements, "
-            "consider running all backends in Docker."
+            "consider running all engines in Docker."
         )
 
     # Resolve results_dir: resume_dir takes priority, then YAML > user config > built-in default
@@ -461,7 +461,7 @@ def _run(
             from llenergymeasure.utils.formatting import format_experiment_header
 
             config = study.experiments[0]
-            spec = runner_specs.get(config.backend) if runner_specs else None
+            spec = runner_specs.get(config.engine) if runner_specs else None
             is_docker = spec and spec.mode == RUNNER_DOCKER
             if is_docker:
                 host_baseline = config.baseline.enabled and config.baseline.strategy != "fresh"
@@ -573,11 +573,11 @@ def _run_in_process(
 ) -> tuple[list[str], list[ExperimentResult | None], list[str]]:
     """Run a single experiment in-process or via DockerRunner directly.
 
-    When runner_specs resolves the backend to "docker", uses DockerRunner directly
-    (no subprocess spawning). Otherwise runs in-process via the backend.
+    When runner_specs resolves the engine to "docker", uses DockerRunner directly
+    (no subprocess spawning). Otherwise runs in-process via the engine.
 
-    Errors from run_preflight() and harness.run(backend, config) propagate unchanged (PreFlightError,
-    BackendError). Only result-saving errors are caught so a save failure does not
+    Errors from run_preflight() and harness.run(engine, config) propagate unchanged (PreFlightError,
+    EngineError). Only result-saving errors are caught so a save failure does not
     discard a completed measurement.
     """
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
@@ -598,8 +598,8 @@ def _run_in_process(
 
     snapshot = collect_environment_snapshot()
 
-    # Check runner spec for this backend
-    spec = runner_specs.get(config.backend) if runner_specs else None
+    # Check runner spec for this engine
+    spec = runner_specs.get(config.engine) if runner_specs else None
 
     manifest.mark_running(config_hash, cycle)
 
@@ -613,7 +613,7 @@ def _run_in_process(
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.utils.exceptions import DockerError
 
-        image = spec.image if spec.image is not None else get_default_image(config.backend)
+        image = spec.image if spec.image is not None else get_default_image(config.engine)
 
         docker_runner = DockerRunner(
             image=image,
@@ -652,10 +652,10 @@ def _run_in_process(
         # Docker path: ts_tmpdir comes from DockerRunner
         ts_tmpdir = docker_ts_dir
     else:
-        # Local in-process path — errors propagate naturally (PreFlightError, BackendError)
+        # Local in-process path — errors propagate naturally (PreFlightError, EngineError)
         import tempfile
 
-        from llenergymeasure.backends import get_backend
+        from llenergymeasure.engines import get_engine
         from llenergymeasure.harness import MeasurementHarness
         from llenergymeasure.harness.preflight import run_preflight
 
@@ -670,11 +670,11 @@ def _run_in_process(
         ts_tmpdir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_TIMESERIES)) if save_ts else None
 
         try:
-            backend = get_backend(config.backend)
+            engine = get_engine(config.engine)
             harness = MeasurementHarness()
             gpu_indices = _resolve_gpu_indices(config)
             result = harness.run(
-                backend,
+                engine,
                 config,
                 snapshot=snapshot,
                 gpu_indices=gpu_indices,

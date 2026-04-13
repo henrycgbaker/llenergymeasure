@@ -50,7 +50,7 @@ Reads config JSON, runs via library API (not CLI re-entry), writes result JSON b
 
 ## Runner resolution
 
-Determines whether each backend runs locally or in Docker:
+Determines whether each engine runs locally or in Docker:
 
 ```python
 from llenergymeasure.infra.runner_resolution import resolve_study_runners, is_docker_available
@@ -69,18 +69,18 @@ Precedence chain (highest wins):
 
 ### Image sources
 
-Two image sources exist for each backend:
+Two image sources exist for each engine:
 
 | Source | Tag pattern | Built by | Use case |
 |--------|------------|----------|----------|
-| **Local** | `llenergymeasure:{backend}` | `make docker-build-{backend}` | Dev iteration - always reflects current source |
-| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}` | CI on release tags | Production, CI, pip-install users |
+| **Local** | `llenergymeasure:{engine}` | `make docker-build-{engine}` | Dev iteration - always reflects current source |
+| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}` | CI on release tags | Production, CI, pip-install users |
 
 ### Resolution precedence (`resolve_image()`)
 
 The full image resolution chain (highest wins):
 
-1. **Env var** `LLEM_IMAGE_{BACKEND}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
+1. **Env var** `LLEM_IMAGE_{ENGINE}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
 2. **Study YAML** `images:` section
 3. **Runner spec** shorthand (`docker:my/custom:tag` in `runners:`)
 4. **User config** `images:` section
@@ -92,7 +92,7 @@ Each level returns an `(image, image_source)` tuple. The `image_source` string
 
 ### Smart default behaviour
 
-`get_default_image(backend)` checks for a local image first, then falls back to the registry tag:
+`get_default_image(engine)` checks for a local image first, then falls back to the registry tag:
 
 ```python
 from llenergymeasure.infra.image_registry import get_default_image
@@ -109,7 +109,7 @@ is already present in the local Docker cache (from a prior pull), the source is
 ### Building local images
 
 ```bash
-make docker-build-all          # all 3 backends
+make docker-build-all          # all 3 engines
 make docker-build-pytorch      # just pytorch
 make docker-build-vllm         # just vllm
 make docker-build-tensorrt     # just tensorrt
@@ -123,7 +123,7 @@ cold). See `docs/installation.md#build-cache-recommended` for details.
 
 For multi-experiment studies, `StudyRunner._prepare_images()` checks and pulls all required
 Docker images **once** before the first experiment, rather than per-experiment. This avoids
-redundant `docker pull` calls when multiple experiments share the same backend. The CLI shows
+redundant `docker pull` calls when multiple experiments share the same engine. The CLI shows
 this as a "Preparing Docker images" section with per-image status and metadata.
 
 ### YAML overrides
@@ -158,7 +158,7 @@ Gracefully degrades when NVML is unavailable.
 
 - Layer 1 — may import from layer 0 only
 - Can import from: `config/`, `domain/`, `device/`, `utils/`
-- Cannot import from: `energy/`, `backends/`, `harness/`, `study/`, `api/`, `cli/`, `results/`
+- Cannot import from: `energy/`, `engines/`, `harness/`, `study/`, `api/`, `cli/`, `results/`
 
 ## Related
 

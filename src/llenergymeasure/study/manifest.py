@@ -93,7 +93,7 @@ def build_config_summary(experiment: ExperimentConfig) -> str:
     Delegates to ``format_experiment_header()`` for consistent naming across
     CLI display, manifest summaries, and directory names.
 
-    Format: "model_short / backend / non_default_params..."
+    Format: "model_short / engine / non_default_params..."
     """
     from llenergymeasure.utils.formatting import format_experiment_header
 
@@ -131,19 +131,19 @@ def create_study_dir(name: str | None, output_dir: Path) -> Path:
 
 def experiment_result_filename(
     model: str,
-    backend: str,
+    engine: str,
     config_hash: str,
     extension: str = ".json",
 ) -> str:
     """Return flat filename for an experiment result file.
 
-    Format: "{model_short}-{backend}_{hash[:8]}{extension}"
+    Format: "{model_short}-{engine}_{hash[:8]}{extension}"
     model_short: last component after '/' (preserves casing).
     """
     from llenergymeasure.utils.formatting import model_short_name
 
     model_short = model_short_name(model)
-    return f"{model_short}-{backend}_{config_hash[:8]}{extension}"
+    return f"{model_short}-{engine}_{config_hash[:8]}{extension}"
 
 
 # ---------------------------------------------------------------------------

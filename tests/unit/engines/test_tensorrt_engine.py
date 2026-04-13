@@ -1,7 +1,7 @@
-"""Unit tests for TensorRTBackend.
+"""Unit tests for TensorRTEngine.
 
 All tests run without GPU hardware and without tensorrt_llm installed.
-TRT-LLM imports inside TensorRTBackend methods are lazy — the module is
+TRT-LLM imports inside TensorRTEngine methods are lazy — the module is
 importable on any host. Tests that exercise QuantConfig / BuildCacheConfig
 construction inject mock classes via sys.modules so no real tensorrt_llm
 import occurs.
@@ -20,8 +20,7 @@ import json
 import sys
 import types
 
-from llenergymeasure.backends.tensorrt import TensorRTBackend, _validate_engine_directory
-from llenergymeasure.config.backend_configs import (
+from llenergymeasure.config.engine_configs import (
     TensorRTBuildCacheConfig,
     TensorRTConfig,
     TensorRTKvCacheConfig,
@@ -29,13 +28,14 @@ from llenergymeasure.config.backend_configs import (
     TensorRTSamplingConfig,
     TensorRTSchedulerConfig,
 )
+from llenergymeasure.engines.tensorrt import TensorRTEngine, _validate_engine_directory
 from tests.conftest import make_config
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
-_TRT_DEFAULTS = {"model": "test-model", "backend": "tensorrt"}
+_TRT_DEFAULTS = {"model": "test-model", "engine": "tensorrt"}
 
 
 class _MockQuantAlgo:
@@ -131,26 +131,26 @@ def _make_fake_tensorrt_llm_module() -> types.ModuleType:
 
 
 class TestProtocolCompliance:
-    def test_tensorrt_backend_satisfies_plugin_protocol(self):
-        """TensorRTBackend must satisfy the BackendPlugin Protocol."""
-        from llenergymeasure.backends.protocol import BackendPlugin
+    def test_tensorrt_engine_satisfies_plugin_protocol(self):
+        """TensorRTEngine must satisfy the EnginePlugin Protocol."""
+        from llenergymeasure.engines.protocol import EnginePlugin
 
-        backend = TensorRTBackend()
-        assert isinstance(backend, BackendPlugin)
+        engine = TensorRTEngine()
+        assert isinstance(engine, EnginePlugin)
 
-    def test_tensorrt_backend_name(self):
-        """TensorRTBackend.name returns 'tensorrt'."""
-        assert TensorRTBackend().name == "tensorrt"
+    def test_tensorrt_engine_name(self):
+        """TensorRTEngine.name returns 'tensorrt'."""
+        assert TensorRTEngine().name == "tensorrt"
 
-    def test_tensorrt_backend_has_all_protocol_methods(self):
-        """TensorRTBackend implements all 6 BackendPlugin methods."""
-        backend = TensorRTBackend()
-        assert hasattr(backend, "name")
-        assert hasattr(backend, "load_model")
-        assert hasattr(backend, "run_warmup_prompt")
-        assert hasattr(backend, "run_inference")
-        assert hasattr(backend, "cleanup")
-        assert hasattr(backend, "validate_config")
+    def test_tensorrt_engine_has_all_protocol_methods(self):
+        """TensorRTEngine implements all 6 EnginePlugin methods."""
+        engine = TensorRTEngine()
+        assert hasattr(engine, "name")
+        assert hasattr(engine, "load_model")
+        assert hasattr(engine, "run_warmup_prompt")
+        assert hasattr(engine, "run_inference")
+        assert hasattr(engine, "cleanup")
+        assert hasattr(engine, "validate_config")
 
 
 # =============================================================================
@@ -162,8 +162,8 @@ class TestBuildLlmKwargs:
     def test_build_llm_kwargs_minimal(self):
         """No tensorrt config → kwargs has model and backend='trt' and enable_build_cache."""
         config = make_config(**_TRT_DEFAULTS)
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["model"] == "test-model"
         assert kwargs["backend"] == "trt"
@@ -172,40 +172,40 @@ class TestBuildLlmKwargs:
     def test_build_llm_kwargs_tp_size(self):
         """tp_size=2 maps to tensor_parallel_size=2."""
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=2))
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["tensor_parallel_size"] == 2
 
     def test_build_llm_kwargs_max_batch_size(self):
         """max_batch_size maps directly."""
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(max_batch_size=16))
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["max_batch_size"] == 16
 
     def test_build_llm_kwargs_dtype(self):
         """dtype='float16' maps directly."""
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(dtype="float16"))
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["dtype"] == "float16"
 
     def test_build_llm_kwargs_fast_build(self):
         """fast_build=True maps directly."""
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(fast_build=True))
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["fast_build"] is True
 
     def test_build_llm_kwargs_none_values_not_included(self):
         """None fields from TensorRTConfig are NOT in kwargs."""
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig())  # all fields None
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert "tensor_parallel_size" not in kwargs
         assert "max_batch_size" not in kwargs
@@ -216,8 +216,8 @@ class TestBuildLlmKwargs:
     def test_build_llm_kwargs_default_build_cache_when_no_build_cache_section(self):
         """When no build_cache section, enable_build_cache=True is set."""
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=1))
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs.get("enable_build_cache") is True
 
@@ -230,8 +230,8 @@ class TestBuildLlmKwargs:
         config = make_config(
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8"))
         )
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert "quantization" in kwargs
         assert isinstance(kwargs["quantization"], _MockQuantConfig)
@@ -253,8 +253,8 @@ class TestBuildLlmKwargs:
                 )
             ),
         )
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert "enable_build_cache" in kwargs
         assert isinstance(kwargs["enable_build_cache"], _MockBuildCacheConfig)
@@ -276,8 +276,8 @@ class TestBuildLlmKwargs:
                 )
             ),
         )
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert "kv_cache_config" in kwargs
         assert isinstance(kwargs["kv_cache_config"], _MockKvCacheConfig)
@@ -298,8 +298,8 @@ class TestBuildLlmKwargs:
                 )
             ),
         )
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert "scheduler_config" in kwargs
         assert isinstance(kwargs["scheduler_config"], _MockSchedulerConfig)
@@ -311,8 +311,8 @@ class TestBuildLlmKwargs:
     def test_build_llm_kwargs_model_always_present(self):
         """model key is always present regardless of tensorrt config."""
         config = make_config(**_TRT_DEFAULTS)
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
         assert kwargs["model"] == "test-model"
 
 
@@ -329,8 +329,8 @@ class TestBuildSamplingParams:
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
         config = make_config(**_TRT_DEFAULTS)
-        backend = TensorRTBackend()
-        params = backend._build_sampling_params(config)
+        engine = TensorRTEngine()
+        params = engine._build_sampling_params(config)
 
         assert isinstance(params, _FakeSamplingParams)
         assert params._kwargs["max_new_tokens"] == config.max_output_tokens
@@ -342,8 +342,8 @@ class TestBuildSamplingParams:
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
         config = make_config(**_TRT_DEFAULTS, random_seed=123)
-        backend = TensorRTBackend()
-        params = backend._build_sampling_params(config)
+        engine = TensorRTEngine()
+        params = engine._build_sampling_params(config)
 
         assert params._kwargs["random_seed"] == 123
 
@@ -356,8 +356,8 @@ class TestBuildSamplingParams:
         from llenergymeasure.config.models import DecoderConfig
 
         config = make_config(**_TRT_DEFAULTS, decoder=DecoderConfig(temperature=0.0))
-        backend = TensorRTBackend()
-        params = backend._build_sampling_params(config)
+        engine = TensorRTEngine()
+        params = engine._build_sampling_params(config)
 
         assert isinstance(params, _FakeSamplingParams)
         # temperature=0.0 should NOT be in kwargs (greedy check: not != 0.0)
@@ -372,8 +372,8 @@ class TestBuildSamplingParams:
         from llenergymeasure.config.models import DecoderConfig
 
         config = make_config(**_TRT_DEFAULTS, decoder=DecoderConfig(temperature=0.7))
-        backend = TensorRTBackend()
-        params = backend._build_sampling_params(config)
+        engine = TensorRTEngine()
+        params = engine._build_sampling_params(config)
 
         assert params._kwargs.get("temperature") == 0.7
 
@@ -393,8 +393,8 @@ class TestBuildSamplingParams:
                 )
             ),
         )
-        backend = TensorRTBackend()
-        params = backend._build_sampling_params(config)
+        engine = TensorRTEngine()
+        params = engine._build_sampling_params(config)
 
         assert params._kwargs.get("n") == 3
         assert params._kwargs.get("ignore_eos") is True
@@ -414,8 +414,8 @@ class TestValidateConfigSMChecks:
             lambda gpu_index=0: (8, 0),
         )
         config = make_config(**_TRT_DEFAULTS)
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
         assert errors == []
 
     def test_validate_config_sm_below_7_5_fails(self, monkeypatch):
@@ -425,8 +425,8 @@ class TestValidateConfigSMChecks:
             lambda gpu_index=0: (7, 0),
         )
         config = make_config(**_TRT_DEFAULTS)
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
 
         assert len(errors) == 1
         assert "SM >= 7.5" in errors[0]
@@ -439,8 +439,8 @@ class TestValidateConfigSMChecks:
             lambda gpu_index=0: (7, 5),
         )
         config = make_config(**_TRT_DEFAULTS)
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
         assert errors == []
 
     def test_validate_config_sm_none_skips(self, monkeypatch):
@@ -450,8 +450,8 @@ class TestValidateConfigSMChecks:
             lambda gpu_index=0: None,
         )
         config = make_config(**_TRT_DEFAULTS)
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
         assert errors == []
 
 
@@ -470,8 +470,8 @@ class TestValidateConfigFP8Checks:
         config = make_config(
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
         )
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
 
         assert len(errors) == 1
         assert "FP8" in errors[0]
@@ -486,8 +486,8 @@ class TestValidateConfigFP8Checks:
         config = make_config(
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
         )
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
         assert errors == []
 
     def test_validate_config_fp8_on_sm_90_passes(self, monkeypatch):
@@ -499,8 +499,8 @@ class TestValidateConfigFP8Checks:
         config = make_config(
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
         )
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
         assert errors == []
 
     def test_validate_config_fp8_kv_cache_on_sm_80_fails(self, monkeypatch):
@@ -513,8 +513,8 @@ class TestValidateConfigFP8Checks:
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(kv_cache_quant_algo="FP8")),
         )
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
 
         assert len(errors) == 1
         assert "FP8" in errors[0]
@@ -529,8 +529,8 @@ class TestValidateConfigFP8Checks:
         config = make_config(
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8"))
         )
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
         assert errors == []
 
     def test_validate_config_both_fp8_errors_collected(self, monkeypatch):
@@ -545,8 +545,8 @@ class TestValidateConfigFP8Checks:
                 quant=TensorRTQuantConfig(quant_algo="FP8", kv_cache_quant_algo="FP8")
             ),
         )
-        backend = TensorRTBackend()
-        errors = backend.validate_config(config)
+        engine = TensorRTEngine()
+        errors = engine.validate_config(config)
 
         assert len(errors) == 2
 
@@ -557,22 +557,22 @@ class TestValidateConfigFP8Checks:
 
 
 class TestBuildMetadata:
-    def _make_backend_with_fake_metadata(self) -> TensorRTBackend:
-        """Return a TensorRTBackend with _build_metadata populated via a direct assignment."""
-        backend = TensorRTBackend()
-        backend._build_metadata = {
+    def _make_engine_with_fake_metadata(self) -> TensorRTEngine:
+        """Return a TensorRTEngine with _build_metadata populated via a direct assignment."""
+        engine = TensorRTEngine()
+        engine._build_metadata = {
             "build_time_sec": 12.5,
             "gpu_architecture": "sm_80",
             "trt_llm_version": "0.21.0",
             "config_hash": "abc123def456",
             "built_at": "2026-03-17T10:00:00+00:00",
         }
-        return backend
+        return engine
 
     def test_build_metadata_keys(self):
         """_build_metadata has exactly the 5 required keys."""
-        backend = self._make_backend_with_fake_metadata()
-        meta = backend._build_metadata
+        engine = self._make_engine_with_fake_metadata()
+        meta = engine._build_metadata
         assert meta is not None
 
         required_keys = {
@@ -586,8 +586,8 @@ class TestBuildMetadata:
 
     def test_build_metadata_types(self):
         """_build_metadata values have expected types."""
-        backend = self._make_backend_with_fake_metadata()
-        meta = backend._build_metadata
+        engine = self._make_engine_with_fake_metadata()
+        meta = engine._build_metadata
         assert meta is not None
 
         assert isinstance(meta["build_time_sec"], float)
@@ -602,10 +602,10 @@ class TestBuildMetadata:
         import json
 
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=2, max_batch_size=8))
-        backend = TensorRTBackend()
+        engine = TensorRTEngine()
 
         # Reproduce the hash computation from load_model
-        kwargs = backend._build_llm_kwargs(config)
+        kwargs = engine._build_llm_kwargs(config)
         hash1 = hashlib.sha256(
             json.dumps(kwargs, default=str, sort_keys=True).encode()
         ).hexdigest()[:16]
@@ -618,18 +618,18 @@ class TestBuildMetadata:
 
     def test_build_metadata_initially_none(self):
         """_build_metadata is None before load_model() is called."""
-        backend = TensorRTBackend()
-        assert backend._build_metadata is None
+        engine = TensorRTEngine()
+        assert engine._build_metadata is None
 
     def test_build_metadata_included_in_run_inference_extras(self, monkeypatch):
         """run_inference passes _build_metadata into InferenceOutput.extras."""
         # We test the logic path: if _build_metadata is set, it appears in extras
-        backend = self._make_backend_with_fake_metadata()
+        engine = self._make_engine_with_fake_metadata()
 
         # Simulate the extras assembly logic from run_inference
         extras = {}
-        if backend._build_metadata is not None:
-            extras["build_metadata"] = backend._build_metadata
+        if engine._build_metadata is not None:
+            extras["build_metadata"] = engine._build_metadata
 
         assert "build_metadata" in extras
         assert extras["build_metadata"]["trt_llm_version"] == "0.21.0"
@@ -701,14 +701,14 @@ class TestValidateEngineDirectory:
 
 class TestBuildLlmKwargsEnginePath:
     def test_build_llm_kwargs_engine_path(self, tmp_path):
-        """engine_path set -> kwargs has model=engine_path as string and backend=trt."""
+        """engine_path set -> kwargs has model=engine_path as string and engine=trt."""
         config_data = {"pretrained_config": {"mapping": {"tp_size": 1}}, "build_config": {}}
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["model"] == str(tmp_path)
         assert kwargs["backend"] == "trt"
@@ -724,8 +724,8 @@ class TestBuildLlmKwargsEnginePath:
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(engine_path=str(tmp_path), tp_size=2, max_batch_size=16),
         )
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert "tensor_parallel_size" not in kwargs
         assert "max_batch_size" not in kwargs
@@ -741,8 +741,8 @@ class TestBuildLlmKwargsEnginePath:
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))
-        backend = TensorRTBackend()
-        kwargs = backend._build_llm_kwargs(config)
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
 
         assert "enable_build_cache" not in kwargs
 
@@ -756,6 +756,6 @@ class TestBuildLlmKwargsEnginePath:
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(engine_path=str(tmp_path / "nonexistent")),
         )
-        backend = TensorRTBackend()
+        engine = TensorRTEngine()
         with pytest.raises(ConfigError, match="engine_path validation failed"):
-            backend._build_llm_kwargs(config)
+            engine._build_llm_kwargs(config)

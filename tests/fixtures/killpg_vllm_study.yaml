@@ -8,7 +8,7 @@ name: killpg-test
 
 experiments:
   - model: facebook/opt-125m
-    backend: vllm
+    engine: vllm
     dataset:
       n_prompts: 1000
     max_output_tokens: 128

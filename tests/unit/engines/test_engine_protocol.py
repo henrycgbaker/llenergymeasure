@@ -1,4 +1,4 @@
-"""GPU-free tests for the BackendPlugin Protocol, factory, and detection.
+"""GPU-free tests for the EnginePlugin Protocol, factory, and detection.
 
 All tests run without a GPU. torch is imported only for dtype comparison in
 test_resolve_torch_dtype (no CUDA calls). Everything else is pure Python.
@@ -9,18 +9,18 @@ import importlib.util
 import pytest
 
 # =============================================================================
-# Protocol satisfaction — TensorRTBackend (BACK-01)
+# Protocol satisfaction — TensorRTEngine (BACK-01)
 # =============================================================================
 
 
-def test_tensorrt_backend_satisfies_plugin_protocol():
-    """TensorRTBackend must satisfy the BackendPlugin Protocol."""
-    from llenergymeasure.backends.protocol import BackendPlugin
-    from llenergymeasure.backends.tensorrt import TensorRTBackend
+def test_tensorrt_engine_satisfies_plugin_protocol():
+    """TensorRTEngine must satisfy the EnginePlugin Protocol."""
+    from llenergymeasure.engines.protocol import EnginePlugin
+    from llenergymeasure.engines.tensorrt import TensorRTEngine
 
-    backend = TensorRTBackend()
-    assert isinstance(backend, BackendPlugin)
-    assert backend.name == "tensorrt"
+    engine = TensorRTEngine()
+    assert isinstance(engine, EnginePlugin)
+    assert engine.name == "tensorrt"
 
 
 # =============================================================================
@@ -28,114 +28,114 @@ def test_tensorrt_backend_satisfies_plugin_protocol():
 # =============================================================================
 
 
-def test_pytorch_backend_satisfies_plugin_protocol():
-    """PyTorchBackend must satisfy the BackendPlugin Protocol."""
-    from llenergymeasure.backends.protocol import BackendPlugin
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+def test_pytorch_engine_satisfies_plugin_protocol():
+    """PyTorchEngine must satisfy the EnginePlugin Protocol."""
+    from llenergymeasure.engines.protocol import EnginePlugin
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
-    assert isinstance(backend, BackendPlugin)
-    assert backend.name == "pytorch"
-
-
-# =============================================================================
-# Backend factory
-# =============================================================================
-
-
-def test_get_backend_pytorch():
-    """get_backend('pytorch') returns a PyTorchBackend with name 'pytorch'."""
-    from llenergymeasure.backends import get_backend
-
-    backend = get_backend("pytorch")
-    assert backend.name == "pytorch"
-
-
-def test_get_backend_tensorrt():
-    """get_backend('tensorrt') returns a TensorRTBackend with name 'tensorrt'."""
-    from llenergymeasure.backends import get_backend
-
-    backend = get_backend("tensorrt")
-    assert backend.name == "tensorrt"
-
-
-def test_get_backend_unknown_raises_backend_error():
-    """get_backend with unknown name raises BackendError."""
-    from llenergymeasure.backends import get_backend
-    from llenergymeasure.utils.exceptions import BackendError
-
-    with pytest.raises(BackendError, match="Unknown backend"):
-        get_backend("nonexistent")
-
-
-def test_get_backend_unknown_message_contains_backend_name():
-    """Error message includes the unknown backend name."""
-    from llenergymeasure.backends import get_backend
-    from llenergymeasure.utils.exceptions import BackendError
-
-    with pytest.raises(BackendError, match="'badbackend'"):
-        get_backend("badbackend")
+    engine = PyTorchEngine()
+    assert isinstance(engine, EnginePlugin)
+    assert engine.name == "pytorch"
 
 
 # =============================================================================
-# Backend detection
+# Engine factory
 # =============================================================================
 
 
-def test_detect_default_backend_returns_pytorch():
-    """detect_default_backend returns 'pytorch' when transformers is installed."""
+def test_get_engine_pytorch():
+    """get_engine('pytorch') returns a PyTorchEngine with name 'pytorch'."""
+    from llenergymeasure.engines import get_engine
+
+    engine = get_engine("pytorch")
+    assert engine.name == "pytorch"
+
+
+def test_get_engine_tensorrt():
+    """get_engine('tensorrt') returns a TensorRTEngine with name 'tensorrt'."""
+    from llenergymeasure.engines import get_engine
+
+    engine = get_engine("tensorrt")
+    assert engine.name == "tensorrt"
+
+
+def test_get_engine_unknown_raises_engine_error():
+    """get_engine with unknown name raises EngineError."""
+    from llenergymeasure.engines import get_engine
+    from llenergymeasure.utils.exceptions import EngineError
+
+    with pytest.raises(EngineError, match="Unknown engine"):
+        get_engine("nonexistent")
+
+
+def test_get_engine_unknown_message_contains_engine_name():
+    """Error message includes the unknown engine name."""
+    from llenergymeasure.engines import get_engine
+    from llenergymeasure.utils.exceptions import EngineError
+
+    with pytest.raises(EngineError, match="'badbackend'"):
+        get_engine("badbackend")
+
+
+# =============================================================================
+# Engine detection
+# =============================================================================
+
+
+def test_detect_default_engine_returns_pytorch():
+    """detect_default_engine returns 'pytorch' when transformers is installed."""
     pytest.importorskip("transformers")
-    from llenergymeasure.backends import detect_default_backend
+    from llenergymeasure.engines import detect_default_engine
 
     # transformers must be installed in the test environment
     assert importlib.util.find_spec("transformers") is not None, (
         "transformers must be installed for this test to be meaningful"
     )
-    assert detect_default_backend() == "pytorch"
+    assert detect_default_engine() == "pytorch"
 
 
-def test_detect_default_backend_returns_tensorrt_when_only_trt():
-    """detect_default_backend returns 'tensorrt' when only tensorrt_llm is installed."""
+def test_detect_default_engine_returns_tensorrt_when_only_trt():
+    """detect_default_engine returns 'tensorrt' when only tensorrt_llm is installed."""
     from unittest.mock import patch
 
-    import llenergymeasure.backends as backends_mod
+    import llenergymeasure.engines as engines_mod
 
     def mock_available(name):
         return name == "tensorrt"  # Only tensorrt is "installed"
 
-    with patch("llenergymeasure.backends.is_backend_available", side_effect=mock_available):
-        result = backends_mod.detect_default_backend()
+    with patch("llenergymeasure.engines.is_engine_available", side_effect=mock_available):
+        result = engines_mod.detect_default_engine()
         assert result == "tensorrt"
 
 
-def test_detect_default_backend_raises_when_no_backends():
-    """detect_default_backend raises BackendError when no backends are installed."""
+def test_detect_default_engine_raises_when_no_engines():
+    """detect_default_engine raises EngineError when no engines are installed."""
     from unittest.mock import patch
 
-    import llenergymeasure.backends as backends_mod
-    from llenergymeasure.utils.exceptions import BackendError
+    import llenergymeasure.engines as engines_mod
+    from llenergymeasure.utils.exceptions import EngineError
 
-    # Patch is_backend_available so all backend checks return False
+    # Patch is_engine_available so all engine checks return False
     with (
-        patch("llenergymeasure.backends.is_backend_available", return_value=False),
-        pytest.raises(BackendError, match="No inference backend"),
+        patch("llenergymeasure.engines.is_engine_available", return_value=False),
+        pytest.raises(EngineError, match="No inference engine"),
     ):
-        backends_mod.detect_default_backend()
+        engines_mod.detect_default_engine()
 
 
-def test_detect_default_backend_error_message_has_install_hint():
-    """Error message from detect_default_backend includes install hint."""
+def test_detect_default_engine_error_message_has_install_hint():
+    """Error message from detect_default_engine includes install hint."""
     from unittest.mock import patch
 
-    import llenergymeasure.backends as backends_mod
-    from llenergymeasure.utils.exceptions import BackendError
+    import llenergymeasure.engines as engines_mod
+    from llenergymeasure.utils.exceptions import EngineError
 
-    # Patch is_backend_available so all backend checks return False
+    # Patch is_engine_available so all engine checks return False
     with (
-        patch("llenergymeasure.backends.is_backend_available", return_value=False),
-        pytest.raises(BackendError, match="pip install"),
+        patch("llenergymeasure.engines.is_engine_available", return_value=False),
+        pytest.raises(EngineError, match="pip install"),
     ):
-        backends_mod.detect_default_backend()
+        engines_mod.detect_default_engine()
 
 
 # =============================================================================
@@ -146,12 +146,12 @@ def test_detect_default_backend_error_message_has_install_hint():
 def test_model_load_kwargs_contains_base_keys():
     """_model_load_kwargs always includes torch_dtype, device_map, trust_remote_code."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2")
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert "torch_dtype" in kwargs
     assert kwargs["device_map"] == "auto"
@@ -161,27 +161,27 @@ def test_model_load_kwargs_contains_base_keys():
 def test_model_load_kwargs_passthrough_kwargs_merged():
     """passthrough_kwargs are merged into model load kwargs (core P0 fix)."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2", passthrough_kwargs={"custom_key": "custom_value"})
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert "custom_key" in kwargs
     assert kwargs["custom_key"] == "custom_value"
 
 
 def test_model_load_kwargs_passthrough_can_override_defaults():
-    """passthrough_kwargs can override backend defaults (intentional escape hatch)."""
+    """passthrough_kwargs can override engine defaults (intentional escape hatch)."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     # Override device_map via passthrough
     config = ExperimentConfig(model="gpt2", passthrough_kwargs={"device_map": "cpu"})
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["device_map"] == "cpu"
 
@@ -189,12 +189,12 @@ def test_model_load_kwargs_passthrough_can_override_defaults():
 def test_model_load_kwargs_no_passthrough_when_none():
     """No extra keys added when passthrough_kwargs is None."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2")  # passthrough_kwargs=None by default
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     expected_keys = {"torch_dtype", "device_map", "trust_remote_code"}
     assert set(kwargs.keys()) == expected_keys
@@ -203,16 +203,16 @@ def test_model_load_kwargs_no_passthrough_when_none():
 def test_model_load_kwargs_pytorch_config_attn_implementation():
     """PyTorchConfig.attn_implementation is included in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(attn_implementation="sdpa"),
     )
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["attn_implementation"] == "sdpa"
 
@@ -226,11 +226,11 @@ def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
     """flash_attention_2 falls back to sdpa when flash_attn package is missing."""
     pytest.importorskip("torch")
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
@@ -238,7 +238,7 @@ def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
 
     # flash_attn is not installed in the test environment, so the guard
     # catches the ImportError and falls back to sdpa automatically.
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["attn_implementation"] == "sdpa"
 
@@ -250,11 +250,11 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
     import types
     from unittest.mock import patch
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
@@ -271,7 +271,7 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
             "flash_attn.bert_padding": fake_bert_padding,
         },
     ):
-        kwargs = backend._model_load_kwargs(config)
+        kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["attn_implementation"] == "flash_attention_2"
 
@@ -279,16 +279,16 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
 def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
     """sdpa attention is passed through without flash_attn availability check."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(attn_implementation="sdpa"),
     )
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     # sdpa should never be affected by flash_attn availability
     assert kwargs["attn_implementation"] == "sdpa"
@@ -297,16 +297,16 @@ def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
 def test_model_load_kwargs_eager_not_affected_by_flash_guard():
     """eager attention is passed through without flash_attn availability check."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(attn_implementation="eager"),
     )
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["attn_implementation"] == "eager"
 
@@ -315,11 +315,11 @@ def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
     """flash_attention_3 also falls back to sdpa when flash_attn is missing."""
     pytest.importorskip("torch")
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(attn_implementation="flash_attention_3"),
@@ -327,7 +327,7 @@ def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
 
     # flash_attn is not installed in the test environment, so the guard
     # catches the ImportError and falls back to sdpa automatically.
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["attn_implementation"] == "sdpa"
 
@@ -337,16 +337,16 @@ def test_model_load_kwargs_pytorch_config_load_in_4bit():
     pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(load_in_4bit=True),
     )
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     # v2.0: BitsAndBytesConfig is used (not raw load_in_4bit kwarg)
     assert "quantization_config" in kwargs
@@ -359,16 +359,16 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
     pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(load_in_8bit=True),
     )
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     # v2.0: BitsAndBytesConfig is used (not raw load_in_8bit kwarg)
     assert "quantization_config" in kwargs
@@ -379,16 +379,16 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
 def test_model_load_kwargs_pytorch_config_none_values_not_included():
     """None values from PyTorchConfig are NOT included in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         pytorch=PyTorchConfig(),  # all fields None
     )
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     # None-valued fields should not appear
     assert "attn_implementation" not in kwargs
@@ -399,12 +399,12 @@ def test_model_load_kwargs_pytorch_config_none_values_not_included():
 def test_model_load_kwargs_no_pytorch_section():
     """When config.pytorch is None, only base keys are present."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2")  # pytorch=None by default
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert "attn_implementation" not in kwargs
     assert "load_in_4bit" not in kwargs
@@ -420,36 +420,36 @@ def test_resolve_torch_dtype_fp32():
     """fp32 maps to torch.float32."""
     torch = pytest.importorskip("torch")
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    assert PyTorchBackend._resolve_torch_dtype("float32") == torch.float32
+    assert PyTorchEngine._resolve_torch_dtype("float32") == torch.float32
 
 
 def test_resolve_torch_dtype_fp16():
     """fp16 maps to torch.float16."""
     torch = pytest.importorskip("torch")
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    assert PyTorchBackend._resolve_torch_dtype("float16") == torch.float16
+    assert PyTorchEngine._resolve_torch_dtype("float16") == torch.float16
 
 
 def test_resolve_torch_dtype_bf16():
     """bf16 maps to torch.bfloat16."""
     torch = pytest.importorskip("torch")
 
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    assert PyTorchBackend._resolve_torch_dtype("bfloat16") == torch.bfloat16
+    assert PyTorchEngine._resolve_torch_dtype("bfloat16") == torch.bfloat16
 
 
 def test_resolve_torch_dtype_unknown_raises():
     """Unknown dtype string raises KeyError."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
     with pytest.raises(KeyError):
-        PyTorchBackend._resolve_torch_dtype("int8")
+        PyTorchEngine._resolve_torch_dtype("int8")
 
 
 # =============================================================================
@@ -459,12 +459,12 @@ def test_resolve_torch_dtype_unknown_raises():
 
 def test_build_generate_kwargs_defaults():
     """Default decoder config produces expected generate kwargs."""
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2")
-    kwargs = backend._build_generate_kwargs(config)
+    kwargs = engine._build_generate_kwargs(config)
 
     assert "do_sample" in kwargs
     assert "temperature" in kwargs
@@ -475,15 +475,15 @@ def test_build_generate_kwargs_defaults():
 
 def test_build_generate_kwargs_greedy_decoding():
     """Greedy decoding (temperature=0) removes sampling params."""
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import DecoderConfig, ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(
         model="gpt2",
         decoder=DecoderConfig(temperature=0.0, do_sample=False),
     )
-    kwargs = backend._build_generate_kwargs(config)
+    kwargs = engine._build_generate_kwargs(config)
 
     assert kwargs["do_sample"] is False
     # temperature and top_k removed for greedy decoding
@@ -496,11 +496,11 @@ def test_build_generate_kwargs_greedy_decoding():
 # =============================================================================
 
 
-def test_backend_plugin_protocol_has_required_methods():
-    """BackendPlugin Protocol defines all required methods plus name/version properties and validate_config."""
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+def test_engine_plugin_protocol_has_required_methods():
+    """EnginePlugin Protocol defines all required methods plus name/version properties and validate_config."""
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    obj = PyTorchBackend()
+    obj = PyTorchEngine()
     assert hasattr(obj, "name")
     assert hasattr(obj, "version")
     assert hasattr(obj, "load_model")
@@ -510,23 +510,23 @@ def test_backend_plugin_protocol_has_required_methods():
     assert hasattr(obj, "validate_config")
 
 
-def test_backend_plugin_protocol_is_runtime_checkable():
-    """BackendPlugin is @runtime_checkable (isinstance works)."""
-    from llenergymeasure.backends.protocol import BackendPlugin
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+def test_engine_plugin_protocol_is_runtime_checkable():
+    """EnginePlugin is @runtime_checkable (isinstance works)."""
+    from llenergymeasure.engines.protocol import EnginePlugin
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
     # runtime_checkable means isinstance() works and confirms protocol conformance
-    assert isinstance(PyTorchBackend(), BackendPlugin) is True
+    assert isinstance(PyTorchEngine(), EnginePlugin) is True
 
 
 def test_non_conforming_object_fails_plugin_protocol_check():
-    """An object without the 4 plugin methods does not satisfy BackendPlugin."""
-    from llenergymeasure.backends.protocol import BackendPlugin
+    """An object without the 4 plugin methods does not satisfy EnginePlugin."""
+    from llenergymeasure.engines.protocol import EnginePlugin
 
-    class NotABackend:
+    class NotAnEngine:
         pass
 
-    assert not isinstance(NotABackend(), BackendPlugin)
+    assert not isinstance(NotAnEngine(), EnginePlugin)
 
 
 # =============================================================================
@@ -535,21 +535,21 @@ def test_non_conforming_object_fails_plugin_protocol_check():
 
 
 def test_pytorch_validate_config_returns_empty():
-    """PyTorchBackend.validate_config returns empty list."""
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+    """PyTorchEngine.validate_config returns empty list."""
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
     config = ExperimentConfig(model="gpt2")
-    assert PyTorchBackend().validate_config(config) == []
+    assert PyTorchEngine().validate_config(config) == []
 
 
 def test_vllm_validate_config_returns_empty():
-    """VLLMBackend.validate_config returns empty list."""
-    from llenergymeasure.backends.vllm import VLLMBackend
+    """VLLMEngine.validate_config returns empty list."""
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.vllm import VLLMEngine
 
-    config = ExperimentConfig(model="gpt2", backend="vllm")
-    assert VLLMBackend().validate_config(config) == []
+    config = ExperimentConfig(model="gpt2", engine="vllm")
+    assert VLLMEngine().validate_config(config) == []
 
 
 # =============================================================================
@@ -557,13 +557,13 @@ def test_vllm_validate_config_returns_empty():
 # =============================================================================
 
 
-def test_get_backend_unknown_message_lists_tensorrt():
-    """Error message from get_backend lists 'tensorrt' as an available backend."""
-    from llenergymeasure.backends import get_backend
-    from llenergymeasure.utils.exceptions import BackendError
+def test_get_engine_unknown_message_lists_tensorrt():
+    """Error message from get_engine lists 'tensorrt' as an available engine."""
+    from llenergymeasure.engines import get_engine
+    from llenergymeasure.utils.exceptions import EngineError
 
-    with pytest.raises(BackendError, match="tensorrt"):
-        get_backend("badbackend")
+    with pytest.raises(EngineError, match="tensorrt"):
+        get_engine("badbackend")
 
 
 # =============================================================================
@@ -574,13 +574,13 @@ def test_get_backend_unknown_message_lists_tensorrt():
 def test_model_load_kwargs_tp_plan_forwarded():
     """With PyTorchConfig(tp_plan='auto'), kwargs contains tp_plan and no device_map."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_plan="auto"))
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["tp_plan"] == "auto"
     assert "device_map" not in kwargs
@@ -589,13 +589,13 @@ def test_model_load_kwargs_tp_plan_forwarded():
 def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
     """With PyTorchConfig(tp_plan='auto', tp_size=4), kwargs contains both and no device_map."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_plan="auto", tp_size=4))
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["tp_plan"] == "auto"
     assert kwargs["tp_size"] == 4
@@ -605,13 +605,13 @@ def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
 def test_model_load_kwargs_tp_size_without_tp_plan_ignored():
     """With PyTorchConfig(tp_size=4) and no tp_plan, tp_size is not in kwargs and device_map defaults."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_size=4))
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert "tp_size" not in kwargs
     assert "tp_plan" not in kwargs
@@ -621,13 +621,13 @@ def test_model_load_kwargs_tp_size_without_tp_plan_ignored():
 def test_model_load_kwargs_device_map_still_works():
     """PyTorchConfig(device_map='cpu') produces device_map='cpu', no tp_plan in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
-    from llenergymeasure.config.backend_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import PyTorchConfig
     from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    backend = PyTorchBackend()
+    engine = PyTorchEngine()
     config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(device_map="cpu"))
-    kwargs = backend._model_load_kwargs(config)
+    kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["device_map"] == "cpu"
     assert "tp_plan" not in kwargs
@@ -639,27 +639,27 @@ def test_model_load_kwargs_device_map_still_works():
 
 
 def test_pytorch_version_returns_torch_version():
-    """PyTorchBackend.version returns torch.__version__."""
+    """PyTorchEngine.version returns torch.__version__."""
     torch = pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
-    assert PyTorchBackend().version == torch.__version__
+    assert PyTorchEngine().version == torch.__version__
 
 
 def test_vllm_version_returns_string():
-    """VLLMBackend.version returns a string (either vllm version or 'unknown')."""
-    from llenergymeasure.backends.vllm import VLLMBackend
+    """VLLMEngine.version returns a string (either vllm version or 'unknown')."""
+    from llenergymeasure.engines.vllm import VLLMEngine
 
-    version = VLLMBackend().version
+    version = VLLMEngine().version
     assert isinstance(version, str)
     assert len(version) > 0
 
 
 def test_tensorrt_version_returns_string():
-    """TensorRTBackend.version returns a string (either tensorrt_llm version or 'unknown')."""
-    from llenergymeasure.backends.tensorrt import TensorRTBackend
+    """TensorRTEngine.version returns a string (either tensorrt_llm version or 'unknown')."""
+    from llenergymeasure.engines.tensorrt import TensorRTEngine
 
-    version = TensorRTBackend().version
+    version = TensorRTEngine().version
     assert isinstance(version, str)
     assert len(version) > 0
     # On hosts without TRT-LLM CUDA libs, import fails and version is "unknown"

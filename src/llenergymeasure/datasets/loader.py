@@ -1,7 +1,7 @@
 """Dataset loading utilities for LLM efficiency measurement.
 
 Provides JSONL loading for bundled datasets and file-path datasets. Used by
-inference backends to load the prompt workload for each experiment.
+inference engines to load the prompt workload for each experiment.
 """
 
 from __future__ import annotations

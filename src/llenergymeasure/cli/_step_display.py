@@ -49,7 +49,7 @@ _VIEWPORT_RESERVED_LINES = 12
 class _ImagePrepResult(NamedTuple):
     """Result of a successfully prepared Docker image."""
 
-    backend: str
+    engine: str
     image: str
     cached: bool
     elapsed: float
@@ -59,7 +59,7 @@ class _ImagePrepResult(NamedTuple):
 class _ImagePrepFailure(NamedTuple):
     """Result of a failed Docker image preparation."""
 
-    backend: str
+    engine: str
     image: str
     error: str
 
@@ -171,7 +171,7 @@ _RUNNER_SOURCE_LABELS: dict[str, str] = {
     "user_config": "user config",
     "auto_detected": "auto-detected",
     "default": "default",
-    "multi_backend_elevation": "multi-backend auto-elevation",
+    "multi_engine_elevation": "multi-engine auto-elevation",
 }
 
 
@@ -1034,18 +1034,18 @@ class StudyStepDisplay:
 
     # -- Image prep (study-level Docker image preparation) --
 
-    def begin_image_prep(self, backends: list[str]) -> None:
+    def begin_image_prep(self, engines: list[str]) -> None:
         """Signal the start of study-level Docker image preparation."""
         with self._lock:
             self._image_prep_active = True
-            self._image_prep_total = len(backends)
+            self._image_prep_total = len(engines)
         if not self._is_tty:
             self._console.print("\n  Preparing Docker images", highlight=False)
         self._refresh()
 
     def image_ready(
         self,
-        backend: str,
+        engine: str,
         image: str,
         cached: bool,
         elapsed: float,
@@ -1053,15 +1053,13 @@ class StudyStepDisplay:
     ) -> None:
         """Signal that a Docker image is ready."""
         with self._lock:
-            self._image_prep_done.append(
-                _ImagePrepResult(backend, image, cached, elapsed, metadata)
-            )
+            self._image_prep_done.append(_ImagePrepResult(engine, image, cached, elapsed, metadata))
         if not self._is_tty:
             idx = len(self._image_prep_done)
             total = self._image_prep_total
             status = "cached" if cached else "pulled"
             short_img = _short_image(image)
-            line = f"      [{idx}/{total}]  {backend:<16s}{short_img} ({status})"
+            line = f"      [{idx}/{total}]  {engine:<16s}{short_img} ({status})"
             line += f"  \u2713  {_format_elapsed(elapsed)}"
             self._console.print(line, highlight=False)
             if metadata:
@@ -1074,16 +1072,16 @@ class StudyStepDisplay:
                 )
         self._refresh()
 
-    def image_failed(self, backend: str, image: str, error: str) -> None:
+    def image_failed(self, engine: str, image: str, error: str) -> None:
         """Signal that a Docker image could not be prepared."""
         with self._lock:
-            self._image_prep_failed = _ImagePrepFailure(backend, image, error)
+            self._image_prep_failed = _ImagePrepFailure(engine, image, error)
         if not self._is_tty:
             idx = len(self._image_prep_done) + 1
             total = self._image_prep_total
             short_img = _short_image(image)
             self._console.print(
-                f"      [{idx}/{total}]  {backend:<16s}{short_img}  \u2717",
+                f"      [{idx}/{total}]  {engine:<16s}{short_img}  \u2717",
                 highlight=False,
             )
             self._console.print(
@@ -1110,11 +1108,11 @@ class StudyStepDisplay:
         lines.append("\n  Preparing Docker images\n")
         total = self._image_prep_total
 
-        for idx, (backend, image, cached, elapsed, metadata) in enumerate(self._image_prep_done, 1):
+        for idx, (engine, image, cached, elapsed, metadata) in enumerate(self._image_prep_done, 1):
             status = "cached" if cached else "pulled"
             short_img = _short_image(image)
             counter = f"[{idx}/{total}]"
-            lines.append(f"      {counter:>7s}  {backend:<16s}{short_img} ({status})")
+            lines.append(f"      {counter:>7s}  {engine:<16s}{short_img} ({status})")
             lines.append("  \u2713", style="bold green")
             lines.append(f"  {_format_elapsed(elapsed)}\n")
             if metadata:
@@ -1123,11 +1121,11 @@ class StudyStepDisplay:
                 lines.append(f"                    \u00b7 {meta_text}\n", style="dim")
 
         if self._image_prep_failed:
-            fail_backend, fail_image, fail_error = self._image_prep_failed
+            fail_engine, fail_image, fail_error = self._image_prep_failed
             idx = len(self._image_prep_done) + 1
             short_img = _short_image(fail_image)
             counter = f"[{idx}/{total}]"
-            lines.append(f"      {counter:>7s}  {fail_backend:<16s}{short_img}")
+            lines.append(f"      {counter:>7s}  {fail_engine:<16s}{short_img}")
             lines.append("  \u2717", style="bold red")
             lines.append("\n")
             lines.append(f"                    \u00b7 {fail_error}\n", style="dim")

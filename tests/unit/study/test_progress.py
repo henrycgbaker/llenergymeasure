@@ -110,9 +110,9 @@ def test_print_study_progress_unknown_status(capsys):
     assert "?" in captured.err
 
 
-def test_print_study_progress_includes_model_and_backend(capsys):
-    """Output line includes model name and backend."""
-    config = make_config(model="meta-llama/Llama-3-8B", backend="vllm")
+def test_print_study_progress_includes_model_and_engine(capsys):
+    """Output line includes model name and engine."""
+    config = make_config(model="meta-llama/Llama-3-8B", engine="vllm")
     print_study_progress(1, 1, config, status="running")
     captured = capsys.readouterr()
     assert "meta-llama/Llama-3-8B" in captured.err

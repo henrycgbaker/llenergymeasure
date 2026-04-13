@@ -1,8 +1,8 @@
-"""MeasurementHarness - owns the measurement lifecycle for any BackendPlugin.
+"""MeasurementHarness - owns the measurement lifecycle for any EnginePlugin.
 
 The harness extracts the ~600 lines of identical measurement infrastructure
 duplicated across pytorch.py and vllm.py into a single location.
-Backends become thin plugins implementing the 4-method BackendPlugin protocol.
+Engines become thin plugins implementing the 4-method EnginePlugin protocol.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from llenergymeasure._version import __version__
-from llenergymeasure.backends.protocol import BackendPlugin, InferenceOutput
 from llenergymeasure.config.ssot import TIMEOUT_ENV_SNAPSHOT
 from llenergymeasure.datasets import load_prompts
 from llenergymeasure.domain.experiment import (
@@ -27,6 +26,7 @@ from llenergymeasure.domain.experiment import (
 )
 from llenergymeasure.domain.progress import STEP_BASELINE
 from llenergymeasure.energy import select_energy_sampler
+from llenergymeasure.engines.protocol import EnginePlugin, InferenceOutput
 from llenergymeasure.harness.warmup import thermal_floor_wait, warmup_until_converged
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Module-level helpers (extracted from both backends — byte-identical copies)
+# Module-level helpers (extracted from both engines — byte-identical copies)
 # ---------------------------------------------------------------------------
 
 
@@ -92,8 +92,8 @@ def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Top-level imports used in harness (lazy in backends, top-level here for
-# patching in tests).  The actual heavy work is inside the backend plugins.
+# Top-level imports used in harness (lazy in engines, top-level here for
+# patching in tests).  The actual heavy work is inside the engine plugins.
 # ---------------------------------------------------------------------------
 
 
@@ -189,9 +189,9 @@ class PowerThermalSampler:  # pragma: no cover
 
 
 class MeasurementHarness:
-    """Orchestrates the measurement lifecycle for any BackendPlugin.
+    """Orchestrates the measurement lifecycle for any EnginePlugin.
 
-    Backends are thin plugins implementing BackendPlugin (load_model, warmup,
+    Engines are thin plugins implementing EnginePlugin (load_model, warmup,
     run_inference, cleanup). The harness owns everything else:
     environment snapshot, baseline power, energy tracking, CUDA sync,
     thermal floor wait, FLOPs estimation, timeseries, warnings, and result assembly.
@@ -199,7 +199,7 @@ class MeasurementHarness:
 
     def run(
         self,
-        backend: BackendPlugin,
+        engine: EnginePlugin,
         config: ExperimentConfig,
         snapshot: EnvironmentSnapshot | None = None,
         gpu_indices: list[int] | None = None,
@@ -208,10 +208,10 @@ class MeasurementHarness:
         save_timeseries: bool = True,
         baseline: BaselineCache | None = None,
     ) -> ExperimentResult:
-        """Run a complete measurement using the given backend plugin.
+        """Run a complete measurement using the given engine plugin.
 
         Args:
-            backend: BackendPlugin instance (pytorch, vllm, tensorrt, ...).
+            engine: EnginePlugin instance (pytorch, vllm, tensorrt, ...).
             config: Fully resolved experiment configuration.
             snapshot: Pre-collected environment snapshot (study-level cache).
                       When None, collected in a background thread during model load.
@@ -231,7 +231,7 @@ class MeasurementHarness:
             ExperimentResult with all measurement fields populated.
 
         Raises:
-            BackendError: If model loading or inference fails.
+            EngineError: If model loading or inference fails.
             PreFlightError: If pre-flight checks fail before GPU allocation.
         """
         _p = progress  # short alias
@@ -281,7 +281,7 @@ class MeasurementHarness:
         elif _p:
             _p.on_step_skip(STEP_BASELINE, "disabled")
 
-        # 3. Load model via backend plugin
+        # 3. Load model via engine plugin
         if _p:
             _p.on_step_start("model", "Loading", f"model {config.model}")
             t0 = time.perf_counter()
@@ -290,7 +290,7 @@ class MeasurementHarness:
         def _on_model_substep(text: str, elapsed: float) -> None:
             _substep("model", text, elapsed)
 
-        model = backend.load_model(config, on_substep=_on_model_substep)
+        model = engine.load_model(config, on_substep=_on_model_substep)
 
         if _p:
             _p.on_step_done("model", time.perf_counter() - t0)
@@ -330,7 +330,7 @@ class MeasurementHarness:
             # Probe call determines warmup strategy:
             # > 0.0 → CV-based convergence (PyTorch), 0.0 → kernel warmup (vLLM/TRT-LLM)
             if config.warmup.enabled:
-                first_latency = backend.run_warmup_prompt(config, model, prompts[0])
+                first_latency = engine.run_warmup_prompt(config, model, prompts[0])
             else:
                 first_latency = 0.0
 
@@ -339,7 +339,7 @@ class MeasurementHarness:
                     (lambda text, elapsed: _p.on_substep("warmup", text, elapsed)) if _p else None
                 )
                 warmup_result = warmup_until_converged(
-                    lambda: backend.run_warmup_prompt(config, model, prompts[0]),
+                    lambda: engine.run_warmup_prompt(config, model, prompts[0]),
                     config.warmup,
                     on_substep=warmup_substep,
                 )
@@ -419,7 +419,7 @@ class MeasurementHarness:
 
             # Start thermal sampler around inference for timeseries + throttle detection
             with PowerThermalSampler(gpu_indices=gpu_indices) as thermal_sampler:
-                output = backend.run_inference(config, model, prompts)
+                output = engine.run_inference(config, model, prompts)
 
             t_inference_end = time.perf_counter()
 
@@ -433,7 +433,7 @@ class MeasurementHarness:
             thermal_info = thermal_sampler.get_thermal_throttle_info()
             timeseries_samples = thermal_sampler.get_samples()
 
-            # Harness sets canonical inference timer — overrides backend's elapsed_time_sec
+            # Harness sets canonical inference timer — overrides engine's elapsed_time_sec
             output.inference_time_sec = t_inference_end - t_inference_start
 
             # 12. Stop energy tracking
@@ -448,7 +448,7 @@ class MeasurementHarness:
             if _p:
                 _p.on_step_start("flops", "Estimating", "FLOPs (PaLM formula)")
                 t0_flops = time.perf_counter()
-            flops_result = self._estimate_flops(backend, config, output)
+            flops_result = self._estimate_flops(engine, config, output)
             if _p:
                 if flops_result is not None:
                     _p.on_step_update("flops", f"FLOPs: {flops_result.value:.2e}")
@@ -458,7 +458,7 @@ class MeasurementHarness:
 
         finally:
             # Always release model from memory even on exception
-            backend.cleanup(model)
+            engine.cleanup(model)
 
         # 14. Write timeseries Parquet sidecar (if output_dir set and save_timeseries enabled)
         resolved_output_dir = Path(output_dir) if output_dir is not None else None
@@ -484,10 +484,10 @@ class MeasurementHarness:
         measurement_warnings = self._collect_warnings(duration_sec, timeseries_samples, gpu_indices)
 
         # 16. Assemble ExperimentResult
-        backend_version = getattr(backend, "version", None)
+        engine_version = getattr(engine, "version", None)
         result = self._build_result(
-            backend_name=backend.name,
-            backend_version=backend_version,
+            engine_name=engine.name,
+            engine_version=engine_version,
             config=config,
             output=output,
             model_memory_mb=model_memory_mb,
@@ -540,7 +540,7 @@ class MeasurementHarness:
 
     def _estimate_flops(
         self,
-        backend: BackendPlugin,
+        engine: EnginePlugin,
         config: ExperimentConfig,
         output: InferenceOutput,
     ) -> Any:
@@ -548,7 +548,7 @@ class MeasurementHarness:
 
         Fallback chain:
         1. AutoConfig path — uses estimate_flops_palm_from_config(config.model).
-           Works for all backends (no model weights needed).
+           Works for all engines (no model weights needed).
         2. hf_model path — uses estimate_flops_palm(hf_model) when extras['hf_model'] is set.
            Higher-confidence since it counts actual loaded parameters.
         3. None — FLOPs unavailable.
@@ -608,8 +608,8 @@ class MeasurementHarness:
 
     def _build_result(
         self,
-        backend_name: str,
-        backend_version: str | None,
+        engine_name: str,
+        engine_version: str | None,
         config: ExperimentConfig,
         output: InferenceOutput,
         model_memory_mb: float,
@@ -631,10 +631,10 @@ class MeasurementHarness:
         Energy breakdown uses baseline adjustment when available.
 
         Args:
-            backend_name: Backend identifier string (from backend.name).
-            backend_version: Backend version string (from backend.version), or None.
+            engine_name: Engine identifier string (from engine.name).
+            engine_version: Engine version string (from engine.version), or None.
             config: Experiment configuration.
-            output: InferenceOutput from backend.run_inference().
+            output: InferenceOutput from engine.run_inference().
             model_memory_mb: GPU memory after model load, before inference (MB).
             snapshot: EnvironmentSnapshot captured before model load.
             start_time: Measurement start time.
@@ -750,8 +750,8 @@ class MeasurementHarness:
             measurement_config_hash=compute_measurement_config_hash(config),
             llenergymeasure_version=__version__,
             measurement_methodology="total",
-            backend=backend_name,
-            backend_version=backend_version,
+            engine=engine_name,
+            engine_version=engine_version,
             aggregation=AggregationMetadata(
                 method="single_process",
                 num_processes=1,
