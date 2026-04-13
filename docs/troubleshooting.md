@@ -298,7 +298,7 @@ runner. Seed the GHCR cache once from a developer machine with more resources:
 
 ```bash
 docker login ghcr.io           # needs write:packages scope
-make docker-seed-transformers  # builds + pushes cache to ghcr.io (MAX_JOBS=8 default)
+make docker-seed-transformers  # builds + pushes cache to ghcr.io (~minutes if locally cached)
 ```
 
 After seeding, CI warm-rebuilds from the GHCR cache in <5 min.

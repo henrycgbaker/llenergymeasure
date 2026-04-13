@@ -276,19 +276,18 @@ docker-build-tensorrt:
 # Intended for seeding the Transformers image cache (FA3 Hopper compile,
 # ~30 min but memory-intensive) when the CI hosted runner cannot complete
 # the build. Requires: docker login ghcr.io, llem-builder buildx builder.
-# Set MAX_JOBS to suit your machine (8 = good default for dev hardware).
+# Uses Dockerfile default MAX_JOBS=32 — matches local layer cache so FA3
+# is not recompiled if already built locally.
 docker-seed-transformers:
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "dev"); \
 	fingerprint=$$(python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo "unknown"); \
-	max_jobs=$${MAX_JOBS:-8}; \
 	ref=ghcr.io/henrycgbaker/llenergymeasure/transformers; \
-	echo "Seeding GHCR cache for transformers (MAX_JOBS=$$max_jobs, version=$$version)"; \
+	echo "Seeding GHCR cache for transformers (version=$$version)"; \
 	docker buildx build \
 	  --builder $(BUILDER_NAME) \
 	  -f docker/Dockerfile.transformers \
 	  --build-arg LLEM_PKG_VERSION=$$version \
 	  --build-arg LLEM_EXPCONF_SCHEMA_FINGERPRINT=$$fingerprint \
-	  --build-arg MAX_JOBS=$$max_jobs \
 	  --cache-from type=registry,ref=$$ref:v$$version \
 	  --cache-from type=registry,ref=$$ref:latest \
 	  --cache-to   type=registry,ref=$$ref:latest,mode=max \
