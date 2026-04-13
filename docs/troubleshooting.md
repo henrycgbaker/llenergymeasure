@@ -259,14 +259,21 @@ Notes:
 
 ## Docker rebuild is slow / recompiling flash-attn
 
-**Symptom:** `make docker-build-pytorch` takes 15-20 minutes and BuildKit logs
-show `flash-attn` source downloads and nvcc compilation for every build.
+**Symptom:** `make docker-build-pytorch` takes 15-20 minutes and the post-build
+summary line reports `⚠ no GHCR cache imported (cold build)` (or BuildKit
+output shows `flash-attn` source downloads and nvcc compilation for every
+build).
 
 **Cause:** BuildKit's `cache_from` registry pull was skipped. Either (a) you
 are on a fresh buildx builder with no local cache, (b) you are offline or
-GHCR is unreachable, or (c) your `LLEM_PKG_VERSION` does not match any tag in
-`ghcr.io/henrycgbaker/llenergymeasure/{backend}:*`, so neither
-`:${LLEM_PKG_VERSION}` nor `:latest` had usable layers.
+GHCR is unreachable, or (c) your `LLEM_PKG_VERSION` does not match any
+published tag (cache_from resolves to `:v${LLEM_PKG_VERSION}` and falls
+through to `:latest` — if neither has usable layers, BuildKit silently
+cold-builds).
+
+The full BuildKit log for the most recent attempt is at
+`/tmp/llem-build-{backend}.log` — grep it for `importing cache manifest` to
+see whether the registry was even reached.
 
 **Fix:**
 

@@ -248,25 +248,29 @@ docker-builder-rm:
 	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
 CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
+BUILD_WITH_REPORT := scripts/docker_build_with_cache_report.sh
 
-# Build all backends (pytorch, vllm, tensorrt) — local images
+# Build all backends (pytorch, vllm, tensorrt) — local images.
+# Calls compose directly so COMPOSE_BAKE=true can build all three in parallel;
+# per-backend cache-import summary is only emitted for single-backend targets
+# below. For per-backend diagnostics, run `make docker-build-{backend}`.
 docker-build-all:
 	$(CACHE_HINT)
-	docker compose build pytorch vllm tensorrt
+	BUILDKIT_PROGRESS=$${BUILDKIT_PROGRESS:-plain} docker compose build pytorch vllm tensorrt
 
 # Build PyTorch backend (default, recommended for most users)
 docker-build-pytorch:
 	$(CACHE_HINT)
-	docker compose build pytorch
+	$(BUILD_WITH_REPORT) pytorch
 
 # Build specific backends — local images
 docker-build-vllm:
 	$(CACHE_HINT)
-	docker compose build vllm
+	$(BUILD_WITH_REPORT) vllm
 
 docker-build-tensorrt:
 	$(CACHE_HINT)
-	docker compose build tensorrt
+	$(BUILD_WITH_REPORT) tensorrt
 
 # Pull versioned registry images (ghcr.io) instead of building locally
 docker-pull:
