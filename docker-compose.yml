@@ -26,21 +26,27 @@
 #   docker compose --profile dev run --rm tensorrt-dev /bin/bash
 
 # Per-backend BuildKit layer cache (shared across runtime + dev services).
-# When LLEM_PKG_VERSION is unset the first entry collapses to :latest and
-# buildx dedups against the second — no-op, not a bug.
+# Two sources, in priority order:
+#   1. :v${LLEM_PKG_VERSION} — exact-version image layers from the matching
+#      release. Note the literal `v`: published tags carry a `v` prefix (set by
+#      release.yml) but LLEM_PKG_VERSION is bare semver (from _version.py), so
+#      we have to add the prefix here. On dev versions (`vdev`) this entry
+#      silently misses, which is fine — the next entry catches it.
+#   2. :latest — rolling cache published by docker-publish.yml with mode=max,
+#      which exports intermediate layers (including the flash-attn compile).
 x-cache-pytorch: &cache-pytorch
   cache_from:
-    - ghcr.io/henrycgbaker/llenergymeasure/pytorch:${LLEM_PKG_VERSION:-latest}
+    - ghcr.io/henrycgbaker/llenergymeasure/pytorch:v${LLEM_PKG_VERSION:-dev}
     - ghcr.io/henrycgbaker/llenergymeasure/pytorch:latest
 
 x-cache-vllm: &cache-vllm
   cache_from:
-    - ghcr.io/henrycgbaker/llenergymeasure/vllm:${LLEM_PKG_VERSION:-latest}
+    - ghcr.io/henrycgbaker/llenergymeasure/vllm:v${LLEM_PKG_VERSION:-dev}
     - ghcr.io/henrycgbaker/llenergymeasure/vllm:latest
 
 x-cache-tensorrt: &cache-tensorrt
   cache_from:
-    - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:${LLEM_PKG_VERSION:-latest}
+    - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v${LLEM_PKG_VERSION:-dev}
     - ghcr.io/henrycgbaker/llenergymeasure/tensorrt:latest
 
 # Shared configuration anchor
