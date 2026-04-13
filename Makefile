@@ -1,7 +1,7 @@
 .PHONY: format lint lint-fix typecheck check test test-unit test-integration test-all install dev clean
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-local test-runtime-docker
-.PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
+.PHONY: docker-build docker-build-all docker-build-transformers docker-build-vllm docker-build-tensorrt
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
@@ -247,24 +247,35 @@ docker-builder-setup:
 docker-builder-rm:
 	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
-# Build all engines (pytorch, vllm, tensorrt) — local images
-docker-build-all:
-	docker compose build pytorch vllm tensorrt
+CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
+BUILD_WITH_REPORT := scripts/docker_build_with_cache_report.sh
 
-# Build PyTorch engine (default, recommended for most users)
-docker-build-pytorch:
-	docker compose build pytorch
+# Build all engines (transformers, vllm, tensorrt) — local images.
+# Calls compose directly so all three can build in parallel;
+# per-engine cache-import summary is only emitted for single-engine targets
+# below. For per-engine diagnostics, run `make docker-build-{engine}`.
+docker-build-all:
+	$(CACHE_HINT)
+	BUILDKIT_PROGRESS=$${BUILDKIT_PROGRESS:-plain} docker compose build transformers vllm tensorrt
+
+# Build Transformers engine (default, recommended for most users)
+docker-build-transformers:
+	$(CACHE_HINT)
+	$(BUILD_WITH_REPORT) transformers
+
 # Build specific engines — local images
 docker-build-vllm:
-	docker compose build vllm
+	$(CACHE_HINT)
+	$(BUILD_WITH_REPORT) vllm
 
 docker-build-tensorrt:
-	docker compose build tensorrt
+	$(CACHE_HINT)
+	$(BUILD_WITH_REPORT) tensorrt
 
 # Pull versioned registry images (ghcr.io) instead of building locally
 docker-pull:
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "latest"); \
-	for engine in pytorch vllm tensorrt; do \
+	for engine in transformers vllm tensorrt; do \
 		echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
 		docker pull "ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
 	done

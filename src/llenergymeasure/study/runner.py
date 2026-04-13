@@ -1270,11 +1270,11 @@ class StudyRunner:
 
                 raise DockerImagePullError(
                     message=f"Image pull timed out: {image}",
-                    fix_suggestion=f"COMPOSE_BAKE=true docker compose build {engine_name}",
+                    fix_suggestion=f"docker compose build {engine_name}",
                 ) from exc
 
             if pull.returncode != 0:
-                tip = f"COMPOSE_BAKE=true docker compose build {engine_name}"
+                tip = f"docker compose build {engine_name}"
                 if self._progress:
                     self._progress.image_failed(engine_name, image, f"not found \u2014 run: {tip}")
                     self._progress.end_image_prep()

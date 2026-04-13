@@ -48,7 +48,7 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plug
 ```
 
 **Verify Docker Compose and Buildx versions** (v2.32+ and v0.17+ recommended for
-[build cache](installation.md#build-cache-recommended)):
+[fast rebuilds](installation.md#fast-rebuilds-and-first-pull-cost)):
 
 ```bash
 docker compose version   # need v2.32+
@@ -355,9 +355,12 @@ make docker-build-vllm
 make docker-build-tensorrt
 ```
 
-These targets use `docker compose build` under the hood. If `COMPOSE_BAKE=true` is set in
-your `.env`, builds use the GHCR registry cache for dramatically faster builds (see
-[Build Cache](installation.md#build-cache-recommended) for details).
+These targets use `docker compose build` under the hood and pull cached layers from the
+GHCR registry on first build (see
+[Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
+for the full mechanism). Setting `COMPOSE_BAKE=true` in your `.env` additionally routes
+builds through `buildx bake` for parallel multi-engine builds and a cleaner progress UI;
+it is not required for the cache itself.
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, engines, or the container entrypoint, rebuild for changes to take
@@ -377,6 +380,18 @@ runners:
 
 SGLang (M5) images will follow the same naming convention, resolution logic, and auto-pull
 behaviour. No additional setup is needed when SGLang ships.
+
+### Layer cache sharing via GHCR registry
+
+See [installation.md — Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
+for the user-facing walkthrough (mechanism, sizes, authentication, offline fallback).
+
+Operator notes:
+
+- `cache-to` pushes only to `:latest` (never to immutable version tags), so
+  storage growth is bounded by image drift between releases.
+- Inspect what's cached on the active builder: `docker buildx du --builder llem-builder`.
+- If the cache is corrupt, recreate it with `make docker-builder-rm && make docker-builder-setup`.
 
 ### Image labels and versioning
 
@@ -495,4 +510,4 @@ llem run experiment.yaml --skip-preflight
 
 - [Getting Started](getting-started.md) — run your first vLLM or TensorRT-LLM experiment
 - [Engine Configuration](engines.md) — configure vLLM, TensorRT-LLM, and switch between engines
-- [Build Cache](installation.md#build-cache-recommended) — speed up local Docker builds with GHCR registry cache
+- [Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost) — how the GHCR layer cache speeds up local Docker builds

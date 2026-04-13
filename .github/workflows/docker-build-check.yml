@@ -47,4 +47,5 @@ jobs:
           target: runtime
           push: false
           build-args: ${{ matrix.build-args }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.engine }}:buildcache
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.engine }}:latest

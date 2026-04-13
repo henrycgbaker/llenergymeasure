@@ -130,68 +130,71 @@ for the full resolution chain.
 | `make docker-images` | Show which image each engine resolves to (local vs registry) |
 | `make docker-check` | Validate `docker-compose.yml` configuration |
 
-### Build Cache (recommended)
+### Fast rebuilds and first-pull cost
 
-Docker image builds can be slow without caching. To speed them up, pull pre-compiled layers
-from GHCR:
+Every engine image declares `cache_from` entries pointing at the published GHCR tags.
+CI populates the cache on each release with `cache-to=type=registry,mode=max`, which
+exports intermediate layers — including the ~15-min flash-attn FA2+FA3 compile — so
+any fresh machine warm-builds in minutes instead of re-compiling from source.
 
-| Engine | Image Size | Cold Build | Cached Rebuild |
-|---------|-----------|------------|----------------|
-| Transformers (FA3 on) | ~8.5 GB | ~30 min | ~30 sec |
-| vLLM | ~17 GB | ~30 min | ~5 min |
+| Engine | Image Size | Cold Build | Warm Rebuild |
+|---------|-----------|------------|--------------|
+| Transformers (FA3 on) | ~8.5 GB | ~30 min | <5 min |
+| vLLM | ~17 GB | ~30 min | <5 min |
 | TensorRT-LLM | ~54 GB | ~40 min | ~10 min |
 
-Cold build = no cache, compiling from scratch. Cached rebuild = `COMPOSE_BAKE=true` with
-local BuildKit cache populated. Times depend on network speed and hardware.
+"Cold build" = fresh buildx builder, no layers cached anywhere. "Warm rebuild"
+= local image wiped, cache layers pulled from GHCR.
 
-**1. Enable COMPOSE_BAKE in your `.env`:**
-
-```bash
-COMPOSE_BAKE=true
-```
-
-This is already set in `.env.example`. It tells Docker Compose to delegate builds to
-BuildKit's [bake](https://docs.docker.com/build/bake/) engine, which has full support for
-registry-based build cache.
-
-**2. Build as normal:**
+**Build as normal:**
 
 ```bash
-docker compose build pytorch
+make docker-build-transformers   # or docker-build-vllm / docker-build-tensorrt
 ```
 
-Compose will pull cached layers from GHCR (written by CI on each release) and only rebuild
-layers that have changed locally. A cached Transformers build completes in under a minute
-instead of ~30 minutes.
+On first invocation, BuildKit pulls cached layers from
+`ghcr.io/henrycgbaker/llenergymeasure/{engine}:latest` (and the exact version tag when
+available). Subsequent rebuilds only re-execute layers whose source changed.
 
 **How it works:**
 
-- CI pushes build cache to GHCR on each release (`ghcr.io/henrycgbaker/llenergymeasure/{engine}:buildcache`)
-- `docker-compose.yml` has `cache_from` entries that pull from these cache images
-- `COMPOSE_BAKE=true` enables BuildKit bake delegation, which supports registry cache
-- Users only pull cache - no write access or authentication is needed for public packages
-- If cache is unavailable (network issues, not yet published), the build proceeds
-  normally without errors
+- CI's `docker-publish.yml` runs `build-push-action` with `cache-to=type=registry,...,mode=max`
+  on `:latest`, exporting full layer graphs including intermediate compile steps to GHCR.
+- `docker-compose.yml` has `cache_from` entries for each engine pointing at
+  both `:v${LLEM_PKG_VERSION}` and `:latest`.
+- `LLEM_PKG_VERSION` is the cache key: shared across an entire 0.X.Y dev cycle and only
+  re-baselined at milestone releases — the flash-attn layer survives `ExperimentConfig`
+  field additions between releases.
+- Users only pull cache — no write access or authentication is needed for public packages.
 
-**Authentication:** The build cache packages are public. No `docker login` is required to
-pull them. If you are behind a corporate proxy or encounter rate limits, logging in with
-`docker login ghcr.io` (using a
-[personal access token](https://github.com/settings/tokens) with `read:packages` scope)
-may help.
+**How to tell if the cache actually warmed:** `make docker-build-{engine}` runs the build
+under `BUILDKIT_PROGRESS=plain` and emits a one-line summary when it finishes:
 
-**Requirements:** Docker Compose v2.32+ and Docker Buildx v0.17+ (`docker compose version`
-and `docker buildx version` to check). If you have older versions, see the upgrade
-instructions in the [Docker Setup Guide](docker-setup.md#step-1-install-docker).
+- `✓ transformers build: 4m 18s — GHCR cache imported, 27 layers reused` — cache hit,
+  FA3 layer not recompiled.
+- `⚠ transformers build: 18m 03s — no GHCR cache imported (cold build)` — silent fallback.
+  Cross-check [troubleshooting → Docker rebuild is slow](troubleshooting.md#docker-rebuild-is-slow--recompiling-flash-attn).
 
-**Without COMPOSE_BAKE:** Builds work normally but don't use registry cache. The `cache_from`
-entries in `docker-compose.yml` are silently ignored. No errors, just slower builds.
+The full BuildKit log for the most recent build is at `/tmp/llem-build-{engine}.log`.
+
+**Authentication:** GHCR packages are public. No `docker login` is required to pull them.
+If you hit rate limits or are behind a corporate proxy, `docker login ghcr.io` with a
+[personal access token](https://github.com/settings/tokens) (scope `read:packages`) may help.
+
+**Offline builds:** BuildKit degrades gracefully. When the registry is unreachable the
+`cache_from` entries are skipped and the build falls back to local layer cache (cold on a
+fresh builder). No errors, just slower.
+
+**First-pull cost:** the first build on any new machine downloads the full cache graph
+(sizes above). Subsequent builds are incremental.
 
 ### FlashAttention-3
 
 The Transformers Docker image ships with both FlashAttention-2 (FA2) and FlashAttention-3 (FA3)
 pre-built. FA3 is compiled from source during the image build, which is the slowest build
-step (~20 min). With the build cache enabled (`COMPOSE_BAKE=true`), FA3 layers are pulled
-pre-compiled and the build completes in under a minute.
+step (~20 min). On warm rebuilds the FA3 layer is reused from the GHCR cache (see
+[Fast rebuilds and first-pull cost](#fast-rebuilds-and-first-pull-cost) above) and the
+build completes in minutes.
 
 FA3 provides Hopper-optimised attention kernels. Use it via
 `transformers.attn_implementation: flash_attention_3` in your experiment configs.
