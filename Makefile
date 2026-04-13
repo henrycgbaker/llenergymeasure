@@ -1,7 +1,7 @@
 .PHONY: format lint lint-fix typecheck check test test-unit test-integration test-all install dev clean
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-local test-runtime-docker
-.PHONY: docker-build docker-build-all docker-build-vllm docker-build-tensorrt
+.PHONY: docker-build docker-build-all docker-build-transformers docker-build-vllm docker-build-tensorrt docker-seed-transformers
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
@@ -225,7 +225,9 @@ gpu-ci-vllm:
 # =============================================================================
 
 
-# Builder name used by COMPOSE_BAKE for registry-cached builds
+# Builder name read by docker compose / buildx via BUILDX_BUILDER for
+# registry-cached builds. The docker-container driver is required to import
+# cache_from registry refs (the default `docker` driver cannot).
 BUILDER_NAME := llem-builder
 
 # Create the BuildKit builder with tuned GC limits (200 GiB).
@@ -247,24 +249,59 @@ docker-builder-setup:
 docker-builder-rm:
 	docker buildx rm $(BUILDER_NAME) 2>/dev/null || true
 
-# Build all engines (pytorch, vllm, tensorrt) — local images
-docker-build-all:
-	docker compose build pytorch vllm tensorrt
+CACHE_HINT := @echo "First build pulls cache layers from ghcr.io; warm rebuilds < 5 min."
+BUILD_WITH_REPORT := scripts/docker_build_with_cache_report.sh
 
-# Build PyTorch engine (default, recommended for most users)
-docker-build-pytorch:
-	docker compose build pytorch
+# Build all engines (transformers, vllm, tensorrt) — local images.
+# Calls compose directly so all three can build in parallel;
+# per-engine cache-import summary is only emitted for single-engine targets
+# below. For per-engine diagnostics, run `make docker-build-{engine}`.
+docker-build-all:
+	$(CACHE_HINT)
+	BUILDKIT_PROGRESS=$${BUILDKIT_PROGRESS:-plain} docker compose build transformers vllm tensorrt
+
+# Build Transformers engine (default, recommended for most users)
+docker-build-transformers:
+	$(CACHE_HINT)
+	$(BUILD_WITH_REPORT) transformers
+
 # Build specific engines — local images
 docker-build-vllm:
-	docker compose build vllm
+	$(CACHE_HINT)
+	$(BUILD_WITH_REPORT) vllm
 
 docker-build-tensorrt:
-	docker compose build tensorrt
+	$(CACHE_HINT)
+	$(BUILD_WITH_REPORT) tensorrt
+
+# Seed GHCR build cache from a local machine with sufficient RAM.
+# Intended for seeding the Transformers image cache (FA3 Hopper compile,
+# ~30 min but memory-intensive) when the CI hosted runner cannot complete
+# the build. Requires: docker login ghcr.io, llem-builder buildx builder.
+# Uses Dockerfile default MAX_JOBS=32 — matches local layer cache so FA3
+# is not recompiled if already built locally.
+docker-seed-transformers:
+	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "dev"); \
+	fingerprint=$$(python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo "unknown"); \
+	ref=ghcr.io/henrycgbaker/llenergymeasure/transformers; \
+	echo "Seeding GHCR cache for transformers (version=$$version)"; \
+	docker buildx build \
+	  --builder $(BUILDER_NAME) \
+	  -f docker/Dockerfile.transformers \
+	  --build-arg LLEM_PKG_VERSION=$$version \
+	  --build-arg LLEM_EXPCONF_SCHEMA_FINGERPRINT=$$fingerprint \
+	  --cache-from type=registry,ref=$$ref:v$$version \
+	  --cache-from type=registry,ref=$$ref:latest \
+	  --cache-to   type=registry,ref=$$ref:latest,mode=max \
+	  --push \
+	  --tag $$ref:v$$version \
+	  --tag $$ref:latest \
+	  .
 
 # Pull versioned registry images (ghcr.io) instead of building locally
 docker-pull:
 	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "latest"); \
-	for engine in pytorch vllm tensorrt; do \
+	for engine in transformers vllm tensorrt; do \
 		echo "Pulling ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
 		docker pull "ghcr.io/henrycgbaker/llenergymeasure/$$engine:v$$version"; \
 	done

@@ -130,68 +130,119 @@ for the full resolution chain.
 | `make docker-images` | Show which image each engine resolves to (local vs registry) |
 | `make docker-check` | Validate `docker-compose.yml` configuration |
 
-### Build Cache (recommended)
+### Fast rebuilds and first-pull cost
 
-Docker image builds can be slow without caching. To speed them up, pull pre-compiled layers
-from GHCR:
+> **Most users never need to build.** `make docker-pull` (or letting `llem run`
+> resolve the registry image automatically) gives you a working environment with
+> no compilation. Building from source is for contributors and for hosts where
+> you've modified `src/llenergymeasure/`.
 
-| Engine | Image Size | Cold Build | Cached Rebuild |
-|---------|-----------|------------|----------------|
-| Transformers (FA3 on) | ~8.5 GB | ~30 min | ~30 sec |
-| vLLM | ~17 GB | ~30 min | ~5 min |
-| TensorRT-LLM | ~54 GB | ~40 min | ~10 min |
+Every engine image declares `cache_from` entries pointing at the published GHCR tags.
+CI populates the cache on each release with `cache-to=type=registry,mode=max`, which
+exports intermediate layers to `ghcr.io/henrycgbaker/llenergymeasure/{engine}:latest`
+(and the immutable `:v${LLEM_PKG_VERSION}` tag). For Transformers this lets fresh
+machines skip the ~30-min flash-attn FA3 Hopper compile.
 
-Cold build = no cache, compiling from scratch. Cached rebuild = `COMPOSE_BAKE=true` with
-local BuildKit cache populated. Times depend on network speed and hardware.
+Measured on `ds01` (AMD EPYC 7742, 128 cores, 504 GB RAM — Docker 27.0.3 / Buildx
+v0.32.1 / llenergymeasure 0.9.0):
 
-**1. Enable COMPOSE_BAKE in your `.env`:**
+| Engine | Image size | Cold build | First GHCR pull | Warm local rebuild |
+|--------|-----------|------------|-----------------|--------------------|
+| Transformers | 7.9 GB | 33m 56s | 2m 33s (10 layers reused) | seconds |
+| vLLM | 15.6 GB | 4m 12s | 4m 16s (0 layers reused) | seconds |
+| TensorRT-LLM | 50.6 GB | 13m 24s | 13m 32s (0 layers reused) | seconds |
+
+**Reading the table.** Times are measured on a 128-core/504 GB host; on smaller
+machines cold builds scale roughly with `MAX_JOBS` (FA3 compile is CPU-bound).
+
+- **Cold build** — fresh builder, `--no-cache`, no GHCR. Simulates an offline
+  first-ever build.
+- **First GHCR pull** — fresh builder, `cache_from` populated. What a new
+  contributor gets after `make docker-builder-setup`.
+- **Warm local rebuild** — second and subsequent local builds. Stable layers
+  (FA3, base deps) sit before `COPY src/` in the Dockerfiles, so source-only
+  edits typically rebuild in seconds for all three engines.
+
+**Why does the GHCR cache only help Transformers?** The vLLM and TensorRT-LLM
+images are thin layers (`COPY src/` + one `pip install`) on top of heavy
+upstream bases (`vllm/vllm-openai`, `nvcr.io/nvidia/tensorrt-llm/release`).
+The dominant cost on a fresh machine is pulling that upstream base from Docker
+Hub / NGC, which BuildKit's `cache_from` cannot accelerate — only layers from
+*our* Dockerfile are eligible. Our own steps add ~30 s on top, so even a perfect
+cache hit caps the saving at ~30 s. The cache is still wired up (and works for
+`:v${LLEM_PKG_VERSION}`-pinned rebuilds within a release) but the architecture
+limits its impact for these two engines. Transformers benefits because the FA3
+compile is in our Dockerfile, ahead of `COPY src/`, so it gets cached.
+
+Once the upstream base is in local Docker storage (after the first build),
+subsequent rebuilds for vLLM/TRT are seconds — the slow part doesn't repeat.
+
+**Build as normal:**
 
 ```bash
-COMPOSE_BAKE=true
+make docker-build-transformers   # or docker-build-vllm / docker-build-tensorrt
 ```
 
-This is already set in `.env.example`. It tells Docker Compose to delegate builds to
-BuildKit's [bake](https://docs.docker.com/build/bake/) engine, which has full support for
-registry-based build cache.
+**How the cache pipeline is wired:**
 
-**2. Build as normal:**
+- CI's `docker-publish.yml` runs `build-push-action` with
+  `cache-to=type=registry,...,mode=max` on each release, exporting the full layer
+  graph (including FA3 intermediates) to two refs:
+  `ghcr.io/henrycgbaker/llenergymeasure/{engine}:v${LLEM_PKG_VERSION}` (immutable
+  per release) and `:latest` (rolling).
+- `docker-compose.yml` declares `cache_from: [:v${LLEM_PKG_VERSION}, :latest]`
+  for every engine — version-pinned first (best layer match within a release),
+  rolling-latest as fallback.
+- `make docker-builder-setup` provisions a `docker-container` BuildKit driver
+  with a 200 GiB GC limit; the default `docker` driver cannot import registry
+  caches at all.
+- The Transformers FA3 compile (the only layer where caching is load-bearing)
+  exceeds GitHub-hosted runner capacity (4 cores / 16 GB), so the seed step is
+  manual: `make docker-seed-transformers` from a host with ≥32 cores and
+  `docker login ghcr.io` (`write:packages`). After the seed, CI rebuilds warm
+  off `:latest` for every subsequent release.
+- Pulling the cache is unauthenticated for public packages.
 
-```bash
-docker compose build pytorch
-```
+**How to tell if the cache actually warmed:** `make docker-build-{engine}` runs the build
+under `BUILDKIT_PROGRESS=plain` and emits a one-line summary when it finishes:
 
-Compose will pull cached layers from GHCR (written by CI on each release) and only rebuild
-layers that have changed locally. A cached Transformers build completes in under a minute
-instead of ~30 minutes.
+- `✓ transformers build: 4m 18s — GHCR cache imported, 27 layers reused` — cache hit,
+  FA3 layer not recompiled.
+- `⚠ transformers build: 18m 03s — no GHCR cache imported (cold build)` — silent fallback.
+  Cross-check [troubleshooting → Docker rebuild is slow](troubleshooting.md#docker-rebuild-is-slow--recompiling-flash-attn).
 
-**How it works:**
+The full BuildKit log for the most recent build is at `/tmp/llem-build-{engine}.log`.
 
-- CI pushes build cache to GHCR on each release (`ghcr.io/henrycgbaker/llenergymeasure/{engine}:buildcache`)
-- `docker-compose.yml` has `cache_from` entries that pull from these cache images
-- `COMPOSE_BAKE=true` enables BuildKit bake delegation, which supports registry cache
-- Users only pull cache - no write access or authentication is needed for public packages
-- If cache is unavailable (network issues, not yet published), the build proceeds
-  normally without errors
+**Authentication:** GHCR packages are public. No `docker login` is required to pull them.
+If you hit rate limits or are behind a corporate proxy, `docker login ghcr.io` with a
+[personal access token](https://github.com/settings/tokens) (scope `read:packages`) may help.
 
-**Authentication:** The build cache packages are public. No `docker login` is required to
-pull them. If you are behind a corporate proxy or encounter rate limits, logging in with
-`docker login ghcr.io` (using a
-[personal access token](https://github.com/settings/tokens) with `read:packages` scope)
-may help.
+**Push access (contributors).** You do not need push access to develop on this project —
+contributors only ever pull cache. Cache publication on releases is fully automated by
+`docker-publish.yml` using the repo's auto-issued `GITHUB_TOKEN`, so any merged release
+PR ships a fresh cache without human intervention. Manual seeding via
+`make docker-seed-transformers` is restricted to the package owner (the packages live
+under the `henrycgbaker` user namespace, not an org); this is the standard OSS pattern
+for solo-maintained projects and reflects the supply-chain principle that manual pushes
+should bypass neither code review nor CI. If you have a legitimate need to push the
+cache manually (e.g. infra recovery, base-image emergency reseed), open an issue and
+the maintainer can either publish on your behalf or grant per-package collaborator
+access in GHCR settings.
 
-**Requirements:** Docker Compose v2.32+ and Docker Buildx v0.17+ (`docker compose version`
-and `docker buildx version` to check). If you have older versions, see the upgrade
-instructions in the [Docker Setup Guide](docker-setup.md#step-1-install-docker).
+**Offline builds:** BuildKit degrades gracefully. When the registry is unreachable the
+`cache_from` entries are skipped and the build falls back to local layer cache (cold on a
+fresh builder). No errors, just slower.
 
-**Without COMPOSE_BAKE:** Builds work normally but don't use registry cache. The `cache_from`
-entries in `docker-compose.yml` are silently ignored. No errors, just slower builds.
+**First-pull cost:** the first build on any new machine downloads the full cache graph
+(sizes above). Subsequent builds are incremental.
 
 ### FlashAttention-3
 
 The Transformers Docker image ships with both FlashAttention-2 (FA2) and FlashAttention-3 (FA3)
 pre-built. FA3 is compiled from source during the image build, which is the slowest build
-step (~20 min). With the build cache enabled (`COMPOSE_BAKE=true`), FA3 layers are pulled
-pre-compiled and the build completes in under a minute.
+step (~20 min). On warm rebuilds the FA3 layer is reused from the GHCR cache (see
+[Fast rebuilds and first-pull cost](#fast-rebuilds-and-first-pull-cost) above) and the
+build completes in minutes.
 
 FA3 provides Hopper-optimised attention kernels. Use it via
 `transformers.attn_implementation: flash_attention_3` in your experiment configs.

@@ -109,15 +109,14 @@ is already present in the local Docker cache (from a prior pull), the source is
 ### Building local images
 
 ```bash
-make docker-build-all          # all 3 engines
-make docker-build-pytorch      # just pytorch
-make docker-build-vllm         # just vllm
-make docker-build-tensorrt     # just tensorrt
+make docker-build-all            # all 3 engines
+make docker-build-transformers   # just transformers
+make docker-build-vllm           # just vllm
+make docker-build-tensorrt       # just tensorrt
 ```
 
-These use `docker compose build`. With `COMPOSE_BAKE=true` in `.env`, builds use the GHCR
-registry build cache for dramatically faster builds (e.g. PyTorch: ~2 min cached vs ~1 hour
-cold). See `docs/installation.md#build-cache-recommended` for details.
+These pull cached layers from GHCR on first build (Transformers: <5 min warm vs ~30 min cold).
+See `docs/installation.md#fast-rebuilds-and-first-pull-cost` for the full mechanism.
 
 ### Study-level image preparation
 

@@ -257,6 +257,68 @@ Notes:
 
 ---
 
+## Docker rebuild is slow / recompiling flash-attn
+
+**Symptom:** `make docker-build-transformers` takes 15-20 minutes and the post-build
+summary line reports `⚠ no GHCR cache imported (cold build)` (or BuildKit
+output shows `flash-attn` source downloads and nvcc compilation for every
+build).
+
+**Cause:** BuildKit's `cache_from` registry pull was skipped. In rough order
+of likelihood:
+
+(a) **`BUILDX_BUILDER` is unset or pointing at the default `docker` driver.**
+    The default driver cannot import registry caches at all — `cache_from`
+    entries are silently ignored. Confirm with `docker buildx ls`: the row
+    marked with `*` (current builder) must show driver `docker-container`,
+    not `docker`. Fix by adding `BUILDX_BUILDER=llem-builder` to your `.env`
+    (it ships in `.env.example`) and re-running `make docker-builder-setup`
+    if the builder doesn't exist yet.
+(b) You are on a fresh buildx builder with no local cache (this is normal
+    on the very first build — first-pull cost is paid once).
+(c) You are offline or GHCR is unreachable.
+(d) Your `LLEM_PKG_VERSION` does not match any published tag (cache_from
+    resolves to `:v${LLEM_PKG_VERSION}` and falls through to `:latest` —
+    if neither has usable layers, BuildKit silently cold-builds).
+
+The full BuildKit log for the most recent attempt is at
+`/tmp/llem-build-{engine}.log` — grep it for `importing cache manifest` to
+see whether the registry was even reached.
+
+**Fix:**
+
+0. Confirm the builder driver: `docker buildx ls`. The active builder
+   (marked `*`) must be `docker-container`. If it's `docker`, run
+   `make docker-builder-setup` and ensure `BUILDX_BUILDER=llem-builder` is
+   in your `.env` (or exported in the shell).
+1. Inspect the builder cache: `docker buildx du --builder llem-builder`. If
+   it's near-empty, BuildKit has nothing to reuse locally and will pull from
+   the registry.
+2. Verify network: `curl -I https://ghcr.io/v2/henrycgbaker/llenergymeasure/transformers/manifests/latest`
+   should return 200 or 401 (both fine; 000/timeout means no connectivity).
+3. If you recently bumped version but CI hasn't published yet, fall back to
+   `:latest` by unsetting `LLEM_PKG_VERSION` for the build:
+   `LLEM_PKG_VERSION= docker compose build transformers`.
+4. If the cache is corrupt, recreate the builder:
+   `make docker-builder-rm && make docker-builder-setup`. Note this discards
+   all local layer cache; the first subsequent build will repopulate from
+   GHCR.
+5. Offline is expected-slow. BuildKit degrades gracefully to a cold build —
+   no errors, just minutes.
+
+**CI can't build the Transformers image (FA3 compile OOM / heartbeat loss):**
+The FA3 Hopper compile requires ~8-16 GB RAM and multiple hours on a 4-core
+runner. Seed the GHCR cache once from a developer machine with more resources:
+
+```bash
+docker login ghcr.io           # needs write:packages scope
+make docker-seed-transformers  # builds + pushes cache to ghcr.io (~minutes if locally cached)
+```
+
+After seeding, CI warm-rebuilds from the GHCR cache in <5 min.
+
+---
+
 ## Schema skew between host and Docker image
 
 **Symptom:** `llem run study.yaml` aborts before any experiment with a message
