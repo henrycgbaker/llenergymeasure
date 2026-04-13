@@ -217,6 +217,18 @@ The full BuildKit log for the most recent build is at `/tmp/llem-build-{engine}.
 If you hit rate limits or are behind a corporate proxy, `docker login ghcr.io` with a
 [personal access token](https://github.com/settings/tokens) (scope `read:packages`) may help.
 
+**Push access (contributors).** You do not need push access to develop on this project —
+contributors only ever pull cache. Cache publication on releases is fully automated by
+`docker-publish.yml` using the repo's auto-issued `GITHUB_TOKEN`, so any merged release
+PR ships a fresh cache without human intervention. Manual seeding via
+`make docker-seed-transformers` is restricted to the package owner (the packages live
+under the `henrycgbaker` user namespace, not an org); this is the standard OSS pattern
+for solo-maintained projects and reflects the supply-chain principle that manual pushes
+should bypass neither code review nor CI. If you have a legitimate need to push the
+cache manually (e.g. infra recovery, base-image emergency reseed), open an issue and
+the maintainer can either publish on your behalf or grant per-package collaborator
+access in GHCR settings.
+
 **Offline builds:** BuildKit degrades gracefully. When the registry is unreachable the
 `cache_from` entries are skipped and the build falls back to local layer cache (cold on a
 fresh builder). No errors, just slower.

@@ -225,7 +225,9 @@ gpu-ci-vllm:
 # =============================================================================
 
 
-# Builder name used by COMPOSE_BAKE for registry-cached builds
+# Builder name read by docker compose / buildx via BUILDX_BUILDER for
+# registry-cached builds. The docker-container driver is required to import
+# cache_from registry refs (the default `docker` driver cannot).
 BUILDER_NAME := llem-builder
 
 # Create the BuildKit builder with tuned GC limits (200 GiB).

@@ -358,9 +358,13 @@ make docker-build-tensorrt
 These targets use `docker compose build` under the hood and pull cached layers from the
 GHCR registry on first build (see
 [Fast rebuilds and first-pull cost](installation.md#fast-rebuilds-and-first-pull-cost)
-for the full mechanism). Setting `COMPOSE_BAKE=true` in your `.env` additionally routes
-builds through `buildx bake` for parallel multi-engine builds and a cleaner progress UI;
-it is not required for the cache itself.
+for the full mechanism).
+
+> **Advanced.** Setting `COMPOSE_BAKE=true` routes builds through `buildx bake` for
+> parallel multi-engine builds. With the current cache architecture this is rarely
+> worth enabling — vLLM/TRT cold builds are already 4–13 min and warm rebuilds are
+> seconds, so the parallelism gain is small. Left out of `.env.example` to avoid
+> noise; opt in only if you frequently run `make docker-build-all` from cold.
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, engines, or the container entrypoint, rebuild for changes to take
