@@ -113,11 +113,11 @@ def test_vram_dtype_bytes_keys():
 
 
 def test_format_validation_error():
-    """ValidationError from bad backend value gets a friendly header."""
+    """ValidationError from bad engine value gets a friendly header."""
     from llenergymeasure.config.models import ExperimentConfig
 
     with pytest.raises(ValidationError) as exc_info:
-        ExperimentConfig(model="gpt2", backend="pytorh")  # type: ignore[arg-type]
+        ExperimentConfig(model="gpt2", engine="pytorh")  # type: ignore[arg-type]
 
     result = format_validation_error(exc_info.value)
     assert "Config validation failed" in result
@@ -125,22 +125,22 @@ def test_format_validation_error():
 
 
 def test_format_validation_error_did_you_mean():
-    """Literal errors on backend field suggest correct spelling."""
+    """Literal errors on engine field suggest correct spelling."""
     from llenergymeasure.config.models import ExperimentConfig
 
     with pytest.raises(ValidationError) as exc_info:
-        ExperimentConfig(model="gpt2", backend="pytorh")  # type: ignore[arg-type]
+        ExperimentConfig(model="gpt2", engine="pytorh")  # type: ignore[arg-type]
 
     result = format_validation_error(exc_info.value)
     # Should suggest 'pytorch' for the typo 'pytorh'
-    assert "pytorch" in result.lower() or "Did you mean" in result or "backend" in result
+    assert "pytorch" in result.lower() or "Did you mean" in result or "engine" in result
 
 
 @pytest.mark.parametrize(
     "bad_kwargs, expected_str",
     [
-        ({"backend": "bad"}, "1 error)"),
-        ({"backend": "bad", "dtype": "bad"}, "2 errors)"),
+        ({"engine": "bad"}, "1 error)"),
+        ({"engine": "bad", "dtype": "bad"}, "2 errors)"),
     ],
 )
 def test_format_validation_error_singular_plural(bad_kwargs, expected_str):
@@ -179,11 +179,11 @@ def test_format_error_includes_class_name():
 
 def test_format_error_subclass():
     """format_error works for any LLEMError subclass."""
-    from llenergymeasure.utils.exceptions import BackendError
+    from llenergymeasure.utils.exceptions import EngineError
 
-    err = BackendError("GPU OOM")
+    err = EngineError("GPU OOM")
     result = format_error(err, verbose=False)
-    assert "BackendError" in result
+    assert "EngineError" in result
     assert "GPU OOM" in result
 
 
@@ -412,12 +412,12 @@ def test_print_dry_run_verbose_annotations(capsys):
     """With verbose=True, default values show annotation like '(default)'."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", backend="pytorch", dtype="bfloat16")
+    config = make_config(model="gpt2", engine="pytorch", dtype="bfloat16")
     vram = {"weights_gb": 0.5, "kv_cache_gb": 0.01, "overhead_gb": 0.075, "total_gb": 0.585}
     print_dry_run(config, vram, gpu_vram_gb=None, verbose=True)
     out = capsys.readouterr().out
 
-    # verbose mode adds "(default)" annotation for default backend/dtype
+    # verbose mode adds "(default)" annotation for default engine/dtype
     assert "(default)" in out
 
 
@@ -505,10 +505,10 @@ def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
 
 
 def test_print_experiment_header_defaults(capsys):
-    """Header with default config shows model and backend (defaults omitted)."""
+    """Header with default config shows model and engine (defaults omitted)."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", backend="pytorch", dtype="bfloat16")
+    config = make_config(model="gpt2", engine="pytorch", dtype="bfloat16")
     print_experiment_header(config)
     err = capsys.readouterr().err
 
@@ -554,7 +554,7 @@ def test_print_study_summary_table_structure(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0
@@ -592,7 +592,7 @@ def test_print_study_summary_failed_experiments(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -624,7 +624,7 @@ def test_print_study_summary_no_total_experiments(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -655,7 +655,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     long_model = "organization/very-long-model-name-that-exceeds-twenty-chars"
     exp = MagicMock()
     exp.model_name = long_model
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -687,7 +687,7 @@ def test_print_study_summary_with_result_files(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -720,7 +720,7 @@ def test_print_study_summary_shows_adj_energy(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0
@@ -757,7 +757,7 @@ def test_print_study_summary_mj_tok_prefers_adjusted(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0

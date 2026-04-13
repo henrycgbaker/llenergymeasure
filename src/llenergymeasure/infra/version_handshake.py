@@ -149,9 +149,9 @@ def parse_image_stamp(inspect_stdout: bytes) -> ImageStamp:
     )
 
 
-def rebuild_hint(backend: str) -> str:
-    """Return the user-facing rebuild command for *backend*."""
-    return f"make docker-build-{backend}"
+def rebuild_hint(engine: str) -> str:
+    """Return the user-facing rebuild command for *engine*."""
+    return f"make docker-build-{engine}"
 
 
 def skip_check_enabled() -> bool:

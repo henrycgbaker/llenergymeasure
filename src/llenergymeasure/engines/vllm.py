@@ -1,6 +1,6 @@
-"""vLLM inference backend — thin BackendPlugin.
+"""vLLM inference engine — thin EnginePlugin.
 
-Implements the 4-method BackendPlugin protocol:
+Implements the 4-method EnginePlugin protocol:
   load_model, warmup, run_inference, cleanup
 
 All measurement lifecycle is delegated to MeasurementHarness. This module
@@ -19,17 +19,17 @@ import time as _time
 from collections.abc import Callable
 from typing import Any
 
-from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.utils.exceptions import BackendError
+from llenergymeasure.engines.protocol import InferenceOutput
+from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
 
 
-class VLLMBackend:
-    """vLLM inference backend — offline batch mode, thin plugin.
+class VLLMEngine:
+    """vLLM inference engine — offline batch mode, thin plugin.
 
-    Implements BackendPlugin:
+    Implements EnginePlugin:
     - load_model: Load model via vllm.LLM(), build SamplingParams
     - warmup: Minimal 1-prompt warmup with 1-token output
     - run_inference: Single llm.generate() call with ALL prompts, returns InferenceOutput
@@ -38,7 +38,7 @@ class VLLMBackend:
 
     @property
     def name(self) -> str:
-        """Backend identifier."""
+        """Engine identifier."""
         return "vllm"
 
     @property
@@ -52,7 +52,7 @@ class VLLMBackend:
             return "unknown"
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: load_model
+    # EnginePlugin: load_model
     # -------------------------------------------------------------------------
 
     def load_model(
@@ -72,9 +72,9 @@ class VLLMBackend:
             Tuple of (llm, sampling_params).
 
         Raises:
-            BackendError: If vLLM is not installed or model loading fails.
+            EngineError: If vLLM is not installed or model loading fails.
         """
-        from llenergymeasure.backends._helpers import require_import
+        from llenergymeasure.engines._helpers import require_import
 
         _vllm = require_import("vllm", "vllm")
         LLM = _vllm.LLM
@@ -91,7 +91,7 @@ class VLLMBackend:
             if on_substep is not None:
                 on_substep("vLLM engine loaded", _time.perf_counter() - t0)
         except Exception as e:
-            raise BackendError(f"vLLM model loading failed: {e}") from e
+            raise EngineError(f"vLLM model loading failed: {e}") from e
 
         logger.debug("vLLM model loaded successfully")
 
@@ -105,7 +105,7 @@ class VLLMBackend:
         return llm, sampling_params
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: warmup
+    # EnginePlugin: warmup
     # -------------------------------------------------------------------------
 
     def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
@@ -124,14 +124,14 @@ class VLLMBackend:
         """
         from vllm import SamplingParams
 
-        from llenergymeasure.backends._helpers import warmup_single_token
+        from llenergymeasure.engines._helpers import warmup_single_token
 
         llm, _sampling_params = model
         warmup_single_token(llm, [prompt], SamplingParams, temperature=0.0, max_tokens=1)
         return 0.0  # Signals harness to skip CV loop
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: run_inference
+    # EnginePlugin: run_inference
     # -------------------------------------------------------------------------
 
     def run_inference(
@@ -151,11 +151,11 @@ class VLLMBackend:
             InferenceOutput with token counts, timing, and memory stats.
 
         Raises:
-            BackendError: On OOM or other inference failures.
+            EngineError: On OOM or other inference failures.
         """
         import time
 
-        from llenergymeasure.backends._helpers import reset_cuda_peak_memory
+        from llenergymeasure.engines._helpers import reset_cuda_peak_memory
 
         llm, sampling_params = model
 
@@ -186,16 +186,16 @@ class VLLMBackend:
             elapsed = time.perf_counter() - t0
 
         except Exception as e:
-            from llenergymeasure.backends._helpers import raise_backend_error
+            from llenergymeasure.engines._helpers import raise_engine_error
 
-            raise_backend_error(
+            raise_engine_error(
                 e,
                 "vLLM",
                 hint="reduce n, use gpu_memory_utilization=0.8, or use a smaller model.",
             )
 
         # Capture peak memory — torch first, NVML fallback for pre-allocation detection.
-        from llenergymeasure.backends._helpers import get_cuda_peak_memory_mb
+        from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
 
         peak_mb = get_cuda_peak_memory_mb()
 
@@ -262,7 +262,7 @@ class VLLMBackend:
         )
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: cleanup
+    # EnginePlugin: cleanup
     # -------------------------------------------------------------------------
 
     def cleanup(self, model: Any) -> None:
@@ -271,14 +271,14 @@ class VLLMBackend:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        from llenergymeasure.backends._helpers import cleanup_model
+        from llenergymeasure.engines._helpers import cleanup_model
 
         llm, _sampling_params = model
         cleanup_model(llm)
         logger.debug("vLLM model cleanup complete")
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """No hardware validation required for vLLM backend."""
+        """No hardware validation required for vLLM engine."""
         return []
 
     # -------------------------------------------------------------------------
@@ -364,7 +364,7 @@ class VLLMBackend:
         """Build vllm.SamplingParams from DecoderConfig."""
         vllm_cfg = config.vllm
         if vllm_cfg is not None and vllm_cfg.beam_search is not None:
-            return VLLMBackend._build_beam_search_params(config, vllm_cfg.beam_search)
+            return VLLMEngine._build_beam_search_params(config, vllm_cfg.beam_search)
 
         decoder = config.decoder
         is_greedy = decoder.temperature == 0.0 or not decoder.do_sample
@@ -418,7 +418,7 @@ class VLLMBackend:
         try:
             from vllm import BeamSearchParams
         except ImportError:
-            raise BackendError(
+            raise EngineError(
                 "beam_search config requires vllm.BeamSearchParams which is not "
                 "available in the installed vLLM version (added in vLLM >=0.8). "
                 "Either upgrade vLLM or remove the beam_search section from "

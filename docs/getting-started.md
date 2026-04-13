@@ -23,12 +23,12 @@ This guide has three tracks. Choose one based on your setup:
 llem config
 ```
 
-Check that the output shows `pytorch: installed` under Backends. If it shows "not installed", run `pip install "llenergymeasure[pytorch]"`.
+Check that the output shows `pytorch: installed` under Engines. If it shows "not installed", run `pip install "llenergymeasure[pytorch]"`.
 
 ### 2. Run your first experiment
 
 ```bash
-llem run --model gpt2 --backend pytorch
+llem run --model gpt2 -e pytorch
 ```
 
 This runs GPT-2 (124M parameters). On first run, the model downloads from HuggingFace (~500 MB). Subsequent runs use the cache.
@@ -81,7 +81,7 @@ The JSON file is the scientific record — it contains all raw metrics, the reso
 Specify a different output directory with `--output`:
 
 ```bash
-llem run --model gpt2 --backend pytorch --output /data/experiments
+llem run --model gpt2 -e pytorch --output /data/experiments
 ```
 
 ---
@@ -99,7 +99,7 @@ Create `experiment.yaml`:
 
 ```yaml
 model: gpt2
-backend: vllm
+engine: vllm
 n: 50
 runners:
   vllm: docker
@@ -120,7 +120,7 @@ What happens:
 
 ### 3. Read the results
 
-The output format is the same as the PyTorch track. The key difference is `backend: vllm` in the experiment ID and result file.
+The output format is the same as the PyTorch track. The key difference is `engine: vllm` in the experiment ID and result file.
 
 ---
 
@@ -142,7 +142,7 @@ Create `experiment.yaml`:
 
 ```yaml
 model: meta-llama/Llama-2-7b-hf
-backend: tensorrt
+engine: tensorrt
 n: 50
 runners:
   tensorrt: docker
@@ -152,7 +152,7 @@ For a quantized run with engine caching configured explicitly:
 
 ```yaml
 model: meta-llama/Llama-2-7b-hf
-backend: tensorrt
+engine: tensorrt
 n: 50
 runners:
   tensorrt: docker
@@ -186,7 +186,7 @@ What happens:
 
 ### 3. Read the results
 
-The output format is the same as other backends. The result file will include `backend: tensorrt`
+The output format is the same as other engines. The result file will include `engine: tensorrt`
 and a `build_metadata` section with engine compilation time, GPU architecture, and TRT-LLM version.
 
 ---
@@ -200,7 +200,7 @@ Minimal config:
 ```yaml
 # experiment.yaml
 model: gpt2
-backend: pytorch
+engine: pytorch
 n: 100
 ```
 
@@ -210,7 +210,7 @@ Run it:
 llem run experiment.yaml
 ```
 
-This is equivalent to `llem run --model gpt2 --backend pytorch -n 100`. CLI flags override YAML values when both are provided.
+This is equivalent to `llem run --model gpt2 -e pytorch -n 100`. CLI flags override YAML values when both are provided.
 
 For study sweeps (running multiple configurations), see the [Study Configuration](study-config.md) reference.
 
@@ -218,7 +218,7 @@ For study sweeps (running multiple configurations), see the [Study Configuration
 
 ## Next Steps
 
-- [Study Configuration](study-config.md) — run parameter sweeps across models, backends, and configurations
+- [Study Configuration](study-config.md) — run parameter sweeps across models, engines, and configurations
 - [Docker Setup](docker-setup.md) — set up Docker + NVIDIA Container Toolkit for vLLM/TensorRT-LLM
-- [Backend Configuration](backends.md) — configure vLLM, TensorRT-LLM, and switch between backends
+- [Engine Configuration](engines.md) — configure vLLM, TensorRT-LLM, and switch between engines
 - [CLI Reference](cli-reference.md) — all `llem run` and `llem config` flags

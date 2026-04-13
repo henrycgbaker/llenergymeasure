@@ -56,7 +56,7 @@ def _make_mock_config() -> MagicMock:
 
     config = MagicMock(spec=ExperimentConfig)
     config.model = "gpt2"
-    config.backend = "pytorch"
+    config.engine = "pytorch"
     config.dtype = "bfloat16"
     config.dataset = MagicMock()
     config.dataset.source = "aienergyscore"
@@ -100,7 +100,7 @@ def test_build_header_strips_hf_org_prefix():
 
     config = _make_mock_config()
     config.model = "meta-llama/Llama-3.2-1B-Instruct"
-    config.backend = "vllm"
+    config.engine = "vllm"
     config.dtype = "bfloat16"
     config.dataset.n_prompts = 100  # default — should not appear
 
@@ -116,7 +116,7 @@ def test_build_header_default_dtype_omitted():
 
     config = _make_mock_config()
     config.model = "gpt2"
-    config.backend = "pytorch"
+    config.engine = "pytorch"
     config.dtype = "bfloat16"  # default — should not appear
     config.dataset.n_prompts = 100  # default — should not appear
 
@@ -131,7 +131,7 @@ def test_build_header_nondefault_fields_shown():
 
     config = _make_mock_config()
     config.model = "gpt2"
-    config.backend = "pytorch"
+    config.engine = "pytorch"
     config.dtype = "float16"
     config.dataset.n_prompts = 50  # non-default — should appear
 
@@ -151,7 +151,7 @@ def test_run_help():
     assert result.exit_code == 0
     plain = _strip_ansi(result.output)
     assert "--model" in plain
-    assert "--backend" in plain
+    assert "--engine" in plain
     assert "--dry-run" in plain
 
 
@@ -191,8 +191,8 @@ def test_run_config_error_exits_2():
 
 def test_run_validation_error_exits_2():
     """Pydantic ValidationError from a bad field value exits with code 2."""
-    # "pytorh" is a misspelled backend — Pydantic will raise ValidationError
-    result = runner.invoke(app, ["run", "--model", "gpt2", "--backend", "pytorh"])
+    # "pytorh" is a misspelled engine — Pydantic will raise ValidationError
+    result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "pytorh"])
     assert result.exit_code == 2, (
         f"Expected exit 2, got {result.exit_code}. Output: {result.output}"
     )
@@ -389,7 +389,7 @@ def test_print_study_summary_basic():
     # experiments list contains a MagicMock, which is not a valid ExperimentResult.
     exp = MagicMock()
     exp.model_name = "test/model"
-    exp.backend = "pytorch"
+    exp.engine = "pytorch"
     exp.duration_sec = 45.2
     exp.total_energy_j = 123.4
     exp.avg_tokens_per_second = 42.5
@@ -424,7 +424,7 @@ def test_print_study_progress():
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.study._progress import print_study_progress
 
-    config = ExperimentConfig(model="test/model", backend="pytorch")
+    config = ExperimentConfig(model="test/model", engine="pytorch")
     with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
         print_study_progress(1, 4, config, status="completed", elapsed=30.5, energy=100.0)
     output = mock_stderr.getvalue()
@@ -444,7 +444,7 @@ def test_run_study_routing_sweep_yaml(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: pytorch\nsweep:\n  dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
 
@@ -475,7 +475,7 @@ def test_run_study_routing_experiments_yaml(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nexperiments:\n  - model: test/model-a\n    backend: pytorch\n  - model: test/model-b\n    backend: pytorch\n"
+        "name: test\nexperiments:\n  - model: test/model-a\n    engine: pytorch\n  - model: test/model-b\n    engine: pytorch\n"
     )
     mock_study_result = make_study_result()
 
@@ -524,7 +524,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: pytorch\nsweep:\n  dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
     _capture_load, captured_overrides = _make_capture_load()
@@ -554,9 +554,9 @@ def test_run_no_model_no_config_error_message():
     assert "Provide a config file or --model flag" in result.output
 
 
-def test_run_backend_error_exits_1():
-    """BackendError raised by run_experiment exits with code 1."""
-    from llenergymeasure.utils.exceptions import BackendError
+def test_run_engine_error_exits_1():
+    """EngineError raised by run_experiment exits with code 1."""
+    from llenergymeasure.utils.exceptions import EngineError
 
     mock_config = _make_mock_config()
 
@@ -564,11 +564,11 @@ def test_run_backend_error_exits_1():
         patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
         patch("llenergymeasure.cli.run.run_experiment") as mock_run,
     ):
-        mock_run.side_effect = BackendError("OOM during forward pass")
+        mock_run.side_effect = EngineError("OOM during forward pass")
         result = runner.invoke(app, ["run", "--model", "gpt2"])
 
     assert result.exit_code == 1
-    assert "BackendError" in result.output
+    assert "EngineError" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -582,7 +582,7 @@ def _make_study_yaml(tmp_path, content: str | None = None) -> Path:
     study_yaml = tmp_path / "study.yaml"
     if content is None:
         content = (
-            "name: test\nmodel: test/model\nbackend: pytorch\nsweep:\n  dtype: [float32, float16]\n"
+            "name: test\nmodel: test/model\nengine: pytorch\nsweep:\n  dtype: [float32, float16]\n"
         )
     study_yaml.write_text(content)
     return study_yaml

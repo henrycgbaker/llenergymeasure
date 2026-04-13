@@ -1,6 +1,6 @@
 """Unit tests for TensorRT sweep expansion (CFG-08).
 
-Tests that backend is a sweepable axis producing distinct experiment configs,
+Tests that engine is a sweepable axis producing distinct experiment configs,
 and that dotted nested sweep keys expand correctly into TensorRT sub-configs.
 """
 
@@ -9,26 +9,26 @@ from __future__ import annotations
 from llenergymeasure.config.grid import expand_grid
 
 
-class TestBackendSweepAxis:
-    """Tests for backend as a sweepable axis."""
+class TestEngineSweepAxis:
+    """Tests for engine as a sweepable axis."""
 
-    def test_backend_sweep_axis_produces_distinct_configs(self):
-        """sweep over backend: [pytorch, tensorrt] produces 2 ExperimentConfig objects."""
+    def test_engine_sweep_axis_produces_distinct_configs(self):
+        """sweep over engine: [pytorch, tensorrt] produces 2 ExperimentConfig objects."""
         raw_study = {
             "model": "gpt2",
             "sweep": {
-                "backend": ["pytorch", "tensorrt"],
+                "engine": ["pytorch", "tensorrt"],
             },
         }
         valid, _skipped = expand_grid(raw_study)
         assert len(valid) == 2
-        assert {c.backend for c in valid} == {"pytorch", "tensorrt"}
+        assert {c.engine for c in valid} == {"pytorch", "tensorrt"}
 
-    def test_backend_sweep_with_trt_scoped_params(self):
-        """backend: [pytorch, tensorrt] with tensorrt.tp_size: [1, 2] produces 3 configs."""
+    def test_engine_sweep_with_trt_scoped_params(self):
+        """engine: [pytorch, tensorrt] with tensorrt.tp_size: [1, 2] produces 3 configs."""
         raw_study = {
             "model": "gpt2",
-            "backend": ["pytorch", "tensorrt"],
+            "engine": ["pytorch", "tensorrt"],
             "sweep": {
                 "tensorrt.tp_size": [1, 2],
             },
@@ -36,8 +36,8 @@ class TestBackendSweepAxis:
         valid, _skipped = expand_grid(raw_study)
         # pytorch: 1 config (no scoped dims), tensorrt: 2 configs (tp_size=[1,2])
         assert len(valid) == 3
-        pytorch_configs = [c for c in valid if c.backend == "pytorch"]
-        tensorrt_configs = [c for c in valid if c.backend == "tensorrt"]
+        pytorch_configs = [c for c in valid if c.engine == "pytorch"]
+        tensorrt_configs = [c for c in valid if c.engine == "tensorrt"]
         assert len(pytorch_configs) == 1
         assert len(tensorrt_configs) == 2
         tp_sizes = {c.tensorrt.tp_size for c in tensorrt_configs}
@@ -51,7 +51,7 @@ class TestDottedNestedSweep:
         """tensorrt.quant.quant_algo: [INT8, FP8, W4A16_AWQ] produces 3 configs."""
         raw_study = {
             "model": "gpt2",
-            "backend": "tensorrt",
+            "engine": "tensorrt",
             "sweep": {
                 "tensorrt.quant.quant_algo": ["INT8", "FP8", "W4A16_AWQ"],
             },
@@ -65,7 +65,7 @@ class TestDottedNestedSweep:
         """tensorrt.build_cache.max_cache_storage_gb: [128, 256] produces 2 configs."""
         raw_study = {
             "model": "gpt2",
-            "backend": "tensorrt",
+            "engine": "tensorrt",
             "sweep": {
                 "tensorrt.build_cache.max_cache_storage_gb": [128, 256],
             },
@@ -79,7 +79,7 @@ class TestDottedNestedSweep:
         """Comprehensive study YAML with all sub-sections and quant sweep round-trips."""
         raw_study = {
             "model": "gpt2",
-            "backend": "tensorrt",
+            "engine": "tensorrt",
             "tensorrt": {
                 "tp_size": 2,
                 "max_batch_size": 8,
@@ -110,7 +110,7 @@ class TestDottedNestedSweep:
         valid, _skipped = expand_grid(raw_study)
         assert len(valid) == 2
         for config in valid:
-            assert config.backend == "tensorrt"
+            assert config.engine == "tensorrt"
             assert config.tensorrt is not None
             assert config.tensorrt.tp_size == 2
             assert config.tensorrt.max_batch_size == 8
@@ -127,7 +127,7 @@ class TestDottedNestedSweep:
         """Sweep with invalid quant algo produces 1 valid + 1 skipped."""
         raw_study = {
             "model": "gpt2",
-            "backend": "tensorrt",
+            "engine": "tensorrt",
             "sweep": {
                 "tensorrt.quant.quant_algo": ["INT8", "INVALID_VALUE"],
             },

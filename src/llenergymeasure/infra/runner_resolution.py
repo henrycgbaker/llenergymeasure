@@ -1,4 +1,4 @@
-"""Runner resolution — determine local vs Docker execution mode for each backend.
+"""Runner resolution — determine local vs Docker execution mode for each engine.
 
 Precedence chain (highest wins):
   env var > study/experiment YAML > user config > auto-detection > default
@@ -131,28 +131,28 @@ class RunnerSpec:
 
 
 def resolve_runner(
-    backend: str,
+    engine: str,
     yaml_runners: dict[str, str] | None = None,
     user_config: UserRunnersConfig | None = None,
 ) -> RunnerSpec:
-    """Resolve the runner for a single backend using the full precedence chain.
+    """Resolve the runner for a single engine using the full precedence chain.
 
     Precedence (highest to lowest):
-        1. Env var   ``LLEM_RUNNER_{BACKEND}``  — source="env"
+        1. Env var   ``LLEM_RUNNER_{ENGINE}``   — source="env"
         2. Study YAML ``runners:`` section       — source="yaml"
-        3. User config ``runners.{backend}``     — source="user_config"
+        3. User config ``runners.{engine}``      — source="user_config"
            Only non-"auto" values are treated as explicit. "auto" falls through
            to step 4. Pass ``user_config=None`` to allow auto-detection.
         4. Auto-detection: Docker + NVIDIA CT    — source="auto_detected"
         5. Built-in default: local              — source="default"
 
     When mode is "docker" and image is None, the caller (DockerRunner) should
-    resolve the image via ``get_default_image(backend)`` from image_registry.
+    resolve the image via ``get_default_image(engine)`` from image_registry.
 
     Args:
-        backend:      Backend name, e.g. "pytorch", "vllm", "tensorrt".
+        engine:       Engine name, e.g. "pytorch", "vllm", "tensorrt".
         yaml_runners: Runners dict from study YAML ``runners:`` section.
-                      Keys are backend names, values are runner strings.
+                      Keys are engine names, values are runner strings.
         user_config:  UserRunnersConfig from loaded user preferences.
                       None = no user config present (enables auto-detection).
                       When provided, "auto" values fall through to auto-detection;
@@ -164,21 +164,21 @@ def resolve_runner(
     # Load .env (idempotent, shell env wins via override=False)
     _load_dotenv()
 
-    # 1. Env var: LLEM_RUNNER_{BACKEND} (highest precedence)
-    env_key = f"{ENV_RUNNER_PREFIX}{backend.upper()}"
+    # 1. Env var: LLEM_RUNNER_{ENGINE} (highest precedence)
+    env_key = f"{ENV_RUNNER_PREFIX}{engine.upper()}"
     if env_val := os.environ.get(env_key):
         mode, image = parse_runner_value(env_val)
         return RunnerSpec(mode=mode, image=image, source="env")
     # 2. Study/experiment YAML runners section
-    if yaml_runners is not None and backend in yaml_runners:
-        yaml_val = yaml_runners[backend]
+    if yaml_runners is not None and engine in yaml_runners:
+        yaml_val = yaml_runners[engine]
         if yaml_val is not None:
             mode, image = parse_runner_value(yaml_val)
             return RunnerSpec(mode=mode, image=image, source="yaml")
     # 3. User config — "auto" means no explicit preference, fall through to auto-detection.
     #    Passing user_config=None means "no user config file present" → auto-detect.
     if user_config is not None:
-        user_val: str = getattr(user_config, backend, "auto")
+        user_val: str = getattr(user_config, engine, "auto")
         if user_val != "auto":
             mode, image = parse_runner_value(user_val)
             return RunnerSpec(
@@ -204,25 +204,25 @@ def resolve_runner(
 
 
 def resolve_study_runners(
-    backends: list[str],
+    engines: list[str],
     yaml_runners: dict[str, str] | None = None,
     user_config: UserRunnersConfig | None = None,
 ) -> dict[str, RunnerSpec]:
-    """Resolve runners for all backends in a study.
+    """Resolve runners for all engines in a study.
 
-    Calls ``resolve_runner`` for each unique backend and returns a mapping of
-    backend name → RunnerSpec. The ``yaml_runners`` dict (from the study YAML
+    Calls ``resolve_runner`` for each unique engine and returns a mapping of
+    engine name → RunnerSpec. The ``yaml_runners`` dict (from the study YAML
     ``runners:`` section) and ``user_config`` are passed through unchanged.
 
     Args:
-        backends:     Unique backend names present in the study's experiments.
+        engines:      Unique engine names present in the study's experiments.
         yaml_runners: Study-level ``runners:`` section from YAML (optional).
         user_config:  Loaded UserRunnersConfig (optional, None = auto-detect).
 
     Returns:
-        Dict mapping each backend name to its resolved RunnerSpec.
+        Dict mapping each engine name to its resolved RunnerSpec.
     """
     return {
-        backend: resolve_runner(backend, yaml_runners=yaml_runners, user_config=user_config)
-        for backend in backends
+        engine: resolve_runner(engine, yaml_runners=yaml_runners, user_config=user_config)
+        for engine in engines
     }

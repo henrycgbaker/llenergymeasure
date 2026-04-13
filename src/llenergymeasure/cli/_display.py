@@ -108,7 +108,7 @@ def print_dry_run(
     """
     # Determine non-default fields for annotations
     defaults = {
-        "backend": "pytorch",
+        "engine": "pytorch",
         "dtype": "bfloat16",
         "n": 100,
         "dataset": "aienergyscore",
@@ -120,12 +120,12 @@ def print_dry_run(
             return ""
         default = defaults.get(field)
         if value == default:
-            return f" ({field} default)" if field not in ("backend", "dtype") else " (default)"
+            return f" ({field} default)" if field not in ("engine", "dtype") else " (default)"
         return ""
 
     print("Config (resolved)")
     print(f"  Model          {config.model}")
-    print(f"  Backend        {config.backend}{_annotate('backend', config.backend)}")
+    print(f"  Engine         {config.engine}{_annotate('engine', config.engine)}")
     print(f"  Dtype          {config.dtype}{_annotate('dtype', config.dtype)}")
 
     # Batch size — from pytorch section if present
@@ -205,7 +205,7 @@ def format_validation_error(e: ValidationError) -> str:
     lines = [header]
 
     # Build a set of valid values for did-you-mean suggestions
-    valid_backends = list(DTYPE_SUPPORT.keys())
+    valid_engines = list(DTYPE_SUPPORT.keys())
     valid_dtypes = list({d for dtypes in DTYPE_SUPPORT.values() for d in dtypes})
 
     for err in errors:
@@ -221,12 +221,12 @@ def format_validation_error(e: ValidationError) -> str:
             if bad_value is not None and isinstance(bad_value, str):
                 # Determine which pool to search based on location
                 last_loc = loc_parts[-1] if loc_parts else ""
-                if last_loc == "backend":
-                    pool = valid_backends
+                if last_loc == "engine":
+                    pool = valid_engines
                 elif last_loc == "dtype":
                     pool = valid_dtypes
                 else:
-                    pool = valid_backends + valid_dtypes
+                    pool = valid_engines + valid_dtypes
 
                 suggestions = difflib.get_close_matches(bad_value, pool, n=3, cutoff=0.6)
                 if suggestions:
@@ -361,12 +361,12 @@ def print_study_summary(result: StudyResult) -> None:
 
     # Table rows
     for i, exp in enumerate(experiments, start_idx):
-        # Build compact config string: model_short / backend
+        # Build compact config string: model_short / engine
         model_short = model_short_name(exp.model_name)
         if len(model_short) > 20:
             model_short = "..." + model_short[-17:]
-        backend = exp.backend
-        config_str = f"{model_short} / {backend}"
+        engine = exp.engine
+        config_str = f"{model_short} / {engine}"
         if len(config_str) > 40:
             config_str = config_str[:37] + "..."
 

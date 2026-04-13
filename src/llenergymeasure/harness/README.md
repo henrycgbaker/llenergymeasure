@@ -1,10 +1,10 @@
 # harness/ - Measurement Harness
 
-Measurement lifecycle orchestration for any inference backend. Layer 3 in the six-layer architecture.
+Measurement lifecycle orchestration for any inference engine. Layer 3 in the six-layer architecture.
 
 ## Purpose
 
-`MeasurementHarness` extracts the measurement infrastructure that was previously duplicated across backends into a single location. Backends are thin plugins (4 methods); the harness owns everything else: environment snapshot, baseline power, energy tracking, CUDA sync, thermal floor wait, FLOPs estimation, timeseries, warnings, and result assembly.
+`MeasurementHarness` extracts the measurement infrastructure that was previously duplicated across engines into a single location. Engines are thin plugins (4 methods); the harness owns everything else: environment snapshot, baseline power, energy tracking, CUDA sync, thermal floor wait, FLOPs estimation, timeseries, warnings, and result assembly.
 
 ## Modules
 
@@ -23,25 +23,25 @@ Measurement lifecycle orchestration for any inference backend. Layer 3 in the si
 
 ```python
 from llenergymeasure.harness import MeasurementHarness
-from llenergymeasure.backends import get_backend
+from llenergymeasure.engines import get_engine
 
 harness = MeasurementHarness()
-backend = get_backend("pytorch")
-result = harness.run(backend, config, gpu_indices=[0])
+engine = get_engine("pytorch")
+result = harness.run(engine, config, gpu_indices=[0])
 ```
 
 ### Measurement lifecycle (in order)
 
 1. Collect environment snapshot (background thread, hidden behind model load)
 2. Measure baseline power (before model load)
-3. Load model via `backend.load_model(config)`
+3. Load model via `engine.load_model(config)`
 4. Capture model memory (torch.cuda.max_memory_allocated)
-5. Run warmup via `backend.run_warmup_prompt()` + `warmup_until_converged()`
+5. Run warmup via `engine.run_warmup_prompt()` + `warmup_until_converged()`
 6. Thermal floor wait (let GPU cool after warmup)
 7. Select energy sampler
 8. CUDA sync (before inference — Zeus best practice)
 9. Start energy tracking
-10. Run inference via `backend.run_inference(config, model)`
+10. Run inference via `engine.run_inference(config, model)`
 11. CUDA sync (after inference, before stopping energy)
 12. Stop energy tracking
 13. Estimate FLOPs (AutoConfig path, then hf_model fallback)
@@ -58,7 +58,7 @@ CV-based adaptive warmup replaces fixed-iteration warmup. Warmup continues until
 from llenergymeasure.harness.warmup import warmup_until_converged
 
 result = warmup_until_converged(
-    run_single_inference=lambda: backend_latency_ms,
+    run_single_inference=lambda: engine_latency_ms,
     config=warmup_config,
 )
 ```
@@ -81,7 +81,7 @@ Energy breakdown uses baseline adjustment: `adjusted_j = total_j - baseline_j` w
 PaLM/Chinchilla formula: `FLOPs = 2 * N_non_embedding_params * total_tokens`
 
 Two paths:
-1. `estimate_flops_palm_from_config(model_name, ...)` — uses HuggingFace `AutoConfig` (no weights loaded, works for all backends)
+1. `estimate_flops_palm_from_config(model_name, ...)` — uses HuggingFace `AutoConfig` (no weights loaded, works for all engines)
 2. `estimate_flops_palm(model, ...)` — uses loaded model object (higher confidence, PyTorch only)
 
 ## State machine (state.py)
@@ -100,6 +100,6 @@ from llenergymeasure.harness.state import ExperimentPhase, ExperimentState
 
 ## Related
 
-- See `../backends/` for the BackendPlugin protocol backends implement
+- See `../engines/` for the EnginePlugin protocol engines implement
 - See `../energy/` for energy sampler selection
 - See `../device/` for PowerThermalSampler used during inference

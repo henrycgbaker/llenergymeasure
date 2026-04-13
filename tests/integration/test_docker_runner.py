@@ -76,7 +76,7 @@ class TestDockerRunnerIntegration:
 
         defaults = dict(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             dataset=DatasetConfig(n_prompts=3),
             output_dir=str(tmp_path),
             warmup=WarmupConfig(enabled=False),
@@ -158,7 +158,7 @@ class TestDockerRunnerIntegration:
 
         config = ExperimentConfig(
             model="gpt2",
-            backend="pytorch",
+            engine="pytorch",
             dataset=DatasetConfig(n_prompts=3),
             output_dir=str(tmp_path),
             warmup=WarmupConfig(enabled=False),

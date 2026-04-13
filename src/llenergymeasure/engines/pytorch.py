@@ -1,6 +1,6 @@
-"""PyTorch/Transformers inference backend — thin BackendPlugin.
+"""PyTorch/Transformers inference engine — thin EnginePlugin.
 
-Implements the 4-method BackendPlugin protocol:
+Implements the 4-method EnginePlugin protocol:
   load_model, warmup, run_inference, cleanup
 
 All measurement lifecycle is delegated to MeasurementHarness. This module
@@ -14,16 +14,16 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.engines.protocol import InferenceOutput
 
 logger = logging.getLogger(__name__)
 
 
-class PyTorchBackend:
-    """PyTorch/Transformers inference backend — thin plugin.
+class PyTorchEngine:
+    """PyTorch/Transformers inference engine — thin plugin.
 
-    Implements BackendPlugin:
+    Implements EnginePlugin:
     - load_model: Load HuggingFace model + tokenizer, apply torch.compile
     - warmup: CV-based warmup via warmup_until_converged()
     - run_inference: Batched model.generate() loop, returns InferenceOutput
@@ -32,7 +32,7 @@ class PyTorchBackend:
 
     @property
     def name(self) -> str:
-        """Backend identifier."""
+        """Engine identifier."""
         return "pytorch"
 
     @property
@@ -46,7 +46,7 @@ class PyTorchBackend:
             return "unknown"
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: load_model
+    # EnginePlugin: load_model
     # -------------------------------------------------------------------------
 
     def load_model(
@@ -111,7 +111,7 @@ class PyTorchBackend:
         return model, tokenizer
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: warmup
+    # EnginePlugin: warmup
     # -------------------------------------------------------------------------
 
     def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
@@ -139,7 +139,7 @@ class PyTorchBackend:
         return (time.perf_counter() - start) * 1000.0
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: run_inference
+    # EnginePlugin: run_inference
     # -------------------------------------------------------------------------
 
     def run_inference(
@@ -156,7 +156,7 @@ class PyTorchBackend:
             InferenceOutput with token counts, timing, and memory stats.
 
         Raises:
-            BackendError: On CUDA OOM or other inference failures.
+            EngineError: On CUDA OOM or other inference failures.
         """
         hf_model, tokenizer = model
 
@@ -169,7 +169,7 @@ class PyTorchBackend:
         # Reset peak stats BEFORE the measurement loop so max_memory_allocated()
         # captures inference-window-only peak (KV cache + activations + batch buffers),
         # NOT model weights already allocated by load_model().
-        from llenergymeasure.backends._helpers import reset_cuda_peak_memory
+        from llenergymeasure.engines._helpers import reset_cuda_peak_memory
 
         reset_cuda_peak_memory()
 
@@ -212,16 +212,16 @@ class PyTorchBackend:
                     batch_time,
                 )
             except Exception as e:
-                from llenergymeasure.backends._helpers import raise_backend_error
+                from llenergymeasure.engines._helpers import raise_engine_error
 
-                raise_backend_error(
+                raise_engine_error(
                     e,
                     "PyTorch",
                     hint="reduce batch_size, use dtype=float16, or use a smaller model.",
                 )
 
         # Track peak GPU memory (inference window only — reset above)
-        from llenergymeasure.backends._helpers import get_cuda_peak_memory_mb
+        from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
 
         peak_memory_mb = get_cuda_peak_memory_mb()
 
@@ -244,7 +244,7 @@ class PyTorchBackend:
         )
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: cleanup
+    # EnginePlugin: cleanup
     # -------------------------------------------------------------------------
 
     def cleanup(self, model: Any) -> None:
@@ -253,14 +253,14 @@ class PyTorchBackend:
         Args:
             model: Tuple of (model, tokenizer) from load_model().
         """
-        from llenergymeasure.backends._helpers import cleanup_model
+        from llenergymeasure.engines._helpers import cleanup_model
 
         hf_model, _tokenizer = model
         cleanup_model(hf_model, use_gc=False)
         logger.debug("Model cleanup complete")
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """No hardware validation required for PyTorch backend."""
+        """No hardware validation required for PyTorch engine."""
         return []
 
     # -------------------------------------------------------------------------

@@ -31,7 +31,7 @@ def _experiment_dir_name(
 ) -> str:
     """Generate a human-readable directory name for an experiment result.
 
-    Format: ``[{index:03d}_]c{cycle}_{model_short}-{backend}_{hash[:8]}``
+    Format: ``[{index:03d}_]c{cycle}_{model_short}-{engine}_{hash[:8]}``
 
     When ``experiment_index`` is provided (study context), the directory is
     prefixed with a zero-padded index for natural sort ordering.
@@ -43,11 +43,11 @@ def _experiment_dir_name(
     from llenergymeasure.utils.formatting import model_short_name
 
     model_short = model_short_name(result.model_name)
-    backend = result.backend
+    engine = result.engine
     config_hash = result.measurement_config_hash[:8]
 
-    # Build slug: model_short-backend
-    slug = f"{model_short}-{backend}"
+    # Build slug: model_short-engine
+    slug = f"{model_short}-{engine}"
     # Sanitise for filesystem: replace spaces, slashes, special chars
     slug = slug.replace(" ", "_").replace("/", "-").replace(":", "-")
     # Truncate overly long slugs (filesystem limits)
@@ -140,7 +140,7 @@ def save_result(
 ) -> Path:
     """Save ExperimentResult to a collision-safe subdirectory of output_dir.
 
-    Creates: ``{output_dir}/[{index}_]c{cycle}_{model}-{backend}_{hash}/result.json``
+    Creates: ``{output_dir}/[{index}_]c{cycle}_{model}-{engine}_{hash}/result.json``
     Also writes ``_resolution.json`` sidecar when ``resolution_log`` is provided.
     If timeseries_source provided: copies to ``{dir}/timeseries.parquet``.
 

@@ -1,9 +1,9 @@
-# Docker Compose with multiple backend support
+# Docker Compose with multiple engine support
 #
 # Quick Start:
 #   pip install -e .              # Install llenergymeasure
 #   llem config                   # Check environment
-#   docker compose build pytorch  # Build backend image
+#   docker compose build pytorch  # Build engine image
 #
 # Manual Usage:
 #   PyTorch (default): docker compose run --rm pytorch llem --help
@@ -11,13 +11,13 @@
 #   TensorRT:          docker compose run --rm tensorrt llem --help
 #
 # Examples:
-#   # PyTorch backend (default)
+#   # PyTorch engine (default)
 #   docker compose run --rm pytorch llem run configs/examples/experiment-pytorch.yaml
 #
 #   # vLLM backend
 #   docker compose run --rm vllm llem run configs/examples/experiment-vllm.yaml
 #
-#   # TensorRT backend
+#   # TensorRT engine
 #   docker compose run --rm tensorrt llem run configs/examples/experiment-tensorrt.yaml
 #
 #   # Development shells
@@ -74,7 +74,7 @@ x-common: &common
 
 services:
   # ==========================================================================
-  # PyTorch Backend - HuggingFace Transformers + Accelerate
+  # PyTorch Engine - HuggingFace Transformers + Accelerate
   # ==========================================================================
   pytorch:
     <<: *common
@@ -113,7 +113,7 @@ services:
     command: []
 
   # ==========================================================================
-  # vLLM Backend - High-performance inference with PagedAttention etc
+  # vLLM Engine - High-performance inference with PagedAttention etc
   # ==========================================================================
   vllm:
     <<: *common
@@ -156,7 +156,7 @@ services:
     command: []
 
   # ==========================================================================
-  # TensorRT-LLM Backend - High-performance compiled inference
+  # TensorRT-LLM Engine - High-performance compiled inference
   # ==========================================================================
   tensorrt:
     <<: *common

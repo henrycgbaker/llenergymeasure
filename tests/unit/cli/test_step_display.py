@@ -240,7 +240,7 @@ def test_study_display_experiment_lifecycle():
     display.begin_experiment(2, "llama / vllm / bf16", ["preflight"])
     display.on_step_start("preflight", "Checking", "")
     display.on_step_done("preflight", 0.3)
-    display.end_experiment_fail(2, elapsed=0.3, error="BackendError: CUDA OOM")
+    display.end_experiment_fail(2, elapsed=0.3, error="EngineError: CUDA OOM")
 
     display.finish()
 
@@ -788,28 +788,28 @@ def test_viewport_hidden_indicator_absent_when_fits():
 def test_image_prep_result_named_fields():
     """_ImagePrepResult supports both named field access and positional destructuring."""
     r = _ImagePrepResult(
-        backend="pytorch",
+        engine="pytorch",
         image="llem-pytorch:latest",
         cached=True,
         elapsed=1.5,
         metadata={"size": "2GB"},
     )
     # Named access
-    assert r.backend == "pytorch"
+    assert r.engine == "pytorch"
     assert r.image == "llem-pytorch:latest"
     assert r.cached is True
     assert r.elapsed == 1.5
     assert r.metadata == {"size": "2GB"}
     # Positional destructuring (backward compatibility)
-    backend, _image, cached, _elapsed, _metadata = r
-    assert backend == "pytorch"
+    engine, _image, cached, _elapsed, _metadata = r
+    assert engine == "pytorch"
     assert cached is True
 
 
 def test_image_prep_failure_named_fields():
     """_ImagePrepFailure supports both named field access and positional destructuring."""
-    f = _ImagePrepFailure(backend="vllm", image="llem-vllm:latest", error="pull failed")
-    assert f.backend == "vllm"
+    f = _ImagePrepFailure(engine="vllm", image="llem-vllm:latest", error="pull failed")
+    assert f.engine == "vllm"
     assert f.image == "llem-vllm:latest"
     assert f.error == "pull failed"
     # Positional destructuring (backward compatibility)

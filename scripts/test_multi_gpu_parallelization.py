@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Test multi-GPU parallelization across all backends.
+"""Test multi-GPU parallelization across all engines.
 
-Validates that each backend can run with parallelization degree 4 (tensor parallel)
+Validates that each engine can run with parallelization degree 4 (tensor parallel)
 using their native arguments.
 
 Run from host (orchestrates Docker containers):
     python scripts/test_multi_gpu_parallelization.py
 
 This script:
-1. Creates minimal test configs for each backend with tp=4
+1. Creates minimal test configs for each engine with tp=4
 2. Runs a short experiment in each container
 3. Validates all 4 GPUs were utilized
 """
@@ -27,7 +27,7 @@ def create_pytorch_config(config_dir: Path) -> Path:
     config.write_text("""
 # PyTorch with 4 data-parallel processes
 model_name: Qwen/Qwen2.5-0.5B
-backend: pytorch
+engine: pytorch
 max_output_tokens: 8
 num_input_prompts: 4
 gpus: [0, 1, 2, 3]
@@ -45,7 +45,7 @@ def create_vllm_config(config_dir: Path) -> Path:
     config.write_text("""
 # vLLM with tensor parallelism across 4 GPUs
 model_name: Qwen/Qwen2.5-0.5B
-backend: vllm
+engine: vllm
 max_output_tokens: 8
 num_input_prompts: 4
 gpus: [0, 1, 2, 3]
@@ -67,7 +67,7 @@ def create_tensorrt_config(config_dir: Path) -> Path:
     config.write_text("""
 # TensorRT-LLM with tensor parallelism across 4 GPUs
 model_name: Qwen/Qwen2.5-0.5B
-backend: tensorrt
+engine: tensorrt
 max_output_tokens: 8
 num_input_prompts: 4
 gpus: [0, 1, 2, 3]
@@ -83,7 +83,7 @@ tensorrt:
     return config
 
 
-def run_experiment(backend: str, config_path: Path, timeout: int = 600) -> tuple[bool, str]:
+def run_experiment(engine: str, config_path: Path, timeout: int = 600) -> tuple[bool, str]:
     """Run experiment in Docker container.
 
     Returns:
@@ -99,7 +99,7 @@ def run_experiment(backend: str, config_path: Path, timeout: int = 600) -> tuple
         "--rm",
         "-v",
         f"{config_path.parent}:/app/configs/test_tp4:ro",
-        backend,
+        engine,
         "lem",
         "experiment",
         container_config,
@@ -111,9 +111,9 @@ def run_experiment(backend: str, config_path: Path, timeout: int = 600) -> tuple
         "--fresh",
     ]
 
-    print(f"\n{'='*60}")
-    print(f"Testing {backend} with tp=4")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print(f"Testing {engine} with tp=4")
+    print(f"{'=' * 60}")
     print(f"$ {' '.join(cmd[:8])}...")
 
     try:
@@ -128,10 +128,10 @@ def run_experiment(backend: str, config_path: Path, timeout: int = 600) -> tuple
         output = result.stdout + "\n" + result.stderr
 
         if result.returncode == 0:
-            print(f"✓ {backend}: SUCCESS")
+            print(f"✓ {engine}: SUCCESS")
             return True, output
         else:
-            print(f"✗ {backend}: FAILED (exit code {result.returncode})")
+            print(f"✗ {engine}: FAILED (exit code {result.returncode})")
             # Print last few lines of output for debugging
             lines = output.strip().split("\n")
             print("Last 10 lines of output:")
@@ -140,10 +140,10 @@ def run_experiment(backend: str, config_path: Path, timeout: int = 600) -> tuple
             return False, output
 
     except subprocess.TimeoutExpired:
-        print(f"✗ {backend}: TIMEOUT after {timeout}s")
+        print(f"✗ {engine}: TIMEOUT after {timeout}s")
         return False, "Timeout"
     except Exception as e:
-        print(f"✗ {backend}: ERROR - {e}")
+        print(f"✗ {engine}: ERROR - {e}")
         return False, str(e)
 
 
@@ -165,7 +165,7 @@ def main():
     print("=" * 60)
     print("Multi-GPU Parallelization Test (tp=4)")
     print("=" * 60)
-    print("This test validates that each backend can utilize all 4 GPUs")
+    print("This test validates that each engine can utilize all 4 GPUs")
     print("using their native tensor/data parallelism arguments.")
 
     # Check we have 4 GPUs
@@ -210,18 +210,18 @@ def main():
     print("=" * 60)
 
     all_passed = True
-    for backend, success in results.items():
+    for engine, success in results.items():
         status = "PASS ✓" if success else "FAIL ✗"
         if not success:
             all_passed = False
-        print(f"  {backend}: {status}")
+        print(f"  {engine}: {status}")
 
     print("=" * 60)
 
     if all_passed:
-        print("\n✓ All backends can utilize 4 GPUs with parallelization")
+        print("\n✓ All engines can utilize 4 GPUs with parallelization")
     else:
-        print("\n✗ Some backends failed multi-GPU parallelization")
+        print("\n✗ Some engines failed multi-GPU parallelization")
 
     return 0 if all_passed else 1
 

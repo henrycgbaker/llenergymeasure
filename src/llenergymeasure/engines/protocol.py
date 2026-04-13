@@ -1,4 +1,4 @@
-"""Backend protocol contracts for inference plugins and the harness interface."""
+"""Engine protocol contracts for inference plugins and the harness interface."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from llenergymeasure.config.models import ExperimentConfig
 
 @dataclass
 class InferenceOutput:
-    """Minimal output from one backend inference run.
+    """Minimal output from one engine inference run.
 
-    Backend-specific data (e.g. vLLM RequestOutput objects) goes in extras.
+    Engine-specific data (e.g. vLLM RequestOutput objects) goes in extras.
     The harness uses these fields to assemble the full ExperimentResult.
     """
 
@@ -32,7 +32,7 @@ class InferenceOutput:
 
 
 @runtime_checkable
-class BackendPlugin(Protocol):
+class EnginePlugin(Protocol):
     """Contract for thin inference plugins.
 
     MeasurementHarness owns the full measurement lifecycle (energy tracking,
@@ -41,12 +41,12 @@ class BackendPlugin(Protocol):
 
     @property
     def name(self) -> str:
-        """Backend identifier (e.g. 'pytorch', 'vllm', 'tensorrt')."""
+        """Engine identifier (e.g. 'pytorch', 'vllm', 'tensorrt')."""
         ...
 
     @property
     def version(self) -> str:
-        """Backend library version string for reproducibility."""
+        """Engine library version string for reproducibility."""
         ...
 
     def load_model(

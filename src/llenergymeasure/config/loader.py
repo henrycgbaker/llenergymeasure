@@ -52,10 +52,10 @@ def load_experiment_config(
 
     Args:
         path: Path to YAML or JSON config file. None = only CLI/defaults.
-        cli_overrides: Dict of CLI flag overrides (e.g. {"model": "gpt2", "backend": "pytorch"}).
+        cli_overrides: Dict of CLI flag overrides (e.g. {"model": "gpt2", "engine": "pytorch"}).
             Keys match ExperimentConfig field names. None values are ignored (unset flags).
         user_config_defaults: Dict of user config defaults to apply as lowest priority.
-            Only fields valid on ExperimentConfig (e.g. energy_sampler, backend defaults).
+            Only fields valid on ExperimentConfig (e.g. energy_sampler, engine defaults).
 
     Returns:
         Validated ExperimentConfig.
@@ -158,10 +158,10 @@ def load_study_config(
 
     # Extract study-level metadata
     name = raw.get("study_name")
-    # runners: per-backend runner config (e.g. {"pytorch": "local", "vllm": "docker"})
+    # runners: per-engine runner config (e.g. {"pytorch": "local", "vllm": "docker"})
     # None if not specified in YAML — caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
-    # images: per-backend Docker image overrides (orthogonal to runners)
+    # images: per-engine Docker image overrides (orthogonal to runners)
     # e.g. {"vllm": "ghcr.io/org/vllm:v1.0"}. None = smart default resolution.
     images: dict[str, str] | None = raw.get("images") or None
 
@@ -188,7 +188,7 @@ def load_study_config(
         skip_details = "\n".join(f"  {s.short_label}: {s.reason}" for s in skipped[:5])
         raise ConfigError(
             f"All {total} generated configs are invalid. "
-            "Nothing to run. Check sweep dimensions against backend constraints.\n" + skip_details
+            "Nothing to run. Check sweep dimensions against engine constraints.\n" + skip_details
         )
 
     # Compute study_design_hash BEFORE applying cycles (hash is over unique configs)

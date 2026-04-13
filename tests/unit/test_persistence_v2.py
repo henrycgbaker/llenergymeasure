@@ -29,7 +29,7 @@ from llenergymeasure.results.persistence import load_result, save_result
 
 @pytest.fixture()
 def minimal_result() -> ExperimentResult:
-    """Minimal valid ExperimentResult with pytorch backend and known model."""
+    """Minimal valid ExperimentResult with pytorch engine and known model."""
     return ExperimentResult(
         experiment_id="persist-test-001",
         measurement_config_hash="abcdef0123456789",
@@ -112,10 +112,10 @@ def test_save_creates_subdirectory(tmp_path: Path, minimal_result: ExperimentRes
 
 
 def test_save_directory_name_format(tmp_path: Path, minimal_result: ExperimentResult) -> None:
-    """Directory name matches c{cycle}_{model_short}-{backend}_{hash} pattern."""
+    """Directory name matches c{cycle}_{model_short}-{engine}_{hash} pattern."""
     result_path = save_result(minimal_result, tmp_path)
     dir_name = result_path.parent.name
-    # Pattern: c1_gpt2-pytorch_abcdef01 (c{cycle}_{model_short}-{backend}_{hash[:8]})
+    # Pattern: c1_gpt2-pytorch_abcdef01 (c{cycle}_{model_short}-{engine}_{hash[:8]})
     pattern = re.compile(r"^c\d+_[\w\.\-]+-[a-z]+_[a-f0-9]{8,}(_\d+)?$")
     assert pattern.match(dir_name), f"Directory name '{dir_name}' does not match expected pattern"
 
@@ -200,7 +200,7 @@ def test_from_json_loads_correctly(tmp_path: Path, minimal_result: ExperimentRes
     assert loaded.measurement_methodology == minimal_result.measurement_methodology
     assert loaded.total_tokens == minimal_result.total_tokens
     assert loaded.total_energy_j == pytest.approx(minimal_result.total_energy_j)
-    assert loaded.backend == minimal_result.backend
+    assert loaded.engine == minimal_result.engine
 
 
 def test_from_json_round_trip(tmp_path: Path, minimal_result: ExperimentResult) -> None:

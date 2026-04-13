@@ -1,7 +1,7 @@
-"""Shared helpers for inference backend implementations.
+"""Shared helpers for inference engine implementations.
 
 Extracted from the repeated patterns in pytorch.py, vllm.py, and tensorrt.py
-to reduce duplication while keeping backends thin.
+to reduce duplication while keeping engines thin.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from llenergymeasure.utils.exceptions import BackendError
+from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def get_cuda_peak_memory_mb() -> float:
 
 
 # ---------------------------------------------------------------------------
-# OOM / import error helpers (extracted from all 3 backends)
+# OOM / import error helpers (extracted from all 3 engines)
 # ---------------------------------------------------------------------------
 
 
@@ -63,27 +63,27 @@ def is_oom_error(exc: Exception) -> bool:
     return "out of memory" in str(exc).lower()
 
 
-def raise_backend_error(exc: Exception, backend_name: str, *, hint: str = "") -> None:
-    """Raise a BackendError wrapping *exc* with a user-friendly message.
+def raise_engine_error(exc: Exception, engine_name: str, *, hint: str = "") -> None:
+    """Raise a EngineError wrapping *exc* with a user-friendly message.
 
     If the error is OOM, includes remediation hints. Otherwise wraps
-    generically as "<backend> inference failed".
+    generically as "<engine> inference failed".
 
     Args:
         exc: The original exception.
-        backend_name: Human-readable backend name (e.g. "vLLM", "TRT-LLM").
+        engine_name: Human-readable engine name (e.g. "vLLM", "TRT-LLM").
         hint: Extra remediation text appended to OOM messages.
     """
     if is_oom_error(exc):
-        msg = f"{backend_name} CUDA out of memory."
+        msg = f"{engine_name} CUDA out of memory."
         if hint:
             msg = f"{msg} Try: {hint}"
-        raise BackendError(f"{msg} Original error: {exc}") from exc
-    raise BackendError(f"{backend_name} inference failed: {exc}") from exc
+        raise EngineError(f"{msg} Original error: {exc}") from exc
+    raise EngineError(f"{engine_name} inference failed: {exc}") from exc
 
 
 def require_import(module: str, extra_name: str) -> Any:
-    """Import *module* or raise BackendError with install instructions.
+    """Import *module* or raise EngineError with install instructions.
 
     Args:
         module: Fully-qualified module name (e.g. "vllm").
@@ -97,7 +97,7 @@ def require_import(module: str, extra_name: str) -> Any:
 
         return importlib.import_module(module)
     except ImportError as e:
-        raise BackendError(
+        raise EngineError(
             f"{module} is not installed. Install it with: pip install llenergymeasure[{extra_name}]"
         ) from e
 
@@ -148,7 +148,7 @@ def warmup_single_token(
 ) -> None:
     """Run a minimal single-token warmup generation.
 
-    Used by vLLM and TRT-LLM backends to warm up the engine before the
+    Used by vLLM and TRT-LLM engines to warm up the engine before the
     measurement window. Takes the first prompt and generates 1 token.
 
     Args:

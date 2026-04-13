@@ -203,17 +203,17 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         """
         ...
 
-    def begin_image_prep(self, backends: list[str]) -> None:
+    def begin_image_prep(self, engines: list[str]) -> None:
         """Signal the start of study-level Docker image preparation.
 
         Args:
-            backends: Backend names that require Docker images.
+            engines: Engine names that require Docker images.
         """
         ...
 
     def image_ready(
         self,
-        backend: str,
+        engine: str,
         image: str,
         cached: bool,
         elapsed: float,
@@ -222,7 +222,7 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         """Signal that a Docker image is ready (found locally or pulled).
 
         Args:
-            backend: Backend name (e.g. "pytorch").
+            engine: Engine name (e.g. "pytorch").
             image: Docker image reference.
             cached: True if image was found locally, False if pulled.
             elapsed: Wall-clock time for the check/pull.
@@ -230,11 +230,11 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         """
         ...
 
-    def image_failed(self, backend: str, image: str, error: str) -> None:
+    def image_failed(self, engine: str, image: str, error: str) -> None:
         """Signal that a Docker image could not be prepared.
 
         Args:
-            backend: Backend name.
+            engine: Engine name.
             image: Docker image reference that was attempted.
             error: Human-readable error message.
         """
@@ -345,7 +345,7 @@ def docker_steps(*, images_prepared: bool, host_baseline: bool) -> list[str]:
 
     Args:
         images_prepared: True when the study preflight has already verified
-            and pulled backend images. Omits ``image_check`` / ``pull`` from
+            and pulled engine images. Omits ``image_check`` / ``pull`` from
             the list because they were handled at study level.
         host_baseline: True when the host runner measures baseline *before*
             dispatching the experiment container — i.e. ``cached`` or

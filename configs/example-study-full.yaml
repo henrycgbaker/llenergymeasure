@@ -1,16 +1,16 @@
-# Full-suite multi-backend study - comprehensive coverage across all backends
+# Full-suite multi-engine study - comprehensive coverage across all engines
 # Run: llem run configs/example-study-full.yaml
 #
 # Reference config - not intended for end-to-end execution.
 # Experiment counts depend on sweep axes and groups; run `llem run --dry-run`
 # to see the exact expansion for your configuration.
 
-study_name: full-suite-all-backends
+study_name: full-suite-all-engines
 
 # =====================================================================
 # Runner configuration
 # =====================================================================
-# Multi-backend runners auto-elevate to docker by default for better isolation and consistency (auto-elevation is configurable (TODO) but recommended).
+# Multi-engine runners auto-elevate to docker by default for better isolation and consistency (auto-elevation is configurable (TODO) but recommended).
 
 runners:
   pytorch: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
@@ -81,7 +81,7 @@ warmup:
   #window_size: 3                # Sliding window for CV calculation. Default: 3
   #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
 
-# --- Decoder / sampling (universal, shared across backends) ---
+# --- Decoder / sampling (universal, shared across engines) ---
 decoder:
   # preset: deterministic          # Presets override individual params below. Available: deterministic | standard | creative | factual
   temperature: 1.0               # 0.0 (greedy) to 2.0
@@ -98,7 +98,7 @@ decoder:
 # lora:
 #   adapter_id: my-org/my-lora-adapter
 #   merge_weights: false
-# TODO: VALUDATE that this works as intended - does this apply to all backends? if not, need to clarify in docs and potentially add backend-specific lora config using dotted notation (e.g. lora.pytorch.adapter_id, lora.vllm.adapter_id, etc.)
+# TODO: VALUDATE that this works as intended - does this apply to all engines? if not, need to clarify in docs and potentially add engine-specific lora config using dotted notation (e.g. lora.pytorch.adapter_id, lora.vllm.adapter_id, etc.)
 
 # --- Passthrough kwargs ---
 # passthrough_kwargs:
@@ -132,13 +132,13 @@ output:
 #     (dequant ops trigger per-call recompilation; see pytorch.compile_quant group)
 #   - pytorch.torch_compile_mode=max-autotune  x  pytorch.cache_implementation=static/sliding_window
 #     (per-shape kernel autotune on every cache reshape; slow but correct — follow-up)
-#   - Any backend x dataset.n_prompts > ~200 without raising
+#   - Any engine x dataset.n_prompts > ~200 without raising
 #     study_execution.experiment_timeout_seconds above its 600s default
 # When in doubt, merge axes into a single group with hand-picked variants:
 # within-group variants are unioned (not crossed) while inter-group axes are.
 
 sweep: # TODO: maybe shared_sweep or global_sweep?
-  # --- Universal (applies to all three backends) ---
+  # --- Universal (applies to all three engines) ---
   dtype: [float32, float16, bfloat16]
 
   # --- PyTorch parameter space ---
@@ -262,7 +262,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     - tensorrt.kv_cache.max_tokens: 8192
       tensorrt.kv_cache.free_gpu_memory_fraction: 0.85
 
-    # --- Shared TRT-LLM backend settings ---
+    # --- Shared TRT-LLM engine settings ---
 # Applied to all TensorRT sweep experiments. Explicit TRT experiments
 # override these where needed.
 tensorrt: #TODO - IM LEAVING THIS HERE AS REMINDER TO WORK OUT WHART THIS WAS AND WHY IT WAS HERE -> REMOVE AND ASSOCIATED PATHS WITHIN THE TOOL.
@@ -292,7 +292,7 @@ experiments:
   # -----------------------------------------------------------------
   # Requires batch_size=1, overriding the sweep axis - must remain explicit.
   - model: Qwen/Qwen2.5-0.5B
-    backend: pytorch
+    engine: pytorch
     dtype: bfloat16
     dataset:
       n_prompts: 50
@@ -307,7 +307,7 @@ experiments:
   # mutually exclusive, so this is a dependent experiment)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: pytorch
+  #   engine: pytorch
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -321,7 +321,7 @@ experiments:
   # Model loading with revision pin + memory limits
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: pytorch
+  #   engine: pytorch
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -336,7 +336,7 @@ experiments:
 
   # PyTorch LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: pytorch
+  #   engine: pytorch
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -358,7 +358,7 @@ experiments:
   # Tensor parallel (special: requires multi-GPU hardware)
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
-    backend: vllm
+    engine: vllm
     dtype: bfloat16
     dataset:
       n_prompts: 50
@@ -372,7 +372,7 @@ experiments:
   # Attention backend fine-tuning (advanced: sub-fields of attention config)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: vllm
+  #   engine: vllm
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -396,7 +396,7 @@ experiments:
   # num_speculative_tokens; commented out - requires a real draft model)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: vllm
+  #   engine: vllm
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -410,7 +410,7 @@ experiments:
   # Pipeline parallel (special: requires multi-GPU hardware)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: vllm
+  #   engine: vllm
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -423,7 +423,7 @@ experiments:
   # CPU offload (offloads model weight layers to CPU RAM)
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
-    backend: vllm
+    engine: vllm
     dtype: bfloat16
     dataset:
       n_prompts: 50
@@ -436,7 +436,7 @@ experiments:
   # CPU offload fine-tuning (layer-level control over offloading)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: vllm
+  #   engine: vllm
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -453,7 +453,7 @@ experiments:
   # Swap space for KV cache offloading
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
-    backend: vllm
+    engine: vllm
     dtype: bfloat16
     dataset:
       n_prompts: 50
@@ -466,7 +466,7 @@ experiments:
   # Sampling extensions (min_tokens, ignore_eos, multi-sequence)
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
-    backend: vllm
+    engine: vllm
     dtype: bfloat16
     dataset:
       n_prompts: 50
@@ -484,7 +484,7 @@ experiments:
   # Compilation config (advanced: full vLLM compilation passthrough)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: vllm
+  #   engine: vllm
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -498,7 +498,7 @@ experiments:
   # Absolute KV cache memory (mutually exclusive with gpu_memory_utilization)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: vllm
+  #   engine: vllm
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -517,7 +517,7 @@ experiments:
   # Fast build mode (single flag, not part of any group)
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
-    backend: tensorrt
+    engine: tensorrt
     dtype: bfloat16
     dataset:
       n_prompts: 50
@@ -535,7 +535,7 @@ experiments:
   # TRT-LLM sampling extensions (min_tokens, multi-sequence, perf metrics)
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
-    backend: tensorrt
+    engine: tensorrt
     dtype: bfloat16
     dataset:
       n_prompts: 50
@@ -555,7 +555,7 @@ experiments:
   # Tensor parallel (special: requires multi-GPU hardware)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: tensorrt
+  #   engine: tensorrt
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -571,7 +571,7 @@ experiments:
   # Pre-compiled engine (skip compilation, load existing engine)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: tensorrt
+  #   engine: tensorrt
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
@@ -586,7 +586,7 @@ experiments:
   # Build cache with custom root and record limits
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   backend: tensorrt
+  #   engine: tensorrt
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50

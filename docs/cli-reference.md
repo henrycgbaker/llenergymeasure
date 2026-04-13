@@ -28,10 +28,10 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--model` | `-m` | str | — | Model name or HuggingFace path |
-| `--backend` | `-b` | str | — | Inference backend (`pytorch`, `vllm`, `tensorrt`) |
+| `--engine` | `-e` | str | — | Inference engine (`pytorch`, `vllm`, `tensorrt`) |
 | `--dataset` | `-d` | str | — | Dataset source (`aienergyscore` or `.jsonl` file path) |
 | `-n` | | int | — | Number of prompts to run (`dataset.n_prompts`) |
-| `--batch-size` | | int | — | Batch size (PyTorch backend only) |
+| `--batch-size` | | int | — | Batch size (PyTorch engine only) |
 | `--dtype` | `-p` | str | — | Model dtype (`float32`, `float16`, `bfloat16`) |
 | `--output` | `-o` | str | — | Output directory for results |
 | `--dry-run` | | flag | false | Validate config and estimate VRAM without running |
@@ -55,7 +55,7 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 
 These defaults are applied at the CLI layer to give better statistical coverage out of the box. To use the conservative model defaults, set them explicitly in the YAML `study_execution:` block.
 
-**Exit codes:** `0` success, `1` experiment/backend/preflight error, `2` config validation error, `130` interrupted (Ctrl-C).
+**Exit codes:** `0` success, `1` experiment/engine/preflight error, `2` config validation error, `130` interrupted (Ctrl-C).
 
 ---
 
@@ -67,14 +67,14 @@ Show environment and configuration status. Always exits `0` — this command is 
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--verbose` | `-v` | flag | false | Show driver version, backend versions, and full config diff |
+| `--verbose` | `-v` | flag | false | Show driver version, engine versions, and full config diff |
 
 **Example output:**
 
 ```
 GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
-Backends
+Engines
   pytorch: installed
   vllm: not installed  (pip install llenergymeasure[vllm])
   tensorrt: not installed  (pip install llenergymeasure[tensorrt])
@@ -91,14 +91,14 @@ Python
 
 ## `llem doctor`
 
-Verify that every backend's resolved Docker image matches the host's
+Verify that every engine's resolved Docker image matches the host's
 `ExperimentConfig` schema. Compares the `llem.expconf.schema.fingerprint`
 OCI label baked into each image against a fingerprint computed from the
 host's current `ExperimentConfig.model_json_schema()`.
 
 Image resolution follows the same chain as `llem run`: local build
-(`llenergymeasure:{backend}`) first, then the versioned GHCR tag
-(`ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}`).
+(`llenergymeasure:{engine}`) first, then the versioned GHCR tag
+(`ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}`).
 
 **Exit codes:** `0` when every reachable image matches (or labels are absent
 on legacy images); `1` when at least one image's schema fingerprint differs
@@ -108,7 +108,7 @@ from the host.
 
 | Column | Meaning |
 |--------|---------|
-| `Backend` | Backend identifier (`pytorch`, `vllm`, `tensorrt`) |
+| `Engine` | Engine identifier (`pytorch`, `vllm`, `tensorrt`) |
 | `Image` | Resolved image tag (local or GHCR) |
 | `Pkg ver` | `org.opencontainers.image.version` label (llenergymeasure release) |
 | `Img FP` | First 12 chars of `llem.expconf.schema.fingerprint` label |
@@ -126,7 +126,7 @@ llem doctor
 ```
 
 ```
-Backend     Image                          Pkg ver     Img FP          Host FP         Status
+Engine     Image                          Pkg ver     Img FP          Host FP         Status
 ---------------------------------------------------------------------------------------------
 pytorch     llenergymeasure:pytorch        0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
 vllm        llenergymeasure:vllm           0.9.0       9988776655ff    a1b2c3d4e5f6    MISMATCH
@@ -160,7 +160,7 @@ llem v0.9.0
 ### Single experiment via flags
 
 ```bash
-llem run --model gpt2 --backend pytorch
+llem run --model gpt2 -e pytorch
 ```
 
 ### Single experiment via YAML
@@ -201,7 +201,7 @@ llem run study.yaml --skip-preflight
 llem run study.yaml --resume
 
 # Resume a specific study directory
-llem run study.yaml --resume-dir results/full-suite-all-backends_20260329_1716/
+llem run study.yaml --resume-dir results/full-suite-all-engines_20260329_1716/
 ```
 
 ### Fail-fast mode (abort on first failure)

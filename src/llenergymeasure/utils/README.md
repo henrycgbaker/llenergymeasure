@@ -21,7 +21,7 @@ Provides the foundation all other layers import: exception hierarchy, framework-
 from llenergymeasure.utils.exceptions import (
     LLEMError,           # base
     ConfigError,         # invalid or missing config
-    BackendError,        # inference backend failures
+    EngineError,        # inference engine failures
     PreFlightError,      # pre-flight check failures
     ExperimentError,     # experiment execution errors
     StudyError,          # study orchestration errors

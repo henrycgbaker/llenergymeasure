@@ -36,9 +36,9 @@ from tests.conftest import TEST_CONFIG_HASH
 
 
 def _make_experiment(
-    model: str = "meta-llama/Llama-3.1-8B", backend: str = "pytorch"
+    model: str = "meta-llama/Llama-3.1-8B", engine: str = "pytorch"
 ) -> ExperimentConfig:
-    return ExperimentConfig(model=model, backend=backend, dtype="bfloat16")
+    return ExperimentConfig(model=model, engine=engine, dtype="bfloat16")
 
 
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
@@ -337,7 +337,7 @@ def test_create_study_dir_raises_study_error_on_failure(tmp_path: Path) -> None:
 def test_experiment_result_filename() -> None:
     result = experiment_result_filename(
         model="meta-llama/Llama-3.1-8B",
-        backend="pytorch",
+        engine="pytorch",
         config_hash="abcdef1234567890",
     )
     assert result == "Llama-3.1-8B-pytorch_abcdef12.json"
@@ -346,7 +346,7 @@ def test_experiment_result_filename() -> None:
 def test_experiment_result_filename_parquet() -> None:
     result = experiment_result_filename(
         model="meta-llama/Llama-3.1-8B",
-        backend="pytorch",
+        engine="pytorch",
         config_hash="abcdef1234567890",
         extension=".parquet",
     )
@@ -359,7 +359,7 @@ def test_experiment_result_filename_parquet() -> None:
 
 
 def test_config_summary_from_experiment() -> None:
-    config = ExperimentConfig(model="meta-llama/Llama-3.1-8B", backend="pytorch", dtype="bfloat16")
+    config = ExperimentConfig(model="meta-llama/Llama-3.1-8B", engine="pytorch", dtype="bfloat16")
     summary = build_config_summary(config)
     # Uses format_experiment_header: "Llama-3.1-8B / pytorch"
     assert "Llama-3.1-8B" in summary
@@ -409,12 +409,8 @@ def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
     from llenergymeasure.config.models import DatasetConfig
 
-    exp_a = ExperimentConfig(
-        model="model-a", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
-    exp_b = ExperimentConfig(
-        model="model-b", backend="pytorch", dataset=DatasetConfig(n_prompts=10)
-    )
+    exp_a = ExperimentConfig(model="model-a", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
+    exp_b = ExperimentConfig(model="model-b", engine="pytorch", dataset=DatasetConfig(n_prompts=10))
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
 

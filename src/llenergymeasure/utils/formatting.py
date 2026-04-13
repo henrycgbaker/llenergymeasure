@@ -115,8 +115,8 @@ _DATASET_DEFAULTS: dict[str, object] = {
     "order": "interleaved",
 }
 
-# Short display names for backend-specific params.
-_BACKEND_PARAM_LABELS: dict[str, str] = {
+# Short display names for engine-specific params.
+_ENGINE_PARAM_LABELS: dict[str, str] = {
     "batch_size": "batch",
     "attn_implementation": "attn",
     "torch_compile": "compile",
@@ -135,9 +135,9 @@ _BACKEND_PARAM_LABELS: dict[str, str] = {
 def format_experiment_header(config: ExperimentConfig) -> str:
     """Build a compact experiment header string for CLI display.
 
-    Format: ``model_short / backend / key=val key=val ...``
+    Format: ``model_short / engine / key=val key=val ...``
 
-    Shows the model name without provider prefix, the backend, and all
+    Shows the model name without provider prefix, the engine, and all
     parameters that differ from ExperimentConfig class defaults. Truncated
     to ~70 chars with ``...`` if too long.
     """
@@ -158,12 +158,12 @@ def format_experiment_header(config: ExperimentConfig) -> str:
             if actual is not None and actual != default_val:
                 params.append(f"{field_name}={actual}")
 
-    # Collect non-default backend-specific params
-    backend_config = getattr(config, config.backend, None)
-    if backend_config is not None:
-        _collect_backend_params(backend_config, params, prefix="")
+    # Collect non-default engine-specific params
+    engine_config = getattr(config, config.engine, None)
+    if engine_config is not None:
+        _collect_engine_params(engine_config, params, prefix="")
 
-    header = f"{model_short} / {config.backend}"
+    header = f"{model_short} / {config.engine}"
     if params:
         header += f" / {' '.join(params)}"
     if len(header) > _HEADER_MAX_LEN:
@@ -171,10 +171,10 @@ def format_experiment_header(config: ExperimentConfig) -> str:
     return header
 
 
-def _collect_backend_params(
+def _collect_engine_params(
     obj: object, params: list[str], prefix: str, *, max_depth: int = 2
 ) -> None:
-    """Recursively extract non-None, non-default backend params with short labels."""
+    """Recursively extract non-None, non-default engine params with short labels."""
     if max_depth <= 0:
         return
     # Walk Pydantic model fields
@@ -187,7 +187,7 @@ def _collect_backend_params(
             continue
         # Skip sub-config objects that are defaults (recurse into non-None ones)
         if hasattr(value, "model_fields"):
-            _collect_backend_params(value, params, prefix=field_name + ".", max_depth=max_depth - 1)
+            _collect_engine_params(value, params, prefix=field_name + ".", max_depth=max_depth - 1)
             continue
         # Skip True/False for boolean fields where True is the "interesting" case
         # and skip values that match field defaults
@@ -195,5 +195,5 @@ def _collect_backend_params(
         field_default = getattr(field_info, "default", None)
         if value == field_default:
             continue
-        short = _BACKEND_PARAM_LABELS.get(field_name, field_name)
+        short = _ENGINE_PARAM_LABELS.get(field_name, field_name)
         params.append(f"{prefix}{short}={value}")

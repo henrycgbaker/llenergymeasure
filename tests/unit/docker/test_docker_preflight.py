@@ -785,11 +785,11 @@ class TestTier2QuotaAndFallbackStderr:
 class TestWiring:
     """Tests that run_study_preflight correctly wires into run_docker_preflight."""
 
-    def _make_study(self, backends: list[str]):
-        """Build a minimal StudyConfig with the given backends."""
+    def _make_study(self, engines: list[str]):
+        """Build a minimal StudyConfig with the given engines."""
         from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 
-        experiments = [ExperimentConfig(model=f"model-{b}", backend=b) for b in backends]
+        experiments = [ExperimentConfig(model=f"model-{b}", engine=b) for b in engines]
         return StudyConfig(
             experiments=experiments,
             study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
@@ -889,7 +889,7 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(model="test-model", backend="pytorch")],
+            experiments=[ExperimentConfig(model="test-model", engine="pytorch")],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
         )
 
@@ -923,7 +923,7 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(model="test-model", backend="pytorch")],
+            experiments=[ExperimentConfig(model="test-model", engine="pytorch")],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
         )
 

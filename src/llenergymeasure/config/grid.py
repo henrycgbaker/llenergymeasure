@@ -24,7 +24,7 @@ from llenergymeasure.config.introspection import (
     get_swept_field_paths,
 )
 from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
-from llenergymeasure.config.ssot import SOURCE_MULTI_BACKEND_ELEVATION
+from llenergymeasure.config.ssot import SOURCE_MULTI_ENGINE_ELEVATION
 from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # Keys that belong to the study YAML structure, not to individual experiments.
 # These are stripped from base: files and excluded from the fixed dict.
-# "runners" is study-level metadata (per-backend runner config) — not an experiment field.
+# "runners" is study-level metadata (per-engine runner config) — not an experiment field.
 _STUDY_ONLY_KEYS = frozenset(
     {
         "sweep",
@@ -70,10 +70,10 @@ class SkippedConfig:
 
     @property
     def short_label(self) -> str:
-        """Short label for display: 'backend, dtype'."""
-        backend = self.raw_config.get("backend", "unknown")
+        """Short label for display: 'engine, dtype'."""
+        engine = self.raw_config.get("engine", "unknown")
         dtype = self.raw_config.get("dtype", "?")
-        return f"{backend}, {dtype}"
+        return f"{engine}, {dtype}"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise for StudyConfig.skipped_configs."""
@@ -118,16 +118,16 @@ def expand_grid(
     sweep_raw_configs = _expand_sweep(sweep, merged_fixed)
 
     # Step 4: Append explicit experiments: list entries
-    # Strip non-matching backend sections *inherited from fixed*, but preserve
+    # Strip non-matching engine sections *inherited from fixed*, but preserve
     # any the user wrote directly in the experiment entry (those are genuine
     # misconfigurations and should fail Pydantic validation).
     explicit_entries = raw_study.get("experiments", [])
     explicit_raw_configs = []
     for exp in explicit_entries:
         merged = {**merged_fixed, **exp}
-        backend = merged.get("backend", merged_fixed.get("backend", "pytorch"))
-        for key in _BACKEND_SECTION_KEYS:
-            if key != backend and key in merged and key not in exp:
+        engine = merged.get("engine", merged_fixed.get("engine", "pytorch"))
+        for key in _ENGINE_SECTION_KEYS:
+            if key != engine and key in merged and key not in exp:
                 del merged[key]
         explicit_raw_configs.append(merged)
 
@@ -367,7 +367,7 @@ def build_preflight_panel(
     - Border title: "Study: <name>"
     - Execution Controls: experiments, experiment order, gaps, shuffle seed
     - Workload: all workload fields; swept fields annotated with "+"
-    - Backends: per-backend runner mode with auto-elevation annotation
+    - Engines: per-engine runner mode with auto-elevation annotation
     - Sweep: summary line with axis/group counts and unique configs
     - Dimmed design hash and results path at the bottom
 
@@ -413,8 +413,8 @@ def build_preflight_panel(
         body.append(f"{label:<18}", style="white")
         body.append(f"{value}\n", style=value_style)
 
-    # --- Unique backends (for Backends section) ---
-    unique_backends = sorted({exp.backend for exp in experiments})
+    # --- Unique engines (for Engines section) ---
+    unique_engines = sorted({exp.engine for exp in experiments})
 
     # --- Resolve energy sampler display ---
     unique_energy = sorted(
@@ -456,19 +456,19 @@ def build_preflight_panel(
     skip_val = "yes" if exec_cfg.skip_preflight else "no"
     _line(body, "Skip preflight", skip_val)
 
-    # -- Backends (renamed from Runners) --
-    _section(body, "Backends")
+    # -- Engines --
+    _section(body, "Engines")
     yaml_runners = study_config.runners or {}
-    for b in unique_backends:
+    for b in unique_engines:
         if runner_specs and b in runner_specs:
             spec = runner_specs[b]
             body.append("    ")
             body.append(f"{b:<18}", style="white")
             body.append(f"{spec.mode}", style="dim")
-            if getattr(spec, "source", None) == SOURCE_MULTI_BACKEND_ELEVATION:
+            if getattr(spec, "source", None) == SOURCE_MULTI_ENGINE_ELEVATION:
                 body.append(" (auto-elevated)", style="yellow")
             body.append("\n")
-            # Show image resolution for Docker backends
+            # Show image resolution for Docker engines
             if spec.mode == "docker" and spec.image:
                 body.append("    ", style="dim")
                 body.append(f"\u21b3 {spec.image}\n", style="dim")
@@ -662,18 +662,18 @@ def _load_base(base_path_str: str | None, study_yaml_path: Path | None) -> dict[
     return {k: v for k, v in raw.items() if k not in _STUDY_ONLY_KEYS}
 
 
-_BACKEND_SECTION_KEYS = frozenset({"pytorch", "vllm", "tensorrt"})
+_ENGINE_SECTION_KEYS = frozenset({"pytorch", "vllm", "tensorrt"})
 
 
-def _strip_other_backend_sections(config_dict: dict[str, Any], backend: str) -> dict[str, Any]:
-    """Remove backend-specific sections that don't match *backend*.
+def _strip_other_engine_sections(config_dict: dict[str, Any], engine: str) -> dict[str, Any]:
+    """Remove engine-specific sections that don't match *engine*.
 
-    In a multi-backend study, top-level backend sections (e.g. ``tensorrt:``)
-    are shared defaults for that backend's experiments.  When the grid expander
-    assigns a different backend, those sections must be stripped before Pydantic
-    validation - otherwise ``validate_backend_section_match`` rejects the config.
+    In a multi-engine study, top-level engine sections (e.g. ``tensorrt:``)
+    are shared defaults for that engine's experiments.  When the grid expander
+    assigns a different engine, those sections must be stripped before Pydantic
+    validation - otherwise ``validate_engine_section_match`` rejects the config.
     """
-    return {k: v for k, v in config_dict.items() if k not in _BACKEND_SECTION_KEYS or k == backend}
+    return {k: v for k, v in config_dict.items() if k not in _ENGINE_SECTION_KEYS or k == engine}
 
 
 # =============================================================================
@@ -703,11 +703,11 @@ def _is_group(value: object) -> bool:
     return True
 
 
-def _group_backend_scope(group_key: str) -> str | None:
-    """Return backend name if a group key is backend-scoped, else None (universal)."""
+def _group_engine_scope(group_key: str) -> str | None:
+    """Return engine name if a group key is engine-scoped, else None (universal)."""
     if "." in group_key:
         prefix = group_key.split(".", 1)[0]
-        if prefix in _BACKEND_SECTION_KEYS:
+        if prefix in _ENGINE_SECTION_KEYS:
             return prefix
     return None
 
@@ -759,7 +759,7 @@ def _route_key_value(
     """Route a single fully-qualified key into *config_dict*.
 
     Routing rules:
-    - Backend-prefixed dotted key (``pytorch.batch_size``) → merge into backend section.
+    - Engine-prefixed dotted key (``pytorch.batch_size``) → merge into engine section.
     - Other dotted key (``decoder.do_sample``) → unflatten at top level.
     - Simple key → direct assignment.
 
@@ -767,10 +767,10 @@ def _route_key_value(
     """
     if "." in key:
         prefix, param = key.split(".", 1)
-        if prefix in _BACKEND_SECTION_KEYS:
-            backend_dict = config_dict.get(prefix, {})
+        if prefix in _ENGINE_SECTION_KEYS:
+            engine_dict = config_dict.get(prefix, {})
             nested_update = _unflatten({param: value})
-            config_dict[prefix] = deep_merge(backend_dict, nested_update)
+            config_dict[prefix] = deep_merge(engine_dict, nested_update)
         else:
             nested_update = _unflatten({key: value})
             config_dict = deep_merge(config_dict, nested_update)
@@ -822,13 +822,13 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     """
     if not sweep:
         if fixed.get("model"):
-            backend = fixed.get("backend", "pytorch")
-            return [_strip_other_backend_sections(dict(fixed), backend)]
+            engine = fixed.get("engine", "pytorch")
+            return [_strip_other_engine_sections(dict(fixed), engine)]
         return []
 
     # ── Step 1: Partition sweep into axes and groups ──
     universal_dims: dict[str, list[Any]] = {}
-    scoped_dims: dict[str, dict[str, list[Any]]] = {}  # {backend: {param: [values]}}
+    scoped_dims: dict[str, dict[str, list[Any]]] = {}  # {engine: {param: [values]}}
     groups: dict[str, list[dict[str, Any]]] = {}  # {group_name: [variant_dicts]}
 
     for key, values in sweep.items():
@@ -841,7 +841,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
 
         if "." in key:
             prefix, _param = key.split(".", 1)
-            if prefix in _BACKEND_SECTION_KEYS:
+            if prefix in _ENGINE_SECTION_KEYS:
                 scoped_dims.setdefault(prefix, {})[_param] = values
             else:
                 universal_dims[key] = values
@@ -854,39 +854,39 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     }
     _validate_sweep_groups(groups, axis_keys)
 
-    # ── Step 2: Separate groups by backend scope ──
+    # ── Step 2: Separate groups by engine scope ──
     universal_groups: dict[str, list[dict[str, Any]]] = {}
-    scoped_groups: dict[str, dict[str, list[dict[str, Any]]]] = {}  # {backend: {name: variants}}
+    scoped_groups: dict[str, dict[str, list[dict[str, Any]]]] = {}  # {engine: {name: variants}}
 
     for group_name, variants in groups.items():
-        backend_scope = _group_backend_scope(group_name)
-        if backend_scope:
-            scoped_groups.setdefault(backend_scope, {})[group_name] = variants
+        engine_scope = _group_engine_scope(group_name)
+        if engine_scope:
+            scoped_groups.setdefault(engine_scope, {})[group_name] = variants
         else:
             universal_groups[group_name] = variants
 
-    # ── Step 3: Determine backends ──
-    fixed_backend = fixed.get("backend", "pytorch")
-    if isinstance(fixed_backend, list):
-        backends = list(fixed_backend)
+    # ── Step 3: Determine engines ──
+    fixed_engine = fixed.get("engine", "pytorch")
+    if isinstance(fixed_engine, list):
+        engines = list(fixed_engine)
     elif scoped_dims or scoped_groups:
-        # Backends implied by scoped axes or scoped groups
-        backends = sorted(set(scoped_dims.keys()) | set(scoped_groups.keys()))
+        # Engines implied by scoped axes or scoped groups
+        engines = sorted(set(scoped_dims.keys()) | set(scoped_groups.keys()))
     else:
-        backends = [fixed_backend]
+        engines = [fixed_engine]
 
-    # ── Step 4: Per-backend expansion ──
+    # ── Step 4: Per-engine expansion ──
     results: list[dict[str, Any]] = []
 
-    for backend in backends:
-        # Collect applicable groups (universal + this backend's scoped)
+    for engine in engines:
+        # Collect applicable groups (universal + this engine's scoped)
         applicable_groups: dict[str, list[dict[str, Any]]] = dict(universal_groups)
-        applicable_groups.update(scoped_groups.get(backend, {}))
+        applicable_groups.update(scoped_groups.get(engine, {}))
 
         # Collect applicable axes — reconstruct fully-qualified keys for routing
-        backend_scoped = scoped_dims.get(backend, {})
-        fq_dim_keys = list(universal_dims.keys()) + [f"{backend}.{p}" for p in backend_scoped]
-        all_dim_values = list(universal_dims.values()) + list(backend_scoped.values())
+        engine_scoped = scoped_dims.get(engine, {})
+        fq_dim_keys = list(universal_dims.keys()) + [f"{engine}.{p}" for p in engine_scoped]
+        all_dim_values = list(universal_dims.values()) + list(engine_scoped.values())
 
         # Cross all group variant lists with each other (lazy — iterated once)
         group_combos: Iterable[tuple[Any, ...]]
@@ -898,15 +898,15 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
             group_combos = [()]  # single empty combo → no group overlays
 
         if not fq_dim_keys and not applicable_groups:
-            # No dimensions or groups for this backend — produce one config
-            config_dict: dict[str, Any] = _strip_other_backend_sections(dict(fixed), backend)
-            config_dict["backend"] = backend
+            # No dimensions or groups for this engine — produce one config
+            config_dict: dict[str, Any] = _strip_other_engine_sections(dict(fixed), engine)
+            config_dict["engine"] = engine
             results.append(config_dict)
             continue
 
-        # Pre-compute stripped base config once per backend
-        base_config = _strip_other_backend_sections(dict(fixed), backend)
-        base_config["backend"] = backend
+        # Pre-compute stripped base config once per engine
+        base_config = _strip_other_engine_sections(dict(fixed), engine)
+        base_config["engine"] = engine
 
         # axis_combos materialised — reused across group combos
         axis_combos = list(itertools.product(*all_dim_values)) if fq_dim_keys else [()]

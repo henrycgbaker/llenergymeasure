@@ -1,7 +1,7 @@
 """E2E integration tests for the full pipeline: YAML -> config -> runner -> result.
 
 These tests exercise real YAML parsing, real config validation, and the real
-orchestrator -- only the inference backend and GPU-specific calls are faked.
+orchestrator -- only the inference engine and GPU-specific calls are faked.
 
 CLI E2E tests use CliRunner (thin wrapper verification per CONTEXT.md).
 
@@ -27,7 +27,7 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     """Patch infrastructure calls common to all pipeline tests.
 
     Patches out:
-    - run_study_preflight (multi-backend guard, Docker pre-flight)
+    - run_study_preflight (multi-engine guard, Docker pre-flight)
     - run_preflight (per-experiment GPU check)
     - check_gpu_memory_residual (NVML residual check)
     - load_user_config (user config file access)
@@ -45,7 +45,7 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
         "run_study_preflight",
         lambda study, **kw: (
             {
-                exp.backend: RunnerSpec(mode="local", image=None, source="default")
+                exp.engine: RunnerSpec(mode="local", image=None, source="default")
                 for exp in study.experiments
             },
             {},
@@ -60,12 +60,12 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
         "llenergymeasure.config.user_config.load_user_config",
         lambda **kwargs: make_user_config(),
     )
-    # Force all backends to use the local in-process path.
+    # Force all engines to use the local in-process path.
     # Without this, resolve_study_runners may return docker specs on Docker-enabled hosts.
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.resolve_study_runners",
-        lambda backends, yaml_runners=None, user_config=None: {
-            b: RunnerSpec(mode="local", image=None, source="default") for b in backends
+        lambda engines, yaml_runners=None, user_config=None: {
+            e: RunnerSpec(mode="local", image=None, source="default") for e in engines
         },
     )
     monkeypatch.setattr(
@@ -84,16 +84,16 @@ def _patch_infra(monkeypatch: Any, tmp_path: Path, mock_result: Any) -> None:
     )
 
 
-def _patch_backend(monkeypatch: Any, mock_result: Any) -> None:
-    """Patch get_backend and MeasurementHarness to return a pre-built result."""
-    import llenergymeasure.backends as backends_module
+def _patch_engine(monkeypatch: Any, mock_result: Any) -> None:
+    """Patch get_engine and MeasurementHarness to return a pre-built result."""
+    import llenergymeasure.engines as engines_module
     import llenergymeasure.harness as harness_module
 
-    monkeypatch.setattr(backends_module, "get_backend", lambda name: MagicMock())
+    monkeypatch.setattr(engines_module, "get_engine", lambda name: MagicMock())
     monkeypatch.setattr(
         harness_module.MeasurementHarness,
         "run",
-        lambda self, backend, config, **kw: mock_result,
+        lambda self, engine, config, **kw: mock_result,
     )
 
 
@@ -103,26 +103,26 @@ def _patch_backend(monkeypatch: Any, mock_result: Any) -> None:
 
 
 class TestPipelineSingleExperiment:
-    """Test 1: YAML -> ExperimentConfig -> backend -> ExperimentResult."""
+    """Test 1: YAML -> ExperimentConfig -> engine -> ExperimentResult."""
 
     def test_pipeline_single_experiment(self, tmp_path: Path, monkeypatch: Any) -> None:
-        """Full pipeline: real YAML parse, real config validation, fake backend."""
+        """Full pipeline: real YAML parse, real config validation, fake engine."""
         from llenergymeasure import run_experiment
         from llenergymeasure.config.loader import load_experiment_config
         from llenergymeasure.domain.experiment import ExperimentResult
 
         # Write minimal experiment YAML
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
-        _patch_backend(monkeypatch, mock_result)
+        _patch_engine(monkeypatch, mock_result)
 
         # Real YAML parsing and config validation (not mocked)
         experiment_config = load_experiment_config(path=yaml_path)
         assert experiment_config.model == "gpt2"
-        assert experiment_config.backend == "pytorch"
+        assert experiment_config.engine == "pytorch"
         assert experiment_config.dataset.n_prompts == 5
 
         # Full run_experiment call
@@ -144,7 +144,7 @@ class TestPipelineSingleExperiment:
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
-        _patch_backend(monkeypatch, mock_result)
+        _patch_engine(monkeypatch, mock_result)
 
         result = run_experiment(str(yaml_path), skip_preflight=True)
 
@@ -193,7 +193,7 @@ baseline:
         yaml_content = """\
 sweep:
   model: [gpt2, distilgpt2]
-  backend: [pytorch]
+  engine: [pytorch]
 study_execution:
   n_cycles: 1
   experiment_order: sequential
@@ -224,32 +224,32 @@ study_execution:
 
 
 class TestPipelineErrorPropagation:
-    """Test 3: BackendError propagates from backend through run_experiment to caller."""
+    """Test 3: EngineError propagates from engine through run_experiment to caller."""
 
-    def test_backend_error_propagates(self, tmp_path: Path, monkeypatch: Any) -> None:
-        """BackendError raised in backend propagates unchanged to the caller.
+    def test_engine_error_propagates(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """EngineError raised in engine propagates unchanged to the caller.
 
         _patch_infra forces resolve_study_runners to return a local spec so the
         in-process path is exercised (not Docker dispatch, which catches errors differently).
         """
-        import llenergymeasure.backends as backends_module
+        import llenergymeasure.engines as engines_module
         import llenergymeasure.harness as harness_module
         from llenergymeasure import run_experiment
-        from llenergymeasure.utils.exceptions import BackendError
+        from llenergymeasure.utils.exceptions import EngineError
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\n")
+        yaml_path.write_text("model: gpt2\nengine: pytorch\n")
 
         _patch_infra(monkeypatch, tmp_path, make_result())
 
-        # Backend raises on run
-        def _failing_harness_run(self: Any, backend: Any, config: Any, **kw: Any) -> None:
-            raise BackendError("GPU OOM")
+        # Engine raises on run
+        def _failing_harness_run(self: Any, engine: Any, config: Any, **kw: Any) -> None:
+            raise EngineError("GPU OOM")
 
-        monkeypatch.setattr(backends_module, "get_backend", lambda name: MagicMock())
+        monkeypatch.setattr(engines_module, "get_engine", lambda name: MagicMock())
         monkeypatch.setattr(harness_module.MeasurementHarness, "run", _failing_harness_run)
 
-        with pytest.raises(BackendError, match="GPU OOM"):
+        with pytest.raises(EngineError, match="GPU OOM"):
             run_experiment(str(yaml_path), skip_preflight=True)
 
     def test_config_error_on_invalid_yaml(self, tmp_path: Path) -> None:
@@ -273,25 +273,25 @@ class TestPipelineErrorPropagation:
 
 
 class TestPipelineDryRun:
-    """Test 4: CLI dry-run path -- validates config and estimates VRAM without running backend."""
+    """Test 4: CLI dry-run path -- validates config and estimates VRAM without running engine."""
 
-    def test_pipeline_dry_run_no_backend_call(self, tmp_path: Path, monkeypatch: Any) -> None:
-        """CLI --dry-run validates config and prints output without calling backend."""
+    def test_pipeline_dry_run_no_engine_call(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """CLI --dry-run validates config and prints output without calling engine."""
         from typer.testing import CliRunner
 
-        import llenergymeasure.backends as backends_module
+        import llenergymeasure.engines as engines_module
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
 
-        backend_call_count = []
+        engine_call_count = []
 
-        def _tracking_get_backend(name: str) -> Any:
-            backend_call_count.append(name)
+        def _tracking_get_engine(name: str) -> Any:
+            engine_call_count.append(name)
             return MagicMock()
 
-        monkeypatch.setattr(backends_module, "get_backend", _tracking_get_backend)
+        monkeypatch.setattr(engines_module, "get_engine", _tracking_get_engine)
 
         # Patch VRAM utilities to avoid GPU hardware dependency.
         # estimate_vram returns dict[str, float] | None (not a plain float).
@@ -309,10 +309,10 @@ class TestPipelineDryRun:
         result = runner.invoke(app, ["run", str(yaml_path), "--dry-run"])
 
         assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}: {result.output}"
-        # Dry-run shows config without running backend
+        # Dry-run shows config without running engine
         assert "Config" in result.output or "gpt2" in result.output
-        # Backend must NOT be called in dry-run
-        assert backend_call_count == [], f"Backend was called during dry-run: {backend_call_count}"
+        # Engine must NOT be called in dry-run
+        assert engine_call_count == [], f"Engine was called during dry-run: {engine_call_count}"
 
 
 # =============================================================================
@@ -330,7 +330,7 @@ class TestCLIE2ESingleExperiment:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result(experiment_id="cli-e2e-001")
 
@@ -360,7 +360,7 @@ class TestCLIE2ESingleExperiment:
         )
 
         runner = CliRunner()
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--backend", "pytorch"])
+        result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "pytorch"])
 
         assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}:\n{result.output}"
         assert "Result:" in result.output
@@ -417,7 +417,7 @@ class TestCLIE2EErrorExitCodes:
         [
             pytest.param("ConfigError", 2, id="config-error-exit-2"),
             pytest.param("ExperimentError", 1, id="experiment-error-exit-1"),
-            pytest.param("BackendError", 1, id="backend-error-exit-1"),
+            pytest.param("EngineError", 1, id="engine-error-exit-1"),
             pytest.param("PreFlightError", 1, id="preflight-error-exit-1"),
         ],
     )
@@ -435,7 +435,7 @@ class TestCLIE2EErrorExitCodes:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nbackend: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
 
         error_cls = getattr(llenergymeasure.utils.exceptions, error_class)
         exc_instance = error_cls(f"test {error_class}")

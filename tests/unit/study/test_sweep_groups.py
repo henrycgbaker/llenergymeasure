@@ -1,7 +1,7 @@
 """Tests for sweep group expansion in grid.py.
 
 Covers: group detection (_is_group), mini-grid expansion within entries,
-group x sweep crossing, backend scoping, fully-qualified key routing,
+group x sweep crossing, engine scoping, fully-qualified key routing,
 empty groups ({}), group + explicit experiments, collision detection,
 combinatorial warnings, and hash stability.
 """
@@ -16,7 +16,7 @@ from llenergymeasure.config.grid import (
     _apply_group_overlay,
     _expand_group,
     _expand_group_entry,
-    _group_backend_scope,
+    _group_engine_scope,
     _is_group,
     _route_key_value,
     _validate_sweep_groups,
@@ -61,25 +61,25 @@ class TestIsGroup:
 
 
 # =============================================================================
-# _group_backend_scope()
+# _group_engine_scope()
 # =============================================================================
 
 
 class TestGroupBackendScope:
     def test_pytorch_scoped(self):
-        assert _group_backend_scope("pytorch.compilation") == "pytorch"
+        assert _group_engine_scope("pytorch.compilation") == "pytorch"
 
     def test_vllm_scoped(self):
-        assert _group_backend_scope("vllm.decoding") == "vllm"
+        assert _group_engine_scope("vllm.decoding") == "vllm"
 
     def test_tensorrt_scoped(self):
-        assert _group_backend_scope("tensorrt.quant_config") == "tensorrt"
+        assert _group_engine_scope("tensorrt.quant_config") == "tensorrt"
 
     def test_universal_no_dot(self):
-        assert _group_backend_scope("compilation") is None
+        assert _group_engine_scope("compilation") is None
 
-    def test_universal_non_backend_prefix(self):
-        assert _group_backend_scope("decoder.sampling") is None
+    def test_universal_non_engine_prefix(self):
+        assert _group_engine_scope("decoder.sampling") is None
 
 
 # =============================================================================
@@ -156,38 +156,38 @@ class TestExpandGroup:
 
 
 class TestRouteKeyValue:
-    def test_backend_scoped_key(self):
-        config = {"backend": "pytorch", "pytorch": {"batch_size": 4}}
+    def test_engine_scoped_key(self):
+        config = {"engine": "pytorch", "pytorch": {"batch_size": 4}}
         result = _route_key_value(dict(config), "pytorch.torch_compile", True)
         assert result["pytorch"]["torch_compile"] is True
         assert result["pytorch"]["batch_size"] == 4  # preserved
 
     def test_cross_section_key(self):
-        config = {"backend": "pytorch", "decoder": {"temperature": 1.0}}
+        config = {"engine": "pytorch", "decoder": {"temperature": 1.0}}
         result = _route_key_value(dict(config), "decoder.do_sample", False)
         assert result["decoder"]["do_sample"] is False
 
     def test_simple_top_level_key(self):
-        config = {"backend": "pytorch"}
+        config = {"engine": "pytorch"}
         result = _route_key_value(dict(config), "dtype", "float16")
         assert result["dtype"] == "float16"
 
     def test_deep_nested_key(self):
-        """Multi-level dotted backend keys like vllm.engine.block_size."""
-        config = {"backend": "vllm", "vllm": {}}
+        """Multi-level dotted engine keys like vllm.engine.block_size."""
+        config = {"engine": "vllm", "vllm": {}}
         result = _route_key_value(dict(config), "vllm.engine.block_size", 16)
         assert result["vllm"]["engine"]["block_size"] == 16
 
 
 class TestApplyGroupOverlay:
-    def test_backend_scoped_key(self):
-        config = {"backend": "pytorch", "pytorch": {"batch_size": 4}}
+    def test_engine_scoped_key(self):
+        config = {"engine": "pytorch", "pytorch": {"batch_size": 4}}
         result = _apply_group_overlay(dict(config), {"pytorch.torch_compile": True})
         assert result["pytorch"]["torch_compile"] is True
         assert result["pytorch"]["batch_size"] == 4  # preserved
 
     def test_cross_section_key(self):
-        config = {"backend": "pytorch", "decoder": {"temperature": 1.0}}
+        config = {"engine": "pytorch", "decoder": {"temperature": 1.0}}
         result = _apply_group_overlay(
             dict(config),
             {"decoder.do_sample": False, "decoder.temperature": 0.0},
@@ -196,18 +196,18 @@ class TestApplyGroupOverlay:
         assert result["decoder"]["temperature"] == 0.0
 
     def test_simple_top_level_key(self):
-        config = {"backend": "pytorch"}
+        config = {"engine": "pytorch"}
         result = _apply_group_overlay(dict(config), {"dtype": "float16"})
         assert result["dtype"] == "float16"
 
     def test_empty_overlay_no_change(self):
-        config = {"backend": "pytorch", "pytorch": {"batch_size": 4}}
+        config = {"engine": "pytorch", "pytorch": {"batch_size": 4}}
         result = _apply_group_overlay(dict(config), {})
         assert result == config
 
     def test_deep_nested_key(self):
-        """Multi-level dotted backend keys like vllm.engine.block_size."""
-        config = {"backend": "vllm", "vllm": {}}
+        """Multi-level dotted engine keys like vllm.engine.block_size."""
+        config = {"engine": "vllm", "vllm": {}}
         result = _apply_group_overlay(
             dict(config),
             {"vllm.engine.block_size": 16},
@@ -243,7 +243,7 @@ class TestExpandGridSweepGroups:
         """A group with 3 entries crossed with 2 dtype = 6 experiments."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "pytorch.compilation": [
@@ -264,7 +264,7 @@ class TestExpandGridSweepGroups:
         """An empty dict {} in a group means 'no override' (baseline)."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "pytorch.quantization": [
                     {},  # baseline: no quantisation
@@ -283,7 +283,7 @@ class TestExpandGridSweepGroups:
         """Two groups are crossed with each other (not unioned)."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "pytorch.compilation": [
                     {"pytorch.torch_compile": False},
@@ -302,7 +302,7 @@ class TestExpandGridSweepGroups:
         """Groups are crossed with independent axes."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "pytorch.compilation": [
@@ -315,10 +315,10 @@ class TestExpandGridSweepGroups:
         assert len(valid) == 4  # 2 dtype x 2 compilation
 
     def test_cross_section_group_overlay(self):
-        """Group entries can override non-backend fields like decoder settings."""
+        """Group entries can override non-engine fields like decoder settings."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "pytorch.decoding": [
                     {},  # baseline: use shared decoder settings
@@ -343,7 +343,7 @@ class TestExpandGridSweepGroups:
         """Groups and explicit experiments coexist."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "pytorch.compilation": [
@@ -352,18 +352,18 @@ class TestExpandGridSweepGroups:
                 ],
             },
             "experiments": [
-                {"model": "gpt2", "backend": "pytorch", "dtype": "float32"},
+                {"model": "gpt2", "engine": "pytorch", "dtype": "float32"},
             ],
         }
         valid, _skipped = expand_grid(raw)
         # 2 dtype x 2 compilation = 4 from sweep, + 1 explicit = 5
         assert len(valid) == 5
 
-    def test_backend_scoped_group(self):
-        """Groups scoped to a backend only apply to that backend's experiments."""
+    def test_engine_scoped_group(self):
+        """Groups scoped to a engine only apply to that engine's experiments."""
         raw = {
             "model": "gpt2",
-            "backend": ["pytorch", "vllm"],
+            "engine": ["pytorch", "vllm"],
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "pytorch.compilation": [
@@ -373,8 +373,8 @@ class TestExpandGridSweepGroups:
             },
         }
         valid, _skipped = expand_grid(raw)
-        pytorch_configs = [c for c in valid if c.backend == "pytorch"]
-        vllm_configs = [c for c in valid if c.backend == "vllm"]
+        pytorch_configs = [c for c in valid if c.engine == "pytorch"]
+        vllm_configs = [c for c in valid if c.engine == "vllm"]
         # PyTorch: 2 dtype x 2 compilation = 4
         assert len(pytorch_configs) == 4
         # vLLM: 2 dtype x no groups = 2
@@ -384,7 +384,7 @@ class TestExpandGridSweepGroups:
         """List-valued fields within a group entry expand as mini-grid."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "pytorch.quantization": [
                     {},
@@ -409,7 +409,7 @@ class TestExpandGridSweepGroups:
         """Study with only groups and no independent axes."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "pytorch.compilation": [
                     {"pytorch.torch_compile": False},
@@ -422,11 +422,11 @@ class TestExpandGridSweepGroups:
 
 
 class TestExpandGridSweepGroupsMultiBackend:
-    def test_groups_scoped_to_different_backends(self):
-        """Backend-scoped groups only apply to their respective backend."""
+    def test_groups_scoped_to_different_engines(self):
+        """Backend-scoped groups only apply to their respective engine."""
         raw = {
             "model": "gpt2",
-            "backend": ["pytorch", "vllm"],
+            "engine": ["pytorch", "vllm"],
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "pytorch.compilation": [
@@ -440,8 +440,8 @@ class TestExpandGridSweepGroupsMultiBackend:
             },
         }
         valid, _skipped = expand_grid(raw)
-        pytorch_configs = [c for c in valid if c.backend == "pytorch"]
-        vllm_configs = [c for c in valid if c.backend == "vllm"]
+        pytorch_configs = [c for c in valid if c.engine == "pytorch"]
+        vllm_configs = [c for c in valid if c.engine == "vllm"]
         # PyTorch: 2 dtype x 2 compilation = 4
         assert len(pytorch_configs) == 4
         # vLLM: 2 dtype x 2 decoding = 4
@@ -460,7 +460,7 @@ class TestCombinatorialWarnings:
         # invalid (flash_attention_2 + float32) = 120 valid experiments
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "dtype": ["float32", "float16", "bfloat16"],
                 "pytorch.batch_size": [1, 4, 8, 16, 32],
@@ -490,7 +490,7 @@ class TestHashStabilityWithGroups:
 
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "pytorch.compilation": [

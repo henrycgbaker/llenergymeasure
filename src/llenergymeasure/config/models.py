@@ -1,7 +1,7 @@
 """Configuration models for LLM efficiency measurement experiments (v2.0 schema).
 
 This module defines the Tier 1 (Universal) configuration that applies identically
-across all backends. Backend-specific parameters live in backend_configs.py.
+across all engines. Engine-specific parameters live in engine_configs.py.
 
 v2.0 field renames from v1.x:
     model_name         -> model
@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field, model_validator
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 
 if TYPE_CHECKING:
-    from llenergymeasure.config.backend_configs import (
+    from llenergymeasure.config.engine_configs import (
         PyTorchConfig,
         TensorRTConfig,
         VLLMConfig,
@@ -49,8 +49,8 @@ SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
 class DecoderConfig(BaseModel):
     """Universal decoder/generation configuration.
 
-    Contains parameters with identical semantics across all backends.
-    Backend-specific decoder params live in backend_configs.py.
+    Contains parameters with identical semantics across all engines.
+    Engine-specific decoder params live in engine_configs.py.
 
     Presets:
         - deterministic: Greedy decoding (temp=0, do_sample=False)
@@ -315,7 +315,7 @@ class ExperimentConfig(BaseModel):
     """v2.0 experiment configuration.
 
     Central configuration object controlling all aspects of a single LLM inference
-    efficiency measurement. Backend-specific parameters live in nested sections
+    efficiency measurement. Engine-specific parameters live in nested sections
     (pytorch:, vllm:, tensorrt:).
 
     Field renames from v1.x:
@@ -326,8 +326,8 @@ class ExperimentConfig(BaseModel):
         dataset_order -> dataset.order
         extra_metadata -> passthrough_kwargs
 
-    The backend section (pytorch:, vllm:, tensorrt:) must match the backend field.
-    Providing a pytorch: section when backend=vllm is a configuration error.
+    The engine section (pytorch:, vllm:, tensorrt:) must match the engine field.
+    Providing a pytorch: section when engine=vllm is a configuration error.
     """
 
     model_config = {"extra": "forbid"}
@@ -340,11 +340,11 @@ class ExperimentConfig(BaseModel):
         json_schema_extra={"display_label": "Model", "role": "workload"},
     )
 
-    # Backend selection
-    backend: Literal["pytorch", "vllm", "tensorrt"] = Field(
+    # Engine selection
+    engine: Literal["pytorch", "vllm", "tensorrt"] = Field(
         default="pytorch",
-        description="Inference backend",
-        json_schema_extra={"display_label": "Backend", "role": "experimental"},
+        description="Inference engine",
+        json_schema_extra={"display_label": "Engine", "role": "experimental"},
     )
 
     # Dataset
@@ -369,7 +369,7 @@ class ExperimentConfig(BaseModel):
 
     # Token limits — control FLOPs isolation between experiments.
     # Setting these keeps computation workload constant so that only implementation
-    # parameters (backend, dtype, quantisation) vary between experiments.
+    # parameters (engine, dtype, quantisation) vary between experiments.
     # None = no limit (prompts keep natural length / model generates to EOS).
     max_input_tokens: int | None = Field(
         default=256,
@@ -408,19 +408,19 @@ class ExperimentConfig(BaseModel):
         ),
         json_schema_extra={"display_label": "Sampler", "role": "workload"},
     )
-    # Backend sections (None = use backend's own defaults)
-    # All current backends (pytorch, vllm, tensorrt) are GPU-only; cpu backend is future scope.
+    # Engine sections (None = use engine's own defaults)
+    # All current engines (pytorch, vllm, tensorrt) are GPU-only; cpu engine is future scope.
     pytorch: PyTorchConfig | None = Field(
         default=None,
-        description="PyTorch-specific configuration (only used when backend=pytorch)",
+        description="PyTorch-specific configuration (only used when engine=pytorch)",
     )
     vllm: VLLMConfig | None = Field(
         default=None,
-        description="vLLM-specific configuration (only used when backend=vllm)",
+        description="vLLM-specific configuration (only used when engine=vllm)",
     )
     tensorrt: TensorRTConfig | None = Field(
         default=None,
-        description="TensorRT-LLM configuration (only used when backend=tensorrt)",
+        description="TensorRT-LLM configuration (only used when engine=tensorrt)",
     )
 
     # LoRA adapter (optional)
@@ -429,7 +429,7 @@ class ExperimentConfig(BaseModel):
     # Escape hatch — explicitly declared for extra="forbid" compatibility
     passthrough_kwargs: dict[str, Any] | None = Field(
         default=None,
-        description="Extra kwargs passed through to backend at execution time. "
+        description="Extra kwargs passed through to engine at execution time. "
         "Keys must not collide with ExperimentConfig top-level fields.",
     )
 
@@ -441,27 +441,27 @@ class ExperimentConfig(BaseModel):
     _FLASH_ATTENTION_IMPLS: ClassVar[set[str]] = {"flash_attention_2", "flash_attention_3"}
 
     @model_validator(mode="after")
-    def validate_backend_section_match(self) -> ExperimentConfig:
-        """Backend section must match the backend field.
+    def validate_engine_section_match(self) -> ExperimentConfig:
+        """Engine section must match the engine field.
 
-        A pytorch: section with backend=vllm is a configuration error — it indicates
+        A pytorch: section with engine=vllm is a configuration error — it indicates
         the researcher copied the wrong config block. Fail explicitly rather than
         silently ignoring the mismatched section.
         """
-        if self.pytorch is not None and self.backend != "pytorch":
+        if self.pytorch is not None and self.engine != "pytorch":
             raise ValueError(
-                f"pytorch: config section provided but backend={self.backend!r}. "
-                "Remove the pytorch: section or set backend: pytorch."
+                f"pytorch: config section provided but engine={self.engine!r}. "
+                "Remove the pytorch: section or set engine: pytorch."
             )
-        if self.vllm is not None and self.backend != "vllm":
+        if self.vllm is not None and self.engine != "vllm":
             raise ValueError(
-                f"vllm: config section provided but backend={self.backend!r}. "
-                "Remove the vllm: section or set backend: vllm."
+                f"vllm: config section provided but engine={self.engine!r}. "
+                "Remove the vllm: section or set engine: vllm."
             )
-        if self.tensorrt is not None and self.backend != "tensorrt":
+        if self.tensorrt is not None and self.engine != "tensorrt":
             raise ValueError(
-                f"tensorrt: config section provided but backend={self.backend!r}. "
-                "Remove the tensorrt: section or set backend: tensorrt."
+                f"tensorrt: config section provided but engine={self.engine!r}. "
+                "Remove the tensorrt: section or set engine: tensorrt."
             )
         return self
 
@@ -486,7 +486,7 @@ class ExperimentConfig(BaseModel):
     def validate_vllm_fp8_dtype_compat(self) -> ExperimentConfig:
         """fp8 quantization requires float16 or bfloat16 dtype (not float32)."""
         if (
-            self.backend == "vllm"
+            self.engine == "vllm"
             and self.vllm is not None
             and self.vllm.engine is not None
             and self.vllm.engine.quantization in self._FP8_QUANTIZATIONS
@@ -502,7 +502,7 @@ class ExperimentConfig(BaseModel):
     def validate_trt_fp8_dtype_compat(self) -> ExperimentConfig:
         """FP8 quantization on TensorRT requires float16 or bfloat16 dtype (not float32)."""
         if (
-            self.backend == "tensorrt"
+            self.engine == "tensorrt"
             and self.tensorrt is not None
             and self.tensorrt.quant is not None
             and self.tensorrt.quant.quant_algo == "FP8"
@@ -518,7 +518,7 @@ class ExperimentConfig(BaseModel):
     def validate_pytorch_flash_attn_dtype(self) -> ExperimentConfig:
         """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32)."""
         if (
-            self.backend == "pytorch"
+            self.engine == "pytorch"
             and self.pytorch is not None
             and self.pytorch.attn_implementation in self._FLASH_ATTENTION_IMPLS
             and self.dtype == "float32"
@@ -531,10 +531,10 @@ class ExperimentConfig(BaseModel):
         return self
 
 
-# Rebuild to resolve forward references for backend configs
+# Rebuild to resolve forward references for engine configs
 def _rebuild_experiment_config() -> None:
     """Rebuild ExperimentConfig to resolve forward references."""
-    from llenergymeasure.config.backend_configs import (
+    from llenergymeasure.config.engine_configs import (
         PyTorchConfig,
         TensorRTConfig,
         VLLMConfig,
@@ -699,7 +699,7 @@ class StudyConfig(BaseModel):
     runners: dict[str, str] | None = Field(
         default=None,
         description=(
-            "Per-backend runner configuration. Keys are backend names "
+            "Per-engine runner configuration. Keys are engine names "
             "('pytorch', 'vllm', 'tensorrt'), values are runner strings "
             "('local', 'docker', or 'docker:<image>'). "
             "None = use user config / auto-detection. "
@@ -709,8 +709,8 @@ class StudyConfig(BaseModel):
     images: dict[str, str] | None = Field(
         default=None,
         description=(
-            "Per-backend Docker image overrides (orthogonal to runners). "
-            "Keys are backend names, values are image references "
+            "Per-engine Docker image overrides (orthogonal to runners). "
+            "Keys are engine names, values are image references "
             "(e.g. 'ghcr.io/org/img:tag'). None = use smart default "
             "(local build → registry fallback). "
             "Image is metadata — not part of the experiment config hash."

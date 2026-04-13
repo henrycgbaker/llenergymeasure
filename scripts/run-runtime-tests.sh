@@ -3,18 +3,18 @@
 # DEPRECATED: This script has been superseded by runtime-test-orchestrator.py
 #
 # The new orchestrator uses SSOT introspection to discover ALL params and
-# dispatches each test to the correct backend container (pytorch, vllm, tensorrt).
+# dispatches each test to the correct engine container (pytorch, vllm, tensorrt).
 #
 # Usage:
-#   python scripts/runtime-test-orchestrator.py               # All backends
-#   python scripts/runtime-test-orchestrator.py --backend pytorch
+#   python scripts/runtime-test-orchestrator.py               # All engines
+#   python scripts/runtime-test-orchestrator.py --engine pytorch
 #   python scripts/runtime-test-orchestrator.py --quick       # Quick mode
 #   python scripts/runtime-test-orchestrator.py --list-params # List params
 #   python scripts/runtime-test-orchestrator.py --check-docker
 #
 # Or via make:
-#   make test-runtime       # PyTorch backend
-#   make test-runtime-all   # All backends
+#   make test-runtime       # PyTorch engine
+#   make test-runtime-all   # All engines
 #   make test-runtime-quick # Quick mode
 #
 # This wrapper script is kept for backwards compatibility.

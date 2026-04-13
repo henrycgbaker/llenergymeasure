@@ -1,16 +1,16 @@
-"""Backend-specific configuration models (v2.0 schema).
+"""Engine-specific configuration models (v2.0 schema).
 
-Each backend section uses None-as-default: all fields default to None, meaning
-"use the backend's own default at execution time". This makes it explicit when
-a researcher has set a value versus when the backend's built-in default applies.
+Each engine section uses None-as-default: all fields default to None, meaning
+"use the engine's own default at execution time". This makes it explicit when
+a researcher has set a value versus when the engine's built-in default applies.
 
 Usage in YAML:
-    backend: pytorch
+    engine: pytorch
     pytorch:
       batch_size: 4
       load_in_4bit: true
 
-    backend: vllm
+    engine: vllm
     vllm:
       engine:
         enforce_eager: false
@@ -20,7 +20,7 @@ Usage in YAML:
         max_tokens: 512
         presence_penalty: 0.0
 
-    backend: tensorrt
+    engine: tensorrt
     tensorrt:
       tp_size: 2
       dtype: bfloat16
@@ -37,15 +37,15 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 # =============================================================================
-# PyTorch Backend Configuration (v2.0)
+# PyTorch Engine Configuration (v2.0)
 # =============================================================================
 
 
 class PyTorchConfig(BaseModel):
-    """PyTorch/Transformers backend configuration.
+    """PyTorch/Transformers engine configuration.
 
-    All fields default to None — None means "use the backend's own default".
-    This distinguishes explicit researcher choices from backend defaults,
+    All fields default to None — None means "use the engine's own default".
+    This distinguishes explicit researcher choices from engine defaults,
     which is important for result reproducibility and experiment attribution.
 
     Fields cover the complete researcher-useful parameter space for
@@ -238,7 +238,7 @@ class PyTorchConfig(BaseModel):
 
 
 # =============================================================================
-# vLLM Backend Configuration
+# vLLM Engine Configuration
 # =============================================================================
 
 
@@ -560,7 +560,7 @@ class VLLMSamplingConfig(BaseModel):
 
     Only vLLM-specific sampling parameters are included here.
     Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all backends.
+    live in DecoderConfig and are shared across all engines.
 
     All fields default to None — None means "use vLLM's own default".
     Unknown fields are forwarded to vllm.SamplingParams() via extra="allow".
@@ -573,7 +573,7 @@ class VLLMSamplingConfig(BaseModel):
         ge=1,
         description=(
             "Max output tokens. Overrides ExperimentConfig.max_output_tokens for vLLM sweeps "
-            "(None -> uses max_output_tokens). Use for backend-specific max_tokens sweeps."
+            "(None -> uses max_output_tokens). Use for engine-specific max_tokens sweeps."
         ),
     )
     min_tokens: int | None = Field(
@@ -616,7 +616,7 @@ class VLLMSamplingConfig(BaseModel):
 class VLLMBeamSearchConfig(BaseModel):
     """vLLM beam search configuration.
 
-    When set, the backend uses BeamSearchParams instead of SamplingParams.
+    When set, the engine uses BeamSearchParams instead of SamplingParams.
     Nested under VLLMConfig.beam_search.
     All fields default to None — None means "use vLLM's own default".
     Uses extra="allow" for forward compatibility with new vLLM beam search options.
@@ -645,17 +645,17 @@ class VLLMBeamSearchConfig(BaseModel):
 
 
 class VLLMConfig(BaseModel):
-    """vLLM backend configuration.
+    """vLLM engine configuration.
 
     Nested structure mirrors vLLM's own two-API separation:
     - engine: vllm.LLM() constructor arguments (engine-level, loaded at model init)
     - sampling: vllm.SamplingParams arguments (vLLM-specific extensions only)
 
     Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all backends.
+    live in DecoderConfig and are shared across all engines.
 
     Example YAML:
-        backend: vllm
+        engine: vllm
         vllm:
           engine:
             enforce_eager: false
@@ -698,7 +698,7 @@ class VLLMConfig(BaseModel):
 
 
 # =============================================================================
-# TensorRT-LLM Backend Configuration
+# TensorRT-LLM Engine Configuration
 # =============================================================================
 
 
@@ -815,7 +815,7 @@ class TensorRTSamplingConfig(BaseModel):
 
     Maps to tensorrt_llm.SamplingParams (TRT-LLM-specific extensions only).
     Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all backends.
+    live in DecoderConfig and are shared across all engines.
     """
 
     model_config = {"extra": "allow"}
@@ -835,7 +835,7 @@ class TensorRTSamplingConfig(BaseModel):
 
 
 class TensorRTConfig(BaseModel):
-    """TensorRT-LLM backend configuration.
+    """TensorRT-LLM engine configuration.
 
     All fields default to None - None means "use TRT-LLM's own default".
     TensorRT requires engine compilation; max_batch_size, max_input_len,
@@ -850,10 +850,10 @@ class TensorRTConfig(BaseModel):
     - sampling: SamplingParams (TRT-LLM-specific extensions only)
 
     Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all backends.
+    live in DecoderConfig and are shared across all engines.
 
     Example YAML:
-        backend: tensorrt
+        engine: tensorrt
         tensorrt:
           tp_size: 2
           max_batch_size: 8
@@ -903,7 +903,7 @@ class TensorRTConfig(BaseModel):
         default=None,
         description=(
             "TRT-LLM internal backend: 'trt' for TensorRT engine (None -> 'trt'). "
-            "This is the TRT-LLM LLM(backend=...) parameter, not the llem backend field."
+            "This is the TRT-LLM LLM(backend=...) parameter, not the llem engine field."
         ),
     )
 

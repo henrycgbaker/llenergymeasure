@@ -39,7 +39,7 @@ class UserOutputConfig(BaseModel):
 
 
 class UserRunnersConfig(BaseModel):
-    """Runner selection per backend."""
+    """Runner selection per engine."""
 
     model_config = {"extra": "forbid"}
 
@@ -132,8 +132,8 @@ class UserConfig(BaseModel):
     images: dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "Per-backend Docker image overrides (orthogonal to runners). "
-            "Keys are backend names, values are image references. "
+            "Per-engine Docker image overrides (orthogonal to runners). "
+            "Keys are engine names, values are image references. "
             "Empty dict = use smart default (local build → registry fallback)."
         ),
     )
@@ -161,10 +161,10 @@ def _apply_env_overrides(config: UserConfig) -> UserConfig:
     Returns updated UserConfig (Pydantic models are immutable; use model_copy).
     """
     runners_updates: dict[str, str] = {}
-    for backend in ("pytorch", "vllm", "tensorrt"):
-        env_key = f"{ENV_RUNNER_PREFIX}{backend.upper()}"
+    for engine in ("pytorch", "vllm", "tensorrt"):
+        env_key = f"{ENV_RUNNER_PREFIX}{engine.upper()}"
         if val := os.environ.get(env_key):
-            runners_updates[backend] = val
+            runners_updates[engine] = val
 
     measurement_updates: dict[str, Any] = {}
     if val := os.environ.get(ENV_CARBON_INTENSITY):

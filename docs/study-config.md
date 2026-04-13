@@ -11,14 +11,14 @@ The minimal experiment YAML requires only `model:`:
 
 ```yaml
 model: gpt2
-backend: pytorch
+engine: pytorch
 ```
 
 A fuller example with sub-configs:
 
 ```yaml
 model: gpt2
-backend: pytorch
+engine: pytorch
 dtype: bfloat16
 max_input_tokens: 256
 max_output_tokens: 256
@@ -51,7 +51,7 @@ A vLLM experiment (requires Docker runner):
 
 ```yaml
 model: gpt2
-backend: vllm
+engine: vllm
 
 dataset:
   source: aienergyscore
@@ -100,7 +100,7 @@ The study YAML also accepts a `base:` key pointing to a base experiment config f
 # 2 configs: dtype=float16 and dtype=bfloat16
 name: dtype-sweep
 model: gpt2
-backend: pytorch
+engine: pytorch
 
 dataset:
   n_prompts: 100
@@ -123,7 +123,7 @@ Run with `llem run dtype-sweep.yaml`. Produces 2 configs × 3 cycles = 6 runs.
 # 4 configs: fp16+50, fp16+100, bf16+50, bf16+100
 name: dtype-n-sweep
 model: gpt2
-backend: pytorch
+engine: pytorch
 
 sweep:
   dtype: [float16, bfloat16]
@@ -138,15 +138,15 @@ Produces 4 configs × 3 cycles = 12 runs.
 
 ---
 
-### Backend-scoped sweep (2-segment path)
+### Engine-scoped sweep (2-segment path)
 
-Use dotted paths (`backend.param`) to sweep a backend-specific parameter:
+Use dotted paths (`engine.param`) to sweep a Engine-specific parameter:
 
 ```yaml
-# 4 configs: batch_size 1, 2, 4, 8 — all with backend=pytorch
+# 4 configs: batch_size 1, 2, 4, 8 — all with engine=pytorch
 name: batch-size-sweep
 model: gpt2
-backend: pytorch
+engine: pytorch
 
 sweep:
   pytorch.batch_size: [1, 2, 4, 8]
@@ -161,15 +161,15 @@ Produces 4 configs × 3 cycles = 12 runs. The `pytorch.batch_size` path expands 
 
 ---
 
-### Backend-scoped sweep (3-segment path)
+### Engine-scoped sweep (3-segment path)
 
-For nested backend configs (e.g. vLLM's `engine` sub-section):
+For nested engine configs (e.g. vLLM's `engine` sub-section):
 
 ```yaml
 # 6 configs: 3 block_sizes × 2 kv_cache_dtypes
 name: kv-cache-sweep
 model: gpt2
-backend: vllm
+engine: vllm
 
 sweep:
   vllm.engine.block_size: [8, 16, 32]
@@ -194,7 +194,7 @@ Use dotted paths for nested config fields like `dataset.n_prompts` or `dataset.s
 ```yaml
 name: dataset-size-sweep
 model: gpt2
-backend: pytorch
+engine: pytorch
 
 sweep:
   dataset.n_prompts: [50, 100, 200]
@@ -206,8 +206,8 @@ study_execution:
 Produces 3 configs × 3 cycles = 9 runs. The dotted path `dataset.n_prompts` expands to
 `dataset: { n_prompts: N }` in each generated experiment config.
 
-> **Note:** Dotted paths starting with a backend name (e.g. `pytorch.batch_size`,
-> `vllm.engine.max_num_seqs`) are treated as backend-scoped parameters. All other dotted
+> **Note:** Dotted paths starting with an engine name (e.g. `pytorch.batch_size`,
+> `vllm.engine.max_num_seqs`) are treated as engine-scoped parameters. All other dotted
 > paths (e.g. `dataset.n_prompts`, `dataset.order`) are treated as nested config fields.
 
 ---
@@ -218,17 +218,17 @@ Use `experiments:` when the configurations are not a regular grid:
 
 ```yaml
 # 2 explicit configs
-name: compare-backends
+name: compare-engines
 
 dataset:
   n_prompts: 50
 
 experiments:
   - model: gpt2
-    backend: pytorch
+    engine: pytorch
     dtype: bfloat16
   - model: gpt2
-    backend: vllm
+    engine: vllm
     runners:
       vllm: docker
 
@@ -279,7 +279,7 @@ sweep:
 
 experiments:
   - model: gpt2
-    backend: pytorch
+    engine: pytorch
     dtype: float32
     pytorch:
       load_in_4bit: true
@@ -307,7 +307,7 @@ entries *within* a group are alternatives (unioned, not crossed).
 # 6 configs: 2 dtype × 3 compilation variants
 name: compile-sweep
 model: gpt2
-backend: pytorch
+engine: pytorch
 
 sweep:
   dtype: [float16, bfloat16]                     # independent axis (2 values)
@@ -361,7 +361,7 @@ Produces 4 variants: 1 baseline + 3 cache implementations (all with `use_cache: 
 
 ### Cross-section overrides
 
-Group entries can override fields outside their backend section, such as decoder settings:
+Group entries can override fields outside their engine section, such as decoder settings:
 
 ```yaml
 sweep:
@@ -415,12 +415,11 @@ sweep:
 
 ---
 
-### Backend-scoped groups
+### Engine-scoped groups
 
-Groups with a backend-prefixed name (e.g. `pytorch.compilation`, `vllm.decoding`) only
-apply to that backend's experiments. Universal groups (no backend prefix) apply to all
-backends.
-
+Groups with an engine-prefixed name (e.g. `pytorch.compilation`, `vllm.decoding`) only
+apply to that engine's experiments. Universal groups (no engine prefix) apply to all
+engines.
 > **Collision rule:** A group name must not match an independent axis key. Use abstract
 > names like `pytorch.compilation` (not `pytorch.torch_compile`) to avoid collisions.
 
@@ -525,7 +524,7 @@ results from different configurations.
 
 ## Runner Configuration
 
-The `runners:` section determines how each backend executes:
+The `runners:` section determines how each engine executes:
 
 ```yaml
 runners:
@@ -537,12 +536,12 @@ runners:
 | Value | Behaviour |
 |-------|-----------|
 | `local` | Run directly on the host (all dependencies must be installed) |
-| `docker` | Run in a container using the default image for that backend |
+| `docker` | Run in a container using the default image for that engine |
 | `docker:<image>` | Run in a container using the specified image |
 
 When `docker` is used without an explicit image tag, the image is resolved from the installed
-package version using the template `ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}`.
-For example, with `llenergymeasure==0.9.0` and `backend=vllm`, the image
+package version using the template `ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}`.
+For example, with `llenergymeasure==0.9.0` and `engine=vllm`, the image
 `ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0` is pulled automatically.
 
 See [Docker Setup](docker-setup.md#image-management) for image pull behaviour and pre-fetching.
@@ -568,19 +567,19 @@ All fields except `model` are optional and have sensible defaults.
 - [Baseline (`baseline:`)](#baseline-baseline)
 - [Energy Sampler (`energy_sampler:`)](#energy-sampler-energy_sampler)
 - [GPU Telemetry (`gpu_telemetry:`)](#gpu-telemetry-gpu_telemetry)
-- [PyTorch Backend (`pytorch:`)](#pytorch-backend-pytorch)
+- [PyTorch Engine (`pytorch:`)](#pytorch-engine-pytorch)
 - [vLLM Engine (`vllm.engine:`)](#vllm-engine-vllm-engine)
 - [vLLM Sampling (`vllm.sampling:`)](#vllm-sampling-vllm-sampling)
 - [vLLM Beam Search (`vllm.beam_search:`)](#vllm-beam-search-vllm-beam_search)
 - [vLLM Attention (`vllm.engine.attention:`)](#vllm-attention-vllm-engine-attention)
-- [TensorRT-LLM Backend (`tensorrt:`)](#tensorrt-llm-backend-tensorrt)
+- [TensorRT-LLM Engine (`tensorrt:`)](#tensorrt-llm-engine-tensorrt)
 
 ### Top-Level Fields
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `model` | string | *(required)* | HuggingFace model ID or local path |
-| `backend` | 'pytorch' | 'vllm' | 'tensorrt' | `pytorch` | Inference backend |
+| `engine` | 'pytorch' | 'vllm' | 'tensorrt' | `pytorch` | Inference engine |
 | `dataset` | DatasetConfig | *(see below)* | Dataset configuration (nested sub-object) |
 | `dtype` | 'float32' | 'float16' | 'bfloat16' | `bfloat16` | Model dtype for inference |
 | `random_seed` | integer | `42` | Per-experiment seed: inference RNG and dataset ordering |
@@ -591,11 +590,11 @@ All fields except `model` are optional and have sensible defaults.
 | `baseline` | BaselineConfig | *(see section)* | Baseline power measurement configuration |
 | `energy_sampler` | 'auto' | 'nvml' | 'zeus' | 'codecarbon' | None | `auto` | Energy measurement backend. auto=best available (Zeus>NVML>CodeCarbon). null disables. |
 | `gpu_telemetry` | boolean | `true` | Persist GPU power/thermal/memory timeseries to Parquet sidecar. NVML always runs for throttle detection; this controls disk output. |
-| `pytorch` | PyTorchConfig | None | `null` | PyTorch-specific configuration (only used when backend=pytorch) |
-| `vllm` | VLLMConfig | None | `null` | vLLM-specific configuration (only used when backend=vllm) |
-| `tensorrt` | TensorRTConfig | None | `null` | TensorRT-LLM configuration (only used when backend=tensorrt) |
+| `pytorch` | PyTorchConfig | None | `null` | PyTorch-specific configuration (only used when engine=pytorch) |
+| `vllm` | VLLMConfig | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
+| `tensorrt` | TensorRTConfig | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
 | `lora` | LoRAConfig | None | `null` | LoRA adapter configuration |
-| `passthrough_kwargs` | dict | None | `null` | Extra kwargs passed through to backend at execution time. Keys must not collide with ExperimentConfig top-level fields. |
+| `passthrough_kwargs` | dict | None | `null` | Extra kwargs passed through to engine at execution time. Keys must not collide with ExperimentConfig top-level fields. |
 | `output_dir` | string | None | `null` | Per-experiment output directory override |
 
 ### Dataset (`dataset:`)
@@ -698,7 +697,7 @@ inference per GPU.
 See [Energy Measurement](energy-measurement.md) for details on how NVML telemetry
 relates to energy measurement.
 
-### PyTorch Backend (`pytorch:`)
+### PyTorch Engine (`pytorch:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -759,7 +758,7 @@ relates to energy measurement.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `max_tokens` | integer | None | `null` | Max output tokens. Overrides ExperimentConfig.max_output_tokens for vLLM sweeps (None -> uses max_output_tokens). Use for backend-specific max_tokens sweeps. |
+| `max_tokens` | integer | None | `null` | Max output tokens. Overrides ExperimentConfig.max_output_tokens for vLLM sweeps (None -> uses max_output_tokens). Use for Engine-specific max_tokens sweeps. |
 | `min_tokens` | integer | None | `null` | Minimum output tokens before EOS is allowed (None -> 0, no minimum). |
 | `presence_penalty` | number | None | `null` | Presence penalty: penalises tokens that appear at all (None -> 0.0). Affects generation diversity. |
 | `frequency_penalty` | number | None | `null` | Frequency penalty: penalises tokens proportional to frequency (None -> 0.0). Affects repetition. |
@@ -779,7 +778,7 @@ relates to energy measurement.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `backend` | string | None | `null` | Attention backend: flash_attn, flashinfer, etc. (None -> auto). |
+| `engine` | string | None | `null` | Attention backend: flash_attn, flashinfer, etc. (None -> auto). |
 | `flash_attn_version` | integer | None | `null` | Flash attention version (None -> auto). |
 | `flash_attn_max_num_splits_for_cuda_graph` | integer | None | `null` | Max splits for CUDA graph with flash attention (None -> auto). |
 | `use_prefill_decode_attention` | boolean | None | `null` | Use prefill-decode attention (None -> True). |
@@ -790,7 +789,7 @@ relates to energy measurement.
 | `use_trtllm_attention` | boolean | None | `null` | Use TensorRT-LLM attention backend (None -> False). |
 | `use_trtllm_ragged_deepseek_prefill` | boolean | None | `null` | Use TRT-LLM ragged DeepSeek prefill (None -> False). |
 
-### TensorRT-LLM Backend (`tensorrt:`)
+### TensorRT-LLM Engine (`tensorrt:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -800,7 +799,7 @@ relates to energy measurement.
 | `max_seq_len` | integer | None | `null` | Max total sequence length (input + output, compile-time constant, None -> 2048) |
 | `dtype` | 'float16' | 'bfloat16' | None | `null` | Model dtype (None -> auto). TRT-LLM is optimised for fp16/bf16; fp32 not supported. |
 | `fast_build` | boolean | None | `null` | Enable fast engine build mode (reduced optimisation, None -> False) |
-| `backend` | string | None | `null` | TRT-LLM internal backend: 'trt' for TensorRT engine (None -> 'trt'). This is the TRT-LLM LLM(backend=...) parameter, not the llem backend field. |
+| `engine` | string | None | `null` | TRT-LLM internal backend: 'trt' for TensorRT engine (None -> 'trt'). This is the TRT-LLM LLM(backend=...) parameter, not the llem engine field. |
 | `engine_path` | string | None | `null` | Pre-compiled engine path (skip compilation) |
 | `quant` | TensorRTQuantConfig | None | `null` | Quantisation configuration (QuantConfig) |
 | `kv_cache` | TensorRTKvCacheConfig | None | `null` | KV cache configuration |
@@ -835,5 +834,5 @@ measurement:
   carbon_intensity_gco2_kwh: 0.233
 ```
 
-Run `llem config` to display the current effective configuration and check which backends
+Run `llem config` to display the current effective configuration and check which engines
 are installed. Use `llem config --verbose` for detailed environment information.

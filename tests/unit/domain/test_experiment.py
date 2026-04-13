@@ -30,7 +30,7 @@ class TestRawProcessResult:
     def test_frozen_model_enforcement(self):
         rpr = make_raw_process_result()
         with pytest.raises(ValidationError):
-            rpr.backend = "vllm"
+            rpr.engine = "vllm"
 
     def test_minimal_construction(self):
         """Builds with only required fields — no extra kwargs needed."""
@@ -168,9 +168,9 @@ class TestMeasurementConfigHash:
         h2 = compute_measurement_config_hash(config)
         assert h1 == h2
 
-    def test_different_backends_different_hash(self):
-        h1 = compute_measurement_config_hash(make_config(backend="pytorch"))
-        h2 = compute_measurement_config_hash(make_config(backend="vllm"))
+    def test_different_engines_different_hash(self):
+        h1 = compute_measurement_config_hash(make_config(engine="pytorch"))
+        h2 = compute_measurement_config_hash(make_config(engine="vllm"))
         assert h1 != h2
 
     def test_hash_is_string(self):

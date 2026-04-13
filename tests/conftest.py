@@ -28,7 +28,7 @@ _REPLAY_DIR = Path(__file__).parent / "fixtures" / "replay"
 # ---------------------------------------------------------------------------
 
 TEST_MODEL = "gpt2"
-TEST_BACKEND = "pytorch"
+TEST_ENGINE = "pytorch"
 TEST_EXPERIMENT_ID = "test-001"
 TEST_CONFIG_HASH = "deadbeef12345678"
 TEST_MEASUREMENT_HASH = "abc123def4567890"
@@ -50,7 +50,7 @@ def make_config(**overrides) -> ExperimentConfig:
     """
     defaults: dict = {
         "model": TEST_MODEL,
-        "backend": TEST_BACKEND,
+        "engine": TEST_ENGINE,
     }
     defaults.update(overrides)
     return ExperimentConfig(**defaults)

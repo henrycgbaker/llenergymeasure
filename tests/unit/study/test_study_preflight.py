@@ -9,59 +9,59 @@ from llenergymeasure.study.preflight import run_study_preflight
 from llenergymeasure.utils.exceptions import PreFlightError
 
 
-def test_single_backend_passes(monkeypatch):
-    """Single-backend study passes pre-flight without error."""
+def test_single_engine_passes(monkeypatch):
+    """Single-engine study passes pre-flight without error."""
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", backend="pytorch"),
-            ExperimentConfig(model="m2", backend="pytorch"),
+            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m2", engine="pytorch"),
         ]
     )
     run_study_preflight(study)  # should not raise
 
 
-def test_multi_backend_raises_preflight_error(monkeypatch):
-    """Multi-backend study raises PreFlightError when Docker is not available."""
+def test_multi_engine_raises_preflight_error(monkeypatch):
+    """Multi-engine study raises PreFlightError when Docker is not available."""
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", backend="pytorch"),
-            ExperimentConfig(model="m2", backend="vllm"),
+            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
-    with pytest.raises(PreFlightError, match="Multi-backend"):
+    with pytest.raises(PreFlightError, match="Multi-engine"):
         run_study_preflight(study)
 
 
-def test_multi_backend_error_mentions_docker(monkeypatch):
+def test_multi_engine_error_mentions_docker(monkeypatch):
     """Error message directs user to Docker runner."""
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", backend="pytorch"),
-            ExperimentConfig(model="m2", backend="vllm"),
+            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
     with pytest.raises(PreFlightError, match="Docker"):
         run_study_preflight(study)
 
 
-def test_multi_backend_error_lists_backends(monkeypatch):
-    """Error message lists the detected backends."""
+def test_multi_engine_error_lists_engines(monkeypatch):
+    """Error message lists the detected engines."""
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", backend="pytorch"),
-            ExperimentConfig(model="m2", backend="vllm"),
+            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
     with pytest.raises(PreFlightError) as exc_info:
@@ -70,8 +70,8 @@ def test_multi_backend_error_lists_backends(monkeypatch):
     assert "vllm" in str(exc_info.value)
 
 
-def test_multi_backend_auto_elevates_local_to_docker(monkeypatch):
-    """Multi-backend study overrides local runners to Docker when Docker is available."""
+def test_multi_engine_auto_elevates_local_to_docker(monkeypatch):
+    """Multi-engine study overrides local runners to Docker when Docker is available."""
     monkeypatch.setattr("llenergymeasure.infra.runner_resolution.is_docker_available", lambda: True)
     # Mock docker preflight to avoid real Docker checks
     monkeypatch.setattr(
@@ -80,15 +80,15 @@ def test_multi_backend_auto_elevates_local_to_docker(monkeypatch):
 
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", backend="pytorch"),
-            ExperimentConfig(model="m2", backend="vllm"),
+            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
     specs, overrides = run_study_preflight(
         study, yaml_runners={"pytorch": "local", "vllm": "docker"}
     )
     assert specs["pytorch"].mode == "docker"
-    assert specs["pytorch"].source == "multi_backend_elevation"
+    assert specs["pytorch"].source == "multi_engine_elevation"
     assert specs["vllm"].mode == "docker"
     # System overrides should capture the auto-elevation
     assert "runner.pytorch" in overrides
@@ -100,12 +100,12 @@ def test_preflight_forwards_runner_context(monkeypatch):
     """run_study_preflight forwards yaml_runners and user_config to resolve_study_runners."""
     captured_calls: list[dict] = []
 
-    def mock_resolve_study_runners(backends, yaml_runners=None, user_config=None):
+    def mock_resolve_study_runners(engines, yaml_runners=None, user_config=None):
         captured_calls.append({"yaml_runners": yaml_runners, "user_config": user_config})
         # Return local specs so no Docker preflight is triggered
         from llenergymeasure.infra.runner_resolution import RunnerSpec
 
-        return {b: RunnerSpec(mode="local", image=None, source="default") for b in backends}
+        return {b: RunnerSpec(mode="local", image=None, source="default") for b in engines}
 
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -116,7 +116,7 @@ def test_preflight_forwards_runner_context(monkeypatch):
     )
 
     mock_user_config = MagicMock()
-    study = StudyConfig(experiments=[ExperimentConfig(model="m1", backend="pytorch")])
+    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="pytorch")])
 
     run_study_preflight(study, yaml_runners={"pytorch": "local"}, user_config=mock_user_config)
 
@@ -129,11 +129,11 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
     """Calling run_study_preflight without yaml_runners/user_config passes None for both."""
     captured_calls: list[dict] = []
 
-    def mock_resolve_study_runners(backends, yaml_runners=None, user_config=None):
+    def mock_resolve_study_runners(engines, yaml_runners=None, user_config=None):
         captured_calls.append({"yaml_runners": yaml_runners, "user_config": user_config})
         from llenergymeasure.infra.runner_resolution import RunnerSpec
 
-        return {b: RunnerSpec(mode="local", image=None, source="default") for b in backends}
+        return {b: RunnerSpec(mode="local", image=None, source="default") for b in engines}
 
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
@@ -143,7 +143,7 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
         mock_resolve_study_runners,
     )
 
-    study = StudyConfig(experiments=[ExperimentConfig(model="m1", backend="pytorch")])
+    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="pytorch")])
 
     run_study_preflight(study)
 

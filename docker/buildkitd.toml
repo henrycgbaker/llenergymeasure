@@ -6,7 +6,7 @@
 # to hold all three images' build cache simultaneously, causing cache eviction
 # and expensive recompilation (~1 hour for FA3).
 #
-# This config raises the GC limits to 200 GiB so all three backends can
+# This config raises the GC limits to 200 GiB so all three engines can
 # coexist in the build cache without evicting each other.
 #
 # Applied via: docker buildx create --config docker/buildkitd.toml

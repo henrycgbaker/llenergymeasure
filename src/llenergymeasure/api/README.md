@@ -11,7 +11,7 @@ Exposes `run_experiment()` and `run_study()` as the primary library interface. A
 | Module | Description |
 |--------|-------------|
 | `_impl.py` | `run_experiment()` and `run_study()` implementations; `_run()` dispatcher |
-| `_gpu.py` | `_resolve_gpu_indices()` — per-backend GPU index resolution |
+| `_gpu.py` | `_resolve_gpu_indices()` — per-engine GPU index resolution |
 | `preflight.py` | `run_preflight()` and `run_study_preflight()` — pre-experiment checks |
 | `__init__.py` | Re-exports `run_experiment`, `run_study` |
 
@@ -33,7 +33,7 @@ result = run_experiment("configs/my-experiment.yaml")
 result = run_experiment(ExperimentConfig(model="gpt2", ...))
 
 # Keyword convenience
-result = run_experiment(model="gpt2", backend="pytorch", n=100)
+result = run_experiment(model="gpt2", engine="pytorch", n=100)
 ```
 
 Returns `ExperimentResult`. Side-effect free unless `output_dir` is set in the config.
@@ -60,19 +60,19 @@ result = run_experiment(model="gpt2", skip_preflight=True)
 `run_preflight(config)` runs before any GPU allocation:
 
 1. CUDA available (`torch.cuda.is_available()`)
-2. Backend package installed (`transformers`, `vllm`, or `tensorrt_llm`)
+2. Engine package installed (`transformers`, `vllm`, or `tensorrt_llm`)
 3. Model accessible (local path exists, or HuggingFace Hub reachable)
 4. Backend `validate_config()` — hardware-specific checks (e.g., FP8 on non-Ada GPUs)
 
 All failures are collected and raised together as a single `PreFlightError` so the user sees all problems at once.
 
-`run_study_preflight(study)` adds multi-backend isolation enforcement: multi-backend studies require Docker; single-backend studies pass through.
+`run_study_preflight(study)` adds multi-engine isolation enforcement: multi-engine studies require Docker; single-engine studies pass through.
 
 ## GPU index resolution (_gpu.py)
 
 `_resolve_gpu_indices(config)` determines which GPUs to monitor for energy measurement:
 
-| Backend | Rule |
+| Engine | Rule |
 |---------|------|
 | `vllm` | `tp_size * pp_size` GPUs |
 | `tensorrt` | `tp_size` GPUs |
@@ -96,7 +96,7 @@ run_study(...)
 ## Layer constraints
 
 - Layer 5 — may import from layers 0–4
-- Cannot be imported by: `harness/`, `backends/`, `energy/`, `infra/`, `study/`, `device/`, `utils/`, `config/`, `domain/`, `datasets/`, `results/`
+- Cannot be imported by: `harness/`, `engines/`, `energy/`, `infra/`, `study/`, `device/`, `utils/`, `config/`, `domain/`, `datasets/`, `results/`
 - The `cli/` layer is the only layer above `api/`
 
 ## Related

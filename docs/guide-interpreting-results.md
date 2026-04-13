@@ -129,7 +129,7 @@ The full result is saved as a JSON file in the `results/` directory. Key fields:
 | `inference_memory_mb` | Peak GPU memory used during inference, in megabytes |
 | `total_prompts` | Number of prompts processed (excluding warmup) |
 | `total_output_tokens` | Total output tokens generated across all prompts |
-| `effective_config` | The exact configuration used (model, dtype, backend, etc.) |
+| `effective_config` | The exact configuration used (model, dtype, engine, etc.) |
 
 The `effective_config` section is particularly important for reproducibility — it records every setting that influenced the measurement, including defaults that were not explicitly specified.
 

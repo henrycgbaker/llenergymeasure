@@ -45,7 +45,7 @@ If you have MLPerf throughput results, you can run llenergymeasure on the same m
 llenergymeasure includes the AI Energy Score benchmark dataset as a built-in option. When you run:
 
 ```bash
-llem run --model gpt2 --backend pytorch
+llem run --model gpt2 -e pytorch
 ```
 
 the default dataset used is the AI Energy Score prompt set. This means llenergymeasure results are directly comparable to AI Energy Score benchmarks run on the same hardware.
@@ -64,7 +64,7 @@ llenergymeasure is a *measurement tool* that produces the raw energy data; AI En
 
 **How llenergymeasure uses it:**
 
-CodeCarbon is one of the optional energy measurement backends in llenergymeasure. You can install it with:
+CodeCarbon is one of the optional energy measurement engines in llenergymeasure. You can install it with:
 
 ```bash
 pip install "llenergymeasure[codecarbon]"

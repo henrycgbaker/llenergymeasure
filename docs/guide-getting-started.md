@@ -58,7 +58,7 @@ llem config
 ```
 GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
-Backends
+Engines
   pytorch: installed
   vllm: not installed  (pip install llenergymeasure[vllm])
   tensorrt: not installed  (pip install llenergymeasure[tensorrt])
@@ -74,7 +74,7 @@ Python
 **What to look for:**
 
 - **GPU section** shows your graphics card. If it says "No GPU detected", llenergymeasure will not be able to measure energy. Check that your NVIDIA drivers are installed.
-- **Backends section** should show `pytorch: installed`. This is the inference engine you just installed.
+- **Engines section** should show `pytorch: installed`. This is the inference engine you just installed.
 - **Energy section** shows `nvml` — this is the energy measurement method. NVML reads directly from the GPU hardware and is the default.
 - **Python section** confirms your Python version.
 
@@ -87,14 +87,14 @@ If `pytorch` shows "not installed", repeat Step 1. If the GPU is not detected, y
 Run:
 
 ```bash
-llem run --model gpt2 --backend pytorch
+llem run --model gpt2 -e pytorch
 ```
 
 **What this does:**
 
 - `llem run` — starts a measurement experiment
 - `--model gpt2` — uses GPT-2, a small AI language model made freely available by OpenAI. It is tiny compared to modern AI systems (124 million parameters vs the billions in GPT-4 or Claude), which makes it fast to download and run.
-- `--backend pytorch` — uses the PyTorch inference engine (what you installed in Step 1)
+- `-e pytorch` — uses the PyTorch inference engine (what you installed in Step 1)
 
 **On first run:** The model downloads from HuggingFace (about 500 MB). This happens once; subsequent runs use a local cache.
 

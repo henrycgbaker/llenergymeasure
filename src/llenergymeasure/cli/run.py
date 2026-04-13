@@ -21,13 +21,13 @@ from llenergymeasure.cli._display import (
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.ssot import (
-    BACKEND_PYTORCH,
+    ENGINE_PYTORCH,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
 )
 from llenergymeasure.utils.exceptions import (
-    BackendError,
     ConfigError,
+    EngineError,
     ExperimentError,
     PreFlightError,
     StudyError,
@@ -47,9 +47,9 @@ def run(
         str | None,
         typer.Option("--model", "-m", help="Model name or HuggingFace path"),
     ] = None,
-    backend: Annotated[
+    engine: Annotated[
         str | None,
-        typer.Option("--backend", "-b", help="Inference backend (pytorch, vllm, tensorrt)"),
+        typer.Option("--engine", "-e", help="Inference engine (pytorch, vllm, tensorrt)"),
     ] = None,
     dataset: Annotated[
         str | None,
@@ -61,7 +61,7 @@ def run(
     ] = None,
     batch_size: Annotated[
         int | None,
-        typer.Option("--batch-size", help="Batch size (PyTorch backend)"),
+        typer.Option("--batch-size", help="Batch size (PyTorch engine)"),
     ] = None,
     dtype: Annotated[
         str | None,
@@ -149,7 +149,7 @@ def run(
         _run_impl(
             config=config,
             model=model,
-            backend=backend,
+            engine=engine,
             dataset=dataset,
             n_prompts=n_prompts,
             batch_size=batch_size,
@@ -172,7 +172,7 @@ def run(
     except ConfigError as e:
         print(format_error(e, verbose=verbose > 0), file=sys.stderr)
         raise typer.Exit(code=2) from None
-    except (PreFlightError, ExperimentError, BackendError, StudyError) as e:
+    except (PreFlightError, ExperimentError, EngineError, StudyError) as e:
         print(format_error(e, verbose=verbose > 0), file=sys.stderr)
         raise typer.Exit(code=1) from None
     except ValidationError as e:
@@ -191,7 +191,7 @@ def run(
 def _run_impl(
     config: Path | None,
     model: str | None,
-    backend: str | None,
+    engine: str | None,
     dataset: str | None,
     n_prompts: int | None,
     batch_size: int | None,
@@ -216,8 +216,8 @@ def _run_impl(
     cli_overrides: dict[str, Any] = {}
     if model is not None:
         cli_overrides["model"] = model
-    if backend is not None:
-        cli_overrides["backend"] = backend
+    if engine is not None:
+        cli_overrides["engine"] = engine
     if dataset is not None:
         cli_overrides["dataset.source"] = dataset
     if n_prompts is not None:
@@ -234,7 +234,7 @@ def _run_impl(
             "Provide a config file or --model flag.\n"
             "  Examples:\n"
             "    llem run experiment.yaml\n"
-            "    llem run --model gpt2 --backend pytorch"
+            "    llem run --model gpt2 --engine pytorch"
         )
 
     # Study detection: YAML with sweep: or experiments: keys is a study
@@ -361,15 +361,15 @@ def _resolve_runner_tag(config: Any) -> str:
     if runner == RUNNER_DOCKER or (isinstance(runner, str) and runner.startswith("docker:")):
         return RUNNER_DOCKER
     # auto: pytorch defaults to local, vllm/tensorrt default to docker
-    backend = getattr(config, "backend", BACKEND_PYTORCH)
-    return RUNNER_LOCAL if backend == BACKEND_PYTORCH else RUNNER_DOCKER
+    engine = getattr(config, "engine", ENGINE_PYTORCH)
+    return RUNNER_LOCAL if engine == ENGINE_PYTORCH else RUNNER_DOCKER
 
 
 def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
-    """Build compact experiment header: model | backend [runner] + deviation fields.
+    """Build compact experiment header: model | engine [runner] + deviation fields.
 
     Args:
-        config: ExperimentConfig with model, backend, dtype, dataset fields.
+        config: ExperimentConfig with model, engine, dtype, dataset fields.
         runner_tag: Runner tag string ("local" or "docker").
     """
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
@@ -382,7 +382,7 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
 
     # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
     model = config.model.split("/")[-1] if "/" in config.model else config.model
-    parts = [f"{model} | {config.backend}"]
+    parts = [f"{model} | {config.engine}"]
     # Deviation fields (only when non-default)
     if config.dtype != default_dtype:
         parts.append(config.dtype)

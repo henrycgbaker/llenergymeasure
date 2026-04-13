@@ -16,9 +16,9 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 from llenergymeasure.config.ssot import (
-    BACKEND_PYTORCH,
-    BACKEND_TENSORRT,
-    BACKEND_VLLM,
+    ENGINE_PYTORCH,
+    ENGINE_TENSORRT,
+    ENGINE_VLLM,
     TIMEOUT_NVIDIA_SMI,
 )
 
@@ -533,7 +533,7 @@ def get_gpu_architecture(device_index: int = 0) -> str:
 def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     """Determine GPU indices to monitor for an experiment.
 
-    Rules per backend:
+    Rules per engine:
     - **vLLM**: tensor_parallel_size * pipeline_parallel_size GPUs. Both are known
       from config before the harness runs, so gpu_indices = list(range(total)).
     - **PyTorch**: device_map="auto" (or any non-None device_map) monitors all
@@ -547,7 +547,7 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    if config.backend == BACKEND_VLLM and config.vllm is not None:
+    if config.engine == ENGINE_VLLM and config.vllm is not None:
         tp = 1
         pp = 1
         if config.vllm.engine is not None:
@@ -556,12 +556,12 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         total = tp * pp
         if total > 1:
             return list(range(total))
-    elif config.backend == BACKEND_TENSORRT and config.tensorrt is not None:
+    elif config.engine == ENGINE_TENSORRT and config.tensorrt is not None:
         tp = config.tensorrt.tp_size or 1
         if tp > 1:
             return list(range(tp))
     elif (
-        config.backend == BACKEND_PYTORCH
+        config.engine == ENGINE_PYTORCH
         and config.pytorch is not None
         and config.pytorch.device_map is not None
     ):

@@ -7,15 +7,15 @@ maintaining separate parameter lists.
 
 Usage:
     from llenergymeasure.config.introspection import (
-        get_backend_params,
+        get_engine_params,
         get_shared_params,
         get_all_params,
         get_param_test_values,
         get_experiment_config_schema,
     )
 
-    # Get all params for a backend
-    pytorch_params = get_backend_params("pytorch")
+    # Get all params for an engine
+    pytorch_params = get_engine_params("pytorch")
 
     # Get test values for a param
     values = get_param_test_values("pytorch.batch_size")
@@ -78,9 +78,9 @@ def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
     for field_name in type(first).model_fields:
         values = [getattr(exp, field_name) for exp in experiments]
 
-        # Find first non-None value to determine type (handles multi-backend
+        # Find first non-None value to determine type (handles multi-engine
         # studies where optional sub-configs like pytorch/vllm are None on
-        # experiments belonging to a different backend).
+        # experiments belonging to a different engine).
         first_non_none = next((v for v in values if v is not None), None)
 
         # Sub-config: compare nested fields via getattr
@@ -293,40 +293,38 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
     }
 
 
-def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
-    """Get all parameters for a backend from its Pydantic model.
+def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
+    """Get all parameters for an engine from its Pydantic model.
 
     Args:
-        backend: One of "pytorch", "vllm", "tensorrt".
+        engine: One of "pytorch", "vllm", "tensorrt".
 
     Returns:
         Dict mapping param paths to metadata. Each param includes
-        ``backend_support: list[str]`` indicating which backends expose it.
+        ``engine_support: list[str]`` indicating which engines expose it.
     """
-    from llenergymeasure.config.backend_configs import (
+    from llenergymeasure.config.engine_configs import (
         PyTorchConfig,
         TensorRTConfig,
         VLLMConfig,
     )
 
-    backend_models = {
+    engine_models = {
         "pytorch": PyTorchConfig,
         "vllm": VLLMConfig,
         "tensorrt": TensorRTConfig,
     }
 
-    if backend not in backend_models:
-        raise ValueError(
-            f"Unknown backend: {backend}. Must be one of {list(backend_models.keys())}"
-        )
+    if engine not in engine_models:
+        raise ValueError(f"Unknown engine: {engine}. Must be one of {list(engine_models.keys())}")
 
-    model_class = backend_models[backend]
+    model_class = engine_models[engine]
     # All values are Pydantic BaseModel subclasses, mypy can't infer this from dict
-    params = get_params_from_model(model_class, prefix=backend)  # type: ignore[arg-type]
+    params = get_params_from_model(model_class, prefix=engine)  # type: ignore[arg-type]
 
-    # Add backend_support to every param
+    # Add engine_support to every param
     for param in params.values():
-        param["backend_support"] = [backend]
+        param["engine_support"] = [engine]
 
     # Apply custom test value overrides
     custom_values = _get_custom_test_values()
@@ -340,11 +338,11 @@ def get_backend_params(backend: str) -> dict[str, dict[str, Any]]:
 def get_shared_params() -> dict[str, dict[str, Any]]:
     """Get shared/universal parameters from ExperimentConfig and DecoderConfig.
 
-    Returns params that are universal across all backends:
+    Returns params that are universal across all engines:
     - Top-level: dtype, n, max_input_tokens, max_output_tokens, random_seed
     - Decoder: temperature, do_sample, top_p, top_k, repetition_penalty, preset
 
-    Each param includes ``backend_support: list[str]`` indicating which backends
+    Each param includes ``engine_support: list[str]`` indicating which engines
     expose each parameter.
     """
     from llenergymeasure.config.models import DecoderConfig
@@ -353,12 +351,12 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
 
     # Decoder params (introspected from model)
     decoder_params = get_params_from_model(DecoderConfig, prefix="decoder")
-    # Add backend_support to decoder params
+    # Add engine_support to decoder params
     for param in decoder_params.values():
-        param["backend_support"] = ["pytorch", "vllm", "tensorrt"]
+        param["engine_support"] = ["pytorch", "vllm", "tensorrt"]
     shared.update(decoder_params)
 
-    # Top-level universal params — defined manually for explicit backend_support
+    # Top-level universal params — defined manually for explicit engine_support
     shared["dtype"] = {
         "path": "dtype",
         "name": "dtype",
@@ -369,7 +367,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["float32", "float16", "bfloat16"],
         "constraints": {},
         "optional": False,
-        "backend_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["dataset.source"] = {
         "path": "dataset.source",
@@ -381,7 +379,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["aienergyscore"],
         "constraints": {"min_length": 1},
         "optional": False,
-        "backend_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["dataset.n_prompts"] = {
         "path": "dataset.n_prompts",
@@ -393,7 +391,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [10, 100, 500],
         "constraints": {"ge": 1},
         "optional": False,
-        "backend_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["dataset.order"] = {
         "path": "dataset.order",
@@ -405,7 +403,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["interleaved", "grouped", "shuffled"],
         "constraints": {},
         "optional": False,
-        "backend_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["max_input_tokens"] = {
         "path": "max_input_tokens",
@@ -420,7 +418,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [64, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "backend_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["pytorch", "vllm", "tensorrt"],
     }
     shared["max_output_tokens"] = {
         "path": "max_output_tokens",
@@ -435,7 +433,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [32, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "backend_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["pytorch", "vllm", "tensorrt"],
     }
 
     return shared
@@ -456,7 +454,7 @@ def get_experiment_config_schema() -> dict[str, Any]:
 
 
 def get_all_params() -> dict[str, dict[str, dict[str, Any]]]:
-    """Get all parameters organised by backend + shared.
+    """Get all parameters organised by engine + shared.
 
     Returns:
         {
@@ -468,9 +466,9 @@ def get_all_params() -> dict[str, dict[str, dict[str, Any]]]:
     """
     return {
         "shared": get_shared_params(),
-        "pytorch": get_backend_params("pytorch"),
-        "vllm": get_backend_params("vllm"),
-        "tensorrt": get_backend_params("tensorrt"),
+        "pytorch": get_engine_params("pytorch"),
+        "vllm": get_engine_params("vllm"),
+        "tensorrt": get_engine_params("tensorrt"),
     }
 
 
@@ -511,21 +509,21 @@ def get_param_options(param_path: str) -> list[Any] | None:
     return None
 
 
-def list_all_param_paths(backend: str | None = None) -> list[str]:
-    """List all parameter paths, optionally filtered by backend.
+def list_all_param_paths(engine: str | None = None) -> list[str]:
+    """List all parameter paths, optionally filtered by engine.
 
     Args:
-        backend: Optional backend filter ("pytorch", "vllm", "tensorrt", "shared").
+        engine: Optional engine filter ("pytorch", "vllm", "tensorrt", "shared").
 
     Returns:
         Sorted list of param paths.
     """
     all_params = get_all_params()
 
-    if backend:
-        if backend not in all_params:
-            raise ValueError(f"Unknown backend: {backend}")
-        return sorted(all_params[backend].keys())
+    if engine:
+        if engine not in all_params:
+            raise ValueError(f"Unknown engine: {engine}")
+        return sorted(all_params[engine].keys())
 
     paths: list[str] = []
     for section in all_params.values():
@@ -571,12 +569,12 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
     }
 
 
-def get_backend_specific_params() -> dict[str, list[str]]:
-    """Get params that are only valid for specific backends.
+def get_engine_specific_params() -> dict[str, list[str]]:
+    """Get params that are only valid for specific engines.
 
     Returns:
-        Dict mapping backend name to list of exclusive param paths.
-        Derived from v2.0 minimal backend config fields.
+        Dict mapping engine name to list of exclusive param paths.
+        Derived from v2.0 minimal engine config fields.
     """
     return {
         "pytorch": [
@@ -791,29 +789,29 @@ def get_streaming_incompatible_tests() -> list[tuple[str, str]]:
 
 
 # =============================================================================
-# SSOT Backend Capability Matrix
+# SSOT Engine Capability Matrix
 # =============================================================================
 
 
-def get_backend_capabilities() -> dict[str, dict[str, bool | str]]:
-    """Derive backend capability matrix from Pydantic model structure.
+def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
+    """Derive engine capability matrix from Pydantic model structure.
 
     This is the SSOT for the capability matrix shown in documentation.
     Capabilities are inferred by checking which fields exist in each
-    backend config and their allowed values.
+    engine config and their allowed values.
 
     Returns:
-        Dict mapping capability names to per-backend support status.
+        Dict mapping capability names to per-engine support status.
         Values are True/False for simple support, or str for notes.
     """
-    from llenergymeasure.config.backend_configs import (
+    from llenergymeasure.config.engine_configs import (
         PyTorchConfig,
         TensorRTConfig,
         TensorRTQuantConfig,
         VLLMEngineConfig,
     )
 
-    # Get field names for each backend
+    # Get field names for each engine
     # VLLMConfig is nested: engine fields are in VLLMEngineConfig
     pytorch_fields = set(PyTorchConfig.model_fields.keys())
     vllm_fields = set(VLLMEngineConfig.model_fields.keys())
@@ -929,7 +927,7 @@ def get_capability_matrix_markdown() -> str:
     Returns:
         Markdown table string.
     """
-    capabilities = get_backend_capabilities()
+    capabilities = get_engine_capabilities()
 
     # Define display names
     display_names = {
@@ -958,8 +956,8 @@ def get_capability_matrix_markdown() -> str:
         display_name = display_names.get(cap_key, cap_key)
         cells = []
 
-        for backend in ["pytorch", "vllm", "tensorrt"]:
-            value = cap_values.get(backend, False)
+        for engine in ["pytorch", "vllm", "tensorrt"]:
+            value = cap_values.get(engine, False)
             if value is True:
                 cells.append("Yes")
             elif value is False:
@@ -982,58 +980,58 @@ def get_capability_matrix_markdown() -> str:
 def get_validation_rules() -> list[dict[str, str]]:
     """Get validation rules from config validators for documentation.
 
-    Extracts cross-backend validation rules that are enforced at config
+    Extracts cross-engine validation rules that are enforced at config
     load time. These rules are the SSOT for the "Config Validation Errors"
     section in invalid-combos.md.
 
     Returns:
-        List of dicts with keys: backend, combination, reason, resolution.
+        List of dicts with keys: engine, combination, reason, resolution.
     """
     return [
         {
-            "backend": "pytorch",
+            "engine": "pytorch",
             "combination": "load_in_4bit=True + load_in_8bit=True",
             "reason": "Cannot use both 4-bit and 8-bit quantization simultaneously",
             "resolution": "Choose one: pytorch.load_in_4bit=true OR pytorch.load_in_8bit=true",
         },
         {
-            "backend": "pytorch",
+            "engine": "pytorch",
             "combination": "torch_compile_mode without torch_compile=True",
             "reason": "torch_compile_mode/torch_compile_backend only take effect when torch_compile=True",
             "resolution": "Set pytorch.torch_compile=true when using torch_compile_mode or torch_compile_backend",
         },
         {
-            "backend": "pytorch",
+            "engine": "pytorch",
             "combination": "bnb_4bit_* without load_in_4bit=True",
             "reason": "BitsAndBytes 4-bit options require 4-bit quantization to be enabled",
             "resolution": "Set pytorch.load_in_4bit=true when using bnb_4bit_compute_dtype, bnb_4bit_quant_type, or bnb_4bit_use_double_quant",
         },
         {
-            "backend": "pytorch",
+            "engine": "pytorch",
             "combination": "cache_implementation with use_cache=False",
             "reason": "Cannot specify a cache strategy when caching is explicitly disabled",
             "resolution": "Remove use_cache=false or remove cache_implementation",
         },
         {
-            "backend": "all",
-            "combination": "backend section mismatch",
-            "reason": "Backend section must match the backend field",
-            "resolution": "Ensure pytorch:/vllm:/tensorrt: section matches backend: field",
+            "engine": "all",
+            "combination": "engine section mismatch",
+            "reason": "Engine section must match the engine field",
+            "resolution": "Ensure pytorch:/vllm:/tensorrt: section matches engine: field",
         },
         {
-            "backend": "all",
+            "engine": "all",
             "combination": "passthrough_kwargs key collision",
             "reason": "passthrough_kwargs keys must not collide with ExperimentConfig fields",
             "resolution": "Use named fields directly instead of passthrough_kwargs",
         },
         {
-            "backend": "tensorrt",
+            "engine": "tensorrt",
             "combination": "dtype=float32",
             "reason": "TensorRT-LLM is optimised for lower-precision inference",
             "resolution": "Use dtype='float16' or 'bfloat16'",
         },
         {
-            "backend": "vllm",
+            "engine": "vllm",
             "combination": "load_in_4bit or load_in_8bit",
             "reason": "vLLM does not support bitsandbytes quantization",
             "resolution": "Use vllm.quantization (awq, gptq, fp8) for quantized inference",

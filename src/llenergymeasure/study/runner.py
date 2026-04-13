@@ -293,7 +293,7 @@ def _run_experiment_worker(
         progress_cb = _QueueProgressCallback(progress_queue)
 
         # Run the actual experiment in-process (within the spawned subprocess)
-        from llenergymeasure.backends import get_backend
+        from llenergymeasure.engines import get_engine
         from llenergymeasure.harness import MeasurementHarness
         from llenergymeasure.harness.preflight import run_preflight
 
@@ -304,13 +304,13 @@ def _run_experiment_worker(
         run_preflight(config)
         progress_cb.on_step_done("container_preflight", time.perf_counter() - t0_pf)
 
-        backend = get_backend(config.backend)
+        engine = get_engine(config.engine)
         harness = MeasurementHarness()
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
         gpu_indices = _resolve_gpu_indices(config)
         result = harness.run(
-            backend,
+            engine,
             config,
             snapshot=snapshot,
             gpu_indices=gpu_indices,
@@ -530,7 +530,7 @@ class StudyRunner:
         self.manifest = manifest_writer
         self.study_dir = study_dir
         self.result_files: list[str] = []
-        # Pre-resolved runner specs per backend (None = all experiments use subprocess path)
+        # Pre-resolved runner specs per engine (None = all experiments use subprocess path)
         self._runner_specs = runner_specs
         # Live study progress display (None = no live output)
         self._progress = progress
@@ -549,7 +549,7 @@ class StudyRunner:
         # Study-level environment snapshot cache — collected once, reused across experiments
         self._env_snapshot_future: Future[EnvironmentSnapshot] | None = None
         # Study-level baseline cache, keyed per runner target ("local" or
-        # "image_<sanitized>") so multi-backend studies don't cross-contaminate.
+        # "image_<sanitized>") so multi-engine studies don't cross-contaminate.
         self._baselines: dict[str, Any] = {}  # dict[str, BaselineCache]
         self._experiments_since_validation: dict[str, int] = {}
         # Study-level image preparation: True after _prepare_images() succeeds
@@ -801,14 +801,14 @@ class StudyRunner:
 
         Baselines are keyed per runner target because the container's CUDA init
         footprint (~8.7 W/GPU on A100) is process-local and may differ between
-        backend images. See ``.product/research/baseline-measurement-location.md``.
+        engine images. See ``.product/research/baseline-measurement-location.md``.
 
         The ``image_`` prefix uses an underscore (not ``:``) so the key is
         safe to embed directly in both filesystem paths and Docker bind-mount
         sources. A ``:`` in the mount source string would be parsed by Docker
         as the mount-mode separator and fail with ``invalid mode``.
         """
-        spec = self._runner_specs.get(config.backend) if self._runner_specs else None
+        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         if spec is None or spec.mode != RUNNER_DOCKER or not spec.image:
             return "local"
         return f"image_{_sanitize_image_for_filename(spec.image)}"
@@ -821,7 +821,7 @@ class StudyRunner:
         and ``fresh`` (returns None; harness measures in-container per experiment).
 
         For Docker targets the measurement runs inside a short-lived container
-        of the same backend image, so the CUDA init state matches the experiment
+        of the same engine image, so the CUDA init state matches the experiment
         container (see ``.product/research/baseline-measurement-location.md``).
         """
         strategy = config.baseline.strategy
@@ -895,10 +895,10 @@ class StudyRunner:
 
         # Measure fresh baseline (in-container for Docker targets)
         dur = config.baseline.duration_seconds
-        # Prefer the image tag over backend name so users see which container
-        # is running in multi-backend studies.
-        spec = self._runner_specs.get(config.backend) if self._runner_specs else None
-        target_label = (spec.image if spec and spec.image else config.backend) or "baseline"
+        # Prefer the image tag over engine name so users see which container
+        # is running in multi-engine studies.
+        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
+        target_label = (spec.image if spec and spec.image else config.engine) or "baseline"
         if self._progress is not None:
             self._progress.on_step_start(STEP_BASELINE, "Calibrating", "sampling idle GPU draw")
             t0_meas = time.perf_counter()
@@ -1058,7 +1058,7 @@ class StudyRunner:
         """Measure a fresh baseline on host or inside a baseline container.
 
         Local runner targets measure on host (no process boundary, no bias).
-        Docker targets dispatch a short-lived baseline container of the backend
+        Docker targets dispatch a short-lived baseline container of the engine
         image so the CUDA init state matches the experiment container. See
         ``.product/research/baseline-measurement-location.md`` for the
         empirical rationale (~8.7 W/GPU bias on A100).
@@ -1085,7 +1085,7 @@ class StudyRunner:
         # Docker: _baseline_cache_key already guaranteed a resolved image when
         # it returned a non-"local" key.
         assert self._runner_specs is not None
-        spec = self._runner_specs[config.backend]
+        spec = self._runner_specs[config.engine]
         assert spec.image is not None
         from llenergymeasure.study.baseline_container import run_baseline_container
 
@@ -1113,7 +1113,7 @@ class StudyRunner:
 
             return measure_spot_check(gpu_indices=gpu_indices, duration_sec=5.0)
 
-        spec = self._runner_specs.get(config.backend) if self._runner_specs else None
+        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         if spec is None or spec.image is None:
             return None
 
@@ -1207,9 +1207,9 @@ class StudyRunner:
         return artefacts_dir / f"baseline_cache_{cache_key}.json"
 
     def _prepare_images(self) -> None:
-        """Check/pull Docker images for all Docker backends before experiments.
+        """Check/pull Docker images for all Docker engines before experiments.
 
-        Runs once at the start of the study. Each backend's image is verified
+        Runs once at the start of the study. Each engine's image is verified
         (or pulled) sequentially. On failure, raises so the study aborts early.
         Sets ``_images_prepared`` so per-experiment image_check is skipped.
         """
@@ -1217,18 +1217,18 @@ class StudyRunner:
         if not self._runner_specs:
             return
 
-        docker_backends = [
-            (backend, spec)
-            for backend, spec in self._runner_specs.items()
+        docker_engines = [
+            (engine_name, spec)
+            for engine_name, spec in self._runner_specs.items()
             if spec.mode == RUNNER_DOCKER and spec.image
         ]
-        if not docker_backends:
+        if not docker_engines:
             return
 
         if self._progress:
-            self._progress.begin_image_prep([b for b, _ in docker_backends])
+            self._progress.begin_image_prep([e for e, _ in docker_engines])
 
-        for backend, spec in docker_backends:
+        for engine_name, spec in docker_engines:
             image = spec.image
             assert image is not None  # narrowing for type checker
             t0 = time.monotonic()
@@ -1246,7 +1246,7 @@ class StudyRunner:
             if check is not None and check.returncode == 0:
                 elapsed = time.monotonic() - t0
                 mismatch_error = self._finalise_image(
-                    backend, image, check.stdout, cached=True, elapsed=elapsed
+                    engine_name, image, check.stdout, cached=True, elapsed=elapsed
                 )
                 if mismatch_error is not None:
                     if self._progress:
@@ -1264,19 +1264,19 @@ class StudyRunner:
                 )
             except subprocess.TimeoutExpired as exc:
                 if self._progress:
-                    self._progress.image_failed(backend, image, "pull timed out (30min)")
+                    self._progress.image_failed(engine_name, image, "pull timed out (30min)")
                     self._progress.end_image_prep()
                 from llenergymeasure.infra.docker_errors import DockerImagePullError
 
                 raise DockerImagePullError(
                     message=f"Image pull timed out: {image}",
-                    fix_suggestion=f"COMPOSE_BAKE=true docker compose build {backend}",
+                    fix_suggestion=f"COMPOSE_BAKE=true docker compose build {engine_name}",
                 ) from exc
 
             if pull.returncode != 0:
-                tip = f"COMPOSE_BAKE=true docker compose build {backend}"
+                tip = f"COMPOSE_BAKE=true docker compose build {engine_name}"
                 if self._progress:
-                    self._progress.image_failed(backend, image, f"not found \u2014 run: {tip}")
+                    self._progress.image_failed(engine_name, image, f"not found \u2014 run: {tip}")
                     self._progress.end_image_prep()
                 from llenergymeasure.infra.docker_errors import DockerImagePullError
 
@@ -1297,7 +1297,7 @@ class StudyRunner:
                 inspect_stdout = b""
 
             mismatch_error = self._finalise_image(
-                backend, image, inspect_stdout, cached=False, elapsed=elapsed
+                engine_name, image, inspect_stdout, cached=False, elapsed=elapsed
             )
             if mismatch_error is not None:
                 if self._progress:
@@ -1363,7 +1363,7 @@ class StudyRunner:
 
     def _finalise_image(
         self,
-        backend: str,
+        engine_name: str,
         image: str,
         inspect_stdout: bytes,
         *,
@@ -1374,23 +1374,23 @@ class StudyRunner:
 
         Parses display metadata and the schema stamp from *inspect_stdout*,
         classifies the schema status, renders it through
-        ``progress.image_ready`` so the backend row appears before any abort,
+        ``progress.image_ready`` so the engine row appears before any abort,
         and returns the ``VersionMismatchError`` for the caller to raise.
         """
         metadata = self._parse_image_metadata(inspect_stdout) or {}
         stamp = parse_image_stamp(inspect_stdout)
-        schema_status, mismatch_error = self._verify_image_fingerprint(backend, image, stamp)
+        schema_status, mismatch_error = self._verify_image_fingerprint(engine_name, image, stamp)
         metadata["schema"] = schema_status
 
         if self._progress:
             self._progress.image_ready(
-                backend, image, cached=cached, elapsed=elapsed, metadata=metadata
+                engine_name, image, cached=cached, elapsed=elapsed, metadata=metadata
             )
         return mismatch_error
 
     def _verify_image_fingerprint(
         self,
-        backend: str,
+        engine_name: str,
         image: str,
         stamp: ImageStamp,
     ) -> tuple[str, Exception | None]:
@@ -1399,7 +1399,7 @@ class StudyRunner:
         Returns ``(schema_status, error)`` where ``schema_status`` is the
         short display string and ``error`` is a ``VersionMismatchError`` to
         raise (or ``None``). Callers raise after rendering so the offending
-        backend appears in the terminal before the study aborts.
+        engine appears in the terminal before the study aborts.
         """
         if skip_check_enabled():
             return "bypassed", None
@@ -1427,7 +1427,7 @@ class StudyRunner:
             f"The container will reject ExperimentConfig fields added on the host "
             f"after the image was built.\n\n"
             f"To fix:\n"
-            f"  {rebuild_hint(backend)}       # rebuild locally\n"
+            f"  {rebuild_hint(engine_name)}       # rebuild locally\n"
             f"  make docker-pull                  # or pull a newer tagged release\n\n"
             f"If you're certain the skew is harmless, set LLEM_SKIP_IMAGE_CHECK=1."
         )
@@ -1451,7 +1451,7 @@ class StudyRunner:
     def _run_one(self, config: ExperimentConfig, mp_ctx: Any, index: int, total: int) -> Any:
         """Dispatch one experiment via Docker or subprocess, collect result or failure dict.
 
-        Checks runner_specs for this experiment's backend first. If a Docker spec is
+        Checks runner_specs for this experiment's engine first. If a Docker spec is
         found, delegates to _run_one_docker(). Otherwise falls through to the existing
         subprocess dispatch path.
 
@@ -1466,8 +1466,8 @@ class StudyRunner:
         self._cycle_counters[config_hash] = current
         cycle = current
 
-        # Docker dispatch path — check runner spec for this backend
-        spec = self._runner_specs.get(config.backend) if self._runner_specs else None
+        # Docker dispatch path — check runner spec for this engine
+        spec = self._runner_specs.get(config.engine) if self._runner_specs else None
         if spec is not None and spec.mode == RUNNER_DOCKER:
             return self._run_one_docker(
                 config, spec, config_hash=config_hash, cycle=cycle, index=index
@@ -1479,7 +1479,7 @@ class StudyRunner:
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
-            local_spec = self._runner_specs.get(config.backend) if self._runner_specs else None
+            local_spec = self._runner_specs.get(config.engine) if self._runner_specs else None
             self._progress.begin_experiment(
                 index,
                 format_experiment_header(config),
@@ -1623,7 +1623,7 @@ class StudyRunner:
                     # The original container path is /run/llem; by this point output_dir
                     # has been rewritten to the host temp dir, so use the known constant.
                     spec = (
-                        self._runner_specs.get(getattr(result, "backend", None) or "")
+                        self._runner_specs.get(getattr(result, "engine", None) or "")
                         if self._runner_specs
                         else None
                     )
@@ -1670,7 +1670,7 @@ class StudyRunner:
 
         Args:
             config:      ExperimentConfig to run.
-            spec:        Resolved RunnerSpec (mode="docker") for this backend.
+            spec:        Resolved RunnerSpec (mode="docker") for this engine.
             config_hash: Pre-computed config hash (avoids recomputing).
             cycle:       Current cycle number for manifest tracking.
             index:       1-based position in study for progress display.
@@ -1691,7 +1691,7 @@ class StudyRunner:
         # Image is pre-resolved during preflight (resolve_image precedence chain).
         # Fall back to get_default_image() only for direct DockerRunner usage
         # outside the study path.
-        image = spec.image if spec.image is not None else get_default_image(config.backend)
+        image = spec.image if spec.image is not None else get_default_image(config.engine)
 
         study_id = self.study.study_design_hash or "unknown"
         container_name = generate_container_name(study_id, index)

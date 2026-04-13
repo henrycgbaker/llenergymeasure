@@ -16,28 +16,28 @@ environment, or the system is CPU-only.
 **Fix:**
 1. Run `nvidia-smi` to verify the GPU is visible on the host.
 2. Run `llem config` to see what the tool detects.
-3. If `nvidia-smi` works but the backend does not, you may be running outside a container
+3. If `nvidia-smi` works but the engine does not, you may be running outside a container
    that has CUDA — for vLLM and TensorRT-LLM, use `llem run study.yaml` with Docker runners
    (see [docker-setup.md](docker-setup.md)).
 4. If `nvidia-smi` fails, install or reinstall the NVIDIA drivers for your OS.
 
 ---
 
-### Backend not installed
+### Engine not installed
 
-**Symptom:** `llem run --backend vllm ...` fails immediately with an import error.
+**Symptom:** `llem run -e vllm ...` fails immediately with an import error.
 
-**Cause:** The required backend package is not installed.
+**Cause:** The required engine package is not installed.
 
 **Fix:** Install the matching extra:
 
 ```bash
-pip install "llenergymeasure[pytorch]"    # PyTorch backend
-pip install "llenergymeasure[vllm]"       # vLLM backend
-pip install "llenergymeasure[tensorrt]"   # TensorRT-LLM backend
+pip install "llenergymeasure[pytorch]"    # PyTorch engine
+pip install "llenergymeasure[vllm]"       # vLLM engine
+pip install "llenergymeasure[tensorrt]"   # TensorRT-LLM engine
 ```
 
-Run `llem config` to see the current status of each backend.
+Run `llem config` to see the current status of each engine.
 
 For vLLM and TensorRT-LLM, the recommended approach is to use the Docker runner rather
 than a host install — see [docker-setup.md](docker-setup.md).
@@ -201,13 +201,13 @@ For publication-quality measurements, leave warmup enabled. See
 
 These combinations are rejected at config load time with a clear error message.
 
-| Backend | Invalid Combination | Reason | Resolution |
+| Engine | Invalid Combination | Reason | Resolution |
 |---------|---------------------|--------|------------|
 | pytorch | `load_in_4bit=True + load_in_8bit=True` | Cannot use both 4-bit and 8-bit quantization simultaneously | Choose one: `pytorch.load_in_4bit: true` OR `pytorch.load_in_8bit: true` |
 | pytorch | `torch_compile_mode without torch_compile=True` | torch_compile_mode/torch_compile_backend only take effect when torch_compile=True | Set `pytorch.torch_compile: true` when using `torch_compile_mode` or `torch_compile_backend` |
 | pytorch | `bnb_4bit_* without load_in_4bit=True` | BitsAndBytes 4-bit options require 4-bit quantization to be enabled | Set `pytorch.load_in_4bit: true` when using `bnb_4bit_compute_dtype`, `bnb_4bit_quant_type`, or `bnb_4bit_use_double_quant` |
 | pytorch | `cache_implementation with use_cache=False` | Cannot specify a cache strategy when caching is explicitly disabled | Remove `use_cache: false` or remove `cache_implementation` |
-| all | `backend section mismatch` | Backend section must match the `backend:` field | Ensure `pytorch:` / `vllm:` / `tensorrt:` section matches `backend:` field |
+| all | `engine section mismatch` | Engine section must match the `engine:` field | Ensure `pytorch:` / `vllm:` / `tensorrt:` section matches `engine:` field |
 | all | `passthrough_kwargs key collision` | `passthrough_kwargs` keys must not collide with ExperimentConfig fields | Use named fields directly instead of `passthrough_kwargs` |
 | tensorrt | `dtype: float32` | TensorRT-LLM is optimised for lower precision inference | Use `dtype: float16` or `dtype: bfloat16` |
 | vllm | `pytorch.load_in_4bit or pytorch.load_in_8bit` | vLLM does not support bitsandbytes quantization | Use `vllm.engine.quantization` (awq, gptq, fp8) for quantized inference |
@@ -217,7 +217,7 @@ These combinations are rejected at config load time with a clear error message.
 These combinations pass config validation but may fail at runtime due to hardware,
 model, or package requirements.
 
-| Backend | Parameter | Limitation | Resolution |
+| Engine | Parameter | Limitation | Resolution |
 |---------|-----------|------------|------------|
 | pytorch | `pytorch.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
 | pytorch | `pytorch.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Included in the Docker image by default | Install locally from source if not using Docker. See [Installation - FA3](installation.md#flashattention-3) |
@@ -228,7 +228,7 @@ model, or package requirements.
 | tensorrt | `tensorrt.quant.quant_algo: FP8` | FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises a `ConfigurationError` — no silent emulation or fallback | Use `INT8`, `W4A16_AWQ`, `W4A16_GPTQ`, or `W8A16` on A100 |
 | tensorrt | `tensorrt.quantization: int8_sq` | INT8 SmoothQuant requires a calibration dataset | Provide calibration config or use a supported quantization method |
 
-### Backend Capability Matrix
+### Engine Capability Matrix
 
 | Feature | PyTorch | vLLM | TensorRT |
 |---------|---------|------|----------|
@@ -281,7 +281,7 @@ was built. `llem` stamps every image at build time with a
 `ExperimentConfig.model_json_schema()`. `StudyRunner._prepare_images` compares
 that label against the host fingerprint before any experiment starts.
 
-**Fix:** rebuild the affected backend image. One of:
+**Fix:** rebuild the affected engine image. One of:
 
 ```bash
 make docker-build-pytorch        # or -vllm / -tensorrt, local build
@@ -291,7 +291,7 @@ make docker-pull                 # pull the newest published tagged release
 Verify with:
 
 ```bash
-llem doctor                      # exits 1 on mismatch, 0 when every backend is OK
+llem doctor                      # exits 1 on mismatch, 0 when every engine is OK
 ```
 
 **Bypass (last resort):** set `LLEM_SKIP_IMAGE_CHECK=1` to skip the handshake.
@@ -304,7 +304,7 @@ it doesn't know about.
 ## Getting Help
 
 Run `llem config --verbose` to capture full environment details (Python version, installed
-backends, GPU info, energy sampler status, config file path). Include this output when
+engines, GPU info, energy sampler status, config file path). Include this output when
 filing a bug report.
 
 File issues at: [github.com/henrycgbaker/llenergymeasure/issues](https://github.com/henrycgbaker/llenergymeasure/issues)

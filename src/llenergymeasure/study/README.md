@@ -45,7 +45,7 @@ manifest = ManifestWriter(study, study_dir)
 
 manifest.mark_running(config_hash, cycle=1)
 manifest.mark_completed(config_hash, cycle=1, result_file="path/to/result.json")
-manifest.mark_failed(config_hash, cycle=1, error_type="BackendError", message="...")
+manifest.mark_failed(config_hash, cycle=1, error_type="EngineError", message="...")
 manifest.mark_study_completed()
 ```
 
@@ -70,7 +70,7 @@ Before each experiment dispatch, `check_gpu_memory_residual()` polls for leftove
 ## Layer constraints
 
 - Layer 4 — may import from layers 0–3
-- Can import from: `config/`, `domain/`, `device/`, `utils/`, `energy/`, `backends/`, `datasets/`, `infra/`, `harness/`, `results/`
+- Can import from: `config/`, `domain/`, `device/`, `utils/`, `energy/`, `engines/`, `datasets/`, `infra/`, `harness/`, `results/`
 - Cannot import from: `api/`, `cli/`
 
 ## Related

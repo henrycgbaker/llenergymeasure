@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Test CUDA_VISIBLE_DEVICES propagation across backends.
+"""Test CUDA_VISIBLE_DEVICES propagation across engines.
 
 Validates that:
 1. Container default (GPU 0) allows imports
-2. Explicit CUDA_VISIBLE_DEVICES is respected by all backends
+2. Explicit CUDA_VISIBLE_DEVICES is respected by all engines
 3. Multi-GPU configs see all specified GPUs
 
 Run inside containers:

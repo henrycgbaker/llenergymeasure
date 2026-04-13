@@ -3,7 +3,7 @@
 Verifies:
 - inference_memory_mb = max(0.0, peak_memory_mb - model_memory_mb) formula
 - Peak memory value flows correctly through InferenceOutput to ExperimentResult
-- PyTorchBackend calls reset_peak_memory_stats before and max_memory_allocated after inference
+- PyTorchEngine calls reset_peak_memory_stats before and max_memory_allocated after inference
 - The clamp at 0.0 is applied when peak_memory_mb <= model_memory_mb
 
 These tests use InferenceOutput as a plain dataclass and monkeypatching of
@@ -23,7 +23,7 @@ import pytest
 
 def test_inference_memory_is_peak_minus_model():
     """inference_memory_mb = peak_memory_mb - model_memory_mb when peak > model."""
-    from llenergymeasure.backends.protocol import InferenceOutput
+    from llenergymeasure.engines.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -43,7 +43,7 @@ def test_inference_memory_clamped_to_zero_when_peak_less_than_model():
     This edge case arises when measurement uncertainty or GPU driver accounting
     causes the reported peak to be lower than the model baseline.
     """
-    from llenergymeasure.backends.protocol import InferenceOutput
+    from llenergymeasure.engines.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -58,7 +58,7 @@ def test_inference_memory_clamped_to_zero_when_peak_less_than_model():
 
 def test_inference_memory_zero_when_peak_equals_model():
     """inference_memory_mb is 0.0 when peak_memory_mb == model_memory_mb exactly."""
-    from llenergymeasure.backends.protocol import InferenceOutput
+    from llenergymeasure.engines.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -72,20 +72,20 @@ def test_inference_memory_zero_when_peak_equals_model():
 
 
 # ---------------------------------------------------------------------------
-# Ordering test — PyTorchBackend resets peak before inference measurement
+# Ordering test — PyTorchEngine resets peak before inference measurement
 # ---------------------------------------------------------------------------
 
 
 def test_peak_memory_reset_precedes_measurement():
-    """PyTorchBackend.run_inference calls reset_peak_memory_stats before max_memory_allocated.
+    """PyTorchEngine.run_inference calls reset_peak_memory_stats before max_memory_allocated.
 
     Uses monkeypatching to record call order without GPU hardware. The call log
     must show 'reset' before 'max_alloc' to confirm the measurement window is
     inference-only (not including model weights).
     """
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
     call_log: list[str] = []
 
@@ -114,16 +114,16 @@ def test_peak_memory_reset_precedes_measurement():
             side_effect=lambda: (call_log.append("max_alloc"), 512 * 1024 * 1024)[1],
         ),
         patch.object(
-            PyTorchBackend,
+            PyTorchEngine,
             "_run_batch",
             return_value=(10, 20, 0.5),
         ),
     ):
-        backend = PyTorchBackend()
+        engine = PyTorchEngine()
         config = ExperimentConfig(
-            model="test-model", backend="pytorch", dataset=DatasetConfig(n_prompts=1)
+            model="test-model", engine="pytorch", dataset=DatasetConfig(n_prompts=1)
         )
-        backend.run_inference(config, (fake_model, FakeTokenizer()), ["test prompt"])
+        engine.run_inference(config, (fake_model, FakeTokenizer()), ["test prompt"])
 
     assert "reset" in call_log, "reset_peak_memory_stats must be called in run_inference"
     assert "max_alloc" in call_log, "max_memory_allocated must be called in run_inference"
@@ -134,15 +134,15 @@ def test_peak_memory_reset_precedes_measurement():
 
 
 # ---------------------------------------------------------------------------
-# Seed test — PyTorchBackend seeds torch RNG before inference
+# Seed test — PyTorchEngine seeds torch RNG before inference
 # ---------------------------------------------------------------------------
 
 
-def test_pytorch_backend_seeds_rng_before_inference():
-    """PyTorchBackend.run_inference calls torch.manual_seed with config.random_seed."""
+def test_pytorch_engine_seeds_rng_before_inference():
+    """PyTorchEngine.run_inference calls torch.manual_seed with config.random_seed."""
     pytest.importorskip("torch")
-    from llenergymeasure.backends.pytorch import PyTorchBackend
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
+    from llenergymeasure.engines.pytorch import PyTorchEngine
 
     seeded_values: list[int] = []
 
@@ -151,16 +151,16 @@ def test_pytorch_backend_seeds_rng_before_inference():
         patch("torch.cuda.reset_peak_memory_stats"),
         patch("torch.cuda.max_memory_allocated", return_value=0),
         patch("torch.manual_seed", side_effect=lambda s: seeded_values.append(s)),
-        patch.object(PyTorchBackend, "_run_batch", return_value=(10, 20, 0.5)),
+        patch.object(PyTorchEngine, "_run_batch", return_value=(10, 20, 0.5)),
     ):
-        backend = PyTorchBackend()
+        engine = PyTorchEngine()
         config = ExperimentConfig(
             model="test-model",
-            backend="pytorch",
+            engine="pytorch",
             dataset=DatasetConfig(n_prompts=1),
             random_seed=123,
         )
-        backend.run_inference(config, (object(), None), ["test prompt"])
+        engine.run_inference(config, (object(), None), ["test prompt"])
 
     assert 123 in seeded_values, "torch.manual_seed must be called with config.random_seed"
 

@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Runtime test orchestrator - dispatches tests to backend containers.
+"""Runtime test orchestrator - dispatches tests to engine containers.
 
 This orchestrator runs on the HOST and dispatches each parameter test to the
-appropriate backend container (pytorch, vllm, tensorrt) using the same Docker
+appropriate engine container (pytorch, vllm, tensorrt) using the same Docker
 dispatch pattern as the campaign CLI.
 
 Key features:
-- Uses SSOT introspection to discover ALL params for ALL backends
-- Routes each test to the correct Docker container based on backend
-- Supports parallel execution within each backend
+- Uses SSOT introspection to discover ALL params for ALL engines
+- Routes each test to the correct Docker container based on engine
+- Supports parallel execution within each engine
 - Generates comprehensive test reports
 
 Usage:
-    # Run all backends (recommended)
+    # Run all engines (recommended)
     python scripts/runtime-test-orchestrator.py
 
-    # Run specific backend
-    python scripts/runtime-test-orchestrator.py --backend pytorch
+    # Run specific engine
+    python scripts/runtime-test-orchestrator.py --engine pytorch
 
     # Quick mode (fewer params)
     python scripts/runtime-test-orchestrator.py --quick
@@ -57,7 +57,7 @@ TEST_SAMPLE_SIZE = 5
 TEST_MAX_OUTPUT = 32
 TEST_TIMEOUT_SECONDS = 300  # 5 minutes per test
 
-BACKENDS = ["pytorch", "vllm", "tensorrt"]
+ENGINES = ["pytorch", "vllm", "tensorrt"]
 
 # Quick mode: reduced param set for faster iteration
 QUICK_PARAMS = {
@@ -76,7 +76,7 @@ QUICK_PARAMS = {
 class TestCase:
     """A single test case to execute."""
 
-    backend: str
+    engine: str
     param_path: str
     param_value: Any
     config_path: Path | None = None
@@ -102,7 +102,7 @@ class OrchestratorReport:
 
     run_id: str
     timestamp: str
-    summary: dict[str, dict[str, int]]  # {backend: {passed, failed, skipped}}
+    summary: dict[str, dict[str, int]]  # {engine: {passed, failed, skipped}}
     results: list[TestResult]
     total_elapsed_seconds: float
 
@@ -112,25 +112,25 @@ class OrchestratorReport:
 # =============================================================================
 
 
-def get_all_backend_params() -> dict[str, dict[str, list[Any]]]:
-    """Get all params for all backends using SSOT introspection.
+def get_all_engine_params() -> dict[str, dict[str, list[Any]]]:
+    """Get all params for all engines using SSOT introspection.
 
     Uses the same introspection functions as tests/runtime/test_all_params.py
     (the canonical source for parameter testing). This ensures the orchestrator
     tests exactly the same params that the standalone test suite would test.
 
     Returns:
-        {backend: {param_path: [test_values]}}
+        {engine: {param_path: [test_values]}}
     """
     try:
         from llenergymeasure.config.introspection import (
-            get_backend_params,
+            get_engine_params,
             get_shared_params,
         )
 
         all_params: dict[str, dict[str, list[Any]]] = {}
 
-        # Get shared params (universal - apply to all backends)
+        # Get shared params (universal - apply to all engines)
         shared = get_shared_params()
         shared_test_values: dict[str, list[Any]] = {}
         for param_path, meta in shared.items():
@@ -138,21 +138,21 @@ def get_all_backend_params() -> dict[str, dict[str, list[Any]]]:
             if test_values:
                 shared_test_values[param_path] = test_values
 
-        # Get backend-specific params (Tier 2 - backend-native)
-        for backend in BACKENDS:
-            backend_params = get_backend_params(backend)
+        # Get engine-specific params (Tier 2 - engine-native)
+        for engine in ENGINES:
+            engine_params = get_engine_params(engine)
             params: dict[str, list[Any]] = {}
 
-            # Add backend-specific params
-            for param_path, meta in backend_params.items():
+            # Add engine-specific params
+            for param_path, meta in engine_params.items():
                 test_values = meta.get("test_values", [])
                 if test_values:
                     params[param_path] = test_values
 
-            # Add shared params to each backend
+            # Add shared params to each engine
             params.update(shared_test_values)
 
-            all_params[backend] = params
+            all_params[engine] = params
 
         return all_params
 
@@ -167,9 +167,9 @@ def filter_quick_params(
 ) -> dict[str, dict[str, list[Any]]]:
     """Filter to quick mode subset of params."""
     filtered: dict[str, dict[str, list[Any]]] = {}
-    for backend, params in all_params.items():
-        quick_list = QUICK_PARAMS.get(backend, [])
-        filtered[backend] = {k: v for k, v in params.items() if k in quick_list}
+    for engine, params in all_params.items():
+        quick_list = QUICK_PARAMS.get(engine, [])
+        filtered[engine] = {k: v for k, v in params.items() if k in quick_list}
     return filtered
 
 
@@ -191,25 +191,25 @@ def check_docker_available() -> bool:
         return False
 
 
-def check_docker_images(backends: list[str]) -> tuple[list[str], list[str]]:
-    """Check which backend images exist.
+def check_docker_images(engines: list[str]) -> tuple[list[str], list[str]]:
+    """Check which engine images exist.
 
     Returns:
         (existing_images, missing_images)
     """
     existing = []
     missing = []
-    for backend in backends:
-        image_name = f"llenergymeasure:{backend}"
+    for engine in engines:
+        image_name = f"llenergymeasure:{engine}"
         result = subprocess.run(
             ["docker", "image", "inspect", image_name],
             capture_output=True,
             check=False,
         )
         if result.returncode == 0:
-            existing.append(backend)
+            existing.append(engine)
         else:
-            missing.append(backend)
+            missing.append(engine)
     return existing, missing
 
 
@@ -231,23 +231,23 @@ def ensure_env_file() -> None:
             env_file.write_text(f"PUID={os.getuid()}\nPGID={os.getgid()}\n")
 
 
-def build_docker_images(backends: list[str]) -> bool:
-    """Build Docker images for specified backends.
+def build_docker_images(engines: list[str]) -> bool:
+    """Build Docker images for specified engines.
 
     Returns:
         True if all builds succeeded.
     """
-    for backend in backends:
-        print(f"  Building {backend} image...")
+    for engine in engines:
+        print(f"  Building {engine} image...")
         result = subprocess.run(
-            ["docker", "compose", "build", backend],
+            ["docker", "compose", "build", engine],
             cwd=PROJECT_ROOT,
             check=False,
         )
         if result.returncode != 0:
-            print(f"  [ERROR] Failed to build {backend}")
+            print(f"  [ERROR] Failed to build {engine}")
             return False
-        print(f"  [OK] {backend} built successfully")
+        print(f"  [OK] {engine} built successfully")
     return True
 
 
@@ -256,12 +256,12 @@ def build_docker_images(backends: list[str]) -> bool:
 # =============================================================================
 
 
-def create_base_config(backend: str) -> dict[str, Any]:
+def create_base_config(engine: str) -> dict[str, Any]:
     """Create a minimal base config for testing."""
     config: dict[str, Any] = {
-        "config_name": f"{backend}-test-base",
+        "config_name": f"{engine}-test-base",
         "model_name": TEST_MODEL,
-        "backend": backend,
+        "engine": engine,
         "gpus": [0],
         "max_input_tokens": 64,
         "max_output_tokens": TEST_MAX_OUTPUT,
@@ -271,20 +271,20 @@ def create_base_config(backend: str) -> dict[str, Any]:
         "dataset": {"name": "ai_energy_score", "sample_size": TEST_SAMPLE_SIZE},
     }
 
-    # Backend-specific defaults
-    if backend == "pytorch":
+    # Engine-specific defaults
+    if engine == "pytorch":
         config["pytorch"] = {
             "batch_size": 1,
             "batching_strategy": "static",
             "attn_implementation": "sdpa",
         }
-    elif backend == "vllm":
+    elif engine == "vllm":
         config["vllm"] = {
             "max_num_seqs": 64,
             "gpu_memory_utilization": 0.7,
             "max_model_len": 512,
         }
-    elif backend == "tensorrt":
+    elif engine == "tensorrt":
         config["tensorrt"] = {
             "max_batch_size": 4,
             "builder_opt_level": 3,
@@ -295,7 +295,7 @@ def create_base_config(backend: str) -> dict[str, Any]:
 
 
 def create_test_config(
-    backend: str,
+    engine: str,
     param_path: str,
     param_value: Any,
     config_dir: Path,
@@ -303,7 +303,7 @@ def create_test_config(
     """Create a config file with a single param variation.
 
     Args:
-        backend: Backend name (pytorch, vllm, tensorrt)
+        engine: Engine name (pytorch, vllm, tensorrt)
         param_path: Dotted param path (e.g., "decoder.temperature")
         param_value: Value to set
         config_dir: Directory to write config file
@@ -313,7 +313,7 @@ def create_test_config(
     """
     import yaml
 
-    config = create_base_config(backend)
+    config = create_base_config(engine)
 
     # Apply the variation
     parts = param_path.split(".")
@@ -328,7 +328,7 @@ def create_test_config(
 
     # Update config name
     safe_value = str(param_value).replace(".", "_").replace("/", "_").replace(" ", "_")
-    config["config_name"] = f"{backend}_{parts[-1]}_{safe_value}"
+    config["config_name"] = f"{engine}_{parts[-1]}_{safe_value}"
 
     # Write config
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -349,7 +349,7 @@ def run_test_in_container(
     test_case: TestCase,
     config_dir: Path,
 ) -> TestResult:
-    """Run a single test in the appropriate backend container.
+    """Run a single test in the appropriate engine container.
 
     Args:
         test_case: Test case to execute
@@ -369,7 +369,7 @@ def run_test_in_container(
         "compose",
         "run",
         "--rm",
-        test_case.backend,
+        test_case.engine,
         "lem",
         "experiment",
         container_config_path,
@@ -429,15 +429,15 @@ def run_test_in_container(
         )
 
 
-def run_backend_tests(
-    backend: str,
+def run_engine_tests(
+    engine: str,
     params: dict[str, list[Any]],
     config_dir: Path,
 ) -> list[TestResult]:
-    """Run all tests for a single backend.
+    """Run all tests for a single engine.
 
     Args:
-        backend: Backend name
+        engine: Engine name
         params: {param_path: [test_values]}
         config_dir: Directory for config files
 
@@ -448,7 +448,7 @@ def run_backend_tests(
     total_tests = sum(len(values) for values in params.values())
 
     print(f"\n{'=' * 60}")
-    print(f"  Backend: {backend.upper()}")
+    print(f"  Engine: {engine.upper()}")
     print(f"  Tests: {total_tests} ({len(params)} params)")
     print(f"{'=' * 60}\n")
 
@@ -459,11 +459,11 @@ def run_backend_tests(
             print(f"  [{test_idx}/{total_tests}] {param_path}={value}", end=" ... ", flush=True)
 
             # Create config
-            config_path = create_test_config(backend, param_path, value, config_dir)
+            config_path = create_test_config(engine, param_path, value, config_dir)
 
             # Create test case
             test_case = TestCase(
-                backend=backend,
+                engine=engine,
                 param_path=param_path,
                 param_value=value,
                 config_path=config_path,
@@ -496,13 +496,13 @@ def generate_report(
     """Generate comprehensive test report."""
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Calculate summary by backend
+    # Calculate summary by engine
     summary: dict[str, dict[str, int]] = {}
     for result in results:
-        backend = result.test_case.backend
-        if backend not in summary:
-            summary[backend] = {"passed": 0, "failed": 0, "skipped": 0}
-        summary[backend][result.status] += 1
+        engine = result.test_case.engine
+        if engine not in summary:
+            summary[engine] = {"passed": 0, "failed": 0, "skipped": 0}
+        summary[engine][result.status] += 1
 
     return OrchestratorReport(
         run_id=run_id,
@@ -524,7 +524,7 @@ def print_summary(report: OrchestratorReport) -> None:
     total_failed = 0
     total_skipped = 0
 
-    for backend, counts in report.summary.items():
+    for engine, counts in report.summary.items():
         passed = counts.get("passed", 0)
         failed = counts.get("failed", 0)
         skipped = counts.get("skipped", 0)
@@ -535,7 +535,7 @@ def print_summary(report: OrchestratorReport) -> None:
         total_skipped += skipped
 
         status_icon = "✓" if failed == 0 else "✗"
-        print(f"\n  {status_icon} {backend.upper()}: {passed}/{total} passed", end="")
+        print(f"\n  {status_icon} {engine.upper()}: {passed}/{total} passed", end="")
         if failed > 0:
             print(f" ({failed} failed)", end="")
         if skipped > 0:
@@ -556,7 +556,7 @@ def print_summary(report: OrchestratorReport) -> None:
         print("\n  FAILED TESTS:")
         for result in failed_results[:10]:  # Show first 10
             tc = result.test_case
-            print(f"    - {tc.backend}/{tc.param_path}={tc.param_value}")
+            print(f"    - {tc.engine}/{tc.param_path}={tc.param_value}")
             if result.error_summary:
                 print(f"      {result.error_summary[:60]}")
         if len(failed_results) > 10:
@@ -576,7 +576,7 @@ def save_report(report: OrchestratorReport, output_dir: Path) -> Path:
         "total_elapsed_seconds": report.total_elapsed_seconds,
         "results": [
             {
-                "backend": r.test_case.backend,
+                "engine": r.test_case.engine,
                 "param_path": r.test_case.param_path,
                 "param_value": r.test_case.param_value,
                 "status": r.status,
@@ -606,12 +606,12 @@ def list_params(all_params: dict[str, dict[str, list[Any]]]) -> None:
     print("=" * 60)
 
     total = 0
-    for backend in BACKENDS:
-        params = all_params.get(backend, {})
+    for engine in ENGINES:
+        params = all_params.get(engine, {})
         test_count = sum(len(v) for v in params.values())
         total += test_count
 
-        print(f"\n  {backend.upper()} ({len(params)} params, {test_count} tests):")
+        print(f"\n  {engine.upper()} ({len(params)} params, {test_count} tests):")
         for param_path, values in sorted(params.items()):
             values_str = ", ".join(str(v) for v in values[:5])
             if len(values) > 5:
@@ -619,7 +619,7 @@ def list_params(all_params: dict[str, dict[str, list[Any]]]) -> None:
             print(f"    {param_path}: [{values_str}]")
 
     print(f"\n  {'─' * 50}")
-    print(f"  TOTAL: {total} tests across {len(BACKENDS)} backends")
+    print(f"  TOTAL: {total} tests across {len(ENGINES)} engines")
     print("=" * 60)
 
 
@@ -637,7 +637,7 @@ def check_docker_setup() -> bool:
     print("\n  [OK] Docker is running")
 
     # Check images
-    existing, missing = check_docker_images(BACKENDS)
+    existing, missing = check_docker_images(ENGINES)
 
     if existing:
         print(f"  [OK] Images ready: {', '.join(existing)}")
@@ -652,13 +652,13 @@ def check_docker_setup() -> bool:
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Runtime test orchestrator - dispatches tests to backend containers"
+        description="Runtime test orchestrator - dispatches tests to engine containers"
     )
     parser.add_argument(
-        "--backend",
-        choices=[*BACKENDS, "all"],
+        "--engine",
+        choices=[*ENGINES, "all"],
         default="all",
-        help="Backend to test (default: all)",
+        help="Engine to test (default: all)",
     )
     parser.add_argument(
         "--quick",
@@ -695,15 +695,15 @@ def main() -> int:
 
     # Discover params
     print("\n[INFO] Discovering params via SSOT introspection...")
-    all_params = get_all_backend_params()
+    all_params = get_all_engine_params()
 
     if args.quick:
         print("[INFO] Quick mode: using reduced param set")
         all_params = filter_quick_params(all_params)
 
-    # Filter to specific backend if requested
-    if args.backend != "all":
-        all_params = {args.backend: all_params.get(args.backend, {})}
+    # Filter to specific engine if requested
+    if args.engine != "all":
+        all_params = {args.engine: all_params.get(args.engine, {})}
 
     # List params mode
     if args.list_params:
@@ -716,8 +716,8 @@ def main() -> int:
         return 1
 
     # Check/build images
-    backends_needed = list(all_params.keys())
-    _existing, missing = check_docker_images(backends_needed)
+    engines_needed = list(all_params.keys())
+    _existing, missing = check_docker_images(engines_needed)
 
     if missing:
         if args.build:
@@ -743,20 +743,20 @@ def main() -> int:
     print("=" * 60)
 
     total_tests = sum(sum(len(v) for v in params.values()) for params in all_params.values())
-    print(f"\n  Backends: {', '.join(backends_needed)}")
+    print(f"\n  Engines: {', '.join(engines_needed)}")
     print(f"  Total tests: {total_tests}")
     print(f"  Output: {args.output_dir}")
 
     start_time = time.time()
     all_results: list[TestResult] = []
 
-    for backend in backends_needed:
-        params = all_params.get(backend, {})
+    for engine in engines_needed:
+        params = all_params.get(engine, {})
         if not params:
-            print(f"\n[WARN] No params found for {backend}")
+            print(f"\n[WARN] No params found for {engine}")
             continue
 
-        results = run_backend_tests(backend, params, config_dir)
+        results = run_engine_tests(engine, params, config_dir)
         all_results.extend(results)
 
     total_elapsed = time.time() - start_time

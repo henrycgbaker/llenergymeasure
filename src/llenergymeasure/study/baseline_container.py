@@ -123,7 +123,7 @@ def run_baseline_container(
     None semantics so callers can degrade gracefully).
 
     Args:
-        image: Docker image tag of the backend the baseline is being measured
+        image: Docker image tag of the engine the baseline is being measured
             for. Must match the experiment container's image so the CUDA init
             footprint lines up.
         mode: ``"measure"`` for a full baseline measurement, ``"spot_check"``

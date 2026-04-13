@@ -145,7 +145,7 @@ class TestExpandGridSweep:
         """2 dtypes x 2 n values = 4 configs."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "dataset.n_prompts": [50, 100],
@@ -159,11 +159,11 @@ class TestExpandGridSweep:
         assert dtypes_set == {"float16", "bfloat16"}
         assert ns == {50, 100}
 
-    def test_backend_scoped_sweep_routes_to_section(self):
+    def test_engine_scoped_sweep_routes_to_section(self):
         """pytorch.batch_size routes to the pytorch section, not top-level."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "pytorch.batch_size": [1, 8],
             },
@@ -174,11 +174,11 @@ class TestExpandGridSweep:
         batch_sizes = {c.pytorch.batch_size for c in valid}
         assert batch_sizes == {1, 8}
 
-    def test_multi_backend_scoped_sweep(self):
-        """Multi-backend with scoped keys: independent grids per backend."""
+    def test_multi_engine_scoped_sweep(self):
+        """Multi-engine with scoped keys: independent grids per engine."""
         raw = {
             "model": "gpt2",
-            "backend": ["pytorch", "vllm"],
+            "engine": ["pytorch", "vllm"],
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
                 "pytorch.batch_size": [1, 8],
@@ -191,8 +191,8 @@ class TestExpandGridSweep:
         # total = 8
         assert len(valid) == 8
         assert len(skipped) == 0
-        pytorch_configs = [c for c in valid if c.backend == "pytorch"]
-        vllm_configs = [c for c in valid if c.backend == "vllm"]
+        pytorch_configs = [c for c in valid if c.engine == "pytorch"]
+        vllm_configs = [c for c in valid if c.engine == "vllm"]
         assert len(pytorch_configs) == 4
         assert len(vllm_configs) == 4
         # pytorch configs must not have vllm section and vice versa
@@ -212,14 +212,14 @@ class TestExpandGridExplicit:
     def test_explicit_experiments_list(self):
         raw = {
             "experiments": [
-                {"model": "gpt2", "backend": "pytorch"},
-                {"model": "gpt2", "backend": "vllm"},
+                {"model": "gpt2", "engine": "pytorch"},
+                {"model": "gpt2", "engine": "vllm"},
             ]
         }
         valid, _skipped = expand_grid(raw)
         assert len(valid) == 2
-        assert valid[0].backend == "pytorch"
-        assert valid[1].backend == "vllm"
+        assert valid[0].engine == "pytorch"
+        assert valid[1].engine == "vllm"
 
 
 # =============================================================================
@@ -232,12 +232,12 @@ class TestExpandGridCombined:
         """Sweep configs come first, then explicit entries appended."""
         raw = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
             },
             "experiments": [
-                {"model": "gpt2-xl", "backend": "pytorch"},
+                {"model": "gpt2-xl", "engine": "pytorch"},
             ],
         }
         valid, _skipped = expand_grid(raw)
@@ -259,7 +259,7 @@ class TestExpandGridBase:
     def test_base_loads_relative_to_study_yaml(self, tmp_path: Path):
         base_config = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             "dataset": {"n_prompts": 50},
         }
         base_file = tmp_path / "base_experiment.yaml"
@@ -282,7 +282,7 @@ class TestExpandGridBase:
         """Study-only keys in base file are stripped before merging."""
         base_config = {
             "model": "gpt2",
-            "backend": "pytorch",
+            "engine": "pytorch",
             # These should be stripped
             "sweep": {"dtype": ["float32"]},
             "experiments": [{"model": "other"}],
@@ -323,30 +323,30 @@ class TestExpandGridInvalidHandling:
         raw = {
             "model": "gpt2",
             "sweep": {
-                # fp32 with tensorrt backend is valid, but dtype float32 is accepted
-                # Use a truly invalid combo: backend=vllm but pytorch section provided via explicit
-                "backend": ["pytorch", "vllm"],
+                # fp32 with tensorrt engine is valid, but dtype float32 is accepted
+                # Use a truly invalid combo: engine=vllm but pytorch section provided via explicit
+                "engine": ["pytorch", "vllm"],
                 "dtype": ["float16"],
             },
             "experiments": [
-                # This will fail: vllm section + backend=pytorch
-                {"model": "gpt2", "backend": "pytorch", "vllm": {"max_num_seqs": 64}},
+                # This will fail: vllm section + engine=pytorch
+                {"model": "gpt2", "engine": "pytorch", "vllm": {"max_num_seqs": 64}},
             ],
         }
         valid, skipped = expand_grid(raw)
         # The two sweep configs are valid; the explicit one fails cross-validation
         assert len(valid) == 2
         assert len(skipped) == 1
-        assert "vllm" in skipped[0].reason.lower() or "backend" in skipped[0].reason.lower()
+        assert "vllm" in skipped[0].reason.lower() or "engine" in skipped[0].reason.lower()
 
     def test_all_invalid_raises_config_error(self):
         """All invalid configs raises ConfigError with count and reasons."""
         raw = {
             "experiments": [
-                # Invalid: pytorch section with vllm backend
-                {"model": "gpt2", "backend": "vllm", "pytorch": {"batch_size": 4}},
-                # Invalid: vllm section with pytorch backend
-                {"model": "gpt2", "backend": "pytorch", "vllm": {"max_num_seqs": 64}},
+                # Invalid: pytorch section with vllm engine
+                {"model": "gpt2", "engine": "vllm", "pytorch": {"batch_size": 4}},
+                # Invalid: vllm section with pytorch engine
+                {"model": "gpt2", "engine": "pytorch", "vllm": {"max_num_seqs": 64}},
             ]
         }
         with pytest.raises(ConfigError, match=r"nothing to run|all.*invalid|0.*valid"):
@@ -354,19 +354,19 @@ class TestExpandGridInvalidHandling:
 
     def test_skipped_config_short_label(self):
         sc = SkippedConfig(
-            raw_config={"backend": "pytorch", "dtype": "float32"},
+            raw_config={"engine": "pytorch", "dtype": "float32"},
             reason="some validation error",
         )
         assert sc.short_label == "pytorch, float32"
 
     def test_skipped_config_to_dict(self):
         sc = SkippedConfig(
-            raw_config={"backend": "vllm", "dtype": "float16"},
+            raw_config={"engine": "vllm", "dtype": "float16"},
             reason="cross-validation error",
-            errors=[{"loc": ["backend"], "msg": "test"}],
+            errors=[{"loc": ["engine"], "msg": "test"}],
         )
         d = sc.to_dict()
-        assert d["raw_config"] == {"backend": "vllm", "dtype": "float16"}
+        assert d["raw_config"] == {"engine": "vllm", "dtype": "float16"}
         assert d["reason"] == "cross-validation error"
         assert d["short_label"] == "vllm, float16"
         assert len(d["errors"]) == 1
@@ -379,9 +379,9 @@ class TestExpandGridInvalidHandling:
 
 
 class TestMultiBackendSectionStripping:
-    """Top-level backend sections are stripped for non-matching backends in multi-backend studies."""
+    """Top-level engine sections are stripped for non-matching engines in multi-engine studies."""
 
-    def test_sweep_strips_inherited_backend_sections(self):
+    def test_sweep_strips_inherited_engine_sections(self):
         """A top-level tensorrt: section must not leak into pytorch/vllm sweep configs."""
         raw = {
             "model": "gpt2",
@@ -395,8 +395,8 @@ class TestMultiBackendSectionStripping:
         valid, skipped = expand_grid(raw)
         assert len(skipped) == 0, f"Expected 0 skipped, got: {[s.reason for s in skipped]}"
         # One pytorch config, one tensorrt config
-        pytorch_configs = [c for c in valid if c.backend == "pytorch"]
-        tensorrt_configs = [c for c in valid if c.backend == "tensorrt"]
+        pytorch_configs = [c for c in valid if c.engine == "pytorch"]
+        tensorrt_configs = [c for c in valid if c.engine == "tensorrt"]
         assert len(pytorch_configs) == 1
         assert len(tensorrt_configs) == 1
         # Pytorch config must NOT have tensorrt section
@@ -406,29 +406,29 @@ class TestMultiBackendSectionStripping:
         assert tensorrt_configs[0].tensorrt.max_input_len == 1024
 
     def test_explicit_experiment_strips_inherited_not_explicit(self):
-        """Inherited backend sections are stripped; explicitly written ones still fail."""
+        """Inherited engine sections are stripped; explicitly written ones still fail."""
         raw = {
             "tensorrt": {"max_input_len": 1024},
             "experiments": [
                 # Inherited tensorrt: should be stripped for this pytorch experiment
-                {"model": "gpt2", "backend": "pytorch"},
-                # Explicit vllm: section with backend=pytorch is a user error — should fail
+                {"model": "gpt2", "engine": "pytorch"},
+                # Explicit vllm: section with engine=pytorch is a user error — should fail
                 {
                     "model": "gpt2",
-                    "backend": "pytorch",
+                    "engine": "pytorch",
                     "vllm": {"engine": {"max_num_seqs": 64}},
                 },
             ],
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 1
-        assert valid[0].backend == "pytorch"
+        assert valid[0].engine == "pytorch"
         assert valid[0].tensorrt is None
         assert len(skipped) == 1
         assert "vllm" in skipped[0].reason.lower()
 
-    def test_sweep_with_all_three_backends(self):
-        """Three-backend sweep with a shared tensorrt section produces valid configs for all."""
+    def test_sweep_with_all_three_engines(self):
+        """Three-engine sweep with a shared tensorrt section produces valid configs for all."""
         raw = {
             "model": "gpt2",
             "tensorrt": {"max_input_len": 512},
@@ -440,8 +440,8 @@ class TestMultiBackendSectionStripping:
         }
         valid, skipped = expand_grid(raw)
         assert len(skipped) == 0, f"Unexpected skips: {[s.reason for s in skipped]}"
-        backends = sorted(c.backend for c in valid)
-        assert backends == ["pytorch", "tensorrt", "vllm"]
+        engines = sorted(c.engine for c in valid)
+        assert engines == ["pytorch", "tensorrt", "vllm"]
 
 
 # =============================================================================
@@ -683,7 +683,7 @@ class TestFormatPreflightSummary:
         """When skipped_configs populated, Skipping line with reasons appears."""
         skipped = [
             {
-                "raw_config": {"backend": "pytorch", "dtype": "float32"},
+                "raw_config": {"engine": "pytorch", "dtype": "float32"},
                 "reason": "cross-validation failed",
                 "short_label": "pytorch, float32",
                 "errors": [],
@@ -700,13 +700,13 @@ class TestFormatPreflightSummary:
         # 1 valid config, 2 skipped → 67% skip rate
         skipped = [
             {
-                "raw_config": {"backend": "vllm", "dtype": "float16"},
+                "raw_config": {"engine": "vllm", "dtype": "float16"},
                 "reason": "error A",
                 "short_label": "vllm, float16",
                 "errors": [],
             },
             {
-                "raw_config": {"backend": "vllm", "dtype": "bfloat16"},
+                "raw_config": {"engine": "vllm", "dtype": "bfloat16"},
                 "reason": "error B",
                 "short_label": "vllm, bfloat16",
                 "errors": [],
@@ -722,7 +722,7 @@ class TestFormatPreflightSummary:
         # 4 valid, 1 skipped → 20% skip rate
         skipped = [
             {
-                "raw_config": {"backend": "pytorch", "dtype": "float32"},
+                "raw_config": {"engine": "pytorch", "dtype": "float32"},
                 "reason": "validation error",
                 "short_label": "pytorch, float32",
                 "errors": [],
@@ -736,7 +736,7 @@ class TestFormatPreflightSummary:
     def test_skipped_list_argument_takes_precedence(self):
         """If skipped list of SkippedConfig passed, uses it instead of skipped_configs."""
         skipped_obj = SkippedConfig(
-            raw_config={"backend": "pytorch", "dtype": "float16"},
+            raw_config={"engine": "pytorch", "dtype": "float16"},
             reason="via argument",
         )
         # StudyConfig has empty skipped_configs
@@ -768,7 +768,7 @@ def _render_panel(study_config: StudyConfig, width: int = 100, **kwargs: object)
 
 def _make_panel_study_config(
     models: list[str] | None = None,
-    backends: list[str] | None = None,
+    engines: list[str] | None = None,
     dtypes: list[str] | None = None,
     n_cycles: int = 1,
     experiment_order: str = "sequential",
@@ -778,15 +778,15 @@ def _make_panel_study_config(
 ) -> StudyConfig:
     """Build a StudyConfig for panel tests with varying fields per experiment."""
     models = models or ["gpt2"]
-    backends = backends or ["pytorch"]
+    engines = engines or ["pytorch"]
     dtypes = dtypes or ["bfloat16"]
 
     # Build one experiment per combination (then replicate for cycles)
     experiments = []
     for model in models:
-        for backend in backends:
+        for engine in engines:
             for dt in dtypes:
-                experiments.append(ExperimentConfig(model=model, backend=backend, dtype=dt))
+                experiments.append(ExperimentConfig(model=model, engine=engine, dtype=dt))
 
     # Replicate for cycles
     all_exps = experiments * n_cycles
@@ -840,23 +840,23 @@ class TestBuildPreflightPanel:
         output = _render_panel(sc)
         assert "interleave" in output
 
-    def test_panel_metadata_backends_with_runners(self):
-        """Panel shows backend with runner mode in Backends section."""
+    def test_panel_metadata_engines_with_runners(self):
+        """Panel shows engine with runner mode in Backends section."""
         sc = _make_panel_study_config(
             models=["gpt2", "gpt2"],
-            backends=["pytorch", "vllm"],
+            engines=["pytorch", "vllm"],
             runners={"pytorch": "local", "vllm": "docker"},
         )
         output = _render_panel(sc)
-        assert "Backends" in output
+        assert "Engines" in output
         assert "pytorch" in output
         assert "local" in output
         assert "vllm" in output
         assert "docker" in output
 
-    def test_panel_metadata_backends_default_local(self):
-        """Panel shows 'local' for backends when runners is None."""
-        sc = _make_panel_study_config(backends=["pytorch"])
+    def test_panel_metadata_engines_default_local(self):
+        """Panel shows 'local' for engines when runners is None."""
+        sc = _make_panel_study_config(engines=["pytorch"])
         output = _render_panel(sc)
         assert "pytorch" in output
         assert "local" in output
@@ -897,11 +897,11 @@ class TestBuildPreflightPanel:
         output = _render_panel(sc)
         assert "Study: unnamed" in output
 
-    def test_panel_multiple_backends_sorted(self):
-        """Multiple backends are sorted alphabetically."""
+    def test_panel_multiple_engines_sorted(self):
+        """Multiple engines are sorted alphabetically."""
         exps = [
-            ExperimentConfig(model="gpt2", backend="vllm"),
-            ExperimentConfig(model="gpt2", backend="pytorch"),
+            ExperimentConfig(model="gpt2", engine="vllm"),
+            ExperimentConfig(model="gpt2", engine="pytorch"),
         ]
         sc = StudyConfig(
             experiments=exps,
@@ -918,11 +918,11 @@ class TestBuildPreflightPanel:
         output = _render_panel(sc)
         assert "Workload" in output
 
-    def test_panel_has_backends_section(self):
+    def test_panel_has_engines_section(self):
         """Panel contains 'Backends' section header (renamed from 'Runners')."""
         sc = _make_panel_study_config()
         output = _render_panel(sc)
-        assert "Backends" in output
+        assert "Engines" in output
         assert "Runners" not in output
 
     def test_panel_no_experimental_section(self):
@@ -993,7 +993,7 @@ class TestCountSweepStructure:
         assert count_sweep_structure({}) == (0, 0)
 
     def test_axes_only(self):
-        sweep = {"backend": ["pytorch", "vllm"], "dtype": ["float16", "bfloat16"]}
+        sweep = {"engine": ["pytorch", "vllm"], "dtype": ["float16", "bfloat16"]}
         assert count_sweep_structure(sweep) == (2, 0)
 
     def test_groups_only(self):
@@ -1002,7 +1002,7 @@ class TestCountSweepStructure:
 
     def test_mixed_axes_and_groups(self):
         sweep = {
-            "backend": ["pytorch", "vllm"],
+            "engine": ["pytorch", "vllm"],
             "dtype": ["float16", "bfloat16"],
             "pytorch.compilation": [
                 {"pytorch.torch_compile": True},
@@ -1012,5 +1012,5 @@ class TestCountSweepStructure:
         assert count_sweep_structure(sweep) == (2, 1)
 
     def test_scalar_counted_as_axis(self):
-        sweep = {"backend": "pytorch"}
+        sweep = {"engine": "pytorch"}
         assert count_sweep_structure(sweep) == (1, 0)

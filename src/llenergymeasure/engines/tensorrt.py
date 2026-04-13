@@ -1,6 +1,6 @@
-"""TensorRT-LLM inference backend — thin BackendPlugin.
+"""TensorRT-LLM inference engine — thin EnginePlugin.
 
-Implements the 6-method BackendPlugin protocol:
+Implements the 6-method EnginePlugin protocol:
   load_model, warmup, run_inference, cleanup, validate_config
 
 All measurement lifecycle is delegated to MeasurementHarness. This module
@@ -26,9 +26,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from llenergymeasure.backends.protocol import InferenceOutput
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.utils.exceptions import BackendError, ConfigError
+from llenergymeasure.engines.protocol import InferenceOutput
+from llenergymeasure.utils.exceptions import ConfigError, EngineError
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +79,10 @@ def _validate_engine_directory(engine_path: Path, tp_size: int) -> list[str]:
     return errors
 
 
-class TensorRTBackend:
-    """TensorRT-LLM inference backend — offline batch mode, thin plugin.
+class TensorRTEngine:
+    """TensorRT-LLM inference engine — offline batch mode, thin plugin.
 
-    Implements BackendPlugin:
+    Implements EnginePlugin:
     - load_model: Compile/load engine via tensorrt_llm.LLM(), record build metadata
     - warmup: Minimal 1-prompt warmup with 1-token output
     - run_inference: Single llm.generate() call with ALL prompts, returns InferenceOutput
@@ -95,7 +95,7 @@ class TensorRTBackend:
 
     @property
     def name(self) -> str:
-        """Backend identifier."""
+        """Engine identifier."""
         return "tensorrt"
 
     @property
@@ -109,7 +109,7 @@ class TensorRTBackend:
             return "unknown"
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: load_model
+    # EnginePlugin: load_model
     # -------------------------------------------------------------------------
 
     def load_model(
@@ -132,9 +132,9 @@ class TensorRTBackend:
             Tuple of (llm, sampling_params).
 
         Raises:
-            BackendError: If TRT-LLM is not installed or model loading fails.
+            EngineError: If TRT-LLM is not installed or model loading fails.
         """
-        from llenergymeasure.backends._helpers import require_import
+        from llenergymeasure.engines._helpers import require_import
 
         _trt_mod = require_import("tensorrt_llm", "tensorrt")
         LLM = _trt_mod.LLM
@@ -164,7 +164,7 @@ class TensorRTBackend:
         try:
             llm = LLM(**kwargs)
         except Exception as e:
-            raise BackendError(f"TensorRT-LLM model loading failed: {e}") from e
+            raise EngineError(f"TensorRT-LLM model loading failed: {e}") from e
 
         build_time_sec = time.perf_counter() - build_start
         if on_substep is not None:
@@ -194,7 +194,7 @@ class TensorRTBackend:
         return llm, sampling_params
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: warmup
+    # EnginePlugin: warmup
     # -------------------------------------------------------------------------
 
     def run_warmup_prompt(self, config: ExperimentConfig, model: Any, prompt: str) -> float:
@@ -213,14 +213,14 @@ class TensorRTBackend:
         """
         from tensorrt_llm import SamplingParams
 
-        from llenergymeasure.backends._helpers import warmup_single_token
+        from llenergymeasure.engines._helpers import warmup_single_token
 
         llm, _sampling_params = model
         warmup_single_token(llm, [prompt], SamplingParams, max_tokens=1)
         return 0.0  # Signals harness to skip CV loop
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: run_inference
+    # EnginePlugin: run_inference
     # -------------------------------------------------------------------------
 
     def run_inference(
@@ -239,14 +239,14 @@ class TensorRTBackend:
             InferenceOutput with token counts, timing, memory stats, and build_metadata.
 
         Raises:
-            BackendError: On OOM or other inference failures.
+            EngineError: On OOM or other inference failures.
         """
         import time
 
         llm, sampling_params = model
 
         # Reset peak stats before the measurement loop
-        from llenergymeasure.backends._helpers import reset_cuda_peak_memory
+        from llenergymeasure.engines._helpers import reset_cuda_peak_memory
 
         reset_cuda_peak_memory()
 
@@ -261,16 +261,16 @@ class TensorRTBackend:
             outputs = llm.generate(prompts, sampling_params)
             elapsed = time.perf_counter() - t0
         except Exception as e:
-            from llenergymeasure.backends._helpers import raise_backend_error
+            from llenergymeasure.engines._helpers import raise_engine_error
 
-            raise_backend_error(
+            raise_engine_error(
                 e,
                 "TRT-LLM",
                 hint="reduce n, use a smaller max_batch_size, or use a smaller model.",
             )
 
         # Capture peak memory
-        from llenergymeasure.backends._helpers import get_cuda_peak_memory_mb
+        from llenergymeasure.engines._helpers import get_cuda_peak_memory_mb
 
         peak_mb = get_cuda_peak_memory_mb()
 
@@ -308,7 +308,7 @@ class TensorRTBackend:
         )
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: cleanup
+    # EnginePlugin: cleanup
     # -------------------------------------------------------------------------
 
     def cleanup(self, model: Any) -> None:
@@ -317,14 +317,14 @@ class TensorRTBackend:
         Args:
             model: Tuple of (llm, sampling_params) from load_model().
         """
-        from llenergymeasure.backends._helpers import cleanup_model
+        from llenergymeasure.engines._helpers import cleanup_model
 
         llm, _sampling_params = model
         cleanup_model(llm)
         logger.debug("TRT-LLM model cleanup complete")
 
     # -------------------------------------------------------------------------
-    # BackendPlugin: validate_config
+    # EnginePlugin: validate_config
     # -------------------------------------------------------------------------
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:

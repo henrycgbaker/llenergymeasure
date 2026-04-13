@@ -39,7 +39,7 @@ def test_config_help() -> None:
 
 
 def test_config_basic_output() -> None:
-    """Basic config output shows GPU name, backend status, and correct install hints."""
+    """Basic config output shows GPU name, engine status, and correct install hints."""
     mock_gpu = [{"name": "NVIDIA A100", "vram_gb": 80.0}]
 
     def fake_find_spec(name: str) -> MagicMock | None:
@@ -133,7 +133,7 @@ def test_config_verbose_gpu_driver() -> None:
     assert "Driver: 535.129.03" in result.output
 
 
-def test_config_verbose_backend_versions() -> None:
+def test_config_verbose_engine_versions() -> None:
     """With -v and transformers installed, version string is shown in parentheses."""
     mock_torch = MagicMock()
     mock_torch.__version__ = "2.2.0"
@@ -145,7 +145,7 @@ def test_config_verbose_backend_versions() -> None:
 
     with (
         patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
-        patch("llenergymeasure.cli.config_cmd._probe_backend_version", return_value="2.2.0"),
+        patch("llenergymeasure.cli.config_cmd._probe_engine_version", return_value="2.2.0"),
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
     ):
         result = runner.invoke(app, ["config", "-v"])
@@ -296,25 +296,25 @@ def test_probe_gpu_returns_none_on_error() -> None:
     assert result is None
 
 
-def test_probe_backend_version_pytorch() -> None:
-    """_probe_backend_version returns torch.__version__ for pytorch backend."""
-    from llenergymeasure.cli.config_cmd import _probe_backend_version
+def test_probe_engine_version_pytorch() -> None:
+    """_probe_engine_version returns torch.__version__ for pytorch engine."""
+    from llenergymeasure.cli.config_cmd import _probe_engine_version
 
     mock_torch = MagicMock()
     mock_torch.__version__ = "2.2.0"
 
     with patch.dict("sys.modules", {"torch": mock_torch}):
-        result = _probe_backend_version("pytorch")
+        result = _probe_engine_version("pytorch")
 
     assert result == "2.2.0"
 
 
-def test_probe_backend_version_returns_none_on_import_error() -> None:
-    """_probe_backend_version returns None when the backend package is not installed."""
-    from llenergymeasure.cli.config_cmd import _probe_backend_version
+def test_probe_engine_version_returns_none_on_import_error() -> None:
+    """_probe_engine_version returns None when the engine package is not installed."""
+    from llenergymeasure.cli.config_cmd import _probe_engine_version
 
     with patch.dict("sys.modules", {"vllm": None}):
-        result = _probe_backend_version("vllm")
+        result = _probe_engine_version("vllm")
 
     assert result is None
 

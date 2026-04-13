@@ -12,10 +12,10 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 
 ## Key Features
 
-- **Multi-backend inference** — PyTorch, vLLM, TensorRT-LLM, SGLang (planned)
+- **Multi-engine inference** — PyTorch, vLLM, TensorRT-LLM, SGLang (planned)
 - **GPU energy measurement** — NVML, Zeus, CodeCarbon, others 
-- **Smart sweep system** — define parameter grids, run Cartesian product experiments automatically; intelligently managed sweep hierarchy scopes available config fields to appropriate backend/component, and ensures invalid combinations are removed
-- **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each backend in registry with full runnder configurability and local mode also available. Every study pre-flight now verifies that each image's `ExperimentConfig` schema fingerprint matches the host's, aborting with an actionable rebuild hint on drift (`llem doctor` for a one-shot check).
+- **Smart sweep system** — define parameter grids, run Cartesian product experiments automatically; intelligently managed sweep hierarchy scopes available config fields to appropriate engine/component, and ensures invalid combinations are removed
+- **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each engine in registry with full runner configurability and local mode also available. Every study pre-flight now verifies that each image's `ExperimentConfig` schema fingerprint matches the host's, aborting with an actionable rebuild hint on drift (`llem doctor` for a one-shot check).
 - **Reproducibility** — fixed seeds, cycle ordering, thermal management, environment snapshots, effective config recorded (add others)
 - **Built-in datasets** — AI Energy Score benchmark prompts included; custom JSONL datasets also supported
 
@@ -30,7 +30,7 @@ pip install "llenergymeasure[pytorch]"
 Run your first measurement:
 
 ```bash
-llem run --model gpt2 --backend pytorch
+llem run --model gpt2 --engine pytorch
 ```
 
 See [Installation](docs/installation.md) for system requirements, Docker setup, and available extras. See [Getting Started](docs/getting-started.md) to run and interpret your first experiment.
@@ -46,7 +46,7 @@ See [Installation](docs/installation.md) for system requirements, Docker setup, 
 | [Installation](docs/installation.md) | System requirements, pip install, Docker setup path |
 | [Getting Started](docs/getting-started.md) | First experiment, PyTorch and Docker tracks |
 | [Docker Setup](docs/docker-setup.md) | NVIDIA Container Toolkit walkthrough for vLLM |
-| [Backend Configuration](docs/backends.md) | PyTorch vs vLLM, parameter support matrix |
+| [Engine Configuration](docs/engines.md) | PyTorch vs vLLM, parameter support matrix |
 | [Study & Experiment Configuration](docs/study-config.md) | YAML reference, sweeps, config schema |
 | [CLI Reference](docs/cli-reference.md) | `llem run`, `llem config`, and `llem doctor` flags and options |
 | [Energy Measurement](docs/energy-measurement.md) | NVML, Zeus, CodeCarbon backends, measurement mechanics |

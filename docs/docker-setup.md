@@ -1,11 +1,11 @@
 # Docker Setup Guide
 
-`llenergymeasure` uses Docker to run vLLM and TensorRT-LLM (and future SGLang) backends in
+`llenergymeasure` uses Docker to run vLLM and TensorRT-LLM (and future SGLang) engines in
 isolated containers with GPU access. This guide walks through setting up Docker with GPU support
 from scratch on a Linux host.
 
 > **Recommended path.** Docker is the recommended way to run llenergymeasure. The PyTorch
-> backend can run locally for quick tests, but Docker gives you vLLM and reproducible
+> engine can run locally for quick tests, but Docker gives you vLLM and reproducible
 > container-isolated measurements.
 
 ---
@@ -88,7 +88,7 @@ Expected output includes `Hello from Docker!`.
 ### BuildKit builder setup (recommended)
 
 Docker image builds use BuildKit under the hood. The default builder has a conservative
-garbage-collection limit (~10% of disk) that is too small when building all three backend
+garbage-collection limit (~10% of disk) that is too small when building all three engine
 images (PyTorch, vLLM, TensorRT). This causes build cache eviction and expensive
 recompilation (FA3 takes ~1 hour from scratch).
 
@@ -198,7 +198,7 @@ Expected output: the same `nvidia-smi` table you saw in Step 2, but printed from
 the container.
 
 > This is exactly the check that `llem`'s Docker pre-flight performs automatically before
-> launching any backend container. If this command works, `llem` pre-flight will pass.
+> launching any engine container. If this command works, `llem` pre-flight will pass.
 
 **If this command fails**, see [Troubleshooting](#troubleshooting) below.
 
@@ -220,7 +220,7 @@ See [Installation](installation.md) for the full `llem config` output format.
 ```yaml
 # experiment.yaml
 model: gpt2
-backend: vllm
+engine: vllm
 n: 50
 runners:
   vllm: docker
@@ -241,7 +241,7 @@ an annotated walkthrough.
 ```yaml
 # experiment.yaml
 model: meta-llama/Llama-2-7b-hf
-backend: tensorrt
+engine: tensorrt
 n: 50
 runners:
   tensorrt: docker
@@ -263,19 +263,19 @@ for the full TensorRT-LLM walkthrough.
 
 ### Image sources
 
-Each backend has two possible image sources:
+each engine has two possible image sources:
 
 | Source | Tag pattern | Built by | Use case |
 |--------|------------|----------|----------|
-| **Local build** | `llenergymeasure:{backend}` | `make docker-build-{backend}` | Development - reflects current source tree |
-| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{backend}:v{version}` | CI on release tags | Production, CI, pip-install users |
+| **Local build** | `llenergymeasure:{engine}` | `make docker-build-{engine}` | Development - reflects current source tree |
+| **Registry** | `ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{version}` | CI on release tags | Production, CI, pip-install users |
 
 ### Image resolution
 
-When you run `llem run`, the tool resolves which image to use for each backend. Resolution
+When you run `llem run`, the tool resolves which image to use for each engine. Resolution
 follows a precedence chain (highest wins):
 
-1. **Environment variable** `LLEM_IMAGE_{BACKEND}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
+1. **Environment variable** `LLEM_IMAGE_{ENGINE}` (e.g. `LLEM_IMAGE_VLLM=my/custom:tag`)
 2. **Study YAML** `images:` section
 3. **Runner spec** shorthand (`docker:my/custom:tag` in `runners:`)
 4. **User config** `images:` section (`~/.config/llenergymeasure/config.yaml`)
@@ -303,7 +303,7 @@ Runners
 
 For multi-experiment studies, `llem` checks and pulls all required Docker images **once**
 before the first experiment runs, not per-experiment. This avoids redundant pulls when
-multiple experiments share the same backend image. The CLI shows this as a
+multiple experiments share the same engine image. The CLI shows this as a
 "Preparing Docker images" section with per-image status (cached vs pulled) and metadata
 (image ID, size, age, layers).
 
@@ -325,13 +325,13 @@ Replace `0.9.0` with your installed version (`llem --version`).
 
 ### Check current image resolution
 
-To see which images `llem` will use for each backend:
+To see which images `llem` will use for each engine:
 
 ```bash
 make docker-images
 ```
 
-Output shows local vs registry source for each backend:
+Output shows local vs registry source for each engine:
 
 ```
 === Image resolution ===
@@ -346,10 +346,10 @@ Build images from source when you have modified the codebase or need images that
 your local changes:
 
 ```bash
-# Build all backends
+# Build all engines
 make docker-build-all
 
-# Build a specific backend
+# Build a specific engine
 make docker-build-pytorch
 make docker-build-vllm
 make docker-build-tensorrt
@@ -360,7 +360,7 @@ your `.env`, builds use the GHCR registry cache for dramatically faster builds (
 [Build Cache](installation.md#build-cache-recommended) for details).
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
-> modify config models, backends, or the container entrypoint, rebuild for changes to take
+> modify config models, engines, or the container entrypoint, rebuild for changes to take
 > effect inside containers. Local-runner experiments (PyTorch without Docker) use the
 > installed source directly and do not need a rebuild.
 
@@ -373,14 +373,14 @@ runners:
   tensorrt: "docker:my/custom:tag"     # explicit image override
 ```
 
-### Future backends
+### Future engines
 
 SGLang (M5) images will follow the same naming convention, resolution logic, and auto-pull
 behaviour. No additional setup is needed when SGLang ships.
 
 ### Image labels and versioning
 
-Every backend image is stamped at build time with OCI labels that llem reads at
+Every engine image is stamped at build time with OCI labels that llem reads at
 study start-up to detect host/container schema skew:
 
 | Label | Source | Purpose |
@@ -456,7 +456,7 @@ Or log out and log back in. Verify with: `groups | grep docker`.
 
 The `--gpus all` flag is missing from the `docker run` command.
 
-`llem` adds `--gpus all` automatically when launching backend containers. If you are running
+`llem` adds `--gpus all` automatically when launching engine containers. If you are running
 Docker commands manually, ensure you include `--gpus all` (or `--gpus device=0` for a specific
 GPU).
 
@@ -494,5 +494,5 @@ llem run experiment.yaml --skip-preflight
 ## Next Steps
 
 - [Getting Started](getting-started.md) — run your first vLLM or TensorRT-LLM experiment
-- [Backend Configuration](backends.md) — configure vLLM, TensorRT-LLM, and switch between backends
+- [Engine Configuration](engines.md) — configure vLLM, TensorRT-LLM, and switch between engines
 - [Build Cache](installation.md#build-cache-recommended) — speed up local Docker builds with GHCR registry cache

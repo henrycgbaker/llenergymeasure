@@ -71,7 +71,7 @@ def _count_params_from_config(model_name: str) -> int | None:
     Uses AutoConfig.from_pretrained() to read architecture dimensions
     without loading model weights. Returns None on any failure.
 
-    This enables FLOPs estimation for backends that do not expose an hf_model
+    This enables FLOPs estimation for engines that do not expose an hf_model
     object (e.g. vLLM, TensorRT-LLM).
     """
     try:

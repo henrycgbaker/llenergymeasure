@@ -1,4 +1,4 @@
-"""Unit tests for measurement integration: timeseries, warnings, and PyTorchBackend wiring.
+"""Unit tests for measurement integration: timeseries, warnings, and PyTorchEngine wiring.
 
 All tests are mocked — no GPU or real model required.
 """
@@ -274,7 +274,7 @@ def test_warnings_custom_threshold() -> None:
 
 
 # =============================================================================
-# Harness and backend wiring tests
+# Harness and engine wiring tests
 # =============================================================================
 
 
@@ -328,10 +328,10 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     """MeasurementHarness._build_result() populates total_energy_j from EnergyMeasurement."""
     from datetime import datetime
 
-    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.engines.protocol import InferenceOutput
     from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
@@ -349,8 +349,8 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     )
     now = datetime.now()
     result = harness._build_result(
-        backend_name="pytorch",
-        backend_version=None,
+        engine_name="pytorch",
+        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -377,10 +377,10 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     """H1: Baseline energy adjustment uses energy_measurement.duration_sec, not datetime delta."""
     from datetime import datetime, timedelta
 
-    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.domain.metrics import ThermalThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.engines.protocol import InferenceOutput
     from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
@@ -393,13 +393,13 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
         model_memory_mb=0.0,
     )
 
-    # Energy backend measured 8.0s (sampler window), but datetime delta is 10.0s.
+    # Energy engine measured 8.0s (sampler window), but datetime delta is 10.0s.
     # Baseline adjustment should use 8.0s, not 10.0s.
     energy_measurement = EnergyMeasurement(total_j=100.0, duration_sec=8.0)
     now = datetime.now()
     result = harness._build_result(
-        backend_name="pytorch",
-        backend_version=None,
+        engine_name="pytorch",
+        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -422,13 +422,13 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     assert result.total_energy_j == 100.0
 
 
-def test_harness_build_result_zero_energy_when_no_backend() -> None:
+def test_harness_build_result_zero_energy_when_no_engine() -> None:
     """MeasurementHarness._build_result() returns total_energy_j=0.0 when energy_measurement is None."""
     from datetime import datetime
 
-    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
+    from llenergymeasure.engines.protocol import InferenceOutput
     from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
@@ -444,8 +444,8 @@ def test_harness_build_result_zero_energy_when_no_backend() -> None:
     now = datetime.now()
 
     result = harness._build_result(
-        backend_name="pytorch",
-        backend_version=None,
+        engine_name="pytorch",
+        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,
@@ -468,7 +468,7 @@ def test_harness_build_result_zero_energy_when_no_backend() -> None:
 
 def test_inference_output_tracks_input_output_tokens() -> None:
     """InferenceOutput separates input_tokens and output_tokens."""
-    from llenergymeasure.backends.protocol import InferenceOutput
+    from llenergymeasure.engines.protocol import InferenceOutput
 
     output = InferenceOutput(
         elapsed_time_sec=1.0,
@@ -491,10 +491,10 @@ def _make_build_result_args():
     """Shared helper: return kwargs for MeasurementHarness._build_result() with minimal data."""
     from datetime import datetime
 
-    from llenergymeasure.backends.protocol import InferenceOutput
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.domain.metrics import FlopsResult, ThermalThrottleInfo
     from llenergymeasure.energy.nvml import EnergyMeasurement
+    from llenergymeasure.engines.protocol import InferenceOutput
 
     config = ExperimentConfig(model="gpt2")
     output = InferenceOutput(
@@ -510,8 +510,8 @@ def _make_build_result_args():
     )
     now = datetime(2026, 1, 1, 12, 0, 0)
     return dict(
-        backend_name="pytorch",
-        backend_version=None,
+        engine_name="pytorch",
+        engine_version=None,
         config=config,
         output=output,
         model_memory_mb=0.0,

@@ -24,7 +24,7 @@ Three commands: `llem run` for running experiments and studies, `llem config` fo
 ```bash
 llem run [CONFIG]           # run from YAML config
 llem run --model gpt2       # inline model spec
-llem run --model gpt2 --backend pytorch --dataset aienergyscore -n 100
+llem run --model gpt2 --engine pytorch --dataset aienergyscore -n 100
 llem run --dry-run          # validate config without running
 llem run -v                 # verbose logging (INFO)
 llem run -vv                # debug logging
@@ -36,10 +36,10 @@ Key options:
 |--------|-------------|
 | `CONFIG` | Path to experiment or study YAML |
 | `--model / -m` | Model name or HuggingFace path |
-| `--backend / -b` | Inference backend (`pytorch`, `vllm`, `tensorrt`) |
+| `--engine / -e` | Inference engine (`pytorch`, `vllm`, `tensorrt`) |
 | `--dataset / -d` | Dataset name or JSONL file path |
 | `-n` | Number of prompts |
-| `--batch-size` | Batch size (PyTorch backend) |
+| `--batch-size` | Batch size (PyTorch engine) |
 | `--dry-run` | Validate config, print plan, exit |
 | `--skip-preflight` | Skip Docker/CUDA pre-flight checks |
 | `-v / -vv` | Verbosity (INFO / DEBUG) |
@@ -51,7 +51,7 @@ llem config          # brief environment summary
 llem config -v       # verbose: list all GPU properties, energy samplers, etc.
 ```
 
-Shows GPU hardware (name, VRAM), installed backends, energy sampler availability, and user config path. Always exits 0 — purely informational.
+Shows GPU hardware (name, VRAM), installed engines, energy sampler availability, and user config path. Always exits 0 — purely informational.
 
 ### llem doctor
 
@@ -59,7 +59,7 @@ Shows GPU hardware (name, VRAM), installed backends, energy sampler availability
 llem doctor          # verify Docker images match the host ExperimentConfig schema
 ```
 
-Reads the `llem.expconf.schema.fingerprint` OCI label from each backend image and compares it to a fingerprint computed from the host's current `ExperimentConfig.model_json_schema()`. Exits non-zero on any `MISMATCH`. Set `LLEM_SKIP_IMAGE_CHECK=1` to bypass the runtime handshake in `llem run` (doctor still reports the true status with a warning footer).
+Reads the `llem.expconf.schema.fingerprint` OCI label from each engine image and compares it to a fingerprint computed from the host's current `ExperimentConfig.model_json_schema()`. Exits non-zero on any `MISMATCH`. Set `LLEM_SKIP_IMAGE_CHECK=1` to bypass the runtime handshake in `llem run` (doctor still reports the true status with a warning footer).
 
 ### llem --version
 
