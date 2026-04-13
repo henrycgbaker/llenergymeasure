@@ -22,7 +22,14 @@ ENTRYPOINT []
 # NGC sets TensorRT/CUDA library paths in shell profiles (.bashrc) rather
 # than Docker ENV.  Our CMD runs python3 directly (no shell), so we must
 # ensure LD_LIBRARY_PATH includes the TRT and CUDA directories explicitly.
-ENV LD_LIBRARY_PATH="/usr/local/tensorrt/lib:${LD_LIBRARY_PATH}"
+#
+# /usr/local/cuda/compat/lib must appear BEFORE /usr/local/cuda/compat/lib.real
+# so that nvidia-container-toolkit's host-driver bind-mount (placed in
+# /usr/local/cuda/compat/lib at --gpus time) takes precedence over the
+# image's bundled compat fallback.  Without this ordering libtensorrt_llm.so
+# resolves libcuda.so.1 against the bundled library and fails to find CUDA
+# 12.4+ symbols (e.g. cuKernelGetName) when the host driver is CUDA 12.2.
+ENV LD_LIBRARY_PATH="/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib:${LD_LIBRARY_PATH}"
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
