@@ -441,7 +441,7 @@ class TestMultiBackendSectionStripping:
         valid, skipped = expand_grid(raw)
         assert len(skipped) == 0, f"Unexpected skips: {[s.reason for s in skipped]}"
         engines = sorted(c.engine for c in valid)
-        assert engines == ["transformers", "tensorrt", "vllm"]
+        assert engines == ["tensorrt", "transformers", "vllm"]
 
 
 # =============================================================================
