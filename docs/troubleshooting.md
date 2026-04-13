@@ -292,6 +292,17 @@ see whether the registry was even reached.
 5. Offline is expected-slow. BuildKit degrades gracefully to a cold build —
    no errors, just minutes.
 
+**CI can't build the Transformers image (FA3 compile OOM / heartbeat loss):**
+The FA3 Hopper compile requires ~8-16 GB RAM and multiple hours on a 4-core
+runner. Seed the GHCR cache once from a developer machine with more resources:
+
+```bash
+docker login ghcr.io           # needs write:packages scope
+make docker-seed-transformers  # builds + pushes cache to ghcr.io (MAX_JOBS=8 default)
+```
+
+After seeding, CI warm-rebuilds from the GHCR cache in <5 min.
+
 ---
 
 ## Schema skew between host and Docker image

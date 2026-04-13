@@ -1,7 +1,7 @@
 .PHONY: format lint lint-fix typecheck check test test-unit test-integration test-all install dev clean
 .PHONY: test-runtime test-runtime-vllm test-runtime-tensorrt test-runtime-all
 .PHONY: test-runtime-quick test-runtime-local test-runtime-docker
-.PHONY: docker-build docker-build-all docker-build-transformers docker-build-vllm docker-build-tensorrt
+.PHONY: docker-build docker-build-all docker-build-transformers docker-build-vllm docker-build-tensorrt docker-seed-transformers
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
@@ -271,6 +271,31 @@ docker-build-vllm:
 docker-build-tensorrt:
 	$(CACHE_HINT)
 	$(BUILD_WITH_REPORT) tensorrt
+
+# Seed GHCR build cache from a local machine with sufficient RAM.
+# Intended for seeding the Transformers image cache (FA3 Hopper compile,
+# ~30 min but memory-intensive) when the CI hosted runner cannot complete
+# the build. Requires: docker login ghcr.io, llem-builder buildx builder.
+# Set MAX_JOBS to suit your machine (8 = good default for dev hardware).
+docker-seed-transformers:
+	@version=$$(python3 -c "from llenergymeasure._version import __version__; print(__version__)" 2>/dev/null || echo "dev"); \
+	fingerprint=$$(python3 scripts/compute_expconf_fingerprint.py 2>/dev/null || echo "unknown"); \
+	max_jobs=$${MAX_JOBS:-8}; \
+	ref=ghcr.io/henrycgbaker/llenergymeasure/transformers; \
+	echo "Seeding GHCR cache for transformers (MAX_JOBS=$$max_jobs, version=$$version)"; \
+	docker buildx build \
+	  --builder $(BUILDER_NAME) \
+	  -f docker/Dockerfile.transformers \
+	  --build-arg LLEM_PKG_VERSION=$$version \
+	  --build-arg LLEM_EXPCONF_SCHEMA_FINGERPRINT=$$fingerprint \
+	  --build-arg MAX_JOBS=$$max_jobs \
+	  --cache-from type=registry,ref=$$ref:v$$version \
+	  --cache-from type=registry,ref=$$ref:latest \
+	  --cache-to   type=registry,ref=$$ref:latest,mode=max \
+	  --push \
+	  --tag $$ref:v$$version \
+	  --tag $$ref:latest \
+	  .
 
 # Pull versioned registry images (ghcr.io) instead of building locally
 docker-pull:
