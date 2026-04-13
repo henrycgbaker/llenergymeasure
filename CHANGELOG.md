@@ -60,6 +60,7 @@ All notable changes to this project are documented here.
 - **Engine parameter discovery (`scripts/discover_engine_schemas.py`).** Introspects installed engine packages inside their Docker images and emits JSON schemas describing every configurable parameter (types, defaults, descriptions where available, discovery limitations). Supports `vllm`, `tensorrt`, and `transformers`; `--all` discovers every engine found in the current image.
 - **Vendored engine schemas at `src/llenergymeasure/config/discovered_schemas/{vllm,tensorrt,transformers}.json`.** These are the canonical SSOT for "what CAN I configure per engine", shipped inside the wheel. Regenerate with `make discover-schema ENGINE=<engine>` (writes to the vendored path and prints `git diff`; committing is the review gate).
 - **`make discover-schema` / `make discover-schemas-all` targets.** Rebuild vendored engine schemas via `./scripts/update_engine_schema.sh`.
+- **`SchemaLoader` class (`llenergymeasure.config.SchemaLoader`).** Reads vendored engine schemas via `importlib.resources` with per-instance caching and major-version envelope validation. Raises `UnsupportedSchemaVersionError` on envelope breaking changes. Exports `DiscoveredSchema`, `DiscoveryLimitation`, and `UnsupportedSchemaVersionError` from `llenergymeasure.config`.
 
 ### Changed
 
