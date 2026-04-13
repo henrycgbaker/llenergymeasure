@@ -67,6 +67,9 @@ llem = "llenergymeasure.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/llenergymeasure"]
+# Hatchling includes non-Python files in package dirs by default, so
+# src/llenergymeasure/config/discovered_schemas/*.json ships automatically
+# in the wheel — no force-include needed (and adding one creates duplicates).
 
 [tool.ruff]
 line-length = 100

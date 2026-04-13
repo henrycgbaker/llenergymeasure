@@ -5,6 +5,7 @@
 .PHONY: docker-build-dev docker-check docker-builder-setup docker-builder-rm
 .PHONY: experiment datasets validate docker-shell docker-dev
 .PHONY: setup docker-setup lem-clean lem-clean-all lem-clean-state lem-clean-cache lem-clean-trt generate-docs check-docs
+.PHONY: discover-schema discover-schemas-all
 .PHONY: package-check docs-check docker-smoke docker-smoke-pytorch docker-smoke-vllm ci ci-all ci-docker
 .PHONY: gpu-ci gpu-ci-pytorch gpu-ci-vllm
 
@@ -121,6 +122,20 @@ generate-docs:
 
 # Check if generated docs are stale (CI validation)
 check-docs: docs-check
+
+# Rediscover a vendored engine schema by running introspection inside the
+# engine's Docker image. Writes to src/llenergymeasure/config/discovered_schemas/<engine>.json
+# and prints the git diff. Committing (or not) is the review gate.
+# Usage: make discover-schema ENGINE=vllm
+discover-schema:
+	@test -n "$(ENGINE)" || (echo "Usage: make discover-schema ENGINE={vllm|tensorrt|transformers}" && exit 1)
+	./scripts/update_engine_schema.sh $(ENGINE)
+
+# Rediscover all three engine schemas in sequence.
+discover-schemas-all:
+	./scripts/update_engine_schema.sh vllm
+	./scripts/update_engine_schema.sh tensorrt
+	./scripts/update_engine_schema.sh transformers
 
 docs-check:
 	@uv run python scripts/generate_config_docs.py > /dev/null

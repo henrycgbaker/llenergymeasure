@@ -53,6 +53,10 @@ All notable changes to this project are documented here.
 - **Host/container schema fingerprint verification.** Docker images are now stamped at build time with a `llem.expconf.schema.fingerprint` OCI label (SHA-256 of `ExperimentConfig.model_json_schema()`) plus `org.opencontainers.image.version`. `StudyRunner._prepare_images` compares the label to the host fingerprint before any experiment runs and aborts with an actionable rebuild hint on mismatch. The check is bypassable via `LLEM_SKIP_IMAGE_CHECK=1`.
 - **`llem doctor` CLI command.** Reports per-backend image status (OK / MISMATCH / UNVERIFIED / UNREACHABLE) and exits non-zero on mismatch for CI-friendly gating.
 - **Inline schema status in the image-prep progress line** (`schema: ok` / `schema: mismatch` / `schema: unverified` / `schema: bypassed`), rendered via the existing metadata display with no changes to the progress protocol.
+- **Engine parameter discovery (`scripts/discover_engine_schemas.py`).** Introspects installed engine packages inside their Docker images and emits JSON schemas describing every configurable parameter (types, defaults, descriptions where available, discovery limitations). Supports `vllm`, `tensorrt`, and `transformers`; `--all` discovers every engine found in the current image.
+- **Vendored engine schemas at `src/llenergymeasure/config/discovered_schemas/{vllm,tensorrt,transformers}.json`.** These are the canonical SSOT for "what CAN I configure per engine", shipped inside the wheel. Regenerate with `make discover-schema ENGINE=<engine>` (writes to the vendored path and prints `git diff`; committing is the review gate).
+- **`SchemaLoader` class (`llenergymeasure.config.SchemaLoader`).** Reads vendored schemas via `importlib.resources` with per-instance caching and major-version validation. Raises `UnsupportedSchemaVersionError` on envelope breaking changes. Exports include `DiscoveredSchema`, `DiscoveryLimitation`, and `UnsupportedSchemaVersionError` from `llenergymeasure.config`.
+- **`make discover-schema` / `make discover-schemas-all` targets.** Rebuild vendored engine schemas via `./scripts/update_engine_schema.sh`.
 
 ### Changed
 

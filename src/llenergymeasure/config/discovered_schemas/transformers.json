@@ -1,0 +1,412 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "transformers",
+  "engine_version": "5.5.4",
+  "engine_commit_sha": null,
+  "image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime+transformers-pipinstall",
+  "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
+  "discovered_at": "2026-04-13T22:06:41.228246+00:00",
+  "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
+  "discovery_limitations": [
+    {
+      "section": "engine_params",
+      "fields": [
+        "AutoModelForCausalLM.from_pretrained.**model_args",
+        "AutoModelForCausalLM.from_pretrained.**kwargs",
+        "PreTrainedModel.from_pretrained.**model_args",
+        "PreTrainedModel.from_pretrained.**kwargs"
+      ],
+      "reason": "from_pretrained accepts **kwargs; kwargs are not in the signature (documented kwargs live in the class docstring only)"
+    },
+    {
+      "section": "sampling_params",
+      "fields": [
+        "max_length",
+        "max_new_tokens",
+        "min_length",
+        "min_new_tokens",
+        "early_stopping",
+        "max_time",
+        "stop_strings",
+        "do_sample",
+        "num_beams",
+        "use_cache",
+        "cache_implementation",
+        "cache_config",
+        "temperature",
+        "top_k",
+        "top_p",
+        "min_p",
+        "top_h",
+        "typical_p",
+        "epsilon_cutoff",
+        "eta_cutoff",
+        "repetition_penalty",
+        "encoder_repetition_penalty",
+        "length_penalty",
+        "no_repeat_ngram_size",
+        "bad_words_ids",
+        "renormalize_logits",
+        "forced_bos_token_id",
+        "forced_eos_token_id",
+        "remove_invalid_values",
+        "exponential_decay_length_penalty",
+        "suppress_tokens",
+        "begin_suppress_tokens",
+        "sequence_bias",
+        "token_healing",
+        "guidance_scale",
+        "watermarking_config",
+        "num_return_sequences",
+        "output_attentions",
+        "output_hidden_states",
+        "output_scores",
+        "output_logits",
+        "return_dict_in_generate",
+        "pad_token_id",
+        "bos_token_id",
+        "eos_token_id",
+        "encoder_no_repeat_ngram_size",
+        "decoder_start_token_id",
+        "is_assistant",
+        "num_assistant_tokens",
+        "num_assistant_tokens_schedule",
+        "assistant_confidence_threshold",
+        "prompt_lookup_num_tokens",
+        "max_matching_ngram_size",
+        "assistant_early_exit",
+        "assistant_lookbehind",
+        "target_lookbehind",
+        "compile_config",
+        "disable_compile",
+        "continuous_batching_config",
+        "low_memory",
+        "penalty_alpha",
+        "dola_layers",
+        "diversity_penalty",
+        "num_beam_groups",
+        "constraints",
+        "force_words_ids",
+        "prefill_chunk_size",
+        "_from_model_config"
+      ],
+      "reason": "GenerationConfig has no type annotations; None defaults yield type='unknown'"
+    }
+  ],
+  "engine_params": {
+    "config": {
+      "type": "PreTrainedConfig | str | PathLike | None",
+      "default": null
+    },
+    "cache_dir": {
+      "type": "str | PathLike | None",
+      "default": null
+    },
+    "ignore_mismatched_sizes": {
+      "type": "bool",
+      "default": false
+    },
+    "force_download": {
+      "type": "bool",
+      "default": false
+    },
+    "local_files_only": {
+      "type": "bool",
+      "default": false
+    },
+    "token": {
+      "type": "str | bool | None",
+      "default": null
+    },
+    "revision": {
+      "type": "str",
+      "default": "main"
+    },
+    "use_safetensors": {
+      "type": "bool | None",
+      "default": null
+    },
+    "weights_only": {
+      "type": "bool",
+      "default": true
+    }
+  },
+  "sampling_params": {
+    "max_length": {
+      "type": "unknown",
+      "default": null
+    },
+    "max_new_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "min_length": {
+      "type": "unknown",
+      "default": null
+    },
+    "min_new_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "early_stopping": {
+      "type": "unknown",
+      "default": null
+    },
+    "max_time": {
+      "type": "unknown",
+      "default": null
+    },
+    "stop_strings": {
+      "type": "unknown",
+      "default": null
+    },
+    "do_sample": {
+      "type": "unknown",
+      "default": null
+    },
+    "num_beams": {
+      "type": "unknown",
+      "default": null
+    },
+    "use_cache": {
+      "type": "unknown",
+      "default": null
+    },
+    "cache_implementation": {
+      "type": "unknown",
+      "default": null
+    },
+    "cache_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "temperature": {
+      "type": "unknown",
+      "default": null
+    },
+    "top_k": {
+      "type": "unknown",
+      "default": null
+    },
+    "top_p": {
+      "type": "unknown",
+      "default": null
+    },
+    "min_p": {
+      "type": "unknown",
+      "default": null
+    },
+    "top_h": {
+      "type": "unknown",
+      "default": null
+    },
+    "typical_p": {
+      "type": "unknown",
+      "default": null
+    },
+    "epsilon_cutoff": {
+      "type": "unknown",
+      "default": null
+    },
+    "eta_cutoff": {
+      "type": "unknown",
+      "default": null
+    },
+    "repetition_penalty": {
+      "type": "unknown",
+      "default": null
+    },
+    "encoder_repetition_penalty": {
+      "type": "unknown",
+      "default": null
+    },
+    "length_penalty": {
+      "type": "unknown",
+      "default": null
+    },
+    "no_repeat_ngram_size": {
+      "type": "unknown",
+      "default": null
+    },
+    "bad_words_ids": {
+      "type": "unknown",
+      "default": null
+    },
+    "renormalize_logits": {
+      "type": "unknown",
+      "default": null
+    },
+    "forced_bos_token_id": {
+      "type": "unknown",
+      "default": null
+    },
+    "forced_eos_token_id": {
+      "type": "unknown",
+      "default": null
+    },
+    "remove_invalid_values": {
+      "type": "unknown",
+      "default": null
+    },
+    "exponential_decay_length_penalty": {
+      "type": "unknown",
+      "default": null
+    },
+    "suppress_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "begin_suppress_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "sequence_bias": {
+      "type": "unknown",
+      "default": null
+    },
+    "token_healing": {
+      "type": "unknown",
+      "default": null
+    },
+    "guidance_scale": {
+      "type": "unknown",
+      "default": null
+    },
+    "watermarking_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "num_return_sequences": {
+      "type": "unknown",
+      "default": null
+    },
+    "output_attentions": {
+      "type": "unknown",
+      "default": null
+    },
+    "output_hidden_states": {
+      "type": "unknown",
+      "default": null
+    },
+    "output_scores": {
+      "type": "unknown",
+      "default": null
+    },
+    "output_logits": {
+      "type": "unknown",
+      "default": null
+    },
+    "return_dict_in_generate": {
+      "type": "unknown",
+      "default": null
+    },
+    "pad_token_id": {
+      "type": "unknown",
+      "default": null
+    },
+    "bos_token_id": {
+      "type": "unknown",
+      "default": null
+    },
+    "eos_token_id": {
+      "type": "unknown",
+      "default": null
+    },
+    "encoder_no_repeat_ngram_size": {
+      "type": "unknown",
+      "default": null
+    },
+    "decoder_start_token_id": {
+      "type": "unknown",
+      "default": null
+    },
+    "is_assistant": {
+      "type": "unknown",
+      "default": null
+    },
+    "num_assistant_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "num_assistant_tokens_schedule": {
+      "type": "unknown",
+      "default": null
+    },
+    "assistant_confidence_threshold": {
+      "type": "unknown",
+      "default": null
+    },
+    "prompt_lookup_num_tokens": {
+      "type": "unknown",
+      "default": null
+    },
+    "max_matching_ngram_size": {
+      "type": "unknown",
+      "default": null
+    },
+    "assistant_early_exit": {
+      "type": "unknown",
+      "default": null
+    },
+    "assistant_lookbehind": {
+      "type": "unknown",
+      "default": null
+    },
+    "target_lookbehind": {
+      "type": "unknown",
+      "default": null
+    },
+    "compile_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "disable_compile": {
+      "type": "unknown",
+      "default": null
+    },
+    "continuous_batching_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "low_memory": {
+      "type": "unknown",
+      "default": null
+    },
+    "penalty_alpha": {
+      "type": "unknown",
+      "default": null
+    },
+    "dola_layers": {
+      "type": "unknown",
+      "default": null
+    },
+    "diversity_penalty": {
+      "type": "unknown",
+      "default": null
+    },
+    "num_beam_groups": {
+      "type": "unknown",
+      "default": null
+    },
+    "constraints": {
+      "type": "unknown",
+      "default": null
+    },
+    "force_words_ids": {
+      "type": "unknown",
+      "default": null
+    },
+    "prefill_chunk_size": {
+      "type": "unknown",
+      "default": null
+    },
+    "_from_model_config": {
+      "type": "unknown",
+      "default": null
+    },
+    "transformers_version": {
+      "type": "str",
+      "default": "5.5.4"
+    }
+  }
+}
