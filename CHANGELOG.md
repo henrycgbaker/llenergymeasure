@@ -58,6 +58,10 @@ All notable changes to this project are documented here.
 
 - **Per-experiment timeout is now configurable** via `study_execution.experiment_timeout_seconds` (default 600s). Replaces the previous `max(n_prompts*2, 600)` heuristic. Both the local subprocess path and the Docker container path honour the same field, and Docker-path timeouts are normalised to `TimeoutError` so the circuit breaker counts them consistently across both paths.
 
+### Fixed
+
+- **`ImportError: cuKernelGetName` when importing `tensorrt_llm` in our image.** `docker/Dockerfile.tensorrt` prepended `/usr/local/tensorrt/lib` to `LD_LIBRARY_PATH` but left the NGC-inherited ordering intact, placing `/usr/local/cuda/compat/lib.real` (the image-bundled compat library, CUDA 12.2) ahead of `/usr/local/cuda/compat/lib` (where nvidia-container-toolkit bind-mounts the host driver at `--gpus` time). `libtensorrt_llm.so` therefore resolved `libcuda.so.1` against the bundled library and failed to find `cuKernelGetName`, a symbol added in CUDA 12.4. Fix: prepend `/usr/local/cuda/compat/lib` so the host-driver mount takes precedence.
+
 ### Removed
 
 - Internal helper `llenergymeasure.study.runner._calculate_timeout` (replaced by direct config reads; also removes a layer-boundary import from `api/_impl.py`).
