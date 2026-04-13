@@ -25,6 +25,17 @@ jobs:
     strategy:
       matrix:
         backend: [pytorch, vllm, tensorrt]
+        include:
+          # Cap nvcc parallelism on the 4-core/16 GB hosted runner. The default
+          # MAX_JOBS=32 (set in Dockerfile.pytorch for developer hardware)
+          # asks for ~128 GB of peak RAM during the FA3 hopper compile,
+          # which causes the runner agent to lose its heartbeat under
+          # memory pressure and the job ends as "runner lost communication
+          # with the server". Leaving 2 cores free keeps the agent
+          # schedulable. vllm/tensorrt don't compile FA3 and ignore this arg.
+          - backend: pytorch
+            extra_build_args: |
+              MAX_JOBS=2
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,6 +87,7 @@ jobs:
           build-args: |
             LLEM_PKG_VERSION=${{ inputs.version }}
             LLEM_EXPCONF_SCHEMA_FINGERPRINT=${{ steps.fingerprint.outputs.value }}
+            ${{ matrix.extra_build_args }}
           # mode=max exports intermediate layers (including the flash-attn
           # compile) so downstream builders can reuse them, not just the final
           # image layers.
