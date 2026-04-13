@@ -15,10 +15,10 @@ Usage:
     )
 
     # Get all params for an engine
-    pytorch_params = get_engine_params("pytorch")
+    transformers_params = get_engine_params("transformers")
 
     # Get test values for a param
-    values = get_param_test_values("pytorch.batch_size")
+    values = get_param_test_values("transformers.batch_size")
 
     # Get full JSON schema
     schema = get_experiment_config_schema()
@@ -79,7 +79,7 @@ def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
         values = [getattr(exp, field_name) for exp in experiments]
 
         # Find first non-None value to determine type (handles multi-engine
-        # studies where optional sub-configs like pytorch/vllm are None on
+        # studies where optional sub-configs like transformers/vllm are None on
         # experiments belonging to a different engine).
         first_non_none = next((v for v in values if v is not None), None)
 
@@ -211,7 +211,7 @@ def get_params_from_model(
 
     Args:
         model_class: Pydantic model to introspect.
-        prefix: Prefix for param paths (e.g., "pytorch").
+        prefix: Prefix for param paths (e.g., "transformers").
         include_nested: Whether to recurse into nested models.
 
     Returns:
@@ -297,20 +297,20 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
     """Get all parameters for an engine from its Pydantic model.
 
     Args:
-        engine: One of "pytorch", "vllm", "tensorrt".
+        engine: One of "transformers", "vllm", "tensorrt".
 
     Returns:
         Dict mapping param paths to metadata. Each param includes
         ``engine_support: list[str]`` indicating which engines expose it.
     """
     from llenergymeasure.config.engine_configs import (
-        PyTorchConfig,
         TensorRTConfig,
+        TransformersConfig,
         VLLMConfig,
     )
 
     engine_models = {
-        "pytorch": PyTorchConfig,
+        "transformers": TransformersConfig,
         "vllm": VLLMConfig,
         "tensorrt": TensorRTConfig,
     }
@@ -353,7 +353,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     decoder_params = get_params_from_model(DecoderConfig, prefix="decoder")
     # Add engine_support to decoder params
     for param in decoder_params.values():
-        param["engine_support"] = ["pytorch", "vllm", "tensorrt"]
+        param["engine_support"] = ["transformers", "vllm", "tensorrt"]
     shared.update(decoder_params)
 
     # Top-level universal params — defined manually for explicit engine_support
@@ -367,7 +367,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["float32", "float16", "bfloat16"],
         "constraints": {},
         "optional": False,
-        "engine_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["transformers", "vllm", "tensorrt"],
     }
     shared["dataset.source"] = {
         "path": "dataset.source",
@@ -379,7 +379,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["aienergyscore"],
         "constraints": {"min_length": 1},
         "optional": False,
-        "engine_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["transformers", "vllm", "tensorrt"],
     }
     shared["dataset.n_prompts"] = {
         "path": "dataset.n_prompts",
@@ -391,7 +391,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [10, 100, 500],
         "constraints": {"ge": 1},
         "optional": False,
-        "engine_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["transformers", "vllm", "tensorrt"],
     }
     shared["dataset.order"] = {
         "path": "dataset.order",
@@ -403,7 +403,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["interleaved", "grouped", "shuffled"],
         "constraints": {},
         "optional": False,
-        "engine_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["transformers", "vllm", "tensorrt"],
     }
     shared["max_input_tokens"] = {
         "path": "max_input_tokens",
@@ -418,7 +418,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [64, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "engine_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["transformers", "vllm", "tensorrt"],
     }
     shared["max_output_tokens"] = {
         "path": "max_output_tokens",
@@ -433,7 +433,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [32, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "engine_support": ["pytorch", "vllm", "tensorrt"],
+        "engine_support": ["transformers", "vllm", "tensorrt"],
     }
 
     return shared
@@ -459,14 +459,14 @@ def get_all_params() -> dict[str, dict[str, dict[str, Any]]]:
     Returns:
         {
             "shared": {...},
-            "pytorch": {...},
+            "transformers": {...},
             "vllm": {...},
             "tensorrt": {...},
         }
     """
     return {
         "shared": get_shared_params(),
-        "pytorch": get_engine_params("pytorch"),
+        "transformers": get_engine_params("transformers"),
         "vllm": get_engine_params("vllm"),
         "tensorrt": get_engine_params("tensorrt"),
     }
@@ -476,7 +476,7 @@ def get_param_test_values(param_path: str) -> list[Any]:
     """Get test values for a specific parameter.
 
     Args:
-        param_path: Full param path, e.g., "pytorch.batch_size" or "decoder.temperature".
+        param_path: Full param path, e.g., "transformers.batch_size" or "decoder.temperature".
 
     Returns:
         List of test values.
@@ -513,7 +513,7 @@ def list_all_param_paths(engine: str | None = None) -> list[str]:
     """List all parameter paths, optionally filtered by engine.
 
     Args:
-        engine: Optional engine filter ("pytorch", "vllm", "tensorrt", "shared").
+        engine: Optional engine filter ("transformers", "vllm", "tensorrt", "shared").
 
     Returns:
         Sorted list of param paths.
@@ -544,18 +544,18 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         These combinations should be skipped during runtime testing.
     """
     return {
-        # PyTorch: can't use both 4-bit and 8-bit quantization
-        "pytorch.load_in_4bit": ["pytorch.load_in_8bit"],
-        "pytorch.load_in_8bit": ["pytorch.load_in_4bit"],
+        # Transformers: can't use both 4-bit and 8-bit quantization
+        "transformers.load_in_4bit": ["transformers.load_in_8bit"],
+        "transformers.load_in_8bit": ["transformers.load_in_4bit"],
         # torch_compile sub-options require torch_compile=True
-        "pytorch.torch_compile_mode": ["pytorch.torch_compile=None|False"],
-        "pytorch.torch_compile_backend": ["pytorch.torch_compile=None|False"],
+        "transformers.torch_compile_mode": ["transformers.torch_compile=None|False"],
+        "transformers.torch_compile_backend": ["transformers.torch_compile=None|False"],
         # BitsAndBytes 4-bit sub-options require load_in_4bit=True
-        "pytorch.bnb_4bit_compute_dtype": ["pytorch.load_in_4bit=None|False"],
-        "pytorch.bnb_4bit_quant_type": ["pytorch.load_in_4bit=None|False"],
-        "pytorch.bnb_4bit_use_double_quant": ["pytorch.load_in_4bit=None|False"],
+        "transformers.bnb_4bit_compute_dtype": ["transformers.load_in_4bit=None|False"],
+        "transformers.bnb_4bit_quant_type": ["transformers.load_in_4bit=None|False"],
+        "transformers.bnb_4bit_use_double_quant": ["transformers.load_in_4bit=None|False"],
         # cache_implementation contradicts use_cache=False
-        "pytorch.cache_implementation": ["pytorch.use_cache=False"],
+        "transformers.cache_implementation": ["transformers.use_cache=False"],
         # vLLM speculative decoding: speculative_model requires num_speculative_tokens
         "vllm.engine.speculative_model": ["vllm.engine.num_speculative_tokens=None"],
         # vLLM kv_cache_memory_bytes vs gpu_memory_utilization
@@ -577,28 +577,28 @@ def get_engine_specific_params() -> dict[str, list[str]]:
         Derived from v2.0 minimal engine config fields.
     """
     return {
-        "pytorch": [
-            "pytorch.batch_size",
-            "pytorch.attn_implementation",
-            "pytorch.torch_compile",
-            "pytorch.torch_compile_mode",
-            "pytorch.torch_compile_backend",
-            "pytorch.load_in_4bit",
-            "pytorch.load_in_8bit",
-            "pytorch.bnb_4bit_compute_dtype",
-            "pytorch.bnb_4bit_quant_type",
-            "pytorch.bnb_4bit_use_double_quant",
-            "pytorch.use_cache",
-            "pytorch.cache_implementation",
-            "pytorch.num_beams",
-            "pytorch.early_stopping",
-            "pytorch.length_penalty",
-            "pytorch.no_repeat_ngram_size",
-            "pytorch.prompt_lookup_num_tokens",
-            "pytorch.device_map",
-            "pytorch.max_memory",
-            "pytorch.revision",
-            "pytorch.trust_remote_code",
+        "transformers": [
+            "transformers.batch_size",
+            "transformers.attn_implementation",
+            "transformers.torch_compile",
+            "transformers.torch_compile_mode",
+            "transformers.torch_compile_backend",
+            "transformers.load_in_4bit",
+            "transformers.load_in_8bit",
+            "transformers.bnb_4bit_compute_dtype",
+            "transformers.bnb_4bit_quant_type",
+            "transformers.bnb_4bit_use_double_quant",
+            "transformers.use_cache",
+            "transformers.cache_implementation",
+            "transformers.num_beams",
+            "transformers.early_stopping",
+            "transformers.length_penalty",
+            "transformers.no_repeat_ngram_size",
+            "transformers.prompt_lookup_num_tokens",
+            "transformers.device_map",
+            "transformers.max_memory",
+            "transformers.revision",
+            "transformers.trust_remote_code",
         ],
         "vllm": [
             # Engine-level params (vllm.LLM() constructor args)
@@ -721,8 +721,8 @@ def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> 
     ampere_required = [
         "vllm.engine.quantization=fp8",
         "tensorrt.quant.quant_algo=FP8",
-        "pytorch.attn_implementation=flash_attention_2",
-        "pytorch.attn_implementation=flash_attention_3",
+        "transformers.attn_implementation=flash_attention_2",
+        "transformers.attn_implementation=flash_attention_3",
     ]
 
     # These features require Hopper (9.0) or newer GPUs
@@ -744,11 +744,11 @@ def get_param_skip_conditions() -> dict[str, str]:
         "vllm.engine.tensor_parallel_size>1": "Requires 2+ GPUs",
         "tensorrt.tp_size>1": "Requires 2+ GPUs",
         # Flash Attention 2 - requires flash-attn package
-        "pytorch.attn_implementation=flash_attention_2": "Requires flash-attn package",
+        "transformers.attn_implementation=flash_attention_2": "Requires flash-attn package",
         # Flash Attention 3 - requires flash_attn_3 package (built from flash-attn hopper/)
-        "pytorch.attn_implementation=flash_attention_3": "Requires flash_attn_3 package (Ampere+ GPU, compute capability 8.0+)",
+        "transformers.attn_implementation=flash_attention_3": "Requires flash_attn_3 package (Ampere+ GPU, compute capability 8.0+)",
         # torch.compile - may not work on all model architectures
-        "pytorch.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
+        "transformers.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
         # FP8 - Ampere or newer
         "vllm.engine.quantization=fp8": "Requires Ampere+ GPU",
         "tensorrt.quant.quant_algo=FP8": "Requires Ada Lovelace+ GPU (SM >= 8.9)",
@@ -758,15 +758,15 @@ def get_param_skip_conditions() -> dict[str, str]:
         # Quantization - requires pre-quantized models (see get_special_test_models)
         "vllm.engine.quantization=awq": "Requires AWQ-quantized model",
         "vllm.engine.quantization=gptq": "Requires GPTQ-quantized model",
-        # PyTorch optional dependencies
-        "pytorch.load_in_4bit": "Requires compatible bitsandbytes version",
-        "pytorch.load_in_8bit": "Requires compatible bitsandbytes version",
+        # Transformers optional dependencies
+        "transformers.load_in_4bit": "Requires compatible bitsandbytes version",
+        "transformers.load_in_8bit": "Requires compatible bitsandbytes version",
         # BitsAndBytes 4-bit sub-options
-        "pytorch.bnb_4bit_compute_dtype": "Requires load_in_4bit=True and bitsandbytes package",
-        "pytorch.bnb_4bit_quant_type": "Requires load_in_4bit=True and bitsandbytes package",
-        "pytorch.bnb_4bit_use_double_quant": "Requires load_in_4bit=True and bitsandbytes package",
+        "transformers.bnb_4bit_compute_dtype": "Requires load_in_4bit=True and bitsandbytes package",
+        "transformers.bnb_4bit_quant_type": "Requires load_in_4bit=True and bitsandbytes package",
+        "transformers.bnb_4bit_use_double_quant": "Requires load_in_4bit=True and bitsandbytes package",
         # Prompt lookup speculative decoding
-        "pytorch.prompt_lookup_num_tokens": "Requires compatible model and sufficient prompt overlap",
+        "transformers.prompt_lookup_num_tokens": "Requires compatible model and sufficient prompt overlap",
     }
 
 
@@ -805,15 +805,15 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
         Values are True/False for simple support, or str for notes.
     """
     from llenergymeasure.config.engine_configs import (
-        PyTorchConfig,
         TensorRTConfig,
         TensorRTQuantConfig,
+        TransformersConfig,
         VLLMEngineConfig,
     )
 
     # Get field names for each engine
     # VLLMConfig is nested: engine fields are in VLLMEngineConfig
-    pytorch_fields = set(PyTorchConfig.model_fields.keys())
+    transformers_fields = set(TransformersConfig.model_fields.keys())
     vllm_fields = set(VLLMEngineConfig.model_fields.keys())
     tensorrt_fields = set(TensorRTConfig.model_fields.keys())
 
@@ -842,76 +842,76 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
 
     return {
         "tensor_parallel": {
-            # PyTorch does NOT support tensor parallelism for HuggingFace models
-            "pytorch": False,
+            # Transformers does NOT support tensor parallelism for HuggingFace models
+            "transformers": False,
             "vllm": "tensor_parallel_size" in vllm_fields,
             "tensorrt": "tp_size" in tensorrt_fields,
         },
         "data_parallel": {
-            # PyTorch data parallelism via Accelerate is not supported in this version
-            "pytorch": False,
+            # Transformers data parallelism via Accelerate is not supported in this version
+            "transformers": False,
             # vLLM/TensorRT manage parallelism internally
             "vllm": False,
             "tensorrt": False,
         },
         "bitsandbytes_4bit": {
-            "pytorch": "load_in_4bit" in pytorch_fields,
+            "transformers": "load_in_4bit" in transformers_fields,
             "vllm": False,  # vLLM uses native quantization, not bitsandbytes
             "tensorrt": False,  # TensorRT uses native quantization
         },
         "bitsandbytes_8bit": {
-            "pytorch": "load_in_8bit" in pytorch_fields,
+            "transformers": "load_in_8bit" in transformers_fields,
             "vllm": False,
             "tensorrt": False,
         },
         "native_quantization": {
-            "pytorch": False,  # PyTorch relies on bitsandbytes, not native
+            "transformers": False,  # Transformers relies on bitsandbytes, not native
             "vllm": "AWQ/GPTQ/FP8" if vllm_quant_options else False,
             "tensorrt": "INT8/W4A16_AWQ/W4A16_GPTQ/FP8" if trt_quant_options else False,
         },
         "float32_precision": {
-            "pytorch": True,
+            "transformers": True,
             "vllm": True,
             # TensorRT-LLM is optimised for lower precision
             "tensorrt": False,
         },
         "float16_precision": {
-            "pytorch": True,
+            "transformers": True,
             "vllm": True,
             "tensorrt": True,
         },
         "bfloat16_precision": {
-            "pytorch": True,
+            "transformers": True,
             "vllm": True,
             "tensorrt": True,
         },
         "prefix_caching": {
-            "pytorch": False,
+            "transformers": False,
             "vllm": "enable_prefix_caching" in vllm_fields,
             "tensorrt": False,
         },
         "lora_adapters": {
-            "pytorch": True,  # Via peft library
+            "transformers": True,  # Via peft library
             "vllm": False,  # Not in v2.0 minimal VLLMConfig
             "tensorrt": False,  # Not in v2.0 minimal TensorRTConfig
         },
         "torch_compile": {
-            "pytorch": "torch_compile" in pytorch_fields,
+            "transformers": "torch_compile" in transformers_fields,
             "vllm": False,
             "tensorrt": False,
         },
         "beam_search": {
-            "pytorch": "num_beams" in pytorch_fields,
+            "transformers": "num_beams" in transformers_fields,
             "vllm": True,
             "tensorrt": False,
         },
         "speculative_decoding": {
-            "pytorch": "prompt_lookup_num_tokens" in pytorch_fields,
+            "transformers": "prompt_lookup_num_tokens" in transformers_fields,
             "vllm": "speculative_model" in vllm_fields,
             "tensorrt": False,
         },
         "static_kv_cache": {
-            "pytorch": "cache_implementation" in pytorch_fields,
+            "transformers": "cache_implementation" in transformers_fields,
             "vllm": False,
             "tensorrt": False,
         },
@@ -948,7 +948,7 @@ def get_capability_matrix_markdown() -> str:
     }
 
     lines = [
-        "| Feature | PyTorch | vLLM | TensorRT |",
+        "| Feature | Transformers | vLLM | TensorRT |",
         "|---------|---------|------|----------|",
     ]
 
@@ -956,7 +956,7 @@ def get_capability_matrix_markdown() -> str:
         display_name = display_names.get(cap_key, cap_key)
         cells = []
 
-        for engine in ["pytorch", "vllm", "tensorrt"]:
+        for engine in ["transformers", "vllm", "tensorrt"]:
             value = cap_values.get(engine, False)
             if value is True:
                 cells.append("Yes")
@@ -989,25 +989,25 @@ def get_validation_rules() -> list[dict[str, str]]:
     """
     return [
         {
-            "engine": "pytorch",
+            "engine": "transformers",
             "combination": "load_in_4bit=True + load_in_8bit=True",
             "reason": "Cannot use both 4-bit and 8-bit quantization simultaneously",
-            "resolution": "Choose one: pytorch.load_in_4bit=true OR pytorch.load_in_8bit=true",
+            "resolution": "Choose one: transformers.load_in_4bit=true OR transformers.load_in_8bit=true",
         },
         {
-            "engine": "pytorch",
+            "engine": "transformers",
             "combination": "torch_compile_mode without torch_compile=True",
             "reason": "torch_compile_mode/torch_compile_backend only take effect when torch_compile=True",
-            "resolution": "Set pytorch.torch_compile=true when using torch_compile_mode or torch_compile_backend",
+            "resolution": "Set transformers.torch_compile=true when using torch_compile_mode or torch_compile_backend",
         },
         {
-            "engine": "pytorch",
+            "engine": "transformers",
             "combination": "bnb_4bit_* without load_in_4bit=True",
             "reason": "BitsAndBytes 4-bit options require 4-bit quantization to be enabled",
-            "resolution": "Set pytorch.load_in_4bit=true when using bnb_4bit_compute_dtype, bnb_4bit_quant_type, or bnb_4bit_use_double_quant",
+            "resolution": "Set transformers.load_in_4bit=true when using bnb_4bit_compute_dtype, bnb_4bit_quant_type, or bnb_4bit_use_double_quant",
         },
         {
-            "engine": "pytorch",
+            "engine": "transformers",
             "combination": "cache_implementation with use_cache=False",
             "reason": "Cannot specify a cache strategy when caching is explicitly disabled",
             "resolution": "Remove use_cache=false or remove cache_implementation",
@@ -1016,7 +1016,7 @@ def get_validation_rules() -> list[dict[str, str]]:
             "engine": "all",
             "combination": "engine section mismatch",
             "reason": "Engine section must match the engine field",
-            "resolution": "Ensure pytorch:/vllm:/tensorrt: section matches engine: field",
+            "resolution": "Ensure transformers:/vllm:/tensorrt: section matches engine: field",
         },
         {
             "engine": "all",

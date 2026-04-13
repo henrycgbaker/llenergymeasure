@@ -189,8 +189,8 @@ def main():
 
         # Test PyTorch (data parallel)
         pytorch_config = create_pytorch_config(config_dir)
-        success, _output = run_experiment("pytorch", pytorch_config)
-        results["pytorch"] = success
+        success, _output = run_experiment("transformers", pytorch_config)
+        results["transformers"] = success
 
         # Test vLLM (tensor parallel)
         vllm_config = create_vllm_config(config_dir)

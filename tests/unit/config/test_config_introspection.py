@@ -31,18 +31,18 @@ from tests.conftest import make_config
 
 
 def test_get_engine_params_returns_pytorch_params():
-    """get_engine_params('pytorch') returns a dict with batch_size field."""
-    params = get_engine_params("pytorch")
+    """get_engine_params('transformers') returns a dict with batch_size field."""
+    params = get_engine_params("transformers")
     assert isinstance(params, dict)
-    assert "pytorch.batch_size" in params
+    assert "transformers.batch_size" in params
 
 
 def test_get_engine_params_pytorch_has_engine_support():
-    """Each pytorch param has engine_support=['pytorch']."""
-    params = get_engine_params("pytorch")
+    """Each pytorch param has engine_support=['transformers']."""
+    params = get_engine_params("transformers")
     for param_path, meta in params.items():
         assert "engine_support" in meta, f"Missing engine_support on {param_path}"
-        assert "pytorch" in meta["engine_support"]
+        assert "transformers" in meta["engine_support"]
 
 
 def test_get_engine_params_vllm_returns_params():
@@ -150,8 +150,8 @@ def test_get_experiment_config_schema_contains_engine_field():
 
 
 def test_get_param_test_values_pytorch_batch_size_returns_list():
-    """get_param_test_values('pytorch.batch_size') returns a list containing 1."""
-    values = get_param_test_values("pytorch.batch_size")
+    """get_param_test_values('transformers.batch_size') returns a list containing 1."""
+    values = get_param_test_values("transformers.batch_size")
     assert isinstance(values, list)
     assert 1 in values
 
@@ -181,9 +181,9 @@ def test_get_param_test_values_unknown_param_returns_empty():
 
 
 def test_get_all_params_covers_all_engines():
-    """get_all_params() returns dict with 'pytorch', 'vllm', 'tensorrt' keys."""
+    """get_all_params() returns dict with 'transformers', 'vllm', 'tensorrt' keys."""
     all_params = get_all_params()
-    assert "pytorch" in all_params
+    assert "transformers" in all_params
     assert "vllm" in all_params
     assert "tensorrt" in all_params
 
@@ -195,9 +195,9 @@ def test_get_all_params_has_shared_key():
 
 
 def test_get_all_params_pytorch_section_contains_batch_size():
-    """get_all_params()['pytorch'] contains the batch_size param."""
+    """get_all_params()['transformers'] contains the batch_size param."""
     all_params = get_all_params()
-    assert "pytorch.batch_size" in all_params["pytorch"]
+    assert "transformers.batch_size" in all_params["transformers"]
 
 
 # ---------------------------------------------------------------------------
@@ -209,22 +209,22 @@ def test_list_all_param_paths_contains_expected_paths():
     """list_all_param_paths() returns a sorted list containing known param paths."""
     paths = list_all_param_paths()
     assert isinstance(paths, list)
-    assert "pytorch.batch_size" in paths
+    assert "transformers.batch_size" in paths
     assert "dtype" in paths
 
 
 def test_list_all_param_paths_contains_known_paths():
     """list_all_param_paths() contains expected well-known param paths."""
     paths = list_all_param_paths()
-    assert "pytorch.batch_size" in paths
+    assert "transformers.batch_size" in paths
     assert "decoder.temperature" in paths
     assert "dtype" in paths
 
 
 def test_list_all_param_paths_filtered_by_engine():
-    """list_all_param_paths(engine='pytorch') returns only pytorch paths."""
-    paths = list_all_param_paths(engine="pytorch")
-    assert all(p.startswith("pytorch.") for p in paths)
+    """list_all_param_paths(engine='transformers') returns only pytorch paths."""
+    paths = list_all_param_paths(engine="transformers")
+    assert all(p.startswith("transformers.") for p in paths)
 
 
 def test_list_all_param_paths_unknown_engine_raises():
@@ -238,16 +238,16 @@ def test_list_all_param_paths_unknown_engine_raises():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("dt", DTYPE_SUPPORT["pytorch"])
+@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
-    """Schema-driven: each SSOT DTYPE_SUPPORT['pytorch'] value creates a valid config."""
+    """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
     config = make_config(dtype=dt)
     assert config.dtype == dt
 
 
 def test_ssot_dtype_values_match_param_test_values():
-    """DTYPE_SUPPORT['pytorch'] values match get_param_test_values('dtype')."""
-    from_ssot = set(DTYPE_SUPPORT["pytorch"])
+    """DTYPE_SUPPORT['transformers'] values match get_param_test_values('dtype')."""
+    from_ssot = set(DTYPE_SUPPORT["transformers"])
     from_introspection = set(get_param_test_values("dtype"))
     # The test values from introspection should cover all SSOT dtype values
     assert from_ssot == from_introspection
@@ -358,13 +358,13 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     get_swept_field_paths must handle None values in optional sub-config lists
     rather than raising AttributeError.
     """
-    from llenergymeasure.config.engine_configs import PyTorchConfig, VLLMConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig, VLLMConfig
 
     exp_pt = ExperimentConfig(
         model="gpt2",
-        engine="pytorch",
+        engine="transformers",
         dtype="float16",
-        pytorch=PyTorchConfig(batch_size=4),
+        transformers=TransformersConfig(batch_size=4),
     )
     exp_vllm = ExperimentConfig(
         model="gpt2",
@@ -377,5 +377,5 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     # Engine itself varies
     assert "engine" in result
     # Optional sub-configs that are None on some experiments should be swept
-    assert "pytorch" in result
+    assert "transformers" in result
     assert "vllm" in result

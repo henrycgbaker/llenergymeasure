@@ -43,9 +43,9 @@ class UserRunnersConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    pytorch: str = Field(
+    transformers: str = Field(
         default="auto",
-        description="PyTorch runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
+        description="Transformers runner: 'auto', 'local', 'docker' (built-in image), or 'docker:<image>'",
     )
     vllm: str = Field(
         default="auto",
@@ -58,7 +58,7 @@ class UserRunnersConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_runner_format(self) -> UserRunnersConfig:
-        for field_name in ("pytorch", "vllm", "tensorrt"):
+        for field_name in ("transformers", "vllm", "tensorrt"):
             value = getattr(self, field_name)
             if value.startswith("singularity:"):
                 raise ValueError(
@@ -161,7 +161,7 @@ def _apply_env_overrides(config: UserConfig) -> UserConfig:
     Returns updated UserConfig (Pydantic models are immutable; use model_copy).
     """
     runners_updates: dict[str, str] = {}
-    for engine in ("pytorch", "vllm", "tensorrt"):
+    for engine in ("transformers", "vllm", "tensorrt"):
         env_key = f"{ENV_RUNNER_PREFIX}{engine.upper()}"
         if val := os.environ.get(env_key):
             runners_updates[engine] = val

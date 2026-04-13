@@ -221,7 +221,7 @@ class StepDisplay:
 
     Usage::
 
-        display = StepDisplay(header="Experiment: gpt2 | pytorch | bf16")
+        display = StepDisplay(header="Experiment: gpt2 | transformers | bf16")
         display.register_steps(
             docker_steps(images_prepared=False, host_baseline=True)
         )

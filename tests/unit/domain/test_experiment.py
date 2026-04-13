@@ -169,7 +169,7 @@ class TestMeasurementConfigHash:
         assert h1 == h2
 
     def test_different_engines_different_hash(self):
-        h1 = compute_measurement_config_hash(make_config(engine="pytorch"))
+        h1 = compute_measurement_config_hash(make_config(engine="transformers"))
         h2 = compute_measurement_config_hash(make_config(engine="vllm"))
         assert h1 != h2
 

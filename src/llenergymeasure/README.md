@@ -122,7 +122,7 @@ Security utilities:
 
 ### `engines/` (Layer 4)
 - `protocol.py` — `EnginePlugin` protocol
-- `pytorch.py`, `vllm.py`, `tensorrt.py` — engine implementations
+- `transformers.py`, `vllm.py`, `tensorrt.py` — engine implementations
 - `_helpers.py` — shared warmup utilities
 
 ### `energy/` (Layer 4)

@@ -20,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [pytorch, vllm, tensorrt]
+        engine: [transformers, vllm, tensorrt]
         include:
-          - engine: pytorch
+          - engine: transformers
             build-args: INSTALL_FA3=false
     runs-on: ubuntu-latest
     permissions:

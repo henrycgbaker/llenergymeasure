@@ -132,8 +132,8 @@ def test_format_validation_error_did_you_mean():
         ExperimentConfig(model="gpt2", engine="pytorh")  # type: ignore[arg-type]
 
     result = format_validation_error(exc_info.value)
-    # Should suggest 'pytorch' for the typo 'pytorh'
-    assert "pytorch" in result.lower() or "Did you mean" in result or "engine" in result
+    # Should suggest 'transformers' for the typo 'pytorh'
+    assert "transformers" in result.lower() or "Did you mean" in result or "engine" in result
 
 
 @pytest.mark.parametrize(
@@ -412,7 +412,7 @@ def test_print_dry_run_verbose_annotations(capsys):
     """With verbose=True, default values show annotation like '(default)'."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", engine="pytorch", dtype="bfloat16")
+    config = make_config(model="gpt2", engine="transformers", dtype="bfloat16")
     vram = {"weights_gb": 0.5, "kv_cache_gb": 0.01, "overhead_gb": 0.075, "total_gb": 0.585}
     print_dry_run(config, vram, gpu_vram_gb=None, verbose=True)
     out = capsys.readouterr().out
@@ -508,12 +508,12 @@ def test_print_experiment_header_defaults(capsys):
     """Header with default config shows model and engine (defaults omitted)."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", engine="pytorch", dtype="bfloat16")
+    config = make_config(model="gpt2", engine="transformers", dtype="bfloat16")
     print_experiment_header(config)
     err = capsys.readouterr().err
 
     assert "gpt2" in err
-    assert "pytorch" in err
+    assert "transformers" in err
     # Default dtype bfloat16 is omitted from the header
     assert "bfloat16" not in err
 
@@ -554,7 +554,7 @@ def test_print_study_summary_table_structure(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0
@@ -592,7 +592,7 @@ def test_print_study_summary_failed_experiments(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -624,7 +624,7 @@ def test_print_study_summary_no_total_experiments(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -655,7 +655,7 @@ def test_print_study_summary_truncates_long_model_name(capsys):
     long_model = "organization/very-long-model-name-that-exceeds-twenty-chars"
     exp = MagicMock()
     exp.model_name = long_model
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -687,7 +687,7 @@ def test_print_study_summary_with_result_files(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 5.0
     exp.total_energy_j = 20.0
     exp.avg_tokens_per_second = 50.0
@@ -720,7 +720,7 @@ def test_print_study_summary_shows_adj_energy(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0
@@ -757,7 +757,7 @@ def test_print_study_summary_mj_tok_prefers_adjusted(capsys):
 
     exp = MagicMock()
     exp.model_name = "gpt2"
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 10.0
     exp.total_energy_j = 50.0
     exp.avg_tokens_per_second = 100.0

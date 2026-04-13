@@ -20,11 +20,11 @@ from typing import Final, Literal
 # Engine name constants — use these instead of raw string literals
 # ---------------------------------------------------------------------------
 
-ENGINE_PYTORCH: Final = "pytorch"
+ENGINE_TRANSFORMERS: Final = "transformers"
 ENGINE_VLLM: Final = "vllm"
 ENGINE_TENSORRT: Final = "tensorrt"
 
-EngineName = Literal["pytorch", "vllm", "tensorrt"]
+EngineName = Literal["transformers", "vllm", "tensorrt"]
 
 # ---------------------------------------------------------------------------
 # Runner mode constants
@@ -48,7 +48,7 @@ DOCKER_PULL_TIMEOUT: Final = 1800
 # ---------------------------------------------------------------------------
 
 ENV_RUNNER_PREFIX: Final = "LLEM_RUNNER_"
-"""Prefix for per-engine runner override env vars (e.g. ``LLEM_RUNNER_PYTORCH=docker``)."""
+"""Prefix for per-engine runner override env vars (e.g. ``LLEM_RUNNER_TRANSFORMERS=docker``)."""
 
 ENV_IMAGE_PREFIX: Final = "LLEM_IMAGE_"
 """Prefix for per-engine image override env vars (e.g. ``LLEM_IMAGE_VLLM=custom:tag``)."""
@@ -122,7 +122,7 @@ TIMEOUT_INTERRUPT_POLL: Final = 1
 # Note: fp16/bf16 require GPU. The cpu engine (future) would be fp32-only.
 # GPU detection and cpu-dtype cross-validation is handled at pre-flight.
 DTYPE_SUPPORT: dict[str, list[str]] = {
-    ENGINE_PYTORCH: ["float32", "float16", "bfloat16"],
+    ENGINE_TRANSFORMERS: ["float32", "float16", "bfloat16"],
     ENGINE_VLLM: ["float16", "bfloat16"],  # vLLM does not support fp32 inference
     ENGINE_TENSORRT: ["float16", "bfloat16"],  # TRT-LLM does not support fp32 inference
 }
@@ -130,7 +130,7 @@ DTYPE_SUPPORT: dict[str, list[str]] = {
 # Decoding strategies supported by each engine.
 # "sampling" = do_sample=True path; "greedy" = do_sample=False path.
 DECODING_SUPPORT: dict[str, list[str]] = {
-    ENGINE_PYTORCH: ["greedy", "sampling"],  # full HuggingFace generate() support
+    ENGINE_TRANSFORMERS: ["greedy", "sampling"],  # full HuggingFace generate() support
     ENGINE_VLLM: ["greedy", "sampling"],  # vLLM supports both via SamplingParams
     ENGINE_TENSORRT: ["greedy", "sampling"],  # TRT-LLM supports both
 }
@@ -138,10 +138,10 @@ DECODING_SUPPORT: dict[str, list[str]] = {
 # Engines that support the full DecoderConfig temperature/top_k/top_p fields.
 # All current engines support these — this dict exists to make future
 # engine additions explicit rather than implicit.
-# min_p and min_new_tokens: pytorch and vLLM support them (identical semantics).
+# min_p and min_new_tokens: transformers and vLLM support them (identical semantics).
 # min_p/min_new_tokens: vLLM supports; TensorRT support varies by version.
 DECODER_PARAM_SUPPORT: dict[str, list[str]] = {
-    ENGINE_PYTORCH: [
+    ENGINE_TRANSFORMERS: [
         "temperature",
         "top_k",
         "top_p",
@@ -160,7 +160,7 @@ DECODER_PARAM_SUPPORT: dict[str, list[str]] = {
 # Map from engine name to the Python package that provides it.
 # Used by preflight checks and CLI to verify engine availability.
 ENGINE_PACKAGES: dict[str, str] = {
-    ENGINE_PYTORCH: "transformers",
+    ENGINE_TRANSFORMERS: "transformers",
     ENGINE_VLLM: "vllm",
     ENGINE_TENSORRT: "tensorrt_llm",
 }
@@ -172,8 +172,8 @@ __all__ = [
     "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
     "ENGINE_PACKAGES",
-    "ENGINE_PYTORCH",
     "ENGINE_TENSORRT",
+    "ENGINE_TRANSFORMERS",
     "ENGINE_VLLM",
     "ENV_BASELINE_SPEC_PATH",
     "ENV_CARBON_INTENSITY",

@@ -29,7 +29,7 @@ def load_test_results(results_dir: Path) -> dict[str, list[dict[str, Any]]]:
     """Load test results from JSON files."""
     results: dict[str, list[dict[str, Any]]] = {}
 
-    for engine in ["pytorch", "vllm", "tensorrt"]:
+    for engine in ["transformers", "vllm", "tensorrt"]:
         result_file = results_dir / f"test_results_{engine}.json"
         if result_file.exists():
             with open(result_file) as f:
@@ -99,7 +99,7 @@ def categorise_parameters(
     for param, engines_map in params.items():
         param_lower = param.lower()
 
-        if param_lower.startswith("pytorch."):
+        if param_lower.startswith("transformers."):
             categories["PyTorch-specific"][param] = engines_map
         elif param_lower.startswith("vllm."):
             categories["vLLM-specific"][param] = engines_map
@@ -138,7 +138,7 @@ def generate_markdown(
     ]
 
     # Summary stats
-    for engine in ["pytorch", "vllm", "tensorrt"]:
+    for engine in ["transformers", "vllm", "tensorrt"]:
         tests = results.get(engine, [])
         if tests:
             # Note: test_all_params.py uses "status" field with values "passed"/"failed"/"skipped"
@@ -184,7 +184,7 @@ def generate_markdown(
             row = [f"`{param}`"]
 
             notes = []
-            for engine in ["pytorch", "vllm", "tensorrt"]:
+            for engine in ["transformers", "vllm", "tensorrt"]:
                 if engine in engines_map:
                     status = engines_map[engine]
                     if status["passed"]:

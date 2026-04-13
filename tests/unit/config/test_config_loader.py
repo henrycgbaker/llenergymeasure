@@ -35,32 +35,32 @@ def _write_yaml(tmp_path: Path, content: str, name: str = "config.yaml") -> Path
 
 def test_load_valid_yaml(tmp_path):
     """Minimal valid YAML loads successfully into ExperimentConfig."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: pytorch\n")
+    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
     config = load_experiment_config(path)
     assert isinstance(config, ExperimentConfig)
     assert config.model == "gpt2"
-    assert config.engine == "pytorch"
+    assert config.engine == "transformers"
 
 
 def test_load_yaml_with_dtype(tmp_path):
     """YAML with optional fields loads correctly."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: pytorch\ndtype: float16\n")
+    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\ndtype: float16\n")
     config = load_experiment_config(path)
     assert config.dtype == "float16"
 
 
 def test_load_yaml_with_pytorch_section(tmp_path):
     """YAML with nested pytorch: section loads correctly."""
-    yaml_content = "model: gpt2\nengine: pytorch\npytorch:\n  batch_size: 4\n"
+    yaml_content = "model: gpt2\nengine: transformers\ntransformers:\n  batch_size: 4\n"
     path = _write_yaml(tmp_path, yaml_content)
     config = load_experiment_config(path)
-    assert config.pytorch is not None
-    assert config.pytorch.batch_size == 4
+    assert config.transformers is not None
+    assert config.transformers.batch_size == 4
 
 
 def test_load_yaml_with_version_field_stripped(tmp_path):
     """Optional 'version' field in YAML is stripped before validation (not ExperimentConfig field)."""
-    path = _write_yaml(tmp_path, "version: 2.0\nmodel: gpt2\nengine: pytorch\n")
+    path = _write_yaml(tmp_path, "version: 2.0\nmodel: gpt2\nengine: transformers\n")
     config = load_experiment_config(path)
     assert config.model == "gpt2"
 
@@ -122,14 +122,14 @@ def test_pydantic_validation_error_not_wrapped_in_config_error(tmp_path):
 
 def test_cli_overrides_merged(tmp_path):
     """cli_overrides override YAML values at highest priority."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: pytorch\n")
+    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
     config = load_experiment_config(path, cli_overrides={"model": "bert-base"})
     assert config.model == "bert-base"
 
 
 def test_cli_overrides_none_values_ignored(tmp_path):
     """None values in cli_overrides are ignored (unset CLI flags)."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: pytorch\n")
+    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
     config = load_experiment_config(path, cli_overrides={"model": None, "dtype": None})
     assert config.model == "gpt2"  # file value retained
 
@@ -138,21 +138,21 @@ def test_cli_overrides_without_file():
     """load_experiment_config with cli_overrides and no file works."""
     config = load_experiment_config(
         path=None,
-        cli_overrides={"model": "gpt2", "engine": "pytorch"},
+        cli_overrides={"model": "gpt2", "engine": "transformers"},
     )
     assert config.model == "gpt2"
-    assert config.engine == "pytorch"
+    assert config.engine == "transformers"
 
 
 def test_cli_override_dotted_key(tmp_path):
     """Dotted CLI override keys are unflattened into nested dicts."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: pytorch\n")
+    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
     config = load_experiment_config(
         path,
-        cli_overrides={"pytorch.batch_size": 8},
+        cli_overrides={"transformers.batch_size": 8},
     )
-    assert config.pytorch is not None
-    assert config.pytorch.batch_size == 8
+    assert config.transformers is not None
+    assert config.transformers.batch_size == 8
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ def test_load_study_config_grid_sweep(tmp_path):
         yaml.dump(
             {
                 "model": "gpt2",
-                "engine": "pytorch",
+                "engine": "transformers",
                 "sweep": {
                     "dtype": ["float16", "bfloat16"],
                     "dataset.n_prompts": [50, 100],
@@ -251,9 +251,9 @@ def test_load_study_config_explicit_experiments(tmp_path):
         yaml.dump(
             {
                 "experiments": [
-                    {"model": "gpt2", "engine": "pytorch"},
-                    {"model": "gpt2", "engine": "pytorch", "dtype": "float16"},
-                    {"model": "gpt2", "engine": "pytorch", "dtype": "bfloat16"},
+                    {"model": "gpt2", "engine": "transformers"},
+                    {"model": "gpt2", "engine": "transformers", "dtype": "float16"},
+                    {"model": "gpt2", "engine": "transformers", "dtype": "bfloat16"},
                 ],
             }
         )
@@ -269,12 +269,12 @@ def test_load_study_config_combined_mode(tmp_path):
         yaml.dump(
             {
                 "model": "gpt2",
-                "engine": "pytorch",
+                "engine": "transformers",
                 "sweep": {
                     "dtype": ["float16", "bfloat16"],
                 },
                 "experiments": [
-                    {"model": "gpt2-xl", "engine": "pytorch"},
+                    {"model": "gpt2-xl", "engine": "transformers"},
                 ],
             }
         )
@@ -291,7 +291,7 @@ def test_load_study_config_with_execution_block(tmp_path):
         yaml.dump(
             {
                 "model": "gpt2",
-                "engine": "pytorch",
+                "engine": "transformers",
                 "sweep": {
                     "dtype": ["float16", "bfloat16"],
                 },
@@ -316,7 +316,7 @@ def test_load_study_config_cli_overrides(tmp_path):
         yaml.dump(
             {
                 "model": "gpt2",
-                "engine": "pytorch",
+                "engine": "transformers",
                 "sweep": {"dtype": ["float16", "bfloat16"]},
                 "study_execution": {"n_cycles": 1},
             }
@@ -335,7 +335,7 @@ def test_load_study_config_with_base(tmp_path):
         yaml.dump(
             {
                 "model": "gpt2",
-                "engine": "pytorch",
+                "engine": "transformers",
                 "dataset": {"n_prompts": 75},
             }
         )
@@ -383,9 +383,9 @@ def test_load_study_config_all_invalid_raises(tmp_path):
             {
                 "experiments": [
                     # Invalid: pytorch section with vllm engine
-                    {"model": "gpt2", "engine": "vllm", "pytorch": {"batch_size": 4}},
+                    {"model": "gpt2", "engine": "vllm", "transformers": {"batch_size": 4}},
                     # Invalid: vllm section with pytorch engine
-                    {"model": "gpt2", "engine": "pytorch", "vllm": {"max_num_seqs": 64}},
+                    {"model": "gpt2", "engine": "transformers", "vllm": {"max_num_seqs": 64}},
                 ],
             }
         )
@@ -406,7 +406,7 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     study_yaml_b = tmp_path / "study_b.yaml"
     sweep_content = {
         "model": "gpt2",
-        "engine": "pytorch",
+        "engine": "transformers",
         "sweep": {"dtype": ["float16", "bfloat16"]},
     }
     study_yaml_a.write_text(yaml.dump({**sweep_content, "study_execution": {"n_cycles": 1}}))

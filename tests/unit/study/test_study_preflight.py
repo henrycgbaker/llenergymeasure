@@ -16,8 +16,8 @@ def test_single_engine_passes(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="pytorch"),
-            ExperimentConfig(model="m2", engine="pytorch"),
+            ExperimentConfig(model="m1", engine="transformers"),
+            ExperimentConfig(model="m2", engine="transformers"),
         ]
     )
     run_study_preflight(study)  # should not raise
@@ -30,7 +30,7 @@ def test_multi_engine_raises_preflight_error(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m1", engine="transformers"),
             ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
@@ -45,7 +45,7 @@ def test_multi_engine_error_mentions_docker(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m1", engine="transformers"),
             ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
@@ -60,13 +60,13 @@ def test_multi_engine_error_lists_engines(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m1", engine="transformers"),
             ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
     with pytest.raises(PreFlightError) as exc_info:
         run_study_preflight(study)
-    assert "pytorch" in str(exc_info.value)
+    assert "transformers" in str(exc_info.value)
     assert "vllm" in str(exc_info.value)
 
 
@@ -80,20 +80,20 @@ def test_multi_engine_auto_elevates_local_to_docker(monkeypatch):
 
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="pytorch"),
+            ExperimentConfig(model="m1", engine="transformers"),
             ExperimentConfig(model="m2", engine="vllm"),
         ]
     )
     specs, overrides = run_study_preflight(
-        study, yaml_runners={"pytorch": "local", "vllm": "docker"}
+        study, yaml_runners={"transformers": "local", "vllm": "docker"}
     )
-    assert specs["pytorch"].mode == "docker"
-    assert specs["pytorch"].source == "multi_engine_elevation"
+    assert specs["transformers"].mode == "docker"
+    assert specs["transformers"].source == "multi_engine_elevation"
     assert specs["vllm"].mode == "docker"
     # System overrides should capture the auto-elevation
-    assert "runner.pytorch" in overrides
-    assert overrides["runner.pytorch"]["declared"] == "local"
-    assert overrides["runner.pytorch"]["effective"] == "docker"
+    assert "runner.transformers" in overrides
+    assert overrides["runner.transformers"]["declared"] == "local"
+    assert overrides["runner.transformers"]["effective"] == "docker"
 
 
 def test_preflight_forwards_runner_context(monkeypatch):
@@ -116,12 +116,12 @@ def test_preflight_forwards_runner_context(monkeypatch):
     )
 
     mock_user_config = MagicMock()
-    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="pytorch")])
+    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="transformers")])
 
-    run_study_preflight(study, yaml_runners={"pytorch": "local"}, user_config=mock_user_config)
+    run_study_preflight(study, yaml_runners={"transformers": "local"}, user_config=mock_user_config)
 
     assert len(captured_calls) == 1
-    assert captured_calls[0]["yaml_runners"] == {"pytorch": "local"}
+    assert captured_calls[0]["yaml_runners"] == {"transformers": "local"}
     assert captured_calls[0]["user_config"] is mock_user_config
 
 
@@ -143,7 +143,7 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
         mock_resolve_study_runners,
     )
 
-    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="pytorch")])
+    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="transformers")])
 
     run_study_preflight(study)
 

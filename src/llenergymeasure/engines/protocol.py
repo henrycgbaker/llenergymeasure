@@ -41,7 +41,7 @@ class EnginePlugin(Protocol):
 
     @property
     def name(self) -> str:
-        """Engine identifier (e.g. 'pytorch', 'vllm', 'tensorrt')."""
+        """Engine identifier (e.g. 'transformers', 'vllm', 'tensorrt')."""
         ...
 
     @property

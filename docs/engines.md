@@ -1,7 +1,7 @@
 # Engine Configuration
 
 `llenergymeasure` supports multiple inference engines. each engine uses a different runtime
-and requires different setup. Currently active: **PyTorch** (local), **vLLM** (Docker), and
+and requires different setup. Currently active: **Transformers** (local), **vLLM** (Docker), and
 **TensorRT-LLM** (Docker). Planned: SGLang (M5).
 
 ---
@@ -10,7 +10,7 @@ and requires different setup. Currently active: **PyTorch** (local), **vLLM** (D
 
 | Engine | Runner | GPU Required | Status |
 |---------|--------|--------------|--------|
-| PyTorch | local | Yes | Active |
+| Transformers | local | Yes | Active |
 | vLLM | docker | Yes | Active |
 | TensorRT-LLM | docker | Yes | Active |
 | SGLang | docker | Yes | Planned (M5) |
@@ -20,7 +20,7 @@ and requires different setup. Currently active: **PyTorch** (local), **vLLM** (D
 
 ---
 
-## PyTorch (Local)
+## Transformers (Local)
 
 The default engine. Runs the HuggingFace `transformers` AutoModelForCausalLM stack directly
 on the host. No Docker required.
@@ -29,24 +29,24 @@ on the host. No Docker required.
 
 ```yaml
 model: gpt2
-engine: pytorch
+engine: transformers
 ```
 
-**With PyTorch-specific options:**
+**With Transformers-specific options:**
 
 ```yaml
 model: gpt2
-engine: pytorch
+engine: transformers
 n: 100
 dtype: bfloat16
-pytorch:
+transformers:
   batch_size: 4
   attn_implementation: sdpa
   torch_compile: false
   load_in_4bit: false
 ```
 
-### PyTorch Parameters
+### Transformers Parameters
 
 All `pytorch:` fields default to `null` — `null` means "use the engine's own default".
 Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
@@ -65,7 +65,7 @@ Unknown fields under `pytorch:` are forwarded to HuggingFace APIs.
 
 Note: `flash_attention_3` requires the `flash_attn_3` package (built separately from the
 flash-attn repo's `hopper/` directory) and an Ampere+ GPU (SM80+, e.g. A100 or H100).
-The Docker PyTorch image includes FA3 by default. To skip it (e.g. for faster CI builds),
+The Docker Transformers image includes FA3 by default. To skip it (e.g. for faster CI builds),
 rebuild with `--build-arg INSTALL_FA3=false`. See
 [Installation - FlashAttention-3](installation.md#flashattention-3) for details.
 
@@ -482,9 +482,9 @@ Change the `engine:` field and add the required runner config. The model and mea
 parameters stay the same.
 
 ```yaml
-# Same experiment — PyTorch (local)
+# Same experiment — Transformers (local)
 model: gpt2
-engine: pytorch
+engine: transformers
 n: 100
 dtype: bfloat16
 ```
@@ -539,7 +539,7 @@ runners:
 ```yaml
 # ~/.config/llenergymeasure/config.yaml
 runners:
-  pytorch: local
+  transformers: local
   vllm: docker       # always use Docker for vLLM
 ```
 
@@ -566,7 +566,7 @@ config models. Full runtime verification (with GPU test results) can be generate
 
 These parameters live in `ExperimentConfig` and are shared across all engines:
 
-| Parameter | PyTorch | vLLM | TensorRT-LLM | Notes |
+| Parameter | Transformers | vLLM | TensorRT-LLM | Notes |
 |-----------|---------|------|--------------|-------|
 | `model` | Yes | Yes | Yes | HuggingFace model ID or local path |
 | `engine` | Yes | Yes | Yes | Selects the inference engine |
@@ -582,25 +582,25 @@ These parameters live in `ExperimentConfig` and are shared across all engines:
 | `decoder.repetition_penalty` | Yes | Yes | Yes | Repetition penalty |
 | `decoder.preset` | Yes | Yes | Yes | `deterministic`, `creative`, `balanced` |
 
-### PyTorch-Specific Parameters
+### Transformers-Specific Parameters
 
-| Parameter | PyTorch | vLLM | TensorRT-LLM | Notes |
+| Parameter | Transformers | vLLM | TensorRT-LLM | Notes |
 |-----------|---------|------|--------------|-------|
-| `pytorch.batch_size` | Yes | N/A | N/A | Transformers batching |
-| `pytorch.attn_implementation` | Yes | N/A | N/A | Attention kernel selection |
-| `pytorch.torch_compile` | Yes | N/A | N/A | `torch.compile` acceleration |
-| `pytorch.load_in_4bit` | Yes | N/A | N/A | BitsAndBytes 4-bit quantization |
-| `pytorch.load_in_8bit` | Yes | N/A | N/A | BitsAndBytes 8-bit quantization |
-| `pytorch.device_map` | Yes | N/A | N/A | Device placement strategy |
-| `pytorch.num_beams` | Yes | N/A | N/A | Beam search width |
-| `pytorch.no_repeat_ngram_size` | Yes | N/A | N/A | Prevent n-gram repetition |
-| `pytorch.prompt_lookup_num_tokens` | Yes | N/A | N/A | Prompt-lookup speculative decoding |
-| `pytorch.tp_plan` | Yes | N/A | N/A | Native HF tensor parallelism plan |
-| `pytorch.tp_size` | Yes | N/A | N/A | Tensor parallel rank count |
+| `transformers.batch_size` | Yes | N/A | N/A | Transformers batching |
+| `transformers.attn_implementation` | Yes | N/A | N/A | Attention kernel selection |
+| `transformers.torch_compile` | Yes | N/A | N/A | `torch.compile` acceleration |
+| `transformers.load_in_4bit` | Yes | N/A | N/A | BitsAndBytes 4-bit quantization |
+| `transformers.load_in_8bit` | Yes | N/A | N/A | BitsAndBytes 8-bit quantization |
+| `transformers.device_map` | Yes | N/A | N/A | Device placement strategy |
+| `transformers.num_beams` | Yes | N/A | N/A | Beam search width |
+| `transformers.no_repeat_ngram_size` | Yes | N/A | N/A | Prevent n-gram repetition |
+| `transformers.prompt_lookup_num_tokens` | Yes | N/A | N/A | Prompt-lookup speculative decoding |
+| `transformers.tp_plan` | Yes | N/A | N/A | Native HF tensor parallelism plan |
+| `transformers.tp_size` | Yes | N/A | N/A | Tensor parallel rank count |
 
 ### vLLM-Specific Parameters
 
-| Parameter | PyTorch | vLLM | TensorRT-LLM | Notes |
+| Parameter | Transformers | vLLM | TensorRT-LLM | Notes |
 |-----------|---------|------|--------------|-------|
 | `vllm.engine.gpu_memory_utilization` | N/A | Yes | N/A | KV cache memory fraction |
 | `vllm.engine.block_size` | N/A | Yes | N/A | KV cache block size |
@@ -616,7 +616,7 @@ These parameters live in `ExperimentConfig` and are shared across all engines:
 
 ### TensorRT-LLM-Specific Parameters
 
-| Parameter | PyTorch | vLLM | TensorRT-LLM | Notes |
+| Parameter | Transformers | vLLM | TensorRT-LLM | Notes |
 |-----------|---------|------|--------------|-------|
 | `tensorrt.max_batch_size` | N/A | N/A | Yes | Compile-time constant |
 | `tensorrt.tp_size` | N/A | N/A | Yes | Tensor parallel size (compile-time) |

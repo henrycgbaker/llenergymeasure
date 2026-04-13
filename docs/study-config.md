@@ -11,14 +11,14 @@ The minimal experiment YAML requires only `model:`:
 
 ```yaml
 model: gpt2
-engine: pytorch
+engine: transformers
 ```
 
 A fuller example with sub-configs:
 
 ```yaml
 model: gpt2
-engine: pytorch
+engine: transformers
 dtype: bfloat16
 max_input_tokens: 256
 max_output_tokens: 256
@@ -31,7 +31,7 @@ dataset:
 decoder:
   preset: deterministic   # greedy decoding
 
-pytorch:
+transformers:
   batch_size: 4
   attn_implementation: sdpa
 
@@ -100,7 +100,7 @@ The study YAML also accepts a `base:` key pointing to a base experiment config f
 # 2 configs: dtype=float16 and dtype=bfloat16
 name: dtype-sweep
 model: gpt2
-engine: pytorch
+engine: transformers
 
 dataset:
   n_prompts: 100
@@ -123,7 +123,7 @@ Run with `llem run dtype-sweep.yaml`. Produces 2 configs × 3 cycles = 6 runs.
 # 4 configs: fp16+50, fp16+100, bf16+50, bf16+100
 name: dtype-n-sweep
 model: gpt2
-engine: pytorch
+engine: transformers
 
 sweep:
   dtype: [float16, bfloat16]
@@ -143,10 +143,10 @@ Produces 4 configs × 3 cycles = 12 runs.
 Use dotted paths (`engine.param`) to sweep a Engine-specific parameter:
 
 ```yaml
-# 4 configs: batch_size 1, 2, 4, 8 — all with engine=pytorch
+# 4 configs: batch_size 1, 2, 4, 8 — all with engine=transformers
 name: batch-size-sweep
 model: gpt2
-engine: pytorch
+engine: transformers
 
 sweep:
   pytorch.batch_size: [1, 2, 4, 8]
@@ -156,7 +156,7 @@ study_execution:
   experiment_order: shuffle
 ```
 
-Produces 4 configs × 3 cycles = 12 runs. The `pytorch.batch_size` path expands to a
+Produces 4 configs × 3 cycles = 12 runs. The `transformers.batch_size` path expands to a
 `pytorch: { batch_size: N }` section in each generated experiment config.
 
 ---
@@ -194,7 +194,7 @@ Use dotted paths for nested config fields like `dataset.n_prompts` or `dataset.s
 ```yaml
 name: dataset-size-sweep
 model: gpt2
-engine: pytorch
+engine: transformers
 
 sweep:
   dataset.n_prompts: [50, 100, 200]
@@ -206,7 +206,7 @@ study_execution:
 Produces 3 configs × 3 cycles = 9 runs. The dotted path `dataset.n_prompts` expands to
 `dataset: { n_prompts: N }` in each generated experiment config.
 
-> **Note:** Dotted paths starting with an engine name (e.g. `pytorch.batch_size`,
+> **Note:** Dotted paths starting with an engine name (e.g. `transformers.batch_size`,
 > `vllm.engine.max_num_seqs`) are treated as engine-scoped parameters. All other dotted
 > paths (e.g. `dataset.n_prompts`, `dataset.order`) are treated as nested config fields.
 
@@ -225,7 +225,7 @@ dataset:
 
 experiments:
   - model: gpt2
-    engine: pytorch
+    engine: transformers
     dtype: bfloat16
   - model: gpt2
     engine: vllm
@@ -279,9 +279,9 @@ sweep:
 
 experiments:
   - model: gpt2
-    engine: pytorch
+    engine: transformers
     dtype: float32
-    pytorch:
+    transformers:
       load_in_4bit: true
 
 study_execution:
@@ -307,7 +307,7 @@ entries *within* a group are alternatives (unioned, not crossed).
 # 6 configs: 2 dtype × 3 compilation variants
 name: compile-sweep
 model: gpt2
-engine: pytorch
+engine: transformers
 
 sweep:
   dtype: [float16, bfloat16]                     # independent axis (2 values)
@@ -319,7 +319,7 @@ sweep:
       pytorch.torch_compile_mode: max-autotune
 ```
 
-The group name (`pytorch.compilation`) is an abstract label - it doesn't map to a config
+The group name (`transformers.compilation`) is an abstract label - it doesn't map to a config
 field. Keys within each variant dict are fully-qualified dotted paths, routed the same way
 as independent axis keys.
 
@@ -417,11 +417,11 @@ sweep:
 
 ### Engine-scoped groups
 
-Groups with an engine-prefixed name (e.g. `pytorch.compilation`, `vllm.decoding`) only
+Groups with an engine-prefixed name (e.g. `transformers.compilation`, `vllm.decoding`) only
 apply to that engine's experiments. Universal groups (no engine prefix) apply to all
 engines.
 > **Collision rule:** A group name must not match an independent axis key. Use abstract
-> names like `pytorch.compilation` (not `pytorch.torch_compile`) to avoid collisions.
+> names like `transformers.compilation` (not `transformers.torch_compile`) to avoid collisions.
 
 ---
 
@@ -528,7 +528,7 @@ The `runners:` section determines how each engine executes:
 
 ```yaml
 runners:
-  pytorch: local                                          # run on host
+  transformers: local                                          # run on host
   vllm: docker                                            # use default image
   vllm: "docker:ghcr.io/custom/vllm:latest"               # explicit image
 ```
@@ -590,7 +590,7 @@ All fields except `model` are optional and have sensible defaults.
 | `baseline` | BaselineConfig | *(see section)* | Baseline power measurement configuration |
 | `energy_sampler` | 'auto' | 'nvml' | 'zeus' | 'codecarbon' | None | `auto` | Energy measurement backend. auto=best available (Zeus>NVML>CodeCarbon). null disables. |
 | `gpu_telemetry` | boolean | `true` | Persist GPU power/thermal/memory timeseries to Parquet sidecar. NVML always runs for throttle detection; this controls disk output. |
-| `pytorch` | PyTorchConfig | None | `null` | PyTorch-specific configuration (only used when engine=pytorch) |
+| `pytorch` | TransformersConfig | None | `null` | PyTorch-specific configuration (only used when engine=transformers) |
 | `vllm` | VLLMConfig | None | `null` | vLLM-specific configuration (only used when engine=vllm) |
 | `tensorrt` | TensorRTConfig | None | `null` | TensorRT-LLM configuration (only used when engine=tensorrt) |
 | `lora` | LoRAConfig | None | `null` | LoRA adapter configuration |
@@ -697,7 +697,7 @@ inference per GPU.
 See [Energy Measurement](energy-measurement.md) for details on how NVML telemetry
 relates to energy measurement.
 
-### PyTorch Engine (`pytorch:`)
+### Transformers Engine (`pytorch:`)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -825,7 +825,7 @@ output:
   model_cache_dir: ~/.cache/huggingface
 
 runners:
-  pytorch: local
+  transformers: local
   vllm: docker         # always use Docker for vLLM
   tensorrt: docker     # TensorRT-LLM requires Docker
 

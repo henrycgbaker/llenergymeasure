@@ -56,7 +56,7 @@ def _make_mock_config() -> MagicMock:
 
     config = MagicMock(spec=ExperimentConfig)
     config.model = "gpt2"
-    config.engine = "pytorch"
+    config.engine = "transformers"
     config.dtype = "bfloat16"
     config.dataset = MagicMock()
     config.dataset.source = "aienergyscore"
@@ -64,7 +64,7 @@ def _make_mock_config() -> MagicMock:
     config.dataset.order = "interleaved"
     config.max_input_tokens = 256
     config.max_output_tokens = 256
-    config.pytorch = None
+    config.transformers = None
     config.baseline = MagicMock()
     config.baseline.enabled = False
     return config
@@ -116,13 +116,13 @@ def test_build_header_default_dtype_omitted():
 
     config = _make_mock_config()
     config.model = "gpt2"
-    config.engine = "pytorch"
+    config.engine = "transformers"
     config.dtype = "bfloat16"  # default — should not appear
     config.dataset.n_prompts = 100  # default — should not appear
 
     header = _build_header(config, runner_tag="local")
     assert "bfloat16" not in header
-    assert header == "gpt2 | pytorch [local]"
+    assert header == "gpt2 | transformers [local]"
 
 
 def test_build_header_nondefault_fields_shown():
@@ -131,7 +131,7 @@ def test_build_header_nondefault_fields_shown():
 
     config = _make_mock_config()
     config.model = "gpt2"
-    config.engine = "pytorch"
+    config.engine = "transformers"
     config.dtype = "float16"
     config.dataset.n_prompts = 50  # non-default — should appear
 
@@ -389,7 +389,7 @@ def test_print_study_summary_basic():
     # experiments list contains a MagicMock, which is not a valid ExperimentResult.
     exp = MagicMock()
     exp.model_name = "test/model"
-    exp.engine = "pytorch"
+    exp.engine = "transformers"
     exp.duration_sec = 45.2
     exp.total_energy_j = 123.4
     exp.avg_tokens_per_second = 42.5
@@ -424,7 +424,7 @@ def test_print_study_progress():
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.study._progress import print_study_progress
 
-    config = ExperimentConfig(model="test/model", engine="pytorch")
+    config = ExperimentConfig(model="test/model", engine="transformers")
     with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
         print_study_progress(1, 4, config, status="completed", elapsed=30.5, energy=100.0)
     output = mock_stderr.getvalue()
@@ -444,7 +444,7 @@ def test_run_study_routing_sweep_yaml(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nengine: pytorch\nsweep:\n  dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
 
@@ -475,7 +475,7 @@ def test_run_study_routing_experiments_yaml(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nexperiments:\n  - model: test/model-a\n    engine: pytorch\n  - model: test/model-b\n    engine: pytorch\n"
+        "name: test\nexperiments:\n  - model: test/model-a\n    engine: transformers\n  - model: test/model-b\n    engine: transformers\n"
     )
     mock_study_result = make_study_result()
 
@@ -524,7 +524,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nengine: pytorch\nsweep:\n  dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
     _capture_load, captured_overrides = _make_capture_load()
@@ -581,9 +581,7 @@ def _make_study_yaml(tmp_path, content: str | None = None) -> Path:
 
     study_yaml = tmp_path / "study.yaml"
     if content is None:
-        content = (
-            "name: test\nmodel: test/model\nengine: pytorch\nsweep:\n  dtype: [float32, float16]\n"
-        )
+        content = "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  dtype: [float32, float16]\n"
     study_yaml.write_text(content)
     return study_yaml
 

@@ -125,7 +125,7 @@ def test_save_model_slug_normalisation(tmp_path: Path, hf_model_result: Experime
     result_path = save_result(hf_model_result, tmp_path)
     dir_name = result_path.parent.name
     # meta-llama/Llama-3.1-8B -> Llama-3.1-8B (short name, no org prefix)
-    assert "Llama-3.1-8B-pytorch" in dir_name, f"Slug normalisation failed: {dir_name}"
+    assert "Llama-3.1-8B-transformers" in dir_name, f"Slug normalisation failed: {dir_name}"
 
 
 def test_save_returns_result_json_path(tmp_path: Path, minimal_result: ExperimentResult) -> None:

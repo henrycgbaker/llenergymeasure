@@ -19,16 +19,16 @@ from tests.conftest import make_config
 
 
 def test_minimal_valid_config():
-    """ExperimentConfig(model='gpt2', engine='pytorch') succeeds."""
-    config = ExperimentConfig(model="gpt2", engine="pytorch")
+    """ExperimentConfig(model='gpt2', engine='transformers') succeeds."""
+    config = ExperimentConfig(model="gpt2", engine="transformers")
     assert config.model == "gpt2"
-    assert config.engine == "pytorch"
+    assert config.engine == "transformers"
 
 
 def test_model_only_uses_pytorch_default():
-    """ExperimentConfig with only model= uses engine='pytorch' default."""
+    """ExperimentConfig with only model= uses engine='transformers' default."""
     config = ExperimentConfig(model="gpt2")
-    assert config.engine == "pytorch"
+    assert config.engine == "transformers"
 
 
 # ---------------------------------------------------------------------------
@@ -39,13 +39,13 @@ def test_model_only_uses_pytorch_default():
 def test_extra_fields_forbidden():
     """Unknown top-level fields are rejected with ValidationError (extra='forbid')."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", engine="pytorch", unknown_field="x")
+        ExperimentConfig(model="gpt2", engine="transformers", unknown_field="x")
 
 
 def test_multiple_extra_fields_all_rejected():
     """Multiple unknown fields are all rejected."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", engine="pytorch", foo="a", bar="b")
+        ExperimentConfig(model="gpt2", engine="transformers", foo="a", bar="b")
 
 
 # ---------------------------------------------------------------------------
@@ -97,9 +97,9 @@ def test_invalid_engine_raises_validation_error():
 
 
 def test_default_engine_is_pytorch():
-    """Default engine is 'pytorch' when not specified."""
+    """Default engine is 'transformers' when not specified."""
     config = ExperimentConfig(model="gpt2")
-    assert config.engine == "pytorch"
+    assert config.engine == "transformers"
 
 
 def test_vllm_engine_accepted():
@@ -120,71 +120,71 @@ def test_tensorrt_engine_accepted():
 
 
 def test_pytorch_config_section_composition():
-    """config with pytorch={batch_size: 4} engine section is accepted."""
+    """config with transformers={batch_size: 4} engine section is accepted."""
     config = ExperimentConfig(
         model="gpt2",
-        engine="pytorch",
-        pytorch={"batch_size": 4},
+        engine="transformers",
+        transformers={"batch_size": 4},
     )
-    assert config.pytorch is not None
-    assert config.pytorch.batch_size == 4
+    assert config.transformers is not None
+    assert config.transformers.batch_size == 4
 
 
 # ---------------------------------------------------------------------------
-# PyTorchConfig.num_processes removal (M3 audit fix)
+# TransformersConfig.num_processes removal (M3 audit fix)
 # ---------------------------------------------------------------------------
 
 
 def test_pytorch_config_has_no_num_processes_field():
-    """PyTorchConfig does not have a num_processes field (removed in M3 audit)."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig does not have a num_processes field (removed in M3 audit)."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    assert "num_processes" not in PyTorchConfig.model_fields
+    assert "num_processes" not in TransformersConfig.model_fields
 
 
 def test_pytorch_config_num_processes_not_a_declared_field():
-    """num_processes is not a declared field on PyTorchConfig.
+    """num_processes is not a declared field on TransformersConfig.
 
-    PyTorchConfig uses extra='allow' for HuggingFace passthrough, so passing
+    TransformersConfig uses extra='allow' for HuggingFace passthrough, so passing
     num_processes as an extra kwarg does not raise a ValidationError, but it
     is NOT a typed model field and will not be type-checked or validated.
     """
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     # Verify it is absent from the declared model fields
-    assert "num_processes" not in PyTorchConfig.model_fields
+    assert "num_processes" not in TransformersConfig.model_fields
     # Extra kwargs are accepted (extra='allow') but go into __pydantic_extra__
-    config = PyTorchConfig(num_processes=4)  # type: ignore[call-arg]
+    config = TransformersConfig(num_processes=4)  # type: ignore[call-arg]
     # Not a typed field - no attribute access by name on the typed model
     assert "num_processes" not in type(config).model_fields
 
 
 def test_pytorch_section_with_wrong_engine_rejected():
     """pytorch: section with engine='vllm' raises ValidationError (cross-validator)."""
-    with pytest.raises(ValidationError, match=r"pytorch.*config section provided.*engine"):
+    with pytest.raises(ValidationError, match=r"transformers.*config section provided.*engine"):
         ExperimentConfig(
             model="gpt2",
             engine="vllm",
-            pytorch={"batch_size": 4},
+            transformers={"batch_size": 4},
         )
 
 
 def test_vllm_section_with_pytorch_engine_rejected():
-    """vllm: section with engine='pytorch' raises ValidationError (cross-validator)."""
+    """vllm: section with engine='transformers' raises ValidationError (cross-validator)."""
     with pytest.raises(ValidationError, match=r"vllm.*config section provided.*engine"):
         ExperimentConfig(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             vllm={"engine": {"max_num_seqs": 16}},
         )
 
 
 def test_tensorrt_section_with_wrong_engine_rejected():
-    """tensorrt: section with engine='pytorch' raises ValidationError."""
+    """tensorrt: section with engine='transformers' raises ValidationError."""
     with pytest.raises(ValidationError, match=r"tensorrt.*config section provided.*engine"):
         ExperimentConfig(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             tensorrt={"max_batch_size": 8},
         )
 
@@ -218,9 +218,9 @@ def test_valid_dtype_bfloat16():
     assert config.dtype == "bfloat16"
 
 
-@pytest.mark.parametrize("dt", DTYPE_SUPPORT["pytorch"])
+@pytest.mark.parametrize("dt", DTYPE_SUPPORT["transformers"])
 def test_all_pytorch_dtypes_valid(dt):
-    """Schema-driven: all SSOT DTYPE_SUPPORT['pytorch'] values are valid."""
+    """Schema-driven: all SSOT DTYPE_SUPPORT['transformers'] values are valid."""
     config = make_config(dtype=dt)
     assert config.dtype == dt
 
@@ -259,7 +259,7 @@ def test_make_config_helper_returns_valid_config():
     config = make_config()
     assert isinstance(config, ExperimentConfig)
     assert config.model == "gpt2"
-    assert config.engine == "pytorch"
+    assert config.engine == "transformers"
 
 
 def test_make_config_override():
@@ -323,65 +323,65 @@ def test_save_timeseries_false_accepted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# PyTorchConfig tensor parallelism fields (tp_plan, tp_size)
+# TransformersConfig tensor parallelism fields (tp_plan, tp_size)
 # ---------------------------------------------------------------------------
 
 
 def test_pytorch_config_tp_plan_accepts_auto():
-    """PyTorchConfig(tp_plan='auto') succeeds."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig(tp_plan='auto') succeeds."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    cfg = PyTorchConfig(tp_plan="auto")
+    cfg = TransformersConfig(tp_plan="auto")
     assert cfg.tp_plan == "auto"
 
 
 def test_pytorch_config_tp_plan_rejects_invalid():
-    """PyTorchConfig(tp_plan='custom') raises ValidationError (Literal enforcement)."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig(tp_plan='custom') raises ValidationError (Literal enforcement)."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     with pytest.raises(ValidationError):
-        PyTorchConfig(tp_plan="custom")  # type: ignore[arg-type]
+        TransformersConfig(tp_plan="custom")  # type: ignore[arg-type]
 
 
 def test_pytorch_config_tp_size_accepts_positive():
-    """PyTorchConfig(tp_plan='auto', tp_size=4) succeeds."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig(tp_plan='auto', tp_size=4) succeeds."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    cfg = PyTorchConfig(tp_plan="auto", tp_size=4)
+    cfg = TransformersConfig(tp_plan="auto", tp_size=4)
     assert cfg.tp_plan == "auto"
     assert cfg.tp_size == 4
 
 
 def test_pytorch_config_tp_size_rejects_zero():
-    """PyTorchConfig(tp_size=0) raises ValidationError (ge=1)."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig(tp_size=0) raises ValidationError (ge=1)."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     with pytest.raises(ValidationError):
-        PyTorchConfig(tp_size=0)
+        TransformersConfig(tp_size=0)
 
 
 def test_pytorch_config_tp_plan_device_map_exclusive():
-    """PyTorchConfig(tp_plan='auto', device_map='auto') raises ValidationError."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig(tp_plan='auto', device_map='auto') raises ValidationError."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     with pytest.raises(ValidationError, match="mutually exclusive"):
-        PyTorchConfig(tp_plan="auto", device_map="auto")
+        TransformersConfig(tp_plan="auto", device_map="auto")
 
 
 def test_pytorch_config_tp_plan_without_device_map_ok():
-    """PyTorchConfig(tp_plan='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig(tp_plan='auto') succeeds (no conflict)."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    cfg = PyTorchConfig(tp_plan="auto")
+    cfg = TransformersConfig(tp_plan="auto")
     assert cfg.tp_plan == "auto"
     assert cfg.device_map is None
 
 
 def test_pytorch_config_device_map_without_tp_plan_ok():
-    """PyTorchConfig(device_map='auto') succeeds (no conflict)."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    """TransformersConfig(device_map='auto') succeeds (no conflict)."""
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    cfg = PyTorchConfig(device_map="auto")
+    cfg = TransformersConfig(device_map="auto")
     assert cfg.device_map == "auto"
     assert cfg.tp_plan is None
 
@@ -502,65 +502,65 @@ def test_vllm_batched_tokens_one_none_accepted():
 
 def test_pytorch_flash_attn2_float32_rejected():
     """flash_attention_2 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     with pytest.raises(ValidationError, match=r"flash_attention_2.*requires.*float16"):
         ExperimentConfig(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             dtype="float32",
-            pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+            transformers=TransformersConfig(attn_implementation="flash_attention_2"),
         )
 
 
 def test_pytorch_flash_attn3_float32_rejected():
     """flash_attention_3 with dtype=float32 raises ValidationError at parse time."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     with pytest.raises(ValidationError, match=r"flash_attention_3.*requires.*float16"):
         ExperimentConfig(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             dtype="float32",
-            pytorch=PyTorchConfig(attn_implementation="flash_attention_3"),
+            transformers=TransformersConfig(attn_implementation="flash_attention_3"),
         )
 
 
 def test_pytorch_flash_attn2_bfloat16_accepted():
     """flash_attention_2 with dtype=bfloat16 is accepted."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        engine="pytorch",
+        engine="transformers",
         dtype="bfloat16",
-        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+        transformers=TransformersConfig(attn_implementation="flash_attention_2"),
     )
     assert cfg.dtype == "bfloat16"
 
 
 def test_pytorch_eager_float32_accepted():
     """attn_implementation=eager with dtype=float32 is accepted."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        engine="pytorch",
+        engine="transformers",
         dtype="float32",
-        pytorch=PyTorchConfig(attn_implementation="eager"),
+        transformers=TransformersConfig(attn_implementation="eager"),
     )
     assert cfg.dtype == "float32"
 
 
 def test_pytorch_no_attn_impl_float32_accepted():
     """No attn_implementation set with dtype=float32 is accepted."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
     cfg = ExperimentConfig(
         model="gpt2",
-        engine="pytorch",
+        engine="transformers",
         dtype="float32",
-        pytorch=PyTorchConfig(),
+        transformers=TransformersConfig(),
     )
     assert cfg.dtype == "float32"
 

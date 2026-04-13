@@ -37,7 +37,7 @@ def _experiment_dir_name(
     prefixed with a zero-padded index for natural sort ordering.
 
     Examples:
-        ``001_c1_Qwen2.5-0.5B-pytorch_abcdef01``
+        ``001_c1_Qwen2.5-0.5B-transformers_abcdef01``
         ``c1_gpt2-vllm_fedcba98``  (single experiment, no index)
     """
     from llenergymeasure.utils.formatting import model_short_name

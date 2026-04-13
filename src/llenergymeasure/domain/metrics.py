@@ -406,7 +406,7 @@ class GPUUtilisationMetrics(BaseModel):
 class BatchEfficiencyMetrics(BaseModel):
     """Batch processing efficiency.
 
-    Only applicable for static batching (PyTorch, TensorRT). Null for vLLM
+    Only applicable for static batching (Transformers, TensorRT). Null for vLLM
     continuous batching.
     """
 
@@ -425,7 +425,7 @@ class BatchEfficiencyMetrics(BaseModel):
 class KVCacheEfficiencyMetrics(BaseModel):
     """KV cache efficiency metrics.
 
-    vLLM-specific. Always null for PyTorch/TensorRT engines.
+    vLLM-specific. Always null for Transformers/TensorRT engines.
     """
 
     kv_cache_hit_rate: float | None = Field(
@@ -510,7 +510,7 @@ class LatencyMeasurementMode(Enum):
     """How latency measurements were obtained.
 
     Different engines have different latency measurement capabilities:
-    - PyTorch: True per-token timestamps via TextIteratorStreamer
+    - Transformers: True per-token timestamps via TextIteratorStreamer
     - vLLM/TensorRT: May use proportional estimation from total time
 
     This enum makes the measurement semantics explicit in results.
@@ -520,7 +520,7 @@ class LatencyMeasurementMode(Enum):
     """Actual per-token timestamps captured via streaming API.
 
     Most accurate method. Each token timestamp represents when that
-    specific token was generated. PyTorch engine achieves this via
+    specific token was generated. Transformers engine achieves this via
     TextIteratorStreamer callback.
     """
 

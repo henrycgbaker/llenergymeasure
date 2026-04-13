@@ -5,8 +5,8 @@ Each engine section uses None-as-default: all fields default to None, meaning
 a researcher has set a value versus when the engine's built-in default applies.
 
 Usage in YAML:
-    engine: pytorch
-    pytorch:
+    engine: transformers
+    transformers:
       batch_size: 4
       load_in_4bit: true
 
@@ -37,12 +37,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 # =============================================================================
-# PyTorch Engine Configuration (v2.0)
+# Transformers Engine Configuration (v2.0)
 # =============================================================================
 
 
-class PyTorchConfig(BaseModel):
-    """PyTorch/Transformers engine configuration.
+class TransformersConfig(BaseModel):
+    """HuggingFace Transformers engine configuration.
 
     All fields default to None — None means "use the engine's own default".
     This distinguishes explicit researcher choices from engine defaults,
@@ -189,7 +189,7 @@ class PyTorchConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     @model_validator(mode="after")
-    def validate_quantization(self) -> PyTorchConfig:
+    def validate_quantization(self) -> TransformersConfig:
         """4-bit and 8-bit quantization are mutually exclusive."""
         if self.load_in_4bit and self.load_in_8bit:
             raise ValueError(
@@ -198,7 +198,7 @@ class PyTorchConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_torch_compile_options(self) -> PyTorchConfig:
+    def validate_torch_compile_options(self) -> TransformersConfig:
         """torch_compile_mode/torch_compile_backend require torch_compile=True."""
         if (
             self.torch_compile_mode is not None or self.torch_compile_backend is not None
@@ -207,7 +207,7 @@ class PyTorchConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_bnb_4bit_options(self) -> PyTorchConfig:
+    def validate_bnb_4bit_options(self) -> TransformersConfig:
         """bnb_4bit_* fields require load_in_4bit=True."""
         if (
             self.bnb_4bit_compute_dtype is not None
@@ -218,7 +218,7 @@ class PyTorchConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_cache_options(self) -> PyTorchConfig:
+    def validate_cache_options(self) -> TransformersConfig:
         """cache_implementation requires use_cache to be True or None (not explicitly False)."""
         if self.cache_implementation is not None and self.use_cache is False:
             raise ValueError(
@@ -227,7 +227,7 @@ class PyTorchConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_tp_device_map_exclusive(self) -> PyTorchConfig:
+    def validate_tp_device_map_exclusive(self) -> TransformersConfig:
         """tp_plan and device_map are mutually exclusive."""
         if self.tp_plan is not None and self.device_map is not None:
             raise ValueError(

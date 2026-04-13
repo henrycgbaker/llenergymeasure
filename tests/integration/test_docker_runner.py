@@ -4,10 +4,10 @@ These tests exercise the full Docker runner path: config serialisation →
 docker run → container entrypoint → result JSON → host read-back.
 
 They require Docker with NVIDIA Container Toolkit and a pre-built
-``llenergymeasure-ci:pytorch`` image (built by gpu-ci.yml).
+``llenergymeasure-ci:transformers`` image (built by gpu-ci.yml).
 
 Run: pytest tests/integration/test_docker_runner.py -m docker -v
-Requires: Docker, nvidia-ctk, GPU, pre-built llenergymeasure-ci:pytorch image
+Requires: Docker, nvidia-ctk, GPU, pre-built llenergymeasure-ci:transformers image
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import subprocess
 
 import pytest
 
-IMAGE = "llenergymeasure-ci:pytorch"
+IMAGE = "llenergymeasure-ci:transformers"
 
 
 def _docker_available() -> bool:
@@ -76,7 +76,7 @@ class TestDockerRunnerIntegration:
 
         defaults = dict(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             dataset=DatasetConfig(n_prompts=3),
             output_dir=str(tmp_path),
             warmup=WarmupConfig(enabled=False),
@@ -158,7 +158,7 @@ class TestDockerRunnerIntegration:
 
         config = ExperimentConfig(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             dataset=DatasetConfig(n_prompts=3),
             output_dir=str(tmp_path),
             warmup=WarmupConfig(enabled=False),
@@ -180,7 +180,7 @@ class TestDockerRunnerIntegration:
 
         with patch(
             "llenergymeasure.study.runner.resolve_study_runners",
-            return_value={"pytorch": docker_spec},
+            return_value={"transformers": docker_spec},
         ):
             runner = StudyRunner(study, output_dir=tmp_path)
             result = runner.run()

@@ -1,7 +1,7 @@
 """MeasurementHarness - owns the measurement lifecycle for any EnginePlugin.
 
 The harness extracts the ~600 lines of identical measurement infrastructure
-duplicated across pytorch.py and vllm.py into a single location.
+duplicated across transformers.py and vllm.py into a single location.
 Engines become thin plugins implementing the 4-method EnginePlugin protocol.
 """
 
@@ -211,7 +211,7 @@ class MeasurementHarness:
         """Run a complete measurement using the given engine plugin.
 
         Args:
-            engine: EnginePlugin instance (pytorch, vllm, tensorrt, ...).
+            engine: EnginePlugin instance (transformers, vllm, tensorrt, ...).
             config: Fully resolved experiment configuration.
             snapshot: Pre-collected environment snapshot (study-level cache).
                       When None, collected in a background thread during model load.
@@ -328,7 +328,7 @@ class MeasurementHarness:
                 t0_warmup = time.perf_counter()
 
             # Probe call determines warmup strategy:
-            # > 0.0 → CV-based convergence (PyTorch), 0.0 → kernel warmup (vLLM/TRT-LLM)
+            # > 0.0 → CV-based convergence (Transformers), 0.0 → kernel warmup (vLLM/TRT-LLM)
             if config.warmup.enabled:
                 first_latency = engine.run_warmup_prompt(config, model, prompts[0])
             else:

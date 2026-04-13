@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 from llenergymeasure.config.ssot import (
-    ENGINE_PYTORCH,
     ENGINE_TENSORRT,
+    ENGINE_TRANSFORMERS,
     ENGINE_VLLM,
     TIMEOUT_NVIDIA_SMI,
 )
@@ -536,7 +536,7 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     Rules per engine:
     - **vLLM**: tensor_parallel_size * pipeline_parallel_size GPUs. Both are known
       from config before the harness runs, so gpu_indices = list(range(total)).
-    - **PyTorch**: device_map="auto" (or any non-None device_map) monitors all
+    - **Transformers**: device_map="auto" (or any non-None device_map) monitors all
       NVML-visible GPUs. Model sharding is determined at load time inside
       harness.run(), but gpu_indices must be passed *before* load. Using all
       visible GPUs is correct and safe.
@@ -561,9 +561,9 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         if tp > 1:
             return list(range(tp))
     elif (
-        config.engine == ENGINE_PYTORCH
-        and config.pytorch is not None
-        and config.pytorch.device_map is not None
+        config.engine == ENGINE_TRANSFORMERS
+        and config.transformers is not None
+        and config.transformers.device_map is not None
     ):
         # Model will shard across all visible GPUs — measure all of them.
         # Best-effort: if pynvml is absent or no NVIDIA GPU, fall through to [0].

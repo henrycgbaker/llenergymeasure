@@ -35,7 +35,7 @@ def test_all_ok_exits_zero() -> None:
     report = _report(
         [
             EngineDoctorResult(
-                engine="pytorch",
+                engine="transformers",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
@@ -46,7 +46,7 @@ def test_all_ok_exits_zero() -> None:
     with patch("llenergymeasure.api.doctor.run_doctor_checks", return_value=report):
         result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0
-    assert "pytorch" in result.output
+    assert "transformers" in result.output
     assert "OK" in result.output
 
 
@@ -54,7 +54,7 @@ def test_mismatch_exits_nonzero() -> None:
     report = _report(
         [
             EngineDoctorResult(
-                engine="pytorch",
+                engine="transformers",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="b" * 64,
@@ -81,7 +81,7 @@ def test_unreachable_is_not_mismatch() -> None:
     report = _report(
         [
             EngineDoctorResult(
-                engine="pytorch",
+                engine="transformers",
                 image="llenergymeasure:pytorch",
                 pkg_version=None,
                 image_fingerprint=None,
@@ -100,7 +100,7 @@ def test_skip_check_warning_rendered() -> None:
     report = _report(
         [
             EngineDoctorResult(
-                engine="pytorch",
+                engine="transformers",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,
@@ -119,7 +119,7 @@ def test_host_footer_rendered() -> None:
     report = _report(
         [
             EngineDoctorResult(
-                engine="pytorch",
+                engine="transformers",
                 image="llenergymeasure:pytorch",
                 pkg_version="0.9.0",
                 image_fingerprint="a" * 64,

@@ -125,7 +125,7 @@ def expand_grid(
     explicit_raw_configs = []
     for exp in explicit_entries:
         merged = {**merged_fixed, **exp}
-        engine = merged.get("engine", merged_fixed.get("engine", "pytorch"))
+        engine = merged.get("engine", merged_fixed.get("engine", "transformers"))
         for key in _ENGINE_SECTION_KEYS:
             if key != engine and key in merged and key not in exp:
                 del merged[key]
@@ -308,7 +308,7 @@ def format_preflight_summary(
         Study [abc123de]: 4 configs x 3 cycles = 12 runs
         Order: interleave
         Skipping 2/6: (per-skip log line with reason)
-          - pytorch, fp32: [Pydantic message]
+          - transformers, fp32: [Pydantic message]
         WARNING: 67% of sweep configs are invalid — check your sweep dimensions.
 
     Args:
@@ -662,7 +662,7 @@ def _load_base(base_path_str: str | None, study_yaml_path: Path | None) -> dict[
     return {k: v for k, v in raw.items() if k not in _STUDY_ONLY_KEYS}
 
 
-_ENGINE_SECTION_KEYS = frozenset({"pytorch", "vllm", "tensorrt"})
+_ENGINE_SECTION_KEYS = frozenset({"transformers", "vllm", "tensorrt"})
 
 
 def _strip_other_engine_sections(config_dict: dict[str, Any], engine: str) -> dict[str, Any]:
@@ -759,7 +759,7 @@ def _route_key_value(
     """Route a single fully-qualified key into *config_dict*.
 
     Routing rules:
-    - Engine-prefixed dotted key (``pytorch.batch_size``) → merge into engine section.
+    - Engine-prefixed dotted key (``transformers.batch_size``) → merge into engine section.
     - Other dotted key (``decoder.do_sample``) → unflatten at top level.
     - Simple key → direct assignment.
 
@@ -799,7 +799,7 @@ def _validate_sweep_groups(
         raise ConfigError(
             f"Sweep group name(s) collide with independent axis key(s): "
             f"{', '.join(sorted(collisions))}. "
-            f"Use abstract names for groups (e.g. 'pytorch.compilation' not 'pytorch.torch_compile')."
+            f"Use abstract names for groups (e.g. 'transformers.compilation' not 'transformers.torch_compile')."
         )
 
 
@@ -822,7 +822,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     """
     if not sweep:
         if fixed.get("model"):
-            engine = fixed.get("engine", "pytorch")
+            engine = fixed.get("engine", "transformers")
             return [_strip_other_engine_sections(dict(fixed), engine)]
         return []
 
@@ -866,7 +866,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
             universal_groups[group_name] = variants
 
     # ── Step 3: Determine engines ──
-    fixed_engine = fixed.get("engine", "pytorch")
+    fixed_engine = fixed.get("engine", "transformers")
     if isinstance(fixed_engine, list):
         engines = list(fixed_engine)
     elif scoped_dims or scoped_groups:

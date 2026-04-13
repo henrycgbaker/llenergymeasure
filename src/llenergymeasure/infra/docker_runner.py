@@ -136,7 +136,7 @@ class DockerRunner:
 
     @property
     def short_image(self) -> str:
-        """Short image tag for display (e.g. 'pytorch:v0.9.0')."""
+        """Short image tag for display (e.g. 'transformers:v0.9.0')."""
         from llenergymeasure.utils.formatting import short_name
 
         return short_name(self.image)
@@ -214,7 +214,7 @@ class DockerRunner:
             # --- Build and execute docker command ---
             t0_container: float | None = None
             if _p:
-                # Show short image tag (e.g. "pytorch:v0.9.0") not the full registry path
+                # Show short image tag (e.g. "transformers:v0.9.0") not the full registry path
                 short_image = self.short_image
                 _p.on_step_start("container_start", "Starting", short_image)
                 t0_container = time.perf_counter()

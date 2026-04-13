@@ -83,7 +83,7 @@ def config_cached() -> ExperimentConfig:
     """ExperimentConfig with strategy='cached' (default)."""
     return ExperimentConfig(
         model="test/model",
-        engine="pytorch",
+        engine="transformers",
         baseline=BaselineConfig(strategy="cached", duration_seconds=30.0),
     )
 
@@ -92,7 +92,7 @@ def config_cached() -> ExperimentConfig:
 def config_fresh() -> ExperimentConfig:
     return ExperimentConfig(
         model="test/model",
-        engine="pytorch",
+        engine="transformers",
         baseline=BaselineConfig(strategy="fresh"),
     )
 
@@ -101,7 +101,7 @@ def config_fresh() -> ExperimentConfig:
 def config_validated() -> ExperimentConfig:
     return ExperimentConfig(
         model="test/model",
-        engine="pytorch",
+        engine="transformers",
         baseline=BaselineConfig(
             strategy="validated",
             validation_interval=3,
@@ -254,7 +254,7 @@ class TestStrategyCached:
         """In-memory baseline is re-measured when TTL expires."""
         config = ExperimentConfig(
             model="test/model",
-            engine="pytorch",
+            engine="transformers",
             baseline=BaselineConfig(strategy="cached", cache_ttl_seconds=3600.0),
         )
         runner = _make_runner(tmp_path, config)
@@ -556,7 +556,7 @@ class TestDockerBaselineMount:
             study,
             manifest,
             relative_study_dir,
-            runner_specs={"pytorch": spec},
+            runner_specs={"transformers": spec},
         )
 
         docker_key = runner._baseline_cache_key(config_cached)
@@ -803,7 +803,7 @@ class TestBaselineHostProgressEvents:
         """
         spec = RunnerSpec(mode="docker", image="test/vllm:v0", source="yaml")
         runner, progress = _make_runner_with_progress(
-            tmp_path, config_cached, runner_specs={"pytorch": spec}
+            tmp_path, config_cached, runner_specs={"transformers": spec}
         )
 
         fake_cache = _make_baseline(
@@ -993,7 +993,7 @@ class TestBaselineCacheKey:
     def test_cache_key_local_for_local_spec(self, tmp_path: Path, config_cached: ExperimentConfig):
         spec = RunnerSpec(mode="local", image=None, source="yaml")
         runner, _ = _make_runner_with_progress(
-            tmp_path, config_cached, runner_specs={"pytorch": spec}
+            tmp_path, config_cached, runner_specs={"transformers": spec}
         )
         assert runner._baseline_cache_key(config_cached) == "local"
 
@@ -1004,7 +1004,7 @@ class TestBaselineCacheKey:
             source="yaml",
         )
         runner, _ = _make_runner_with_progress(
-            tmp_path, config_cached, runner_specs={"pytorch": spec}
+            tmp_path, config_cached, runner_specs={"transformers": spec}
         )
         key = runner._baseline_cache_key(config_cached)
         # Key must contain no chars that would break either a filesystem path
@@ -1018,7 +1018,7 @@ class TestBaselineCacheKey:
         long_image = "a" * 500
         spec = RunnerSpec(mode="docker", image=long_image, source="yaml")
         runner, _ = _make_runner_with_progress(
-            tmp_path, config_cached, runner_specs={"pytorch": spec}
+            tmp_path, config_cached, runner_specs={"transformers": spec}
         )
         key = runner._baseline_cache_key(config_cached)
         sanitized = key.removeprefix("image_")
@@ -1043,7 +1043,7 @@ class TestBaselineCacheKey:
 
 def _docker_runner(tmp_path: Path, config: ExperimentConfig) -> tuple[StudyRunner, MagicMock]:
     spec = RunnerSpec(mode="docker", image="test/pytorch:v0", source="yaml")
-    return _make_runner_with_progress(tmp_path, config, runner_specs={"pytorch": spec})
+    return _make_runner_with_progress(tmp_path, config, runner_specs={"transformers": spec})
 
 
 class TestBaselineContainerDispatch:
@@ -1180,7 +1180,7 @@ class TestDockerPathOrdering:
             study,
             manifest,
             tmp_path,
-            runner_specs={"pytorch": spec},
+            runner_specs={"transformers": spec},
             progress=progress,
         )
         runner._images_prepared = True

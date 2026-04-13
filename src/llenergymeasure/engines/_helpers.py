@@ -1,6 +1,6 @@
 """Shared helpers for inference engine implementations.
 
-Extracted from the repeated patterns in pytorch.py, vllm.py, and tensorrt.py
+Extracted from the repeated patterns in transformers.py, vllm.py, and tensorrt.py
 to reduce duplication while keeping engines thin.
 """
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# CUDA memory helpers (extracted from pytorch.py, vllm.py, tensorrt.py)
+# CUDA memory helpers (extracted from transformers.py, vllm.py, tensorrt.py)
 # ---------------------------------------------------------------------------
 
 

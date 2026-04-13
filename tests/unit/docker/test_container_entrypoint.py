@@ -31,7 +31,7 @@ _PATCH_HARNESS_RUN = "llenergymeasure.harness.MeasurementHarness.run"
 @pytest.fixture
 def config(tmp_path: Path):
     """A minimal ExperimentConfig serialised to a JSON file."""
-    cfg = make_config(model="gpt2", engine="pytorch")
+    cfg = make_config(model="gpt2", engine="transformers")
     config_json = tmp_path / "abc123_config.json"
     config_json.write_text(cfg.model_dump_json(), encoding="utf-8")
     return cfg, config_json
@@ -148,7 +148,7 @@ class TestRunContainerExperiment:
 
 class TestMainErrorHandling:
     def test_main_writes_error_json_on_failure(self, tmp_path: Path, monkeypatch):
-        cfg = make_config(model="gpt2", engine="pytorch")
+        cfg = make_config(model="gpt2", engine="transformers")
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
 
@@ -306,7 +306,7 @@ class TestContainerBaselineLoading:
 
     def test_no_baseline_when_disabled(self, tmp_path: Path, result_dir: Path):
         """Baseline not loaded even if cache exists when baseline.enabled=False."""
-        cfg = make_config(model="gpt2", engine="pytorch", baseline={"enabled": False})
+        cfg = make_config(model="gpt2", engine="transformers", baseline={"enabled": False})
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
         fake_result = make_result()
@@ -341,7 +341,7 @@ class TestContainerBaselineLoading:
         """load_baseline_cache is called with the config's cache_ttl_seconds."""
         cfg = make_config(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             baseline={"enabled": True, "cache_ttl_seconds": 900.0},
         )
         config_path = tmp_path / "abc123_config.json"
@@ -376,7 +376,7 @@ class TestContainerBaselineLoading:
 
     def test_expired_cache_passes_none_baseline(self, tmp_path: Path, result_dir: Path):
         """When disk cache is expired (load returns None), baseline=None."""
-        cfg = make_config(model="gpt2", engine="pytorch")
+        cfg = make_config(model="gpt2", engine="transformers")
         config_path = tmp_path / "abc123_config.json"
         config_path.write_text(cfg.model_dump_json(), encoding="utf-8")
         fake_result = make_result()

@@ -150,7 +150,7 @@ def resolve_runner(
     resolve the image via ``get_default_image(engine)`` from image_registry.
 
     Args:
-        engine:       Engine name, e.g. "pytorch", "vllm", "tensorrt".
+        engine:       Engine name, e.g. "transformers", "vllm", "tensorrt".
         yaml_runners: Runners dict from study YAML ``runners:`` section.
                       Keys are engine names, values are runner strings.
         user_config:  UserRunnersConfig from loaded user preferences.

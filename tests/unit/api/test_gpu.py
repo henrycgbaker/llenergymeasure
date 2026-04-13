@@ -19,7 +19,7 @@ from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
 def test_default_config_returns_single_gpu():
     """pytorch engine with no device_map returns [0] (single-GPU default)."""
-    config = ExperimentConfig(model="gpt2", engine="pytorch")
+    config = ExperimentConfig(model="gpt2", engine="transformers")
     result = _resolve_gpu_indices(config)
     assert result == [0]
 
@@ -27,7 +27,7 @@ def test_default_config_returns_single_gpu():
 def test_unknown_engine_returns_single_gpu():
     """Unrecognised engine string falls through to [0]."""
     # ExperimentConfig validates engine, so we test by patching attribute
-    config = ExperimentConfig(model="gpt2", engine="pytorch")
+    config = ExperimentConfig(model="gpt2", engine="transformers")
     object.__setattr__(config, "engine", "someother")
     result = _resolve_gpu_indices(config)
     assert result == [0]
@@ -139,10 +139,10 @@ def test_tensorrt_none_tp_size_returns_single_gpu():
 
 def test_pytorch_device_map_auto_single_gpu():
     """pytorch with device_map='auto' but 1 GPU falls through to [0]."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    pytorch_cfg = PyTorchConfig(device_map="auto")
-    config = ExperimentConfig(model="gpt2", engine="pytorch", pytorch=pytorch_cfg)
+    pytorch_cfg = TransformersConfig(device_map="auto")
+    config = ExperimentConfig(model="gpt2", engine="transformers", transformers=pytorch_cfg)
 
     mock_pynvml = MagicMock()
     mock_pynvml.nvmlInit.return_value = None
@@ -157,10 +157,10 @@ def test_pytorch_device_map_auto_single_gpu():
 
 def test_pytorch_device_map_auto_multi_gpu():
     """pytorch with device_map='auto' and 4 GPUs returns [0, 1, 2, 3]."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    pytorch_cfg = PyTorchConfig(device_map="auto")
-    config = ExperimentConfig(model="gpt2", engine="pytorch", pytorch=pytorch_cfg)
+    pytorch_cfg = TransformersConfig(device_map="auto")
+    config = ExperimentConfig(model="gpt2", engine="transformers", transformers=pytorch_cfg)
 
     mock_pynvml = MagicMock()
     mock_pynvml.nvmlInit.return_value = None
@@ -175,20 +175,20 @@ def test_pytorch_device_map_auto_multi_gpu():
 
 def test_pytorch_device_map_none_returns_single_gpu():
     """pytorch with device_map=None (not set) returns [0]."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    pytorch_cfg = PyTorchConfig(device_map=None)
-    config = ExperimentConfig(model="gpt2", engine="pytorch", pytorch=pytorch_cfg)
+    pytorch_cfg = TransformersConfig(device_map=None)
+    config = ExperimentConfig(model="gpt2", engine="transformers", transformers=pytorch_cfg)
     result = _resolve_gpu_indices(config)
     assert result == [0]
 
 
 def test_pytorch_device_map_pynvml_error_falls_through():
     """pytorch device_map with pynvml error falls through to [0]."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    pytorch_cfg = PyTorchConfig(device_map="auto")
-    config = ExperimentConfig(model="gpt2", engine="pytorch", pytorch=pytorch_cfg)
+    pytorch_cfg = TransformersConfig(device_map="auto")
+    config = ExperimentConfig(model="gpt2", engine="transformers", transformers=pytorch_cfg)
 
     # pynvml raises on init — should fall through silently
     mock_pynvml = MagicMock()
@@ -202,10 +202,10 @@ def test_pytorch_device_map_pynvml_error_falls_through():
 
 def test_pytorch_device_map_pynvml_import_error_falls_through():
     """pytorch device_map with pynvml absent falls through to [0]."""
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
 
-    pytorch_cfg = PyTorchConfig(device_map="auto")
-    config = ExperimentConfig(model="gpt2", engine="pytorch", pytorch=pytorch_cfg)
+    pytorch_cfg = TransformersConfig(device_map="auto")
+    config = ExperimentConfig(model="gpt2", engine="transformers", transformers=pytorch_cfg)
 
     # Remove pynvml from sys.modules to simulate it being absent
     pynvml_mod = sys.modules.pop("pynvml", None)

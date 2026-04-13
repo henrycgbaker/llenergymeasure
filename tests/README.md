@@ -41,7 +41,7 @@ make test-runtime
 poetry run pytest tests/runtime/ -v
 
 # Runtime tests with engine filter
-pytest tests/runtime/ -v --engine pytorch
+pytest tests/runtime/ -v --engine transformers
 pytest tests/runtime/ -v --engine vllm
 pytest tests/runtime/ -v --quick    # Quick subset
 
@@ -108,7 +108,7 @@ GPU-required tests that run actual inference to validate parameters.
 **Features:**
 - **Single source of truth**: Params auto-discovered from Pydantic models
 - **Strict validation**: Tests fail if inference doesn't actually run
-- **Engine filtering**: `--engine pytorch` to test one engine
+- **Engine filtering**: `--engine transformers` to test one engine
 - **Quick mode**: `--quick` for fewer parameter variations
 - **Discovery mode**: `--discover` to use auto-discovered params
 - **Result verification**: Checks output tokens, throughput, energy
@@ -160,13 +160,13 @@ After running runtime tests, generate the parameter support matrix:
 
 ```bash
 # Run tests and generate results (from project root)
-python -m tests.runtime.test_all_params --engine pytorch --output results/test_results_pytorch.json
+python -m tests.runtime.test_all_params --engine transformers --output results/test_results_pytorch.json
 
 # Or with auto-discovery from Pydantic models
-python -m tests.runtime.test_all_params --discover --engine pytorch --output results/test_results_pytorch.json
+python -m tests.runtime.test_all_params --discover --engine transformers --output results/test_results_pytorch.json
 
 # List discovered params without running tests
-python -m tests.runtime.test_all_params --list-params --engine pytorch
+python -m tests.runtime.test_all_params --list-params --engine transformers
 
 # Generate documentation from results
 python scripts/generate_param_matrix.py

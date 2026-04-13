@@ -88,7 +88,7 @@ def minimal_config():
 
     return ExperimentConfig(
         model="fake/model",
-        engine="pytorch",
+        engine="transformers",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
@@ -365,7 +365,7 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
 
     config_with_baseline = ExperimentConfig(
         model="fake/model",
-        engine="pytorch",
+        engine="transformers",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
@@ -937,7 +937,7 @@ def test_harness_save_timeseries_false_skips_parquet(tmp_path):
 
     config = ExperimentConfig(
         model="fake/model",
-        engine="pytorch",
+        engine="transformers",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,
@@ -973,7 +973,7 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
 
     config = ExperimentConfig(
         model="fake/model",
-        engine="pytorch",
+        engine="transformers",
         dataset=DatasetConfig(n_prompts=1),
         max_input_tokens=32,
         max_output_tokens=32,

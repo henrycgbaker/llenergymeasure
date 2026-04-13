@@ -113,7 +113,7 @@ class TestPipelineSingleExperiment:
 
         # Write minimal experiment YAML
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -122,7 +122,7 @@ class TestPipelineSingleExperiment:
         # Real YAML parsing and config validation (not mocked)
         experiment_config = load_experiment_config(path=yaml_path)
         assert experiment_config.model == "gpt2"
-        assert experiment_config.engine == "pytorch"
+        assert experiment_config.engine == "transformers"
         assert experiment_config.dataset.n_prompts == 5
 
         # Full run_experiment call
@@ -193,7 +193,7 @@ baseline:
         yaml_content = """\
 sweep:
   model: [gpt2, distilgpt2]
-  engine: [pytorch]
+  engine: [transformers]
 study_execution:
   n_cycles: 1
   experiment_order: sequential
@@ -238,7 +238,7 @@ class TestPipelineErrorPropagation:
         from llenergymeasure.utils.exceptions import EngineError
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: pytorch\n")
+        yaml_path.write_text("model: gpt2\nengine: transformers\n")
 
         _patch_infra(monkeypatch, tmp_path, make_result())
 
@@ -283,7 +283,7 @@ class TestPipelineDryRun:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
 
         engine_call_count = []
 
@@ -330,7 +330,7 @@ class TestCLIE2ESingleExperiment:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
 
         mock_result = make_result(experiment_id="cli-e2e-001")
 
@@ -360,7 +360,7 @@ class TestCLIE2ESingleExperiment:
         )
 
         runner = CliRunner()
-        result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "pytorch"])
+        result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "transformers"])
 
         assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}:\n{result.output}"
         assert "Result:" in result.output
@@ -435,7 +435,7 @@ class TestCLIE2EErrorExitCodes:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: pytorch\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
 
         error_cls = getattr(llenergymeasure.utils.exceptions, error_class)
         exc_instance = error_cls(f"test {error_class}")

@@ -2526,15 +2526,15 @@ dev = [
     { name = "transformers" },
     { name = "types-pyyaml" },
 ]
-pytorch = [
+tensorrt = [
+    { name = "tensorrt-llm" },
+]
+transformers = [
     { name = "accelerate" },
     { name = "bitsandbytes" },
     { name = "calflops" },
     { name = "torch" },
     { name = "transformers" },
-]
-tensorrt = [
-    { name = "tensorrt-llm" },
 ]
 vllm = [
     { name = "vllm" },
@@ -2546,7 +2546,7 @@ zeus = [
 [package.dev-dependencies]
 dev = [
     { name = "import-linter" },
-    { name = "llenergymeasure", extra = ["pytorch"] },
+    { name = "llenergymeasure", extra = ["transformers"] },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -2558,13 +2558,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "accelerate", marker = "extra == 'pytorch'", specifier = ">=1.4" },
-    { name = "bitsandbytes", marker = "extra == 'pytorch'", specifier = ">=0.45" },
-    { name = "calflops", marker = "extra == 'pytorch'", specifier = ">=0.2" },
+    { name = "accelerate", marker = "extra == 'transformers'", specifier = ">=1.4" },
+    { name = "bitsandbytes", marker = "extra == 'transformers'", specifier = ">=0.45" },
+    { name = "calflops", marker = "extra == 'transformers'", specifier = ">=0.2" },
     { name = "codecarbon", marker = "extra == 'codecarbon'", specifier = ">=2.8" },
     { name = "filelock" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.9" },
-    { name = "llenergymeasure", extras = ["pytorch"], marker = "extra == 'dev'" },
+    { name = "llenergymeasure", extras = ["transformers"], marker = "extra == 'dev'" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "nvidia-ml-py", specifier = ">=12.0" },
@@ -2580,20 +2580,20 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
     { name = "tensorrt-llm", marker = "extra == 'tensorrt'", specifier = ">=0.12" },
-    { name = "torch", marker = "extra == 'pytorch'", specifier = ">=2.5" },
+    { name = "torch", marker = "extra == 'transformers'", specifier = ">=2.5" },
     { name = "tqdm", specifier = ">=4.66" },
-    { name = "transformers", marker = "extra == 'pytorch'", specifier = ">=4.49" },
+    { name = "transformers", marker = "extra == 'transformers'", specifier = ">=4.49" },
     { name = "typer", specifier = ">=0.9" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.6" },
     { name = "zeus", marker = "extra == 'zeus'", specifier = ">=0.13.1" },
 ]
-provides-extras = ["pytorch", "vllm", "tensorrt", "zeus", "codecarbon", "dev"]
+provides-extras = ["transformers", "vllm", "tensorrt", "zeus", "codecarbon", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "import-linter", specifier = ">=2.9" },
-    { name = "llenergymeasure", extras = ["pytorch"] },
+    { name = "llenergymeasure", extras = ["transformers"] },
     { name = "mypy", specifier = ">=1.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=4.0" },
