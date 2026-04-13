@@ -159,6 +159,34 @@ def _jsonable(value: Any) -> Any:
     return str(value)
 
 
+def _dataclass_fields_to_specs(
+    cls: type, *, skip_private: bool = False
+) -> dict[str, dict[str, Any]]:
+    """Extract ``{name: {type, default}}`` specs from a dataclass.
+
+    Resolves ``default_factory`` by calling it (swallowing errors to ``None``)
+    so downstream JSON stays concrete. Types are rendered via
+    ``_annotation_to_type_str``.
+    """
+    specs: dict[str, dict[str, Any]] = {}
+    for fld in dataclasses.fields(cls):
+        if skip_private and fld.name.startswith("_"):
+            continue
+        default: Any = None
+        if fld.default is not dataclasses.MISSING:
+            default = fld.default
+        elif fld.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
+            try:
+                default = fld.default_factory()
+            except Exception:
+                default = None
+        specs[fld.name] = {
+            "type": _annotation_to_type_str(fld.type),
+            "default": _jsonable(default),
+        }
+    return specs
+
+
 def _make_envelope(
     *,
     engine: str,
@@ -201,20 +229,7 @@ def discover_vllm(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
     from vllm.engine.arg_utils import EngineArgs  # type: ignore[import-not-found]
 
     limitations: list[dict[str, Any]] = []
-    engine_params: dict[str, Any] = {}
-    for field in dataclasses.fields(EngineArgs):
-        default: Any = None
-        if field.default is not dataclasses.MISSING:
-            default = field.default
-        elif field.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-            try:
-                default = field.default_factory()
-            except Exception:
-                default = None
-        engine_params[field.name] = {
-            "type": _annotation_to_type_str(field.type),
-            "default": _jsonable(default),
-        }
+    engine_params = _dataclass_fields_to_specs(EngineArgs)
 
     sampling_params: dict[str, Any] = {}
     try:
@@ -333,22 +348,7 @@ def discover_tensorrt(repo_root: Path, image_ref: str | None) -> dict[str, Any]:
         }
     )
 
-    sampling_params: dict[str, Any] = {}
-    for field in dataclasses.fields(SamplingParams):
-        if field.name.startswith("_"):
-            continue
-        default: Any = None
-        if field.default is not dataclasses.MISSING:
-            default = field.default
-        elif field.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-            try:
-                default = field.default_factory()
-            except Exception:
-                default = None
-        sampling_params[field.name] = {
-            "type": _annotation_to_type_str(field.type),
-            "default": _jsonable(default),
-        }
+    sampling_params = _dataclass_fields_to_specs(SamplingParams, skip_private=True)
 
     limitations.append(
         {

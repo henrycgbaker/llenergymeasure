@@ -21,11 +21,12 @@ from datetime import datetime
 from importlib import resources
 from typing import Any
 
+from llenergymeasure.config.ssot import ENGINE_TENSORRT, ENGINE_TRANSFORMERS, ENGINE_VLLM
+
 SUPPORTED_MAJOR_VERSION = 1
 
-# Engines known to ship a vendored schema. Hardcoded here; PR 48.3 will
-# source this from ssot.ALL_ENGINES once that constant exists.
-_KNOWN_ENGINES: tuple[str, ...] = ("vllm", "tensorrt", "transformers")
+# Engines known to ship a vendored schema.
+_KNOWN_ENGINES: tuple[str, ...] = (ENGINE_VLLM, ENGINE_TENSORRT, ENGINE_TRANSFORMERS)
 
 _PACKAGE = "llenergymeasure.config.discovered_schemas"
 
