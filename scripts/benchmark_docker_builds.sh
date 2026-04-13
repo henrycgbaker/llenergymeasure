@@ -77,14 +77,18 @@ run_build() {
     BUILDKIT_PROGRESS=plain docker compose build "$@" "$engine" >"$log" 2>&1
     t1=$(date +%s)
     local secs=$(( t1 - t0 ))
-    local cached; cached=$(grep -cE "^#[0-9]+ CACHED$" "$log" 2>/dev/null || true)
-    local imported; imported=$(grep -c "importing cache manifest from ghcr.io" "$log" 2>/dev/null || true)
+    # grep -c exits 1 on zero matches; || echo 0 keeps the value numeric
+    # (|| true would leave an empty string under set -euo pipefail).
+    local cached; cached=$(grep -cE "^#[0-9]+ CACHED$" "$log" 2>/dev/null || echo 0)
+    local imported; imported=$(grep -c "importing cache manifest from ghcr.io" "$log" 2>/dev/null || echo 0)
     echo "$secs $cached $imported"
 }
 
 image_size() {
-    docker image inspect "llenergymeasure:${1}" --format '{{.Size}}' 2>/dev/null \
-        | awk '{printf "%.1f GB", $1/1073741824}' || echo "not built"
+    local bytes
+    bytes=$(docker image inspect "llenergymeasure:${1}" --format '{{.Size}}' 2>/dev/null) \
+        || { echo "not built"; return; }
+    awk -v b="$bytes" 'BEGIN {printf "%.1f GB", b/1073741824}'
 }
 
 # ---------------------------------------------------------------------------

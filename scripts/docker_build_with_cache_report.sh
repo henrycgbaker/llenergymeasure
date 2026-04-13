@@ -29,10 +29,10 @@ mins=$(( elapsed / 60 ))
 secs=$(( elapsed % 60 ))
 human=$(printf "%dm %02ds" "${mins}" "${secs}")
 
-# These two markers are stable BuildKit conventions documented in the
-# build-push-action and buildx repos; they have not changed in years.
-imported=$(grep -c "importing cache manifest from ghcr.io" "${log}" 2>/dev/null || true)
-cached_steps=$(grep -cE "^#[0-9]+ CACHED$" "${log}" 2>/dev/null || true)
+# grep -c exits 1 on zero matches; || echo 0 keeps the value numeric for the
+# arithmetic tests below (|| true would leave an empty string under set -e).
+imported=$(grep -c "importing cache manifest from ghcr.io" "${log}" 2>/dev/null || echo 0)
+cached_steps=$(grep -cE "^#[0-9]+ CACHED$" "${log}" 2>/dev/null || echo 0)
 
 echo
 if [[ "${rc}" -ne 0 ]]; then
