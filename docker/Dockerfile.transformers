@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# PyTorch engine — llenergymeasure on top of official PyTorch image
+# Transformers engine — llenergymeasure on PyTorch base image
 # ============================================================
-# Extends pytorch/pytorch with llenergymeasure installed.
+# Uses pytorch/pytorch as the tensor substrate, then installs llenergymeasure
+# with the HuggingFace Transformers engine on top.
 # CUDA and PyTorch compatibility is guaranteed by the upstream image.
 #
 # Usage:
-#   docker build -f docker/Dockerfile.pytorch -t llenergymeasure-pytorch .
+#   docker build -f docker/Dockerfile.transformers -t llenergymeasure-transformers .
 #
 # Version pin policy: update PYTORCH_VERSION on each milestone release.
 # Must be compatible with pyproject.toml torch>=2.5 constraint.
@@ -80,7 +81,7 @@ COPY --from=builder /flash-attn-staging/ /opt/conda/lib/python3.11/site-packages
 
 WORKDIR /app
 
-# Install llenergymeasure with pytorch extras from source (no PyPI yet).
+# Install llenergymeasure with transformers extras from source (no PyPI yet).
 # sentencepiece needed for Llama/Qwen tokenisers.
 # Bind mounts: pyproject.toml/uv.lock/README.md are build-only (not needed at runtime).
 # Cache mount: uv reuses cached wheels across rebuilds without bloating the image.
@@ -89,7 +90,7 @@ RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
     --mount=type=bind,source=uv.lock,target=/app/uv.lock \
     --mount=type=bind,source=README.md,target=/app/README.md \
     --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system ".[pytorch]" sentencepiece einops
+    uv pip install --system ".[transformers]" sentencepiece einops
 
 # HuggingFace cache — writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface
