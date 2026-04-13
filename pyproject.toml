@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-pytorch = [
+transformers = [
     "torch>=2.5",
     "transformers>=4.49",
     "accelerate>=1.4",
@@ -38,7 +38,7 @@ tensorrt = ["tensorrt-llm>=0.12"]
 zeus = ["zeus>=0.13.1"]
 codecarbon = ["codecarbon>=2.8"]
 dev = [
-    "llenergymeasure[pytorch]",
+    "llenergymeasure[transformers]",
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.8.0",
@@ -51,7 +51,7 @@ dev = [
 
 [dependency-groups]
 dev = [
-    "llenergymeasure[pytorch]",
+    "llenergymeasure[transformers]",
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.8.0",

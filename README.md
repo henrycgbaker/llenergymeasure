@@ -12,7 +12,7 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 
 ## Key Features
 
-- **Multi-engine inference** — PyTorch, vLLM, TensorRT-LLM, SGLang (planned)
+- **Multi-engine inference** — Transformers, vLLM, TensorRT-LLM, SGLang (planned)
 - **GPU energy measurement** — NVML, Zeus, CodeCarbon, others 
 - **Smart sweep system** — define parameter grids, run Cartesian product experiments automatically; intelligently managed sweep hierarchy scopes available config fields to appropriate engine/component, and ensures invalid combinations are removed
 - **Docker isolation** — launches per-experiment containers with full GPU passthrough; latest docker images for each engine in registry with full runner configurability and local mode also available. Every study pre-flight now verifies that each image's `ExperimentConfig` schema fingerprint matches the host's, aborting with an actionable rebuild hint on drift (`llem doctor` for a one-shot check).
@@ -24,13 +24,13 @@ LLenergyMeasure is a Python framework for measuring the energy consumption, thro
 ## Quick Install
 
 ```bash
-pip install "llenergymeasure[pytorch]"
+pip install "llenergymeasure[transformers]"
 ```
 
 Run your first measurement:
 
 ```bash
-llem run --model gpt2 --engine pytorch
+llem run --model gpt2 --engine transformers
 ```
 
 See [Installation](docs/installation.md) for system requirements, Docker setup, and available extras. See [Getting Started](docs/getting-started.md) to run and interpret your first experiment.
@@ -44,9 +44,9 @@ See [Installation](docs/installation.md) for system requirements, Docker setup, 
 | Guide | Description |
 |-------|-------------|
 | [Installation](docs/installation.md) | System requirements, pip install, Docker setup path |
-| [Getting Started](docs/getting-started.md) | First experiment, PyTorch and Docker tracks |
+| [Getting Started](docs/getting-started.md) | First experiment, Transformers and Docker tracks |
 | [Docker Setup](docs/docker-setup.md) | NVIDIA Container Toolkit walkthrough for vLLM |
-| [Engine Configuration](docs/engines.md) | PyTorch vs vLLM, parameter support matrix |
+| [Engine Configuration](docs/engines.md) | Transformers vs vLLM, parameter support matrix |
 | [Study & Experiment Configuration](docs/study-config.md) | YAML reference, sweeps, config schema |
 | [CLI Reference](docs/cli-reference.md) | `llem run`, `llem config`, and `llem doctor` flags and options |
 | [Energy Measurement](docs/energy-measurement.md) | NVML, Zeus, CodeCarbon backends, measurement mechanics |

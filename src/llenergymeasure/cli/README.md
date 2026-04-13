@@ -24,7 +24,7 @@ Three commands: `llem run` for running experiments and studies, `llem config` fo
 ```bash
 llem run [CONFIG]           # run from YAML config
 llem run --model gpt2       # inline model spec
-llem run --model gpt2 --engine pytorch --dataset aienergyscore -n 100
+llem run --model gpt2 --engine transformers --dataset aienergyscore -n 100
 llem run --dry-run          # validate config without running
 llem run -v                 # verbose logging (INFO)
 llem run -vv                # debug logging

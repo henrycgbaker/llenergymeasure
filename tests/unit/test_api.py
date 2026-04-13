@@ -243,9 +243,9 @@ def test_run_experiment_kwargs_engine(monkeypatch):
 
     monkeypatch.setattr(api_module, "_run", mock_run)
 
-    run_experiment(model="gpt2", engine="pytorch")
+    run_experiment(model="gpt2", engine="transformers")
 
-    assert captured_study["value"].experiments[0].engine == "pytorch"
+    assert captured_study["value"].experiments[0].engine == "transformers"
 
 
 # =============================================================================
@@ -267,7 +267,7 @@ class _MockBackend:
 
     @property
     def name(self) -> str:
-        return "pytorch"
+        return "transformers"
 
     def load_model(self, config: ExperimentConfig, **kwargs):
         return object()  # Opaque model object
@@ -389,13 +389,13 @@ def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    config = ExperimentConfig(model="gpt2", engine="pytorch")
+    config = ExperimentConfig(model="gpt2", engine="transformers")
     study = StudyConfig(experiments=[config])
 
     api_module._run(study)
 
     assert len(engine_calls) == 1
-    assert engine_calls[0] == "pytorch"
+    assert engine_calls[0] == "transformers"
 
 
 def test_run_returns_study_result(monkeypatch, tmp_path):
@@ -672,7 +672,7 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
     mock_result = make_result(experiment_id="runner-wired")
 
     resolved_specs = {
-        "pytorch": RunnerSpec(mode="local", image=None, source="default"),
+        "transformers": RunnerSpec(mode="local", image=None, source="default"),
     }
 
     # Capture what runner_specs was passed to _run_via_runner
@@ -723,8 +723,8 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
 
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="gpt2", engine="pytorch"),
-            ExperimentConfig(model="gpt2-medium", engine="pytorch"),
+            ExperimentConfig(model="gpt2", engine="transformers"),
+            ExperimentConfig(model="gpt2-medium", engine="transformers"),
         ]
     )
 
@@ -771,7 +771,7 @@ def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
 
     mock_manifest = MagicMock(spec=ManifestWriter)
 
-    config = ExperimentConfig(model="gpt2", engine="pytorch")
+    config = ExperimentConfig(model="gpt2", engine="transformers")
     study = StudyConfig(experiments=[config])
 
     api_module._run_in_process(study, mock_manifest, tmp_path, runner_specs=None)
@@ -792,7 +792,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
     from llenergymeasure.infra.runner_resolution import RunnerSpec
 
     mixed_specs = {
-        "pytorch": RunnerSpec(mode="local", image=None, source="default"),
+        "transformers": RunnerSpec(mode="local", image=None, source="default"),
         "vllm": RunnerSpec(mode="docker", image=None, source="yaml"),
     }
 
@@ -911,10 +911,10 @@ class TestResolveGpuIndices:
 
     def _make_pytorch_config(self, device_map: str | None = None) -> ExperimentConfig:
         """Build a minimal PyTorch ExperimentConfig."""
-        from llenergymeasure.config.engine_configs import PyTorchConfig
+        from llenergymeasure.config.engine_configs import TransformersConfig
 
-        pytorch_cfg = PyTorchConfig(device_map=device_map)
-        return ExperimentConfig(model="gpt2", engine="pytorch", pytorch=pytorch_cfg)
+        pytorch_cfg = TransformersConfig(device_map=device_map)
+        return ExperimentConfig(model="gpt2", engine="transformers", transformers=pytorch_cfg)
 
     def _make_mock_pynvml(self, device_count: int):
         """Build a minimal pynvml mock with nvmlInit, nvmlDeviceGetCount, nvmlShutdown."""
@@ -977,10 +977,12 @@ class TestResolveGpuIndices:
         assert _resolve_gpu_indices(config) == [0]
 
     def test_pytorch_engine_no_pytorch_block_returns_zero(self):
-        """PyTorch engine with pytorch=None (no pytorch block) returns [0]."""
+        """PyTorch engine with transformers=None (no pytorch block) returns [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = ExperimentConfig.model_construct(model="gpt2", engine="pytorch", pytorch=None)
+        config = ExperimentConfig.model_construct(
+            model="gpt2", engine="transformers", transformers=None
+        )
         assert _resolve_gpu_indices(config) == [0]
 
     # ── vLLM engine tests ──

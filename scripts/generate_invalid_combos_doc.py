@@ -39,7 +39,7 @@ except ImportError:
 INVALID_COMBOS: list[tuple[str, str, str, str]] = [
     # Cross-engine validation rules (from ExperimentConfig validator)
     (
-        "pytorch",
+        "transformers",
         "parallelism.strategy=pipeline_parallel",
         "PyTorch's generate() requires full model access for autoregressive generation",
         "Use engine='vllm' or engine='tensorrt' for pipeline parallel",
@@ -94,19 +94,19 @@ INVALID_COMBOS: list[tuple[str, str, str, str]] = [
 STREAMING_CONSTRAINTS: list[tuple[str, str, str, str]] = [
     (
         "all",
-        "pytorch.batch_size / vllm.max_num_seqs",
+        "transformers.batch_size / vllm.max_num_seqs",
         "Ignored - processes 1 request at a time",
         "Reduced throughput but accurate latency",
     ),
     (
-        "pytorch",
-        "pytorch.torch_compile",
+        "transformers",
+        "transformers.torch_compile",
         "May cause graph-tracing errors",
         "Falls back to non-compiled inference",
     ),
     (
-        "pytorch",
-        "pytorch.batching_strategy",
+        "transformers",
+        "transformers.batching_strategy",
         "Ignored - always sequential",
         "No batching optimisation",
     ),
@@ -121,14 +121,14 @@ STREAMING_CONSTRAINTS: list[tuple[str, str, str, str]] = [
 # Known hardware/model limitations (not config validation, but runtime)
 RUNTIME_LIMITATIONS: list[tuple[str, str, str, str]] = [
     (
-        "pytorch",
-        "pytorch.attn_implementation=flash_attention_2",
+        "transformers",
+        "transformers.attn_implementation=flash_attention_2",
         "flash-attn requires Ampere+ GPU (SM80+); fails on older architectures",
         "Use attn_implementation='sdpa' on pre-Ampere GPUs",
     ),
     (
-        "pytorch",
-        "pytorch.attn_implementation=flash_attention_3",
+        "transformers",
+        "transformers.attn_implementation=flash_attention_3",
         "FA3 requires the flash_attn_3 package (built from flash-attn hopper/ directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built",
         "Install flash_attn_3 from source, or use the Docker runner",
     ),
@@ -227,8 +227,8 @@ def generate_markdown() -> str:
         introspection_constraints = get_streaming_constraints()
         for param, explanation in introspection_constraints.items():
             engine = (
-                "pytorch"
-                if param.startswith("pytorch.")
+                "transformers"
+                if param.startswith("transformers.")
                 else ("vllm" if param.startswith("vllm.") else "all")
             )
             lines.append(f"| {engine} | `{param}` | {explanation} | See docs |")

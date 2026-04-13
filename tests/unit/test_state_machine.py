@@ -194,7 +194,7 @@ def test_state_manager_save_returns_path(tmp_path):
 
 def test_compute_config_hash_deterministic():
     """Same dict always produces the same hash."""
-    config = {"model": "gpt2", "engine": "pytorch", "dtype": "bfloat16"}
+    config = {"model": "gpt2", "engine": "transformers", "dtype": "bfloat16"}
     h1 = compute_config_hash(config)
     h2 = compute_config_hash(config)
     assert h1 == h2
@@ -202,8 +202,8 @@ def test_compute_config_hash_deterministic():
 
 def test_compute_config_hash_different_for_different_configs():
     """Different dicts produce different hashes."""
-    config_a = {"model": "gpt2", "engine": "pytorch"}
-    config_b = {"model": "llama", "engine": "pytorch"}
+    config_a = {"model": "gpt2", "engine": "transformers"}
+    config_b = {"model": "llama", "engine": "transformers"}
     assert compute_config_hash(config_a) != compute_config_hash(config_b)
 
 

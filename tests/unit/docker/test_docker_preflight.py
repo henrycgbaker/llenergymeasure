@@ -800,10 +800,10 @@ class TestWiring:
         from llenergymeasure.infra.runner_resolution import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
-        study = self._make_study(["pytorch"])
+        study = self._make_study(["transformers"])
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
-        runner_specs = {"pytorch": docker_spec}
+        runner_specs = {"transformers": docker_spec}
 
         # run_docker_preflight is imported inside the function body via a local
         # 'from' import. Patch it at the source module.
@@ -833,10 +833,10 @@ class TestWiring:
         from llenergymeasure.infra.runner_resolution import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
-        study = self._make_study(["pytorch"])
+        study = self._make_study(["transformers"])
 
         local_spec = RunnerSpec(mode="local", image=None, source="default")
-        runner_specs = {"pytorch": local_spec}
+        runner_specs = {"transformers": local_spec}
 
         call_count = 0
 
@@ -858,10 +858,10 @@ class TestWiring:
         from llenergymeasure.infra.runner_resolution import RunnerSpec
         from llenergymeasure.study.preflight import run_study_preflight
 
-        study = self._make_study(["pytorch"])
+        study = self._make_study(["transformers"])
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
-        runner_specs = {"pytorch": docker_spec}
+        runner_specs = {"transformers": docker_spec}
 
         received_skip: list[bool] = []
 
@@ -889,12 +889,12 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(model="test-model", engine="pytorch")],
+            experiments=[ExperimentConfig(model="test-model", engine="transformers")],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
         )
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
-        runner_specs = {"pytorch": docker_spec}
+        runner_specs = {"transformers": docker_spec}
 
         received_skip: list[bool] = []
 
@@ -923,12 +923,12 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(model="test-model", engine="pytorch")],
+            experiments=[ExperimentConfig(model="test-model", engine="transformers")],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
         )
 
         docker_spec = RunnerSpec(mode="docker", image=None, source="yaml")
-        runner_specs = {"pytorch": docker_spec}
+        runner_specs = {"transformers": docker_spec}
 
         received_skip: list[bool] = []
 

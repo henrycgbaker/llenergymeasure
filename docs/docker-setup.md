@@ -89,7 +89,7 @@ Expected output includes `Hello from Docker!`.
 
 Docker image builds use BuildKit under the hood. The default builder has a conservative
 garbage-collection limit (~10% of disk) that is too small when building all three engine
-images (PyTorch, vLLM, TensorRT). This causes build cache eviction and expensive
+images (Transformers, vLLM, TensorRT). This causes build cache eviction and expensive
 recompilation (FA3 takes ~1 hour from scratch).
 
 Create a dedicated builder with a 200 GiB cache limit:
@@ -335,7 +335,7 @@ Output shows local vs registry source for each engine:
 
 ```
 === Image resolution ===
-  pytorch    -> llenergymeasure:pytorch  (local_build)
+  pytorch    -> llenergymeasure:transformers  (local_build)
   tensorrt   -> ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0  (registry)
   vllm       -> llenergymeasure:vllm  (local_build)
 ```
@@ -361,14 +361,14 @@ your `.env`, builds use the GHCR registry cache for dramatically faster builds (
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, engines, or the container entrypoint, rebuild for changes to take
-> effect inside containers. Local-runner experiments (PyTorch without Docker) use the
+> effect inside containers. Local-runner experiments (Transformers without Docker) use the
 > installed source directly and do not need a rebuild.
 
 ### Override images in YAML
 
 ```yaml
 runners:
-  pytorch: local                       # host execution, no Docker
+  transformers: local                       # host execution, no Docker
   vllm: docker                         # default resolution (local → registry)
   tensorrt: "docker:my/custom:tag"     # explicit image override
 ```
@@ -398,7 +398,7 @@ renamed, or restructured.
 Inspect the labels on a local image:
 
 ```bash
-docker image inspect llenergymeasure:pytorch \
+docker image inspect llenergymeasure:transformers \
     --format '{{json .Config.Labels}}' | python3 -m json.tool
 ```
 

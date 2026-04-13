@@ -35,8 +35,8 @@ import subprocess
 from functools import lru_cache
 
 from llenergymeasure.config.ssot import (
-    ENGINE_PYTORCH,
     ENGINE_TENSORRT,
+    ENGINE_TRANSFORMERS,
     ENGINE_VLLM,
     ENV_IMAGE_PREFIX,
     RUNNER_DOCKER,
@@ -68,7 +68,7 @@ DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{versio
 LOCAL_IMAGE_TEMPLATE = "llenergymeasure:{engine}"
 
 # Engines that have a Docker image in the registry.
-_SUPPORTED_ENGINES = frozenset({ENGINE_PYTORCH, ENGINE_VLLM, ENGINE_TENSORRT})
+_SUPPORTED_ENGINES = frozenset({ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT})
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ def get_default_image(engine: str) -> str:
     in the study YAML.
 
     Args:
-        engine: Engine name, e.g. ``"vllm"``, ``"pytorch"``, ``"tensorrt"``.
+        engine: Engine name, e.g. ``"vllm"``, ``"transformers"``, ``"tensorrt"``.
 
     Returns:
         Image reference string, e.g. ``"llenergymeasure:vllm"`` (local) or

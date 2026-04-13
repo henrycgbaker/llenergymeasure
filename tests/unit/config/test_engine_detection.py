@@ -52,12 +52,12 @@ def _hide_module(name: str):
 class TestIsEngineAvailable:
     def test_returns_true_when_torch_importable(self):
         pytest.importorskip("torch")
-        result = is_engine_available("pytorch")
+        result = is_engine_available("transformers")
         assert result is True
 
     def test_returns_false_when_torch_not_importable(self):
         with _hide_module("torch"):
-            result = is_engine_available("pytorch")
+            result = is_engine_available("transformers")
         assert result is False
 
     def test_returns_false_when_vllm_not_importable(self):
@@ -132,11 +132,11 @@ class TestGetAvailableEngines:
     def test_returns_list_of_available_engines(self):
         with patch(
             "llenergymeasure.config.engine_detection.is_engine_available",
-            side_effect=lambda b: b == "pytorch",
+            side_effect=lambda b: b == "transformers",
         ):
             result = get_available_engines()
 
-        assert result == ["pytorch"]
+        assert result == ["transformers"]
 
     def test_returns_empty_list_when_none_available(self):
         with patch(
@@ -160,15 +160,15 @@ class TestGetAvailableEngines:
         """get_available_engines preserves KNOWN_ENGINES order."""
         with patch(
             "llenergymeasure.config.engine_detection.is_engine_available",
-            side_effect=lambda b: b in ("pytorch", "vllm"),
+            side_effect=lambda b: b in ("transformers", "vllm"),
         ):
             result = get_available_engines()
 
-        assert result == ["pytorch", "vllm"]
+        assert result == ["transformers", "vllm"]
 
     def test_pytorch_comes_before_vllm_in_known_engines(self):
         """Locked decision: pytorch takes priority over vllm."""
-        pytorch_idx = KNOWN_ENGINES.index("pytorch")
+        pytorch_idx = KNOWN_ENGINES.index("transformers")
         vllm_idx = KNOWN_ENGINES.index("vllm")
         assert pytorch_idx < vllm_idx
 
@@ -180,7 +180,7 @@ class TestGetAvailableEngines:
 
 class TestGetEngineInstallHint:
     def test_pytorch_hint_is_base_install(self):
-        hint = get_engine_install_hint("pytorch")
+        hint = get_engine_install_hint("transformers")
         assert "llenergymeasure" in hint
         # pytorch ships with the base package — no extra bracket needed
         assert "[" not in hint

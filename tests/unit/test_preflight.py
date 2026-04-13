@@ -77,7 +77,7 @@ def test_preflight_collects_all_failures(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "3 issue(s) found" in msg
     # All three failures present
     assert "CUDA" in msg
-    assert "pytorch" in msg.lower() or "transformers" in msg.lower()
+    assert "transformers" in msg.lower() or "transformers" in msg.lower()
     assert "not found" in msg
 
 
@@ -116,11 +116,11 @@ def test_preflight_engine_not_installed(monkeypatch: pytest.MonkeyPatch) -> None
         llenergymeasure.harness.preflight, "_check_model_accessible", lambda model_id: None
     )
 
-    config = make_config(engine="pytorch")
+    config = make_config(engine="transformers")
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
-    assert "pytorch not installed" in str(exc_info.value)
+    assert "transformers not installed" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +288,7 @@ def test_check_cuda_available_no_torch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result is False
 
 
-def test_check_engine_installed_pytorch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_engine_installed_transformers(monkeypatch: pytest.MonkeyPatch) -> None:
     """_check_engine_installed() delegates to find_spec for transformers."""
     mock_spec = MagicMock()  # truthy
     monkeypatch.setattr(
@@ -296,7 +296,7 @@ def test_check_engine_installed_pytorch(monkeypatch: pytest.MonkeyPatch) -> None
         "find_spec",
         lambda name: mock_spec if name == "transformers" else None,
     )
-    assert llenergymeasure.harness.preflight._check_engine_installed("pytorch") is True
+    assert llenergymeasure.harness.preflight._check_engine_installed("transformers") is True
 
 
 def test_check_engine_installed_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -423,7 +423,7 @@ def test_run_study_preflight_single_engine_passes(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    study = _make_study(["pytorch"])
+    study = _make_study(["transformers"])
     # Should not raise
     run_study_preflight(study)
 
@@ -436,7 +436,7 @@ def test_run_study_preflight_multi_engine_docker_available_auto_elevates(
     monkeypatch.setattr(
         "llenergymeasure.infra.docker_preflight.run_docker_preflight", lambda skip=False: None
     )
-    study = _make_study(["pytorch", "vllm"])
+    study = _make_study(["transformers", "vllm"])
     with caplog.at_level(logging.INFO, logger="llenergymeasure.study.preflight"):
         # Should not raise
         run_study_preflight(study)
@@ -455,13 +455,13 @@ def test_run_study_preflight_multi_engine_no_docker_raises(
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    study = _make_study(["pytorch", "vllm"])
+    study = _make_study(["transformers", "vllm"])
     with pytest.raises(PreFlightError) as exc_info:
         run_study_preflight(study)
 
     msg = str(exc_info.value)
     assert "Docker" in msg
-    assert "pytorch" in msg or "vllm" in msg
+    assert "transformers" in msg or "vllm" in msg
     assert "NVIDIA Container Toolkit" in msg or "single engine" in msg
 
 
@@ -472,13 +472,13 @@ def test_run_study_preflight_error_message_contains_engines(
     monkeypatch.setattr(
         "llenergymeasure.infra.runner_resolution.is_docker_available", lambda: False
     )
-    study = _make_study(["pytorch", "tensorrt"])
+    study = _make_study(["transformers", "tensorrt"])
     with pytest.raises(PreFlightError) as exc_info:
         run_study_preflight(study)
 
     msg = str(exc_info.value)
     # Both engine names must appear in the error message
-    assert "pytorch" in msg
+    assert "transformers" in msg
     assert "tensorrt" in msg
 
 
@@ -528,14 +528,14 @@ def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.Mon
     )
 
     class _FakeBackend:
-        name = "pytorch"
+        name = "transformers"
 
         def validate_config(self, config):
             return []
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
-    config = ExperimentConfig(model="test-model", engine="pytorch")
+    config = ExperimentConfig(model="test-model", engine="transformers")
     # Should not raise
     run_preflight(config)
 

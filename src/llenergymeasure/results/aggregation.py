@@ -319,7 +319,7 @@ def aggregate_results(
     )
 
     # Resolve engine and model_name from first result if not provided
-    engine = raw_results[0].engine if raw_results else "pytorch"
+    engine = raw_results[0].engine if raw_results else "transformers"
     engine_version: str | None = raw_results[0].engine_version if raw_results else None
     model_name = raw_results[0].model_name if raw_results else "unknown"
 

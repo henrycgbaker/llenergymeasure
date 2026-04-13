@@ -11,7 +11,7 @@ Each engine owns only inference: load model, run warmup, run inference, clean up
 | Module | Description |
 |--------|-------------|
 | `protocol.py` | `EnginePlugin` protocol and `InferenceOutput` dataclass |
-| `pytorch.py` | HuggingFace Transformers engine |
+| `transformers.py` | HuggingFace Transformers engine |
 | `vllm.py` | vLLM engine (Docker-only in production) |
 | `tensorrt.py` | TensorRT-LLM engine (NGC Docker) |
 | `_helpers.py` | Shared helpers (dataset loading, token counting) |
@@ -69,7 +69,7 @@ Zero engine deps at base. Each engine requires an install extra:
 
 | Engine | Install extra | Required package |
 |---------|--------------|-----------------|
-| `pytorch` | `pip install llenergymeasure[pytorch]` | `transformers` |
+| `pytorch` | `pip install llenergymeasure[transformers]` | `transformers` |
 | `vllm` | `pip install llenergymeasure[vllm]` | `vllm` |
 | `tensorrt` | `pip install llenergymeasure[tensorrt]` | `tensorrt_llm` |
 
@@ -82,5 +82,5 @@ Zero engine deps at base. Each engine requires an install extra:
 ## Related
 
 - See `../harness/` for the measurement lifecycle that drives these engines
-- See `../config/README.md` for `PyTorchConfig`, `VLLMConfig`, `TensorRTConfig`
+- See `../config/README.md` for `TransformersConfig`, `VLLMConfig`, `TensorRTConfig`
 - See `../api/preflight.py` for engine pre-flight checks

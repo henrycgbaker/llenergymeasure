@@ -7,7 +7,7 @@ name: sigint-test
 
 experiments:
   - model: gpt2
-    engine: pytorch
+    engine: transformers
     dataset:
       n_prompts: 10
     max_output_tokens: 32

@@ -128,7 +128,7 @@ config = ExperimentConfig(
 **Sub-configurations:**
 - `DatasetConfig` - source, n_prompts, order (nested sub-object)
 - `DecoderConfig` - temperature, sampling presets, repetition control
-- `PyTorchConfig` - PyTorch engine options
+- `TransformersConfig` - PyTorch engine options
 - `VLLMConfig` - vLLM engine options
 - `TensorRTConfig` - TensorRT-LLM backend options
 
@@ -441,8 +441,8 @@ vllm:
   kv_cache_dtype: fp8           # Memory-efficient KV cache
 
 # PyTorch engine (default)
-engine: pytorch
-pytorch:
+engine: transformers
+transformers:
   attn_implementation: flash_attention_2
   torch_compile: reduce-overhead
 ```
@@ -457,7 +457,7 @@ pytorch:
 | `VLLMAttentionConfig` | Attention backend selection |
 | `VLLMSpeculativeConfig` | Speculative decoding setup |
 | `VLLMLoRAConfig` | LoRA adapter configuration |
-| `PyTorchConfig` | PyTorch/Transformers options |
+| `TransformersConfig` | PyTorch/Transformers options |
 | `PyTorchAssistedGenerationConfig` | Assisted generation (speculative) |
 | `TensorRTConfig` | TensorRT-LLM engine and build options |
 | `TensorRTQuantizationConfig` | TensorRT quantization (FP8/INT8/INT4) |

@@ -1,4 +1,4 @@
-"""Unit tests for measurement integration: timeseries, warnings, and PyTorchEngine wiring.
+"""Unit tests for measurement integration: timeseries, warnings, and TransformersEngine wiring.
 
 All tests are mocked — no GPU or real model required.
 """
@@ -349,7 +349,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     )
     now = datetime.now()
     result = harness._build_result(
-        engine_name="pytorch",
+        engine_name="transformers",
         engine_version=None,
         config=config,
         output=output,
@@ -398,7 +398,7 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     energy_measurement = EnergyMeasurement(total_j=100.0, duration_sec=8.0)
     now = datetime.now()
     result = harness._build_result(
-        engine_name="pytorch",
+        engine_name="transformers",
         engine_version=None,
         config=config,
         output=output,
@@ -444,7 +444,7 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     now = datetime.now()
 
     result = harness._build_result(
-        engine_name="pytorch",
+        engine_name="transformers",
         engine_version=None,
         config=config,
         output=output,
@@ -510,7 +510,7 @@ def _make_build_result_args():
     )
     now = datetime(2026, 1, 1, 12, 0, 0)
     return dict(
-        engine_name="pytorch",
+        engine_name="transformers",
         engine_version=None,
         config=config,
         output=output,

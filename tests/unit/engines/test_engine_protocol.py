@@ -29,13 +29,13 @@ def test_tensorrt_engine_satisfies_plugin_protocol():
 
 
 def test_pytorch_engine_satisfies_plugin_protocol():
-    """PyTorchEngine must satisfy the EnginePlugin Protocol."""
+    """TransformersEngine must satisfy the EnginePlugin Protocol."""
     from llenergymeasure.engines.protocol import EnginePlugin
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     assert isinstance(engine, EnginePlugin)
-    assert engine.name == "pytorch"
+    assert engine.name == "transformers"
 
 
 # =============================================================================
@@ -44,11 +44,11 @@ def test_pytorch_engine_satisfies_plugin_protocol():
 
 
 def test_get_engine_pytorch():
-    """get_engine('pytorch') returns a PyTorchEngine with name 'pytorch'."""
+    """get_engine('transformers') returns a TransformersEngine with name 'transformers'."""
     from llenergymeasure.engines import get_engine
 
-    engine = get_engine("pytorch")
-    assert engine.name == "pytorch"
+    engine = get_engine("transformers")
+    assert engine.name == "transformers"
 
 
 def test_get_engine_tensorrt():
@@ -83,7 +83,7 @@ def test_get_engine_unknown_message_contains_engine_name():
 
 
 def test_detect_default_engine_returns_pytorch():
-    """detect_default_engine returns 'pytorch' when transformers is installed."""
+    """detect_default_engine returns 'transformers' when transformers is installed."""
     pytest.importorskip("transformers")
     from llenergymeasure.engines import detect_default_engine
 
@@ -91,7 +91,7 @@ def test_detect_default_engine_returns_pytorch():
     assert importlib.util.find_spec("transformers") is not None, (
         "transformers must be installed for this test to be meaningful"
     )
-    assert detect_default_engine() == "pytorch"
+    assert detect_default_engine() == "transformers"
 
 
 def test_detect_default_engine_returns_tensorrt_when_only_trt():
@@ -147,9 +147,9 @@ def test_model_load_kwargs_contains_base_keys():
     """_model_load_kwargs always includes torch_dtype, device_map, trust_remote_code."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")
     kwargs = engine._model_load_kwargs(config)
 
@@ -162,9 +162,9 @@ def test_model_load_kwargs_passthrough_kwargs_merged():
     """passthrough_kwargs are merged into model load kwargs (core P0 fix)."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2", passthrough_kwargs={"custom_key": "custom_value"})
     kwargs = engine._model_load_kwargs(config)
 
@@ -176,9 +176,9 @@ def test_model_load_kwargs_passthrough_can_override_defaults():
     """passthrough_kwargs can override engine defaults (intentional escape hatch)."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     # Override device_map via passthrough
     config = ExperimentConfig(model="gpt2", passthrough_kwargs={"device_map": "cpu"})
     kwargs = engine._model_load_kwargs(config)
@@ -190,9 +190,9 @@ def test_model_load_kwargs_no_passthrough_when_none():
     """No extra keys added when passthrough_kwargs is None."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")  # passthrough_kwargs=None by default
     kwargs = engine._model_load_kwargs(config)
 
@@ -201,16 +201,16 @@ def test_model_load_kwargs_no_passthrough_when_none():
 
 
 def test_model_load_kwargs_pytorch_config_attn_implementation():
-    """PyTorchConfig.attn_implementation is included in kwargs."""
+    """TransformersConfig.attn_implementation is included in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(attn_implementation="sdpa"),
+        transformers=TransformersConfig(attn_implementation="sdpa"),
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -226,14 +226,14 @@ def test_model_load_kwargs_flash_attention_falls_back_when_not_installed():
     """flash_attention_2 falls back to sdpa when flash_attn package is missing."""
     pytest.importorskip("torch")
 
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+        transformers=TransformersConfig(attn_implementation="flash_attention_2"),
     )
 
     # flash_attn is not installed in the test environment, so the guard
@@ -250,14 +250,14 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
     import types
     from unittest.mock import patch
 
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(attn_implementation="flash_attention_2"),
+        transformers=TransformersConfig(attn_implementation="flash_attention_2"),
     )
 
     # Simulate flash_attn and flash_attn.bert_padding being importable by
@@ -279,14 +279,14 @@ def test_model_load_kwargs_flash_attention_kept_when_installed():
 def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
     """sdpa attention is passed through without flash_attn availability check."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(attn_implementation="sdpa"),
+        transformers=TransformersConfig(attn_implementation="sdpa"),
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -297,14 +297,14 @@ def test_model_load_kwargs_sdpa_not_affected_by_flash_guard():
 def test_model_load_kwargs_eager_not_affected_by_flash_guard():
     """eager attention is passed through without flash_attn availability check."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(attn_implementation="eager"),
+        transformers=TransformersConfig(attn_implementation="eager"),
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -315,14 +315,14 @@ def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
     """flash_attention_3 also falls back to sdpa when flash_attn is missing."""
     pytest.importorskip("torch")
 
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(attn_implementation="flash_attention_3"),
+        transformers=TransformersConfig(attn_implementation="flash_attention_3"),
     )
 
     # flash_attn is not installed in the test environment, so the guard
@@ -333,18 +333,18 @@ def test_model_load_kwargs_flash_attention_3_falls_back_when_not_installed():
 
 
 def test_model_load_kwargs_pytorch_config_load_in_4bit():
-    """PyTorchConfig.load_in_4bit=True produces a BitsAndBytesConfig quantization_config."""
+    """TransformersConfig.load_in_4bit=True produces a BitsAndBytesConfig quantization_config."""
     pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(load_in_4bit=True),
+        transformers=TransformersConfig(load_in_4bit=True),
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -355,18 +355,18 @@ def test_model_load_kwargs_pytorch_config_load_in_4bit():
 
 
 def test_model_load_kwargs_pytorch_config_load_in_8bit():
-    """PyTorchConfig.load_in_8bit=True produces a BitsAndBytesConfig quantization_config."""
+    """TransformersConfig.load_in_8bit=True produces a BitsAndBytesConfig quantization_config."""
     pytest.importorskip("torch")
     from transformers import BitsAndBytesConfig
 
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(load_in_8bit=True),
+        transformers=TransformersConfig(load_in_8bit=True),
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -377,16 +377,16 @@ def test_model_load_kwargs_pytorch_config_load_in_8bit():
 
 
 def test_model_load_kwargs_pytorch_config_none_values_not_included():
-    """None values from PyTorchConfig are NOT included in kwargs."""
+    """None values from TransformersConfig are NOT included in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
-        pytorch=PyTorchConfig(),  # all fields None
+        transformers=TransformersConfig(),  # all fields None
     )
     kwargs = engine._model_load_kwargs(config)
 
@@ -397,13 +397,13 @@ def test_model_load_kwargs_pytorch_config_none_values_not_included():
 
 
 def test_model_load_kwargs_no_pytorch_section():
-    """When config.pytorch is None, only base keys are present."""
+    """When config.transformers is None, only base keys are present."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
-    config = ExperimentConfig(model="gpt2")  # pytorch=None by default
+    engine = TransformersEngine()
+    config = ExperimentConfig(model="gpt2")  # transformers=None by default
     kwargs = engine._model_load_kwargs(config)
 
     assert "attn_implementation" not in kwargs
@@ -420,36 +420,36 @@ def test_resolve_torch_dtype_fp32():
     """fp32 maps to torch.float32."""
     torch = pytest.importorskip("torch")
 
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    assert PyTorchEngine._resolve_torch_dtype("float32") == torch.float32
+    assert TransformersEngine._resolve_torch_dtype("float32") == torch.float32
 
 
 def test_resolve_torch_dtype_fp16():
     """fp16 maps to torch.float16."""
     torch = pytest.importorskip("torch")
 
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    assert PyTorchEngine._resolve_torch_dtype("float16") == torch.float16
+    assert TransformersEngine._resolve_torch_dtype("float16") == torch.float16
 
 
 def test_resolve_torch_dtype_bf16():
     """bf16 maps to torch.bfloat16."""
     torch = pytest.importorskip("torch")
 
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    assert PyTorchEngine._resolve_torch_dtype("bfloat16") == torch.bfloat16
+    assert TransformersEngine._resolve_torch_dtype("bfloat16") == torch.bfloat16
 
 
 def test_resolve_torch_dtype_unknown_raises():
     """Unknown dtype string raises KeyError."""
     pytest.importorskip("torch")
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
     with pytest.raises(KeyError):
-        PyTorchEngine._resolve_torch_dtype("int8")
+        TransformersEngine._resolve_torch_dtype("int8")
 
 
 # =============================================================================
@@ -460,9 +460,9 @@ def test_resolve_torch_dtype_unknown_raises():
 def test_build_generate_kwargs_defaults():
     """Default decoder config produces expected generate kwargs."""
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")
     kwargs = engine._build_generate_kwargs(config)
 
@@ -476,9 +476,9 @@ def test_build_generate_kwargs_defaults():
 def test_build_generate_kwargs_greedy_decoding():
     """Greedy decoding (temperature=0) removes sampling params."""
     from llenergymeasure.config.models import DecoderConfig, ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
+    engine = TransformersEngine()
     config = ExperimentConfig(
         model="gpt2",
         decoder=DecoderConfig(temperature=0.0, do_sample=False),
@@ -498,9 +498,9 @@ def test_build_generate_kwargs_greedy_decoding():
 
 def test_engine_plugin_protocol_has_required_methods():
     """EnginePlugin Protocol defines all required methods plus name/version properties and validate_config."""
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    obj = PyTorchEngine()
+    obj = TransformersEngine()
     assert hasattr(obj, "name")
     assert hasattr(obj, "version")
     assert hasattr(obj, "load_model")
@@ -513,10 +513,10 @@ def test_engine_plugin_protocol_has_required_methods():
 def test_engine_plugin_protocol_is_runtime_checkable():
     """EnginePlugin is @runtime_checkable (isinstance works)."""
     from llenergymeasure.engines.protocol import EnginePlugin
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
     # runtime_checkable means isinstance() works and confirms protocol conformance
-    assert isinstance(PyTorchEngine(), EnginePlugin) is True
+    assert isinstance(TransformersEngine(), EnginePlugin) is True
 
 
 def test_non_conforming_object_fails_plugin_protocol_check():
@@ -535,12 +535,12 @@ def test_non_conforming_object_fails_plugin_protocol_check():
 
 
 def test_pytorch_validate_config_returns_empty():
-    """PyTorchEngine.validate_config returns empty list."""
+    """TransformersEngine.validate_config returns empty list."""
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
     config = ExperimentConfig(model="gpt2")
-    assert PyTorchEngine().validate_config(config) == []
+    assert TransformersEngine().validate_config(config) == []
 
 
 def test_vllm_validate_config_returns_empty():
@@ -572,14 +572,14 @@ def test_get_engine_unknown_message_lists_tensorrt():
 
 
 def test_model_load_kwargs_tp_plan_forwarded():
-    """With PyTorchConfig(tp_plan='auto'), kwargs contains tp_plan and no device_map."""
+    """With TransformersConfig(tp_plan='auto'), kwargs contains tp_plan and no device_map."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
-    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_plan="auto"))
+    engine = TransformersEngine()
+    config = ExperimentConfig(model="gpt2", transformers=TransformersConfig(tp_plan="auto"))
     kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["tp_plan"] == "auto"
@@ -587,14 +587,16 @@ def test_model_load_kwargs_tp_plan_forwarded():
 
 
 def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
-    """With PyTorchConfig(tp_plan='auto', tp_size=4), kwargs contains both and no device_map."""
+    """With TransformersConfig(tp_plan='auto', tp_size=4), kwargs contains both and no device_map."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
-    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_plan="auto", tp_size=4))
+    engine = TransformersEngine()
+    config = ExperimentConfig(
+        model="gpt2", transformers=TransformersConfig(tp_plan="auto", tp_size=4)
+    )
     kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["tp_plan"] == "auto"
@@ -603,14 +605,14 @@ def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
 
 
 def test_model_load_kwargs_tp_size_without_tp_plan_ignored():
-    """With PyTorchConfig(tp_size=4) and no tp_plan, tp_size is not in kwargs and device_map defaults."""
+    """With TransformersConfig(tp_size=4) and no tp_plan, tp_size is not in kwargs and device_map defaults."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
-    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(tp_size=4))
+    engine = TransformersEngine()
+    config = ExperimentConfig(model="gpt2", transformers=TransformersConfig(tp_size=4))
     kwargs = engine._model_load_kwargs(config)
 
     assert "tp_size" not in kwargs
@@ -619,14 +621,14 @@ def test_model_load_kwargs_tp_size_without_tp_plan_ignored():
 
 
 def test_model_load_kwargs_device_map_still_works():
-    """PyTorchConfig(device_map='cpu') produces device_map='cpu', no tp_plan in kwargs."""
+    """TransformersConfig(device_map='cpu') produces device_map='cpu', no tp_plan in kwargs."""
     pytest.importorskip("torch")
-    from llenergymeasure.config.engine_configs import PyTorchConfig
+    from llenergymeasure.config.engine_configs import TransformersConfig
     from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    engine = PyTorchEngine()
-    config = ExperimentConfig(model="gpt2", pytorch=PyTorchConfig(device_map="cpu"))
+    engine = TransformersEngine()
+    config = ExperimentConfig(model="gpt2", transformers=TransformersConfig(device_map="cpu"))
     kwargs = engine._model_load_kwargs(config)
 
     assert kwargs["device_map"] == "cpu"
@@ -639,11 +641,11 @@ def test_model_load_kwargs_device_map_still_works():
 
 
 def test_pytorch_version_returns_torch_version():
-    """PyTorchEngine.version returns torch.__version__."""
+    """TransformersEngine.version returns torch.__version__."""
     torch = pytest.importorskip("torch")
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
-    assert PyTorchEngine().version == torch.__version__
+    assert TransformersEngine().version == torch.__version__
 
 
 def test_vllm_version_returns_string():

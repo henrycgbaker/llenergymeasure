@@ -17,8 +17,8 @@ import typer
 
 from llenergymeasure.config.ssot import (
     ENGINE_PACKAGES,
-    ENGINE_PYTORCH,
     ENGINE_TENSORRT,
+    ENGINE_TRANSFORMERS,
     ENGINE_VLLM,
 )
 
@@ -52,7 +52,7 @@ def _probe_gpu() -> list[dict[str, Any]] | None:
 def _probe_engine_version(engine: str) -> str | None:
     """Try to retrieve version string for an installed inference engine."""
     try:
-        if engine == ENGINE_PYTORCH:
+        if engine == ENGINE_TRANSFORMERS:
             import torch
 
             return str(torch.__version__)

@@ -57,7 +57,7 @@ def test_config_basic_output() -> None:
     assert result.exit_code == 0
     assert "GPU" in result.output
     assert "A100" in result.output
-    assert "pytorch: installed" in result.output
+    assert "transformers: installed" in result.output
     assert "vllm: not installed" in result.output
 
 
@@ -296,15 +296,15 @@ def test_probe_gpu_returns_none_on_error() -> None:
     assert result is None
 
 
-def test_probe_engine_version_pytorch() -> None:
-    """_probe_engine_version returns torch.__version__ for pytorch engine."""
+def test_probe_engine_version_transformers() -> None:
+    """_probe_engine_version returns torch.__version__ for transformers engine."""
     from llenergymeasure.cli.config_cmd import _probe_engine_version
 
     mock_torch = MagicMock()
     mock_torch.__version__ = "2.2.0"
 
     with patch.dict("sys.modules", {"torch": mock_torch}):
-        result = _probe_engine_version("pytorch")
+        result = _probe_engine_version("transformers")
 
     assert result == "2.2.0"
 

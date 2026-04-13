@@ -4,17 +4,17 @@
 
 This guide has three tracks. Choose one based on your setup:
 
-- **Quick Start (Local PyTorch)** — No Docker required. Get running in minutes.
+- **Quick Start (Local Transformers)** — No Docker required. Get running in minutes.
 - **Recommended Start (Docker + vLLM)** — Full measurement experience with vLLM backend.
 - **TensorRT-LLM Start (Docker)** — Maximum performance with TensorRT engine compilation.
 
 ---
 
-## Track 1: Quick Start (Local PyTorch)
+## Track 1: Quick Start (Local Transformers)
 
 ### Prerequisites
 
-- `llenergymeasure[pytorch]` installed (see [Installation](installation.md))
+- `llenergymeasure[transformers]` installed (see [Installation](installation.md))
 - NVIDIA GPU available
 
 ### 1. Verify your environment
@@ -23,7 +23,7 @@ This guide has three tracks. Choose one based on your setup:
 llem config
 ```
 
-Check that the output shows `pytorch: installed` under Engines. If it shows "not installed", run `pip install "llenergymeasure[pytorch]"`.
+Check that the output shows `pytorch: installed` under Engines. If it shows "not installed", run `pip install "llenergymeasure[transformers]"`.
 
 ### 2. Run your first experiment
 
@@ -90,7 +90,7 @@ llem run --model gpt2 -e pytorch --output /data/experiments
 
 ### Prerequisites
 
-- `llenergymeasure[pytorch]` installed (base + pytorch needed even for Docker dispatch)
+- `llenergymeasure[transformers]` installed (base + pytorch needed even for Docker dispatch)
 - Docker + NVIDIA Container Toolkit installed — see [Docker Setup](docker-setup.md)
 
 ### 1. Create a config file
@@ -120,7 +120,7 @@ What happens:
 
 ### 3. Read the results
 
-The output format is the same as the PyTorch track. The key difference is `engine: vllm` in the experiment ID and result file.
+The output format is the same as the Transformers track. The key difference is `engine: vllm` in the experiment ID and result file.
 
 ---
 
@@ -133,7 +133,7 @@ runs with the same config load the cached engine and are much faster.
 ### Prerequisites
 
 - Docker + NVIDIA Container Toolkit installed — see [Docker Setup](docker-setup.md)
-- `llenergymeasure[pytorch]` installed (base + pytorch needed even for Docker dispatch)
+- `llenergymeasure[transformers]` installed (base + pytorch needed even for Docker dispatch)
 - NVIDIA GPU with SM >= 7.5 (Turing or newer; e.g. RTX 2000-series, A100, H100)
 
 ### 1. Create a config file
@@ -200,7 +200,7 @@ Minimal config:
 ```yaml
 # experiment.yaml
 model: gpt2
-engine: pytorch
+engine: transformers
 n: 100
 ```
 

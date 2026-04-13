@@ -24,7 +24,7 @@ jobs:
   docker-publish:
     strategy:
       matrix:
-        engine: [pytorch, vllm, tensorrt]
+        engine: [transformers, vllm, tensorrt]
     runs-on: ubuntu-latest
     permissions:
       contents: read

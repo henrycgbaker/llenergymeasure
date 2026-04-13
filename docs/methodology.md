@@ -148,7 +148,7 @@ energy comparisons remain apples-to-apples.
 Baseline caches, TTL expiry, and the `validated` strategy's spot-check
 counter are all keyed per engine target (``local`` for host runs,
 ``image:<sanitised-tag>`` for each Docker image). In a mixed-engine
-study — for example 300 experiments randomly interleaving PyTorch, vLLM,
+study — for example 300 experiments randomly interleaving Transformers, vLLM,
 and TensorRT-LLM — each engine behaves as if it had its own independent
 baseline session:
 
@@ -415,14 +415,14 @@ API names.
 
 ### Complete mapping table
 
-| Universal field | PyTorch native | vLLM native | TensorRT native | Notes |
+| Universal field | Transformers native | vLLM native | TensorRT native | Notes |
 |---|---|---|---|---|
 | `dtype` | `torch_dtype` (torch.float16, etc.) | `dtype` (passthrough) | `dtype` (passthrough) | Direct mapping in PyTorch; passthrough for vLLM/TRT |
 | `random_seed` | `torch.manual_seed()` | `seed=` in LLM() | `random_seed=` in SamplingParams | Different API surfaces |
-| `max_input_tokens` | `max_length` in tokeniser | (pre-truncated by harness) | `max_input_len` (compile-time) | PyTorch truncates at tokenisation; TRT-LLM uses it as a compile-time engine constraint |
-| `max_output_tokens` | `max_new_tokens` | `max_tokens` | `max_new_tokens` | **vLLM uses `max_tokens`**; PyTorch/TRT-LLM use `max_new_tokens` |
+| `max_input_tokens` | `max_length` in tokeniser | (pre-truncated by harness) | `max_input_len` (compile-time) | Transformers truncates at tokenisation; TRT-LLM uses it as a compile-time engine constraint |
+| `max_output_tokens` | `max_new_tokens` | `max_tokens` | `max_new_tokens` | **vLLM uses `max_tokens`**; Transformers/TRT-LLM use `max_new_tokens` |
 | `decoder.temperature` | `temperature` | `temperature` | `temperature` | No rename; conditional stripping in greedy mode |
-| `decoder.do_sample` | `do_sample` | (implicit from temperature) | (implicit from temperature) | Only PyTorch has an explicit flag |
+| `decoder.do_sample` | `do_sample` | (implicit from temperature) | (implicit from temperature) | Only Transformers has an explicit flag |
 | `decoder.top_k` | `top_k` (0=disabled) | `top_k` (**0 → -1**) | `top_k` (0=skipped) | vLLM uses -1 to mean disabled |
 | `decoder.top_p` | `top_p` | `top_p` | `top_p` | No rename |
 | `decoder.repetition_penalty` | `repetition_penalty` | `repetition_penalty` | `repetition_penalty` | No rename |
@@ -433,7 +433,7 @@ API names.
 
 Everything else passes through without translation:
 
-- **Engine-specific configs** (`pytorch.batch_size`, `vllm.engine.max_num_seqs`,
+- **Engine-specific configs** (`transformers.batch_size`, `vllm.engine.max_num_seqs`,
   `tensorrt.max_batch_size`, etc.) use native names - no mapping.
 - **Sub-configs** (`warmup`, `baseline`, `energy`) are consumed by the measurement harness,
   not by engines.

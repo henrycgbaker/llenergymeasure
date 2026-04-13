@@ -13,7 +13,7 @@
 #   python scripts/runtime-test-orchestrator.py --check-docker
 #
 # Or via make:
-#   make test-runtime       # PyTorch engine
+#   make test-runtime       # Transformers engine
 #   make test-runtime-all   # All engines
 #   make test-runtime-quick # Quick mode
 #

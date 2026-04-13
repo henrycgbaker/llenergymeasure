@@ -31,7 +31,7 @@ Run an experiment or study. Detects study mode automatically when the YAML confi
 | `--engine` | `-e` | str | — | Inference engine (`pytorch`, `vllm`, `tensorrt`) |
 | `--dataset` | `-d` | str | — | Dataset source (`aienergyscore` or `.jsonl` file path) |
 | `-n` | | int | — | Number of prompts to run (`dataset.n_prompts`) |
-| `--batch-size` | | int | — | Batch size (PyTorch engine only) |
+| `--batch-size` | | int | — | Batch size (Transformers engine only) |
 | `--dtype` | `-p` | str | — | Model dtype (`float32`, `float16`, `bfloat16`) |
 | `--output` | `-o` | str | — | Output directory for results |
 | `--dry-run` | | flag | false | Validate config and estimate VRAM without running |
@@ -75,7 +75,7 @@ Show environment and configuration status. Always exits `0` — this command is 
 GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
 Engines
-  pytorch: installed
+  transformers: installed
   vllm: not installed  (pip install llenergymeasure[vllm])
   tensorrt: not installed  (pip install llenergymeasure[tensorrt])
 Energy
@@ -128,7 +128,7 @@ llem doctor
 ```
 Engine     Image                          Pkg ver     Img FP          Host FP         Status
 ---------------------------------------------------------------------------------------------
-pytorch     llenergymeasure:pytorch        0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
+pytorch     llenergymeasure:transformers        0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK
 vllm        llenergymeasure:vllm           0.9.0       9988776655ff    a1b2c3d4e5f6    MISMATCH
             └─ rebuild: make docker-build-vllm
 tensorrt    llenergymeasure:tensorrt       0.9.0       a1b2c3d4e5f6    a1b2c3d4e5f6    OK

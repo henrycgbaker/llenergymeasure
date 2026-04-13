@@ -3,7 +3,7 @@
 Verifies:
 - inference_memory_mb = max(0.0, peak_memory_mb - model_memory_mb) formula
 - Peak memory value flows correctly through InferenceOutput to ExperimentResult
-- PyTorchEngine calls reset_peak_memory_stats before and max_memory_allocated after inference
+- TransformersEngine calls reset_peak_memory_stats before and max_memory_allocated after inference
 - The clamp at 0.0 is applied when peak_memory_mb <= model_memory_mb
 
 These tests use InferenceOutput as a plain dataclass and monkeypatching of
@@ -72,12 +72,12 @@ def test_inference_memory_zero_when_peak_equals_model():
 
 
 # ---------------------------------------------------------------------------
-# Ordering test — PyTorchEngine resets peak before inference measurement
+# Ordering test — TransformersEngine resets peak before inference measurement
 # ---------------------------------------------------------------------------
 
 
 def test_peak_memory_reset_precedes_measurement():
-    """PyTorchEngine.run_inference calls reset_peak_memory_stats before max_memory_allocated.
+    """TransformersEngine.run_inference calls reset_peak_memory_stats before max_memory_allocated.
 
     Uses monkeypatching to record call order without GPU hardware. The call log
     must show 'reset' before 'max_alloc' to confirm the measurement window is
@@ -85,7 +85,7 @@ def test_peak_memory_reset_precedes_measurement():
     """
     pytest.importorskip("torch")
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
     call_log: list[str] = []
 
@@ -114,14 +114,14 @@ def test_peak_memory_reset_precedes_measurement():
             side_effect=lambda: (call_log.append("max_alloc"), 512 * 1024 * 1024)[1],
         ),
         patch.object(
-            PyTorchEngine,
+            TransformersEngine,
             "_run_batch",
             return_value=(10, 20, 0.5),
         ),
     ):
-        engine = PyTorchEngine()
+        engine = TransformersEngine()
         config = ExperimentConfig(
-            model="test-model", engine="pytorch", dataset=DatasetConfig(n_prompts=1)
+            model="test-model", engine="transformers", dataset=DatasetConfig(n_prompts=1)
         )
         engine.run_inference(config, (fake_model, FakeTokenizer()), ["test prompt"])
 
@@ -134,15 +134,15 @@ def test_peak_memory_reset_precedes_measurement():
 
 
 # ---------------------------------------------------------------------------
-# Seed test — PyTorchEngine seeds torch RNG before inference
+# Seed test — TransformersEngine seeds torch RNG before inference
 # ---------------------------------------------------------------------------
 
 
-def test_pytorch_engine_seeds_rng_before_inference():
-    """PyTorchEngine.run_inference calls torch.manual_seed with config.random_seed."""
+def test_transformers_engine_seeds_rng_before_inference():
+    """TransformersEngine.run_inference calls torch.manual_seed with config.random_seed."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
-    from llenergymeasure.engines.pytorch import PyTorchEngine
+    from llenergymeasure.engines.transformers import TransformersEngine
 
     seeded_values: list[int] = []
 
@@ -151,12 +151,12 @@ def test_pytorch_engine_seeds_rng_before_inference():
         patch("torch.cuda.reset_peak_memory_stats"),
         patch("torch.cuda.max_memory_allocated", return_value=0),
         patch("torch.manual_seed", side_effect=lambda s: seeded_values.append(s)),
-        patch.object(PyTorchEngine, "_run_batch", return_value=(10, 20, 0.5)),
+        patch.object(TransformersEngine, "_run_batch", return_value=(10, 20, 0.5)),
     ):
-        engine = PyTorchEngine()
+        engine = TransformersEngine()
         config = ExperimentConfig(
             model="test-model",
-            engine="pytorch",
+            engine="transformers",
             dataset=DatasetConfig(n_prompts=1),
             random_seed=123,
         )

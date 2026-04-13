@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from llenergymeasure.config.ssot import ENGINE_PYTORCH, ENGINE_TENSORRT, ENGINE_VLLM
+from llenergymeasure.config.ssot import ENGINE_TENSORRT, ENGINE_TRANSFORMERS, ENGINE_VLLM
 
-KNOWN_ENGINES: list[str] = [ENGINE_PYTORCH, ENGINE_VLLM, ENGINE_TENSORRT]
+KNOWN_ENGINES: list[str] = [ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT]
 
 
 def is_engine_available(engine: str) -> bool:
     """Check if an engine is available (installed and importable).
 
     Args:
-        engine: Engine name ("pytorch", "vllm", or "tensorrt").
+        engine: Engine name ("transformers", "vllm", or "tensorrt").
 
     Returns:
         True if engine is importable, False otherwise.
     """
     try:
-        if engine == ENGINE_PYTORCH:
+        if engine == ENGINE_TRANSFORMERS:
             import torch  # noqa: F401
         elif engine == ENGINE_VLLM:
             import vllm  # noqa: F401
@@ -53,7 +53,7 @@ def get_engine_install_hint(engine: str) -> str:
         pip install command string for the engine.
     """
     hints = {
-        "pytorch": "pip install llenergymeasure",
+        "transformers": "pip install llenergymeasure",
         "vllm": "Docker recommended — see docs/deployment.md",
         "tensorrt": "Docker recommended — see docs/deployment.md",
     }

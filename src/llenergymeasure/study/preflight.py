@@ -60,7 +60,7 @@ def run_study_preflight(
         - runner_specs: Resolved runner specs dict (engine -> RunnerSpec).
           Docker runner specs have ``image`` and ``image_source`` populated.
         - system_overrides: Dict of overrides applied during preflight, keyed
-          by override target (e.g. ``"runner.pytorch"``). Each value has
+          by override target (e.g. ``"runner.transformers"``). Each value has
           ``declared``, ``effective``, and ``reason`` keys.
 
     Raises:
@@ -96,7 +96,7 @@ def run_study_preflight(
     )
 
     # Multi-engine enforcement: override any local runners to Docker.
-    # The YAML may say pytorch: local, but multi-engine studies require
+    # The YAML may say transformers: local, but multi-engine studies require
     # Docker isolation for all engines.
     if is_multi_engine:
         for engine_name, spec in runner_specs.items():

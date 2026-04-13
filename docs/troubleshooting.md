@@ -32,7 +32,7 @@ environment, or the system is CPU-only.
 **Fix:** Install the matching extra:
 
 ```bash
-pip install "llenergymeasure[pytorch]"    # PyTorch engine
+pip install "llenergymeasure[transformers]"    # Transformers engine
 pip install "llenergymeasure[vllm]"       # vLLM engine
 pip install "llenergymeasure[tensorrt]"   # TensorRT-LLM engine
 ```
@@ -79,7 +79,7 @@ llem run study.yaml --skip-preflight
 
 **Fix (try in order):**
 1. Use a smaller model.
-2. Reduce `pytorch.batch_size` (default is 1 — already minimal for PyTorch).
+2. Reduce `transformers.batch_size` (default is 1 — already minimal for Transformers).
 3. Switch to lower dtype: `dtype: float16` or `dtype: bfloat16`.
 4. Enable BitsAndBytes quantization: `pytorch: { load_in_4bit: true }`.
 5. For vLLM: reduce `vllm.engine.gpu_memory_utilization` (e.g. 0.7 instead of 0.9).
@@ -134,7 +134,7 @@ bundled code expects the old schema.
 **Fix:** Rebuild the Docker images from the current source:
 
 ```bash
-docker build -f docker/Dockerfile.pytorch -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
+docker build -f docker/Dockerfile.transformers -t ghcr.io/henrycgbaker/llenergymeasure/pytorch:v0.9.0 .
 docker build -f docker/Dockerfile.vllm -t ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0 .
 ```
 
@@ -203,14 +203,14 @@ These combinations are rejected at config load time with a clear error message.
 
 | Engine | Invalid Combination | Reason | Resolution |
 |---------|---------------------|--------|------------|
-| pytorch | `load_in_4bit=True + load_in_8bit=True` | Cannot use both 4-bit and 8-bit quantization simultaneously | Choose one: `pytorch.load_in_4bit: true` OR `pytorch.load_in_8bit: true` |
-| pytorch | `torch_compile_mode without torch_compile=True` | torch_compile_mode/torch_compile_backend only take effect when torch_compile=True | Set `pytorch.torch_compile: true` when using `torch_compile_mode` or `torch_compile_backend` |
-| pytorch | `bnb_4bit_* without load_in_4bit=True` | BitsAndBytes 4-bit options require 4-bit quantization to be enabled | Set `pytorch.load_in_4bit: true` when using `bnb_4bit_compute_dtype`, `bnb_4bit_quant_type`, or `bnb_4bit_use_double_quant` |
+| pytorch | `load_in_4bit=True + load_in_8bit=True` | Cannot use both 4-bit and 8-bit quantization simultaneously | Choose one: `transformers.load_in_4bit: true` OR `transformers.load_in_8bit: true` |
+| pytorch | `torch_compile_mode without torch_compile=True` | torch_compile_mode/torch_compile_backend only take effect when torch_compile=True | Set `transformers.torch_compile: true` when using `torch_compile_mode` or `torch_compile_backend` |
+| pytorch | `bnb_4bit_* without load_in_4bit=True` | BitsAndBytes 4-bit options require 4-bit quantization to be enabled | Set `transformers.load_in_4bit: true` when using `bnb_4bit_compute_dtype`, `bnb_4bit_quant_type`, or `bnb_4bit_use_double_quant` |
 | pytorch | `cache_implementation with use_cache=False` | Cannot specify a cache strategy when caching is explicitly disabled | Remove `use_cache: false` or remove `cache_implementation` |
 | all | `engine section mismatch` | Engine section must match the `engine:` field | Ensure `pytorch:` / `vllm:` / `tensorrt:` section matches `engine:` field |
 | all | `passthrough_kwargs key collision` | `passthrough_kwargs` keys must not collide with ExperimentConfig fields | Use named fields directly instead of `passthrough_kwargs` |
 | tensorrt | `dtype: float32` | TensorRT-LLM is optimised for lower precision inference | Use `dtype: float16` or `dtype: bfloat16` |
-| vllm | `pytorch.load_in_4bit or pytorch.load_in_8bit` | vLLM does not support bitsandbytes quantization | Use `vllm.engine.quantization` (awq, gptq, fp8) for quantized inference |
+| vllm | `transformers.load_in_4bit or pytorch.load_in_8bit` | vLLM does not support bitsandbytes quantization | Use `vllm.engine.quantization` (awq, gptq, fp8) for quantized inference |
 
 ### Runtime Limitations
 
@@ -219,8 +219,8 @@ model, or package requirements.
 
 | Engine | Parameter | Limitation | Resolution |
 |---------|-----------|------------|------------|
-| pytorch | `pytorch.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
-| pytorch | `pytorch.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Included in the Docker image by default | Install locally from source if not using Docker. See [Installation - FA3](installation.md#flashattention-3) |
+| pytorch | `transformers.attn_implementation: flash_attention_2` | flash-attn requires Ampere+ GPU; may fail on older architectures | Use `attn_implementation: sdpa` on pre-Ampere GPUs |
+| pytorch | `transformers.attn_implementation: flash_attention_3` | FA3 requires the `flash_attn_3` package (built from flash-attn `hopper/` directory) and Ampere+ GPU (SM80+). Included in the Docker image by default | Install locally from source if not using Docker. See [Installation - FA3](installation.md#flashattention-3) |
 | vllm | `vllm.engine.kv_cache_dtype: fp8` | FP8 KV cache requires Hopper (H100) or newer GPU | Use `kv_cache_dtype: auto` for automatic selection |
 | vllm | `vllm.engine.attention.backend: FLASHINFER` | FlashInfer requires JIT compilation on first use | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.attention.backend: TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use `attention.backend: auto` or `FLASH_ATTN` |
@@ -230,7 +230,7 @@ model, or package requirements.
 
 ### Engine Capability Matrix
 
-| Feature | PyTorch | vLLM | TensorRT |
+| Feature | Transformers | vLLM | TensorRT |
 |---------|---------|------|----------|
 | Tensor Parallel | Yes (HF native) | Yes | Yes |
 | Data Parallel | Yes | No | No |
@@ -248,7 +248,7 @@ model, or package requirements.
 | Static KV Cache | Yes | No | No |
 
 Notes:
-- PyTorch Tensor Parallel uses HF native TP via `tp_plan`/`tp_size` (requires Transformers >= 4.50 and `torchrun` launch).
+- Transformers Tensor Parallel uses HF native TP via `tp_plan`/`tp_size` (requires Transformers >= 4.50 and `torchrun` launch).
 - vLLM does not support FP32 precision. Use FP16 or BF16.
 - vLLM supports 4-bit via AWQ/GPTQ quantized models, not bitsandbytes.
 - TensorRT-LLM is optimised for FP16/BF16/INT8 precision, not FP32.
@@ -263,7 +263,7 @@ Notes:
 like:
 
 ```
-Docker image 'llenergymeasure:pytorch' was built from llenergymeasure 0.9.0
+Docker image 'llenergymeasure:transformers' was built from llenergymeasure 0.9.0
 (schema 9988776655ff) but the host is running 0.9.0 (schema a1b2c3d4e5f6).
 The container will reject ExperimentConfig fields added on the host after
 the image was built.

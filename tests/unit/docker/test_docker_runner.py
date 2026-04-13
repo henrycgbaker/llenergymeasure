@@ -830,9 +830,9 @@ class TestMpirunInjection:
 
         assert "mpirun" not in cmd
 
-    def test_no_mpirun_for_pytorch(self, tmp_path):
+    def test_no_mpirun_for_transformers(self, tmp_path):
         """PyTorch engine (default) never gets mpirun."""
-        config = make_config()  # engine="pytorch" by default
+        config = make_config()  # engine="transformers" by default
         cmd = self._capture_cmd(config, tmp_path)
 
         assert "mpirun" not in cmd
@@ -927,7 +927,7 @@ class TestExtraMounts:
 
     def test_non_tensorrt_no_auto_cache_mount(self, tmp_path):
         """PyTorch engine does not get the TRT-LLM auto-cache mount."""
-        config = make_config()  # engine="pytorch"
+        config = make_config()  # engine="transformers"
         runner = DockerRunner(image=IMAGE)
         cmd = self._build_cmd(config, tmp_path, runner)
 

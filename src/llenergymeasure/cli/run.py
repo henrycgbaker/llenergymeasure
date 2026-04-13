@@ -21,7 +21,7 @@ from llenergymeasure.cli._display import (
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.ssot import (
-    ENGINE_PYTORCH,
+    ENGINE_TRANSFORMERS,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
 )
@@ -61,7 +61,7 @@ def run(
     ] = None,
     batch_size: Annotated[
         int | None,
-        typer.Option("--batch-size", help="Batch size (PyTorch engine)"),
+        typer.Option("--batch-size", help="Batch size (Transformers engine)"),
     ] = None,
     dtype: Annotated[
         str | None,
@@ -224,7 +224,7 @@ def _run_impl(
         cli_overrides["dataset.n_prompts"] = n_prompts
     if batch_size is not None:
         # Dotted key for _unflatten() in loader — maps to pytorch.batch_size
-        cli_overrides["pytorch.batch_size"] = batch_size
+        cli_overrides["transformers.batch_size"] = batch_size
     if dtype is not None:
         cli_overrides["dtype"] = dtype
 
@@ -361,8 +361,8 @@ def _resolve_runner_tag(config: Any) -> str:
     if runner == RUNNER_DOCKER or (isinstance(runner, str) and runner.startswith("docker:")):
         return RUNNER_DOCKER
     # auto: pytorch defaults to local, vllm/tensorrt default to docker
-    engine = getattr(config, "engine", ENGINE_PYTORCH)
-    return RUNNER_LOCAL if engine == ENGINE_PYTORCH else RUNNER_DOCKER
+    engine = getattr(config, "engine", ENGINE_TRANSFORMERS)
+    return RUNNER_LOCAL if engine == ENGINE_TRANSFORMERS else RUNNER_DOCKER
 
 
 def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:

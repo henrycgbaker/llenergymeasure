@@ -788,21 +788,21 @@ def test_viewport_hidden_indicator_absent_when_fits():
 def test_image_prep_result_named_fields():
     """_ImagePrepResult supports both named field access and positional destructuring."""
     r = _ImagePrepResult(
-        engine="pytorch",
+        engine="transformers",
         image="llem-pytorch:latest",
         cached=True,
         elapsed=1.5,
         metadata={"size": "2GB"},
     )
     # Named access
-    assert r.engine == "pytorch"
+    assert r.engine == "transformers"
     assert r.image == "llem-pytorch:latest"
     assert r.cached is True
     assert r.elapsed == 1.5
     assert r.metadata == {"size": "2GB"}
     # Positional destructuring (backward compatibility)
     engine, _image, cached, _elapsed, _metadata = r
-    assert engine == "pytorch"
+    assert engine == "transformers"
     assert cached is True
 
 

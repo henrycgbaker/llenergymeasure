@@ -90,14 +90,14 @@ class TestGetDefaultImage:
             patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=False),
             patch("llenergymeasure._version.__version__", ""),
         ):
-            image = get_default_image("pytorch")
+            image = get_default_image("transformers")
 
         assert image.endswith(":vlatest")
 
     def test_engine_name_included_in_image(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        for engine in ("pytorch", "vllm", "tensorrt"):
+        for engine in ("transformers", "vllm", "tensorrt"):
             image = get_default_image(engine)
             assert engine in image, f"Expected engine {engine!r} in image {image!r}"
 
@@ -126,7 +126,7 @@ class TestShowImageResolution:
             show_image_resolution()
 
         output = capsys.readouterr().out
-        assert "pytorch" in output
+        assert "transformers" in output
         assert "vllm" in output
         assert "tensorrt" in output
 
@@ -234,8 +234,8 @@ class TestResolveImage:
     def test_env_var_case_insensitive_engine(self, monkeypatch):
         from llenergymeasure.infra.image_registry import resolve_image
 
-        monkeypatch.setenv(f"{ENV_IMAGE_PREFIX}PYTORCH", "my/pytorch:v1")
-        image, source = resolve_image("pytorch")
+        monkeypatch.setenv(f"{ENV_IMAGE_PREFIX}TRANSFORMERS", "my/pytorch:v1")
+        image, source = resolve_image("transformers")
         assert image == "my/pytorch:v1"
         assert source == "env"
 
@@ -245,7 +245,7 @@ class TestResolveImage:
         with patch("llenergymeasure.infra.image_registry._image_exists_locally", return_value=True):
             image, source = resolve_image(
                 "vllm",
-                yaml_images={"pytorch": "pytorch-image:v1"},
+                yaml_images={"transformers": "pytorch-image:v1"},
             )
 
         assert image == "llenergymeasure:vllm"

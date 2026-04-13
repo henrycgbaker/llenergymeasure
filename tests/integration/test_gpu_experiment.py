@@ -26,8 +26,8 @@ def _save_replay(result, model: str, engine: str) -> None:
 class TestM1ExitCriteria:
     """Validates M1 success criteria with a real GPU experiment."""
 
-    def test_run_experiment_gpt2_pytorch(self, tmp_path):
-        """M1 primary exit criterion: llem run --model gpt2 --engine pytorch
+    def test_run_experiment_gpt2_transformers(self, tmp_path):
+        """M1 primary exit criterion: llem run --model gpt2 --engine transformers
         produces a valid ExperimentResult.
 
         Validates STU-05: single experiment runs in-process (no subprocess).
@@ -37,7 +37,7 @@ class TestM1ExitCriteria:
 
         config = ExperimentConfig(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             dataset=DatasetConfig(n_prompts=5),  # small for speed
             output_dir=str(tmp_path),
         )
@@ -64,7 +64,7 @@ class TestM1ExitCriteria:
         assert result.total_flops > 0
 
         # Save replay fixture for offline unit tests
-        _save_replay(result, "gpt2", "pytorch")
+        _save_replay(result, "gpt2", "transformers")
 
     def test_output_files_written(self, tmp_path):
         """Timeseries parquet file written to output_dir."""
@@ -73,7 +73,7 @@ class TestM1ExitCriteria:
 
         config = ExperimentConfig(
             model="gpt2",
-            engine="pytorch",
+            engine="transformers",
             dataset=DatasetConfig(n_prompts=5),
             output_dir=str(tmp_path),
         )
@@ -86,7 +86,7 @@ class TestM1ExitCriteria:
         assert len(parquet_files) >= 1
 
     def test_cli_run_produces_valid_output(self, tmp_path):
-        """llem run --model gpt2 --engine pytorch via CLI produces valid output."""
+        """llem run --model gpt2 --engine transformers via CLI produces valid output."""
         from typer.testing import CliRunner
 
         from llenergymeasure.cli import app
@@ -99,7 +99,7 @@ class TestM1ExitCriteria:
                 "--model",
                 "gpt2",
                 "--engine",
-                "pytorch",
+                "transformers",
                 "--output",
                 str(tmp_path),
             ],

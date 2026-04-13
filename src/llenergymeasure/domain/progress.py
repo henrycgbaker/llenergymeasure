@@ -222,7 +222,7 @@ class StudyProgressCallback(ProgressCallback, Protocol):
         """Signal that a Docker image is ready (found locally or pulled).
 
         Args:
-            engine: Engine name (e.g. "pytorch").
+            engine: Engine name (e.g. "transformers").
             image: Docker image reference.
             cached: True if image was found locally, False if pulled.
             elapsed: Wall-clock time for the check/pull.

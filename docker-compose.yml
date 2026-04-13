@@ -3,16 +3,16 @@
 # Quick Start:
 #   pip install -e .              # Install llenergymeasure
 #   llem config                   # Check environment
-#   docker compose build pytorch  # Build engine image
+#   docker compose build transformers  # Build engine image
 #
 # Manual Usage:
-#   PyTorch (default): docker compose run --rm pytorch llem --help
+#   Transformers (default): docker compose run --rm transformers llem --help
 #   vLLM:              docker compose run --rm vllm llem --help
 #   TensorRT:          docker compose run --rm tensorrt llem --help
 #
 # Examples:
-#   # PyTorch engine (default)
-#   docker compose run --rm pytorch llem run configs/examples/experiment-pytorch.yaml
+#   # Transformers engine (default)
+#   docker compose run --rm transformers llem run configs/examples/experiment-transformers.yaml
 #
 #   # vLLM backend
 #   docker compose run --rm vllm llem run configs/examples/experiment-vllm.yaml
@@ -21,7 +21,7 @@
 #   docker compose run --rm tensorrt llem run configs/examples/experiment-tensorrt.yaml
 #
 #   # Development shells
-#   docker compose --profile dev run --rm pytorch-dev /bin/bash
+#   docker compose --profile dev run --rm transformers-dev /bin/bash
 #   docker compose --profile dev run --rm vllm-dev /bin/bash
 #   docker compose --profile dev run --rm tensorrt-dev /bin/bash
 
@@ -74,9 +74,9 @@ x-common: &common
 
 services:
   # ==========================================================================
-  # PyTorch Engine - HuggingFace Transformers + Accelerate
+  # Transformers Engine - HuggingFace Transformers + Accelerate
   # ==========================================================================
-  pytorch:
+  transformers:
     <<: *common
     volumes:
       # Bind mounts: user-accessible data (resume workflow requires host access)
@@ -88,14 +88,14 @@ services:
       - hf-cache:/app/.cache/huggingface
     build:
       context: .
-      dockerfile: docker/Dockerfile.pytorch
+      dockerfile: docker/Dockerfile.transformers
       target: runtime
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-    image: llenergymeasure:pytorch
+    image: llenergymeasure:transformers
 
-  pytorch-dev:
+  transformers-dev:
     <<: *common
     volumes:
       - .:/app
@@ -103,12 +103,12 @@ services:
     profiles: ["dev"]
     build:
       context: .
-      dockerfile: docker/Dockerfile.pytorch
+      dockerfile: docker/Dockerfile.transformers
       target: dev
       args:
         LLEM_PKG_VERSION: ${LLEM_PKG_VERSION:-dev}
         LLEM_EXPCONF_SCHEMA_FINGERPRINT: ${LLEM_EXPCONF_SCHEMA_FINGERPRINT:-unknown}
-    image: llenergymeasure:pytorch-dev
+    image: llenergymeasure:transformers-dev
     entrypoint: ["/app/scripts/dev-entrypoint.sh"]
     command: []
 
@@ -205,11 +205,11 @@ services:
   # ==========================================================================
   llenergymeasure-app:
     extends:
-      service: pytorch
+      service: transformers
 
   llenergymeasure-dev:
     extends:
-      service: pytorch-dev
+      service: transformers-dev
     profiles: ["dev"]
 
 # =============================================================================

@@ -108,7 +108,7 @@ def print_dry_run(
     """
     # Determine non-default fields for annotations
     defaults = {
-        "engine": "pytorch",
+        "engine": "transformers",
         "dtype": "bfloat16",
         "n": 100,
         "dataset": "aienergyscore",
@@ -130,8 +130,8 @@ def print_dry_run(
 
     # Batch size — from pytorch section if present
     batch_size: int | None = None
-    if config.pytorch is not None and hasattr(config.pytorch, "batch_size"):
-        batch_size = config.pytorch.batch_size
+    if config.transformers is not None and hasattr(config.transformers, "batch_size"):
+        batch_size = config.transformers.batch_size
     if batch_size is not None:
         print(f"  Batch size     {batch_size}")
 

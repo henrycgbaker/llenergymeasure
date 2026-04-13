@@ -57,11 +57,11 @@ TEST_SAMPLE_SIZE = 5
 TEST_MAX_OUTPUT = 32
 TEST_TIMEOUT_SECONDS = 300  # 5 minutes per test
 
-ENGINES = ["pytorch", "vllm", "tensorrt"]
+ENGINES = ["transformers", "vllm", "tensorrt"]
 
 # Quick mode: reduced param set for faster iteration
 QUICK_PARAMS = {
-    "pytorch": ["pytorch.batch_size", "decoder.temperature"],
+    "transformers": ["transformers.batch_size", "decoder.temperature"],
     "vllm": ["vllm.max_num_seqs", "decoder.temperature"],
     "tensorrt": ["tensorrt.max_batch_size", "decoder.temperature"],
 }
@@ -272,8 +272,8 @@ def create_base_config(engine: str) -> dict[str, Any]:
     }
 
     # Engine-specific defaults
-    if engine == "pytorch":
-        config["pytorch"] = {
+    if engine == "transformers":
+        config["transformers"] = {
             "batch_size": 1,
             "batching_strategy": "static",
             "attn_implementation": "sdpa",

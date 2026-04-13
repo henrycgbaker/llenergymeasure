@@ -142,9 +142,9 @@ class TestResolveRunner:
 
     def test_env_var_bare_docker(self, monkeypatch):
         """LLEM_RUNNER_PYTORCH=docker (bare) sets mode=docker, image=None."""
-        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "docker")
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "docker")
 
-        spec = resolve_runner("pytorch")
+        spec = resolve_runner("transformers")
 
         assert spec.source == "env"
         assert spec.mode == "docker"
@@ -152,19 +152,19 @@ class TestResolveRunner:
 
     def test_env_var_local_overrides_yaml_docker(self, monkeypatch):
         """Env var 'local' takes precedence even when yaml says 'docker'."""
-        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "local")
-        spec = resolve_runner("pytorch", yaml_runners={"pytorch": "docker"})
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "local")
+        spec = resolve_runner("transformers", yaml_runners={"transformers": "docker"})
         assert spec.source == "env"
         assert spec.mode == "local"
 
     # --- YAML runners ---
 
     def test_yaml_runners_wins_over_user_config(self):
-        """yaml_runners={'pytorch': 'docker'} wins over user_config with 'local'."""
-        user_config = UserRunnersConfig(pytorch="local")
+        """yaml_runners={'transformers': 'docker'} wins over user_config with 'local'."""
+        user_config = UserRunnersConfig(transformers="local")
 
         spec = resolve_runner(
-            "pytorch", yaml_runners={"pytorch": "docker"}, user_config=user_config
+            "transformers", yaml_runners={"transformers": "docker"}, user_config=user_config
         )
 
         assert spec.source == "yaml"
@@ -189,7 +189,7 @@ class TestResolveRunner:
         ):
             spec = resolve_runner(
                 "tensorrt",
-                yaml_runners={"pytorch": "docker"},  # tensorrt not listed
+                yaml_runners={"transformers": "docker"},  # tensorrt not listed
             )
         assert spec.source == "default"
 
@@ -199,20 +199,20 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner("pytorch", yaml_runners=None)
+            spec = resolve_runner("transformers", yaml_runners=None)
         assert spec.source == "default"
 
     # --- User config ---
 
     def test_user_config_docker_with_image_wins_over_auto_detection(self):
-        """user_config.pytorch='docker:myimg' wins over auto-detection."""
-        user_config = UserRunnersConfig(pytorch="docker:myimg")
+        """user_config.transformers='docker:myimg' wins over auto-detection."""
+        user_config = UserRunnersConfig(transformers="docker:myimg")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("pytorch", user_config=user_config)
+            spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "user_config"
         assert spec.mode == "docker"
@@ -220,13 +220,13 @@ class TestResolveRunner:
 
     def test_explicit_local_in_user_config_respected_not_overridden_by_auto_detect(self):
         """Explicit 'local' in user_config wins; auto-detection is not applied."""
-        user_config = UserRunnersConfig(pytorch="local")
+        user_config = UserRunnersConfig(transformers="local")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("pytorch", user_config=user_config)
+            spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "user_config"
         assert spec.mode == "local"
@@ -253,7 +253,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("pytorch")  # no yaml_runners, no user_config
+            spec = resolve_runner("transformers")  # no yaml_runners, no user_config
 
         assert spec.source == "auto_detected"
         assert spec.mode == "docker"
@@ -267,7 +267,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("pytorch", user_config=user_config)
+            spec = resolve_runner("transformers", user_config=user_config)
 
         # "auto" falls through — Docker auto-detection applies
         assert spec.source == "auto_detected"
@@ -275,13 +275,13 @@ class TestResolveRunner:
 
     def test_explicit_auto_in_user_config_falls_through_to_auto_detection(self):
         """Explicit 'auto' in user_config falls through to auto-detection."""
-        user_config = UserRunnersConfig(pytorch="auto")
+        user_config = UserRunnersConfig(transformers="auto")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            spec = resolve_runner("pytorch", user_config=user_config)
+            spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "auto_detected"
         assert spec.mode == "docker"
@@ -294,7 +294,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner("pytorch", user_config=user_config)
+            spec = resolve_runner("transformers", user_config=user_config)
 
         assert spec.source == "default"
         assert spec.mode == "local"
@@ -307,7 +307,7 @@ class TestResolveRunner:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            spec = resolve_runner("pytorch")
+            spec = resolve_runner("transformers")
 
         assert spec.source == "default"
         assert spec.mode == "local"
@@ -317,8 +317,8 @@ class TestResolveRunner:
 
     def test_parse_runner_value_integration_docker_custom_image(self, monkeypatch):
         """parse_runner_value integration: 'docker:ghcr.io/custom:v1' resolves image."""
-        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "docker:ghcr.io/custom:v1")
-        spec = resolve_runner("pytorch")
+        monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "docker:ghcr.io/custom:v1")
+        spec = resolve_runner("transformers")
         assert spec.mode == "docker"
         assert spec.image == "ghcr.io/custom:v1"
         assert spec.source == "env"
@@ -336,23 +336,23 @@ class TestResolveStudyRunners:
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            result = resolve_study_runners(["pytorch", "vllm"])
+            result = resolve_study_runners(["transformers", "vllm"])
 
-        assert set(result.keys()) == {"pytorch", "vllm"}
+        assert set(result.keys()) == {"transformers", "vllm"}
         assert all(isinstance(v, RunnerSpec) for v in result.values())
 
     def test_yaml_runners_applied_per_engine(self):
         """yaml_runners are applied to each engine correctly."""
-        yaml_runners = {"pytorch": "local", "vllm": "docker:myimg"}
+        yaml_runners = {"transformers": "local", "vllm": "docker:myimg"}
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=False,
         ):
-            result = resolve_study_runners(["pytorch", "vllm"], yaml_runners=yaml_runners)
+            result = resolve_study_runners(["transformers", "vllm"], yaml_runners=yaml_runners)
 
-        assert result["pytorch"].mode == "local"
-        assert result["pytorch"].source == "yaml"
+        assert result["transformers"].mode == "local"
+        assert result["transformers"].source == "yaml"
         assert result["vllm"].mode == "docker"
         assert result["vllm"].image == "myimg"
 
@@ -373,20 +373,22 @@ class TestResolveStudyRunners:
     def test_mixed_auto_and_explicit_per_engine(self):
         """Study with one engine explicitly set and another using auto-detection.
 
-        Simulates a researcher who forces pytorch=local but lets vllm auto-detect
+        Simulates a researcher who forces transformers=local but lets vllm auto-detect
         to Docker. Each engine resolves independently through the precedence chain.
         """
-        user_config = UserRunnersConfig(pytorch="local", vllm="auto", tensorrt="auto")
+        user_config = UserRunnersConfig(transformers="local", vllm="auto", tensorrt="auto")
 
         with patch(
             "llenergymeasure.infra.runner_resolution.is_docker_available",
             return_value=True,
         ):
-            result = resolve_study_runners(["pytorch", "vllm", "tensorrt"], user_config=user_config)
+            result = resolve_study_runners(
+                ["transformers", "vllm", "tensorrt"], user_config=user_config
+            )
 
         # pytorch: explicit "local" -> user_config source
-        assert result["pytorch"].mode == "local"
-        assert result["pytorch"].source == "user_config"
+        assert result["transformers"].mode == "local"
+        assert result["transformers"].source == "user_config"
         # vllm: "auto" falls through -> Docker auto-detected
         assert result["vllm"].mode == "docker"
         assert result["vllm"].source == "auto_detected"

@@ -2,7 +2,7 @@
   "schema_version": "3.0",
   "experiment_id": "gpt2_20260313_142111",
   "measurement_config_hash": "9944baab4dabe390",
-  "engine": "pytorch",
+  "engine": "transformers",
   "engine_version": null,
   "model_name": "gpt2",
   "measurement_methodology": "total",

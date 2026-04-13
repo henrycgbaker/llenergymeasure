@@ -123,11 +123,11 @@ def test_env_var_llem_no_prompt(tmp_path, monkeypatch):
     assert config.ui.prompt is False
 
 
-def test_env_var_runner_pytorch(tmp_path, monkeypatch):
-    """LLEM_RUNNER_PYTORCH env var overrides pytorch runner."""
-    monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}PYTORCH", "docker:nvcr.io/nvidia/pytorch:latest")
+def test_env_var_runner_transformers(tmp_path, monkeypatch):
+    """LLEM_RUNNER_TRANSFORMERS env var overrides transformers runner."""
+    monkeypatch.setenv(f"{ENV_RUNNER_PREFIX}TRANSFORMERS", "docker:nvcr.io/nvidia/pytorch:latest")
     config = load_user_config(config_path=tmp_path / "nonexistent.yaml")
-    assert config.runners.pytorch == "docker:nvcr.io/nvidia/pytorch:latest"
+    assert config.runners.transformers == "docker:nvcr.io/nvidia/pytorch:latest"
 
 
 def test_env_var_overrides_take_precedence_over_file(tmp_path, monkeypatch):
@@ -172,22 +172,22 @@ def test_user_runners_config_defaults_to_auto():
     from llenergymeasure.config.user_config import UserRunnersConfig
 
     config = UserRunnersConfig()
-    assert config.pytorch == "auto"
+    assert config.transformers == "auto"
     assert config.vllm == "auto"
     assert config.tensorrt == "auto"
 
 
 def test_user_runners_config_accepts_auto_in_file(tmp_path):
-    """Config file with runners.pytorch: auto loads without error."""
+    """Config file with runners.transformers: auto loads without error."""
     config_file = tmp_path / "config.yaml"
-    config_file.write_text("runners:\n  pytorch: auto\n")
+    config_file.write_text("runners:\n  transformers: auto\n")
     config = load_user_config(config_path=config_file)
-    assert config.runners.pytorch == "auto"
+    assert config.runners.transformers == "auto"
 
 
 def test_user_runners_config_validator_accepts_auto():
-    """UserRunnersConfig(pytorch='auto') does not raise ValidationError."""
+    """UserRunnersConfig(transformers='auto') does not raise ValidationError."""
     from llenergymeasure.config.user_config import UserRunnersConfig
 
-    config = UserRunnersConfig(pytorch="auto")
-    assert config.pytorch == "auto"
+    config = UserRunnersConfig(transformers="auto")
+    assert config.transformers == "auto"

@@ -52,7 +52,7 @@ def load_experiment_config(
 
     Args:
         path: Path to YAML or JSON config file. None = only CLI/defaults.
-        cli_overrides: Dict of CLI flag overrides (e.g. {"model": "gpt2", "engine": "pytorch"}).
+        cli_overrides: Dict of CLI flag overrides (e.g. {"model": "gpt2", "engine": "transformers"}).
             Keys match ExperimentConfig field names. None values are ignored (unset flags).
         user_config_defaults: Dict of user config defaults to apply as lowest priority.
             Only fields valid on ExperimentConfig (e.g. energy_sampler, engine defaults).
@@ -83,7 +83,7 @@ def load_experiment_config(
         overrides = {k: v for k, v in cli_overrides.items() if v is not None}
         merged = deep_merge(
             merged, _unflatten(overrides)
-        )  # handle "pytorch.batch_size" dotted keys
+        )  # handle "transformers.batch_size" dotted keys
 
     # Strip optional version field — not an ExperimentConfig field
     merged.pop("version", None)
@@ -158,7 +158,7 @@ def load_study_config(
 
     # Extract study-level metadata
     name = raw.get("study_name")
-    # runners: per-engine runner config (e.g. {"pytorch": "local", "vllm": "docker"})
+    # runners: per-engine runner config (e.g. {"transformers": "local", "vllm": "docker"})
     # None if not specified in YAML — caller uses user config / auto-detection.
     runners: dict[str, str] | None = raw.get("runners") or None
     # images: per-engine Docker image overrides (orthogonal to runners)

@@ -6,6 +6,29 @@ All notable changes to this project are documented here.
 
 ### Breaking Changes
 
+- **`engine: pytorch` → `engine: transformers` rename (YAML / API / engine identifier).** The `pytorch` engine identifier has been renamed to `transformers` throughout. The engine runs HuggingFace Transformers `.generate()` — PyTorch is the tensor substrate, not the engine. This aligns the identifier with `pip install transformers` and the library that owns the inference API.
+
+  **Migrate YAML configs** (one-liner):
+  ```bash
+  sed -i 's/engine: pytorch/engine: transformers/g; s/^pytorch:/transformers:/g' your-study.yaml
+  ```
+
+  **Affected identifiers:**
+  - YAML engine value: `engine: pytorch` → `engine: transformers`
+  - YAML section key: `pytorch:` → `transformers:`
+  - Python class: `PyTorchConfig` → `TransformersConfig`
+  - Python constant: `ENGINE_PYTORCH = "pytorch"` → `ENGINE_TRANSFORMERS = "transformers"`
+  - PyPI extra: `pip install llenergymeasure[pytorch]` → `llenergymeasure[transformers]`
+  - Env vars: `LLEM_RUNNER_PYTORCH` → `LLEM_RUNNER_TRANSFORMERS`, `LLEM_IMAGE_PYTORCH` → `LLEM_IMAGE_TRANSFORMERS`
+  - Docker image tags: `llenergymeasure:pytorch` → `llenergymeasure:transformers`, `Dockerfile.pytorch` → `Dockerfile.transformers`
+
+  **Preserved** (PyTorch the library — unchanged):
+  - `import torch` and all `torch.*` API references
+  - `torch_dtype` field
+  - `FROM pytorch/pytorch:...` Docker base image tag
+  - `PYTORCH_VERSION` / `PYTORCH_DEVEL_VERSION` build args
+  - `torch_compile_backend` field (PyTorch's `torch.compile(backend=...)` parameter)
+
 - **`backend:` → `engine:` rename (YAML / CLI / API).** The experiment configuration field, CLI flag, and all public symbols now use "engine" instead of "backend" throughout. This aligns terminology with how vLLM, TRT-LLM, and HuggingFace themselves use "engine" (EngineArgs, LLM engine, etc.) and removes ambiguity with tensor/compute/attention backends.
 
   **Migrate YAML configs** (one-liner):
@@ -14,14 +37,14 @@ All notable changes to this project are documented here.
   ```
 
   **Affected identifiers:**
-  - YAML field: `backend: pytorch/vllm/tensorrt` → `engine: pytorch/vllm/tensorrt`
+  - YAML field: `backend: pytorch/vllm/tensorrt` → `engine: transformers/vllm/tensorrt`
   - CLI flag: `llem run --backend` → `llem run --engine` (short: `-b` → `-e`)
   - Result JSON fields: `"backend"` / `"backend_version"` → `"engine"` / `"engine_version"`
   - Python symbols: `BackendPlugin` → `EnginePlugin`, `BackendError` → `EngineError`, `BACKEND_*` constants → `ENGINE_*`, `get_backend()` → `get_engine()`, `detect_default_backend()` → `detect_default_engine()`
 
   **Preserved** (these are kernel/compute backends, not inference engines — unchanged):
   - `vllm.attention.backend` — vLLM's attention kernel selector (Flash/FlashInfer/SDPA)
-  - `pytorch.torch_compile_backend` — PyTorch `torch.compile(backend=...)` parameter
+  - `transformers.torch_compile_backend` — PyTorch `torch.compile(backend=...)` parameter
   - `TensorRTConfig.backend` — TRT-LLM's internal `LLM(backend=...)` parameter
   - Energy measurement backends (Zeus, NVML, CodeCarbon)
 

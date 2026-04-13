@@ -14,7 +14,7 @@ Before you start, you need:
 |-------------|---------------|
 | Python 3.10 or later | A programming language runtime — the engine that runs llenergymeasure |
 | An NVIDIA GPU | A graphics card for running AI models. Required for energy measurement. |
-| Linux operating system | Required for the full measurement stack. macOS/Windows work for PyTorch-only measurements. |
+| Linux operating system | Required for the full measurement stack. macOS/Windows work for Transformers-only measurements. |
 | Terminal access | A command-line interface (Terminal on macOS/Linux, PowerShell or Command Prompt on Windows) |
 
 **Checking Python:** Open a terminal and type `python --version` or `python3 --version`. You should see a version number like `Python 3.11.2`. If Python is not installed, visit [python.org/downloads](https://www.python.org/downloads/).
@@ -30,10 +30,10 @@ For a detailed system requirements reference, see the [Installation Guide](insta
 In your terminal, run:
 
 ```bash
-pip install "llenergymeasure[pytorch]"
+pip install "llenergymeasure[transformers]"
 ```
 
-**What this does:** Downloads and installs llenergymeasure along with the PyTorch inference engine — the component that actually runs AI models. The `[pytorch]` part tells the installer to include PyTorch as well as the core tool.
+**What this does:** Downloads and installs llenergymeasure along with the Transformers inference engine — the component that actually runs AI models. The `[transformers]` part tells the installer to include PyTorch as well as the core tool.
 
 **How long it takes:** Several minutes on first install (PyTorch is a large package). Subsequent installs are faster because packages are cached.
 
@@ -59,7 +59,7 @@ llem config
 GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
 Engines
-  pytorch: installed
+  transformers: installed
   vllm: not installed  (pip install llenergymeasure[vllm])
   tensorrt: not installed  (pip install llenergymeasure[tensorrt])
 Energy

@@ -17,18 +17,18 @@ class TestEngineSweepAxis:
         raw_study = {
             "model": "gpt2",
             "sweep": {
-                "engine": ["pytorch", "tensorrt"],
+                "engine": ["transformers", "tensorrt"],
             },
         }
         valid, _skipped = expand_grid(raw_study)
         assert len(valid) == 2
-        assert {c.engine for c in valid} == {"pytorch", "tensorrt"}
+        assert {c.engine for c in valid} == {"transformers", "tensorrt"}
 
     def test_engine_sweep_with_trt_scoped_params(self):
         """engine: [pytorch, tensorrt] with tensorrt.tp_size: [1, 2] produces 3 configs."""
         raw_study = {
             "model": "gpt2",
-            "engine": ["pytorch", "tensorrt"],
+            "engine": ["transformers", "tensorrt"],
             "sweep": {
                 "tensorrt.tp_size": [1, 2],
             },
@@ -36,7 +36,7 @@ class TestEngineSweepAxis:
         valid, _skipped = expand_grid(raw_study)
         # pytorch: 1 config (no scoped dims), tensorrt: 2 configs (tp_size=[1,2])
         assert len(valid) == 3
-        pytorch_configs = [c for c in valid if c.engine == "pytorch"]
+        pytorch_configs = [c for c in valid if c.engine == "transformers"]
         tensorrt_configs = [c for c in valid if c.engine == "tensorrt"]
         assert len(pytorch_configs) == 1
         assert len(tensorrt_configs) == 2

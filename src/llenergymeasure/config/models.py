@@ -26,8 +26,8 @@ EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 
 if TYPE_CHECKING:
     from llenergymeasure.config.engine_configs import (
-        PyTorchConfig,
         TensorRTConfig,
+        TransformersConfig,
         VLLMConfig,
     )
 
@@ -316,7 +316,7 @@ class ExperimentConfig(BaseModel):
 
     Central configuration object controlling all aspects of a single LLM inference
     efficiency measurement. Engine-specific parameters live in nested sections
-    (pytorch:, vllm:, tensorrt:).
+    (transformers:, vllm:, tensorrt:).
 
     Field renames from v1.x:
         model_name -> model
@@ -326,8 +326,8 @@ class ExperimentConfig(BaseModel):
         dataset_order -> dataset.order
         extra_metadata -> passthrough_kwargs
 
-    The engine section (pytorch:, vllm:, tensorrt:) must match the engine field.
-    Providing a pytorch: section when engine=vllm is a configuration error.
+    The engine section (transformers:, vllm:, tensorrt:) must match the engine field.
+    Providing a transformers: section when engine=vllm is a configuration error.
     """
 
     model_config = {"extra": "forbid"}
@@ -341,8 +341,8 @@ class ExperimentConfig(BaseModel):
     )
 
     # Engine selection
-    engine: Literal["pytorch", "vllm", "tensorrt"] = Field(
-        default="pytorch",
+    engine: Literal["transformers", "vllm", "tensorrt"] = Field(
+        default="transformers",
         description="Inference engine",
         json_schema_extra={"display_label": "Engine", "role": "experimental"},
     )
@@ -409,10 +409,10 @@ class ExperimentConfig(BaseModel):
         json_schema_extra={"display_label": "Sampler", "role": "workload"},
     )
     # Engine sections (None = use engine's own defaults)
-    # All current engines (pytorch, vllm, tensorrt) are GPU-only; cpu engine is future scope.
-    pytorch: PyTorchConfig | None = Field(
+    # All current engines (transformers, vllm, tensorrt) are GPU-only; cpu engine is future scope.
+    transformers: TransformersConfig | None = Field(
         default=None,
-        description="PyTorch-specific configuration (only used when engine=pytorch)",
+        description="HuggingFace Transformers engine configuration (only used when engine=transformers)",
     )
     vllm: VLLMConfig | None = Field(
         default=None,
@@ -444,14 +444,14 @@ class ExperimentConfig(BaseModel):
     def validate_engine_section_match(self) -> ExperimentConfig:
         """Engine section must match the engine field.
 
-        A pytorch: section with engine=vllm is a configuration error — it indicates
+        A transformers: section with engine=vllm is a configuration error — it indicates
         the researcher copied the wrong config block. Fail explicitly rather than
         silently ignoring the mismatched section.
         """
-        if self.pytorch is not None and self.engine != "pytorch":
+        if self.transformers is not None and self.engine != "transformers":
             raise ValueError(
-                f"pytorch: config section provided but engine={self.engine!r}. "
-                "Remove the pytorch: section or set engine: pytorch."
+                f"transformers: config section provided but engine={self.engine!r}. "
+                "Remove the transformers: section or set engine: transformers."
             )
         if self.vllm is not None and self.engine != "vllm":
             raise ValueError(
@@ -515,16 +515,16 @@ class ExperimentConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_pytorch_flash_attn_dtype(self) -> ExperimentConfig:
+    def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:
         """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32)."""
         if (
-            self.engine == "pytorch"
-            and self.pytorch is not None
-            and self.pytorch.attn_implementation in self._FLASH_ATTENTION_IMPLS
+            self.engine == "transformers"
+            and self.transformers is not None
+            and self.transformers.attn_implementation in self._FLASH_ATTENTION_IMPLS
             and self.dtype == "float32"
         ):
             raise ValueError(
-                f"attn_implementation='{self.pytorch.attn_implementation}' requires "
+                f"attn_implementation='{self.transformers.attn_implementation}' requires "
                 "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
                 "float32 computation."
             )
@@ -535,15 +535,15 @@ class ExperimentConfig(BaseModel):
 def _rebuild_experiment_config() -> None:
     """Rebuild ExperimentConfig to resolve forward references."""
     from llenergymeasure.config.engine_configs import (
-        PyTorchConfig,
         TensorRTConfig,
+        TransformersConfig,
         VLLMConfig,
     )
 
     ExperimentConfig.model_rebuild(
         _types_namespace={
             "VLLMConfig": VLLMConfig,
-            "PyTorchConfig": PyTorchConfig,
+            "TransformersConfig": TransformersConfig,
             "TensorRTConfig": TensorRTConfig,
         }
     )
@@ -700,7 +700,7 @@ class StudyConfig(BaseModel):
         default=None,
         description=(
             "Per-engine runner configuration. Keys are engine names "
-            "('pytorch', 'vllm', 'tensorrt'), values are runner strings "
+            "('transformers', 'vllm', 'tensorrt'), values are runner strings "
             "('local', 'docker', or 'docker:<image>'). "
             "None = use user config / auto-detection. "
             "Runner is metadata — not part of the experiment config hash."

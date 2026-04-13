@@ -1,10 +1,10 @@
-"""PyTorch/Transformers inference engine — thin EnginePlugin.
+"""HuggingFace Transformers inference engine — thin EnginePlugin.
 
 Implements the 4-method EnginePlugin protocol:
   load_model, warmup, run_inference, cleanup
 
 All measurement lifecycle is delegated to MeasurementHarness. This module
-owns only PyTorch-specific inference: model loading, warmup via
+owns only Transformers-specific inference: model loading, warmup via
 warmup_until_converged(), model.generate() inference loop, and cleanup.
 """
 
@@ -20,8 +20,8 @@ from llenergymeasure.engines.protocol import InferenceOutput
 logger = logging.getLogger(__name__)
 
 
-class PyTorchEngine:
-    """PyTorch/Transformers inference engine — thin plugin.
+class TransformersEngine:
+    """HuggingFace Transformers inference engine — thin plugin.
 
     Implements EnginePlugin:
     - load_model: Load HuggingFace model + tokenizer, apply torch.compile
@@ -33,11 +33,11 @@ class PyTorchEngine:
     @property
     def name(self) -> str:
         """Engine identifier."""
-        return "pytorch"
+        return "transformers"
 
     @property
     def version(self) -> str:
-        """PyTorch version string."""
+        """Transformers library version string."""
         try:
             import torch
 
@@ -76,8 +76,8 @@ class PyTorchEngine:
 
         # trust_remote_code for tokenizer — respects config, defaults True
         trust = True
-        if config.pytorch is not None and config.pytorch.trust_remote_code is not None:
-            trust = config.pytorch.trust_remote_code
+        if config.transformers is not None and config.transformers.trust_remote_code is not None:
+            trust = config.transformers.trust_remote_code
 
         t0 = _time.perf_counter()
         tokenizer = AutoTokenizer.from_pretrained(config.model, trust_remote_code=trust)
@@ -93,11 +93,11 @@ class PyTorchEngine:
             on_substep("model weights loaded", _time.perf_counter() - t0)
 
         # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
-        if config.pytorch is not None and config.pytorch.torch_compile:
+        if config.transformers is not None and config.transformers.torch_compile:
             import torch as _torch
 
-            mode = config.pytorch.torch_compile_mode or "default"
-            backend = config.pytorch.torch_compile_backend or "inductor"
+            mode = config.transformers.torch_compile_mode or "default"
+            backend = config.transformers.torch_compile_backend or "inductor"
             try:
                 t0 = _time.perf_counter()
                 model = _torch.compile(model, mode=mode, backend=backend)  # type: ignore[assignment]
@@ -161,10 +161,10 @@ class PyTorchEngine:
         hf_model, tokenizer = model
 
         batch_size = 1
-        if config.pytorch is not None and config.pytorch.batch_size is not None:
-            batch_size = config.pytorch.batch_size
+        if config.transformers is not None and config.transformers.batch_size is not None:
+            batch_size = config.transformers.batch_size
         else:
-            logger.debug("PyTorch batch_size not set, defaulting to 1")
+            logger.debug("Transformers batch_size not set, defaulting to 1")
 
         # Reset peak stats BEFORE the measurement loop so max_memory_allocated()
         # captures inference-window-only peak (KV cache + activations + batch buffers),
@@ -216,7 +216,7 @@ class PyTorchEngine:
 
                 raise_engine_error(
                     e,
-                    "PyTorch",
+                    "Transformers",
                     hint="reduce batch_size, use dtype=float16, or use a smaller model.",
                 )
 
@@ -260,7 +260,7 @@ class PyTorchEngine:
         logger.debug("Model cleanup complete")
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """No hardware validation required for PyTorch engine."""
+        """No hardware validation required for Transformers engine."""
         return []
 
     # -------------------------------------------------------------------------
@@ -270,7 +270,7 @@ class PyTorchEngine:
     def _model_load_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build the full kwargs dict for AutoModelForCausalLM.from_pretrained().
 
-        This is the P0 fix location: passthrough_kwargs and pytorch config
+        This is the P0 fix location: passthrough_kwargs and transformers config
         options are ALL collected here and ALL passed to from_pretrained().
 
         Args:
@@ -283,7 +283,7 @@ class PyTorchEngine:
             "torch_dtype": self._resolve_torch_dtype(config.dtype),
         }
 
-        pt = config.pytorch
+        pt = config.transformers
 
         # Device placement / tensor parallelism — mutually exclusive
         if pt is not None and pt.tp_plan is not None:
@@ -303,7 +303,7 @@ class PyTorchEngine:
         else:
             kwargs["trust_remote_code"] = True
 
-        # Apply PyTorch-specific config options
+        # Apply Transformers-specific config options
         if pt is not None:
             if pt.attn_implementation is not None:
                 kwargs["attn_implementation"] = self._resolve_attn_implementation(
@@ -340,7 +340,7 @@ class PyTorchEngine:
             if pt.max_memory is not None:
                 kwargs["max_memory"] = pt.max_memory
 
-        # PyTorch extra="allow" passthrough: forward unknown fields to from_pretrained()
+        # Transformers extra="allow" passthrough: forward unknown fields to from_pretrained()
         if pt is not None and pt.model_extra:
             kwargs.update(pt.model_extra)
 
@@ -462,7 +462,7 @@ class PyTorchEngine:
         return input_token_count, output_token_count, elapsed
 
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build generation kwargs from DecoderConfig and PyTorchConfig."""
+        """Build generation kwargs from DecoderConfig and TransformersConfig."""
         decoder = config.decoder
         kwargs: dict[str, Any] = {
             "do_sample": decoder.do_sample,
@@ -478,8 +478,8 @@ class PyTorchEngine:
         if decoder.min_new_tokens is not None:
             kwargs["min_new_tokens"] = decoder.min_new_tokens
 
-        # PyTorchConfig generate() fields
-        pt = config.pytorch
+        # TransformersConfig generate() fields
+        pt = config.transformers
         if pt is not None:
             if pt.use_cache is not None:
                 kwargs["use_cache"] = pt.use_cache

@@ -130,7 +130,7 @@ this as a "Preparing Docker images" section with per-image status and metadata.
 
 ```yaml
 runners:
-  pytorch: local                                         # host, no Docker
+  transformers: local                                         # host, no Docker
   vllm: docker                                           # default (local → registry)
   tensorrt: "docker:ghcr.io/henrycgbaker/llenergymeasure/tensorrt:v0.9.0"  # force registry
 ```

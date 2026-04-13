@@ -28,7 +28,7 @@ _REPLAY_DIR = Path(__file__).parent / "fixtures" / "replay"
 # ---------------------------------------------------------------------------
 
 TEST_MODEL = "gpt2"
-TEST_ENGINE = "pytorch"
+TEST_ENGINE = "transformers"
 TEST_EXPERIMENT_ID = "test-001"
 TEST_CONFIG_HASH = "deadbeef12345678"
 TEST_MEASUREMENT_HASH = "abc123def4567890"

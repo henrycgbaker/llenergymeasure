@@ -12,7 +12,7 @@
 | Docker Compose | v2.32+ recommended | Required for build cache (see below). v2.11+ minimum |
 | Docker Buildx | v0.17+ recommended | Required for build cache. Bundled with Docker Engine 24+ |
 
-**macOS/Windows:** PyTorch engine only. Docker-based engines (vLLM, TensorRT-LLM) require Linux.
+**macOS/Windows:** Transformers engine only. Docker-based engines (vLLM, TensorRT-LLM) require Linux.
 
 ---
 
@@ -21,7 +21,7 @@
 The base package includes no inference engine. Install with the extras for your use case.
 
 ```bash
-pip install "llenergymeasure[pytorch]"
+pip install "llenergymeasure[transformers]"
 ```
 
 ### Available extras
@@ -108,7 +108,7 @@ docker compose build pytorch vllm tensorrt
 Or with plain `docker build` (no Compose, no build cache):
 
 ```bash
-docker build -f docker/Dockerfile.pytorch -t llenergymeasure:pytorch .
+docker build -f docker/Dockerfile.transformers -t llenergymeasure:transformers .
 docker build -f docker/Dockerfile.vllm -t llenergymeasure:vllm .
 docker build -f docker/Dockerfile.tensorrt -t llenergymeasure:tensorrt .
 ```
@@ -119,7 +119,7 @@ for the full resolution chain.
 
 > **When to rebuild.** Images bundle the `llenergymeasure` source at build time. If you
 > modify config models, engines, or the container entrypoint, you must rebuild for changes
-> to take effect inside containers. Local-runner experiments (PyTorch) use the installed
+> to take effect inside containers. Local-runner experiments (Transformers) use the installed
 > source directly and do not need a rebuild.
 
 ### Other Docker Make targets
@@ -137,7 +137,7 @@ from GHCR:
 
 | Engine | Image Size | Cold Build | Cached Rebuild |
 |---------|-----------|------------|----------------|
-| PyTorch (FA3 on) | ~8.5 GB | ~30 min | ~30 sec |
+| Transformers (FA3 on) | ~8.5 GB | ~30 min | ~30 sec |
 | vLLM | ~17 GB | ~30 min | ~5 min |
 | TensorRT-LLM | ~54 GB | ~40 min | ~10 min |
 
@@ -161,7 +161,7 @@ docker compose build pytorch
 ```
 
 Compose will pull cached layers from GHCR (written by CI on each release) and only rebuild
-layers that have changed locally. A cached PyTorch build completes in under a minute
+layers that have changed locally. A cached Transformers build completes in under a minute
 instead of ~30 minutes.
 
 **How it works:**
@@ -188,20 +188,20 @@ entries in `docker-compose.yml` are silently ignored. No errors, just slower bui
 
 ### FlashAttention-3
 
-The PyTorch Docker image ships with both FlashAttention-2 (FA2) and FlashAttention-3 (FA3)
+The Transformers Docker image ships with both FlashAttention-2 (FA2) and FlashAttention-3 (FA3)
 pre-built. FA3 is compiled from source during the image build, which is the slowest build
 step (~20 min). With the build cache enabled (`COMPOSE_BAKE=true`), FA3 layers are pulled
 pre-compiled and the build completes in under a minute.
 
 FA3 provides Hopper-optimised attention kernels. Use it via
-`pytorch.attn_implementation: flash_attention_3` in your experiment configs.
+`transformers.attn_implementation: flash_attention_3` in your experiment configs.
 
 **To skip FA3** (e.g. for faster CI builds):
 
 ```bash
-docker build -f docker/Dockerfile.pytorch \
+docker build -f docker/Dockerfile.transformers \
   --build-arg INSTALL_FA3=false \
-  -t llenergymeasure:pytorch .
+  -t llenergymeasure:transformers .
 ```
 
 **Why FA3 takes so long from scratch:** FA3 has no pre-built PyPI wheel. It is compiled from
@@ -245,7 +245,7 @@ Example output:
 GPU
   NVIDIA A100-SXM4-80GB  80.0 GB
 Engines
-  pytorch: installed
+  transformers: installed
   vllm: not installed  (pip install llenergymeasure[vllm])
   tensorrt: not installed  (pip install llenergymeasure[tensorrt])
 Energy

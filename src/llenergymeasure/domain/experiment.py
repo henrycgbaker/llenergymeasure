@@ -70,7 +70,7 @@ class RawProcessResult(BaseModel):
 
     schema_version: str = Field(default="3.0", description="Result schema version")
     experiment_id: str = Field(..., description="Unique experiment identifier")
-    engine: str = Field(default="pytorch", description="Inference engine used")
+    engine: str = Field(default="transformers", description="Inference engine used")
     engine_version: str | None = Field(
         default=None, description="Engine version string for reproducibility"
     )
@@ -156,7 +156,7 @@ class ExperimentResult(BaseModel):
     )
 
     # Engine
-    engine: str = Field(default="pytorch", description="Inference engine used")
+    engine: str = Field(default="transformers", description="Inference engine used")
     engine_version: str | None = Field(
         default=None, description="Engine version string for reproducibility"
     )

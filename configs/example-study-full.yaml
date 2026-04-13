@@ -13,7 +13,7 @@ study_name: full-suite-all-engines
 # Multi-engine runners auto-elevate to docker by default for better isolation and consistency (auto-elevation is configurable (TODO) but recommended).
 
 runners:
-  pytorch: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
+  transformers: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
   vllm: docker
   tensorrt: docker
 
@@ -98,7 +98,7 @@ decoder:
 # lora:
 #   adapter_id: my-org/my-lora-adapter
 #   merge_weights: false
-# TODO: VALUDATE that this works as intended - does this apply to all engines? if not, need to clarify in docs and potentially add engine-specific lora config using dotted notation (e.g. lora.pytorch.adapter_id, lora.vllm.adapter_id, etc.)
+# TODO: VALUDATE that this works as intended - does this apply to all engines? if not, need to clarify in docs and potentially add engine-specific lora config using dotted notation (e.g. lora.transformers.adapter_id, lora.vllm.adapter_id, etc.)
 
 # --- Passthrough kwargs ---
 # passthrough_kwargs:
@@ -128,9 +128,9 @@ output:
 # See .product/designs/sweep-constraints.md for full design rationale.
 #
 # KNOWN-BAD CROSSES (do not add as independent axes):
-#   - pytorch.torch_compile=true  x  bitsandbytes load_in_{4,8}bit
-#     (dequant ops trigger per-call recompilation; see pytorch.compile_quant group)
-#   - pytorch.torch_compile_mode=max-autotune  x  pytorch.cache_implementation=static/sliding_window
+#   - transformers.torch_compile=true  x  bitsandbytes load_in_{4,8}bit
+#     (dequant ops trigger per-call recompilation; see transformers.compile_quant group)
+#   - transformers.torch_compile_mode=max-autotune  x  transformers.cache_implementation=static/sliding_window
 #     (per-shape kernel autotune on every cache reshape; slow but correct — follow-up)
 #   - Any engine x dataset.n_prompts > ~200 without raising
 #     study_execution.experiment_timeout_seconds above its 600s default
@@ -141,11 +141,11 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # --- Universal (applies to all three engines) ---
   dtype: [float32, float16, bfloat16]
 
-  # --- PyTorch parameter space ---
-  pytorch.batch_size: [1, 4, 8, 16, 32]
-  pytorch.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
+  # --- Transformers parameter space ---
+  transformers.batch_size: [1, 4, 8, 16, 32]
+  transformers.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
 
-  # --- PyTorch: dependent groups ─────────────────────────────────
+  # --- Transformers: dependent groups ─────────────────────────────────
 
   # torch.compile and bitsandbytes quantisation are merged into one group
   # because their cross-product is pathological: bitsandbytes inserts dynamic
@@ -153,40 +153,40 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # max-autotune compounds this with per-shape kernel search. Within-group
   # variants are unioned (not crossed), so the variants below are exactly
   # what runs — no bnb-with-compile cells exist.
-  pytorch.compile_quant:
+  transformers.compile_quant:
     # Baseline: no compile, no quantisation
     - {}
     # bitsandbytes 8-bit (no compile)
-    - pytorch.load_in_8bit: true
+    - transformers.load_in_8bit: true
     # bitsandbytes 4-bit, nf4 and fp4 (no compile)
-    - pytorch.load_in_4bit: true
-      pytorch.bnb_4bit_compute_dtype: float16
-      pytorch.bnb_4bit_quant_type: [nf4, fp4]
+    - transformers.load_in_4bit: true
+      transformers.bnb_4bit_compute_dtype: float16
+      transformers.bnb_4bit_quant_type: [nf4, fp4]
     # bitsandbytes 4-bit + double-quant (no compile)
-    - pytorch.load_in_4bit: true
-      pytorch.bnb_4bit_compute_dtype: float16
-      pytorch.bnb_4bit_quant_type: nf4
-      pytorch.bnb_4bit_use_double_quant: true
+    - transformers.load_in_4bit: true
+      transformers.bnb_4bit_compute_dtype: float16
+      transformers.bnb_4bit_quant_type: nf4
+      transformers.bnb_4bit_use_double_quant: true
     # torch.compile on unquantised weights — all three modes safe here
-    - pytorch.torch_compile: true
-      pytorch.torch_compile_backend: inductor
-      pytorch.torch_compile_mode: [default, reduce-overhead, max-autotune]
+    - transformers.torch_compile: true
+      transformers.torch_compile_backend: inductor
+      transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]
 
   # cache_implementation requires use_cache: true
-  pytorch.caching:
+  transformers.caching:
     - {}                                          # baseline: default caching
-    - pytorch.use_cache: true
-      pytorch.cache_implementation: [static, offloaded_static, sliding_window]
+    - transformers.use_cache: true
+      transformers.cache_implementation: [static, offloaded_static, sliding_window]
 
   # beam search requires decoder.do_sample: false (cross-section dependency)
-  pytorch.decoding:
+  transformers.decoding:
     - {}                                          # baseline: use shared decoder settings
     - decoder.do_sample: false
       decoder.temperature: 0.0
-      pytorch.num_beams: 4
-      pytorch.early_stopping: true
-      pytorch.length_penalty: 1.0
-      pytorch.no_repeat_ngram_size: 3
+      transformers.num_beams: 4
+      transformers.early_stopping: true
+      transformers.length_penalty: 1.0
+      transformers.no_repeat_ngram_size: 3
 
   # --- vLLM parameter space ---
   # (vLLM uses continuous batching - no user-facing batch_size parameter)
@@ -281,22 +281,22 @@ tensorrt: #TODO - IM LEAVING THIS HERE AS REMINDER TO WORK OUT WHART THIS WAS AN
 experiments:
 
   # =================================================================
-  # PYTORCH - unique experiments
+  # TRANSFORMERS - unique experiments
   # =================================================================
   # torch.compile, quantisation, caching, and beam search are now handled
-  # by sweep groups above (pytorch.compilation, pytorch.quantization,
-  # pytorch.caching, pytorch.decoding).
+  # by sweep groups above (transformers.compilation, transformers.quantization,
+  # transformers.caching, transformers.decoding).
 
   # -----------------------------------------------------------------
-  # PyTorch speculative decoding (prompt-lookup)
+  # Transformers speculative decoding (prompt-lookup)
   # -----------------------------------------------------------------
   # Requires batch_size=1, overriding the sweep axis - must remain explicit.
   - model: Qwen/Qwen2.5-0.5B
-    engine: pytorch
+    engine: transformers
     dtype: bfloat16
     dataset:
       n_prompts: 50
-    pytorch:
+    transformers:
       batch_size: 1
       prompt_lookup_num_tokens: 3
       device_map: auto
@@ -307,11 +307,11 @@ experiments:
   # mutually exclusive, so this is a dependent experiment)
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   engine: pytorch
+  #   engine: transformers
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
-  #   pytorch:
+  #   transformers:
   #     batch_size: 4
   #     tp_plan: auto
   #     tp_size: 2
@@ -321,11 +321,11 @@ experiments:
   # Model loading with revision pin + memory limits
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
-  #   engine: pytorch
+  #   engine: transformers
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
-  #   pytorch:
+  #   transformers:
   #     batch_size: 4
   #     revision: main
   #     max_memory:
@@ -334,16 +334,16 @@ experiments:
   #     device_map: auto
   #     trust_remote_code: true
 
-  # PyTorch LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
+  # Transformers LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
   # - model: Qwen/Qwen2.5-0.5B
-  #   engine: pytorch
+  #   engine: transformers
   #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   lora:
   #     adapter_id: my-org/my-lora-adapter
   #     merge_weights: false
-  #   pytorch:
+  #   transformers:
   #     batch_size: 4
   #     device_map: auto
   #     trust_remote_code: true

@@ -6,7 +6,7 @@ torch = pytest.importorskip("torch")
 
 
 def _count_tokens(inputs: dict, outputs: torch.Tensor) -> tuple[int, int]:
-    """Replicate the token counting logic from PyTorchEngine._run_batch()."""
+    """Replicate the token counting logic from TransformersEngine._run_batch()."""
     input_token_count = int(inputs["attention_mask"].sum().item())
     input_lengths = inputs["attention_mask"].sum(dim=1)  # shape: (batch,)
     output_token_count = int(
