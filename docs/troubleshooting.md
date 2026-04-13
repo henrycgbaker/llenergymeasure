@@ -264,12 +264,22 @@ summary line reports `⚠ no GHCR cache imported (cold build)` (or BuildKit
 output shows `flash-attn` source downloads and nvcc compilation for every
 build).
 
-**Cause:** BuildKit's `cache_from` registry pull was skipped. Either (a) you
-are on a fresh buildx builder with no local cache, (b) you are offline or
-GHCR is unreachable, or (c) your `LLEM_PKG_VERSION` does not match any
-published tag (cache_from resolves to `:v${LLEM_PKG_VERSION}` and falls
-through to `:latest` — if neither has usable layers, BuildKit silently
-cold-builds).
+**Cause:** BuildKit's `cache_from` registry pull was skipped. In rough order
+of likelihood:
+
+(a) **`BUILDX_BUILDER` is unset or pointing at the default `docker` driver.**
+    The default driver cannot import registry caches at all — `cache_from`
+    entries are silently ignored. Confirm with `docker buildx ls`: the row
+    marked with `*` (current builder) must show driver `docker-container`,
+    not `docker`. Fix by adding `BUILDX_BUILDER=llem-builder` to your `.env`
+    (it ships in `.env.example`) and re-running `make docker-builder-setup`
+    if the builder doesn't exist yet.
+(b) You are on a fresh buildx builder with no local cache (this is normal
+    on the very first build — first-pull cost is paid once).
+(c) You are offline or GHCR is unreachable.
+(d) Your `LLEM_PKG_VERSION` does not match any published tag (cache_from
+    resolves to `:v${LLEM_PKG_VERSION}` and falls through to `:latest` —
+    if neither has usable layers, BuildKit silently cold-builds).
 
 The full BuildKit log for the most recent attempt is at
 `/tmp/llem-build-{engine}.log` — grep it for `importing cache manifest` to
@@ -277,6 +287,10 @@ see whether the registry was even reached.
 
 **Fix:**
 
+0. Confirm the builder driver: `docker buildx ls`. The active builder
+   (marked `*`) must be `docker-container`. If it's `docker`, run
+   `make docker-builder-setup` and ensure `BUILDX_BUILDER=llem-builder` is
+   in your `.env` (or exported in the shell).
 1. Inspect the builder cache: `docker buildx du --builder llem-builder`. If
    it's near-empty, BuildKit has nothing to reuse locally and will pull from
    the registry.
