@@ -48,6 +48,10 @@ All notable changes to this project are documented here.
   - `TensorRTConfig.backend` — TRT-LLM's internal `LLM(backend=...)` parameter
   - Energy measurement backends (Zeus, NVML, CodeCarbon)
 
+### Fixed
+
+- **`Dockerfile.transformers` stale references.** The Dockerfile was renamed in #261 but still installed the now-nonexistent `[pytorch]` extra and carried header comments referencing the old `Dockerfile.pytorch` file and `llenergymeasure-pytorch` tag. Updated to install `.[transformers]` and corrected all header comments. The `pytorch/pytorch:*` base image tags are preserved - PyTorch the library is unchanged, only the engine identifier was renamed.
+
 ### Added
 
 - **Host/container schema fingerprint verification.** Docker images are now stamped at build time with a `llem.expconf.schema.fingerprint` OCI label (SHA-256 of `ExperimentConfig.model_json_schema()`) plus `org.opencontainers.image.version`. `StudyRunner._prepare_images` compares the label to the host fingerprint before any experiment runs and aborts with an actionable rebuild hint on mismatch. The check is bypassable via `LLEM_SKIP_IMAGE_CHECK=1`.
