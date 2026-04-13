@@ -115,9 +115,10 @@ make docker-build-vllm         # just vllm
 make docker-build-tensorrt     # just tensorrt
 ```
 
-These use `docker compose build`. With `COMPOSE_BAKE=true` in `.env`, builds use the GHCR
-registry build cache for dramatically faster builds (e.g. PyTorch: ~2 min cached vs ~1 hour
-cold). See `docs/installation.md#build-cache-recommended` for details.
+These use `docker compose build` and pull cached layers from GHCR on first build
+(PyTorch: <5 min warm vs ~15-20 min cold). `COMPOSE_BAKE=true` in `.env` additionally
+enables parallel multi-backend builds via `buildx bake` but is not required for the
+cache. See `docs/installation.md#fast-rebuilds-and-first-pull-cost` for details.
 
 ### Study-level image preparation
 

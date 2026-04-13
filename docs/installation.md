@@ -185,12 +185,27 @@ local layer cache (cold on a fresh builder). No errors, just slower.
 **First-pull cost:** the first build on any new machine downloads the full
 cache graph (sizes above). Subsequent builds are incremental.
 
+**How to tell if the cache actually warmed:** `make docker-build-{backend}`
+runs the build under `BUILDKIT_PROGRESS=plain` and emits a one-line summary
+when it finishes:
+
+- `✓ pytorch build: 4m 18s — GHCR cache imported, 27 layers reused` — cache
+  hit, FA3 layer not recompiled.
+- `⚠ pytorch build: 18m 03s — no GHCR cache imported (cold build)` — silent
+  fallback. Cross-check
+  [troubleshooting → Docker rebuild is slow](troubleshooting.md#docker-rebuild-is-slow--recompiling-flash-attn).
+
+The summary is computed from BuildKit's own progress markers
+(`importing cache manifest …` and `CACHED` per-stage lines), so it reflects
+actual cache behaviour, not just intent.
+
 ### FlashAttention-3
 
 The PyTorch Docker image ships with both FlashAttention-2 (FA2) and FlashAttention-3 (FA3)
 pre-built. FA3 is compiled from source during the image build, which is the slowest build
-step (~20 min). With the build cache enabled (`COMPOSE_BAKE=true`), FA3 layers are pulled
-pre-compiled and the build completes in under a minute.
+step (~20 min). On warm rebuilds the FA3 layer is reused from the GHCR cache (see
+[Fast rebuilds and first-pull cost](#fast-rebuilds-and-first-pull-cost) above) and the
+build completes in minutes.
 
 FA3 provides Hopper-optimised attention kernels. Use it via
 `pytorch.attn_implementation: flash_attention_3` in your experiment configs.
