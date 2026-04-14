@@ -25,22 +25,22 @@ class TestEngineSweepAxis:
         assert {c.engine for c in valid} == {"transformers", "tensorrt"}
 
     def test_engine_sweep_with_trt_scoped_params(self):
-        """engine: [pytorch, tensorrt] with tensorrt.tp_size: [1, 2] produces 3 configs."""
+        """engine: [transformers, tensorrt] with tensorrt.tensor_parallel_size: [1, 2] produces 3 configs."""
         raw_study = {
             "model": "gpt2",
             "engine": ["transformers", "tensorrt"],
             "sweep": {
-                "tensorrt.tp_size": [1, 2],
+                "tensorrt.tensor_parallel_size": [1, 2],
             },
         }
         valid, _skipped = expand_grid(raw_study)
-        # pytorch: 1 config (no scoped dims), tensorrt: 2 configs (tp_size=[1,2])
+        # transformers: 1 config (no scoped dims), tensorrt: 2 configs (tensor_parallel_size=[1,2])
         assert len(valid) == 3
         pytorch_configs = [c for c in valid if c.engine == "transformers"]
         tensorrt_configs = [c for c in valid if c.engine == "tensorrt"]
         assert len(pytorch_configs) == 1
         assert len(tensorrt_configs) == 2
-        tp_sizes = {c.tensorrt.tp_size for c in tensorrt_configs}
+        tp_sizes = {c.tensorrt.tensor_parallel_size for c in tensorrt_configs}
         assert tp_sizes == {1, 2}
 
 
@@ -81,7 +81,7 @@ class TestDottedNestedSweep:
             "model": "gpt2",
             "engine": "tensorrt",
             "tensorrt": {
-                "tp_size": 2,
+                "tensor_parallel_size": 2,
                 "max_batch_size": 8,
                 "max_input_len": 1024,
                 "max_seq_len": 2048,
@@ -112,7 +112,7 @@ class TestDottedNestedSweep:
         for config in valid:
             assert config.engine == "tensorrt"
             assert config.tensorrt is not None
-            assert config.tensorrt.tp_size == 2
+            assert config.tensorrt.tensor_parallel_size == 2
             assert config.tensorrt.max_batch_size == 8
             assert config.tensorrt.dtype == "bfloat16"
             assert config.tensorrt.kv_cache is not None

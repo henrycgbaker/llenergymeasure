@@ -309,7 +309,7 @@ dtype: bfloat16
 runners:
   tensorrt: docker
 tensorrt:
-  tp_size: 2
+  tensor_parallel_size: 2
   max_batch_size: 8
   dtype: bfloat16
   quant:
@@ -330,7 +330,7 @@ Changing any **[recompile]** field invalidates the cached engine and triggers a 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `max_batch_size` | int | 8 | Maximum batch size the engine accepts. **[recompile]** |
-| `tp_size` | int | 1 | Tensor parallel degree (number of GPUs). **[recompile]** |
+| `tensor_parallel_size` | int | 1 | Tensor parallel degree (number of GPUs). **[recompile]** |
 | `max_input_len` | int | 1024 | Maximum input sequence length in tokens. **[recompile]** |
 | `max_seq_len` | int | 2048 | Maximum total sequence length (input + output). **[recompile]** |
 | `dtype` | `float16` \| `bfloat16` | auto | Model compute dtype. TRT-LLM is optimised for fp16/bf16; fp32 is not supported. **[recompile]** |
@@ -429,14 +429,14 @@ directly, skipping engine compilation entirely. This is useful when:
 
 1. Directory exists
 2. `config.json` exists and is valid JSON
-3. `tp_size` in `config.json` matches `tensorrt.tp_size` (if detectable)
-4. `rank{N}.engine` files exist for each rank (0 to tp_size-1)
+3. `tp_size` in `config.json` matches `tensorrt.tensor_parallel_size` (if detectable)
+4. `rank{N}.engine` files exist for each rank (0 to `tensor_parallel_size-1`)
 
 **What happens when `engine_path` is set:**
 
 - `model` field is still required but used only as a fallback tokeniser source
   (if the engine directory lacks tokeniser files)
-- All compile-time parameters (`max_batch_size`, `tp_size`, `max_input_len`,
+- All compile-time parameters (`max_batch_size`, `tensor_parallel_size`, `max_input_len`,
   `max_seq_len`, `dtype`, `fast_build`) are **ignored** - they are baked into
   the engine
 - `build_cache` is **ignored** - no compilation occurs, so caching is irrelevant
@@ -619,7 +619,7 @@ These parameters live in `ExperimentConfig` and are shared across all engines:
 | Parameter | Transformers | vLLM | TensorRT-LLM | Notes |
 |-----------|---------|------|--------------|-------|
 | `tensorrt.max_batch_size` | N/A | N/A | Yes | Compile-time constant |
-| `tensorrt.tp_size` | N/A | N/A | Yes | Tensor parallel size (compile-time) |
+| `tensorrt.tensor_parallel_size` | N/A | N/A | Yes | Tensor parallel size (compile-time) |
 | `tensorrt.max_input_len` | N/A | N/A | Yes | Max input tokens (compile-time) |
 | `tensorrt.max_seq_len` | N/A | N/A | Yes | Max total sequence length (compile-time) |
 | `tensorrt.dtype` | N/A | N/A | Yes | Model compute dtype (compile-time) |

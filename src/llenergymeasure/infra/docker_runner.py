@@ -570,14 +570,14 @@ class DockerRunner:
     ) -> list[str]:
         """Build the ``docker run`` command list.
 
-        For TRT-LLM tensor parallelism (tp_size > 1), ``mpirun -n {tp_size}
+        For TRT-LLM tensor parallelism (tensor_parallel_size > 1), ``mpirun -n {n}
         --allow-run-as-root`` is injected between the image name and ``python3``.
         MPI worker ranks re-import the module but do not call ``main()`` because
         ``container_entrypoint.py`` is guarded by ``if __name__ == "__main__"``.
 
         Args:
             config:       ExperimentConfig for the current experiment. Used to
-                          detect TRT-LLM engine and read ``tensorrt.tp_size``.
+                          detect TRT-LLM engine and read ``tensorrt.tensor_parallel_size``.
             config_hash:  Hash prefix for config/result file names.
             exchange_dir: Host path of the temporary exchange directory.
             env_path:     Path to a temp env-file (written by ``_env_file``), or None.
@@ -628,7 +628,7 @@ class DockerRunner:
         # Determine TRT-LLM tensor parallel size for MPI injection
         tp_size = None
         if config.engine == "tensorrt" and config.tensorrt is not None:
-            tp_size = config.tensorrt.tp_size
+            tp_size = config.tensorrt.tensor_parallel_size
 
         cmd.append(self.image)
 

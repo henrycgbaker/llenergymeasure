@@ -399,7 +399,7 @@ class TensorRTEngine:
         # engine_path early-return: pass engine dir as model, skip all compile-time kwargs
         if trt is not None and trt.engine_path is not None:
             engine_path = Path(trt.engine_path)
-            tp_size = trt.tp_size if trt.tp_size is not None else 1
+            tp_size = trt.tensor_parallel_size if trt.tensor_parallel_size is not None else 1
             errors = _validate_engine_directory(engine_path, tp_size=tp_size)
             if errors:
                 raise ConfigError(f"engine_path validation failed: {'; '.join(errors)}")
@@ -414,8 +414,8 @@ class TensorRTEngine:
             return kwargs
 
         # Scalar fields: map directly (same name or renamed)
-        if trt.tp_size is not None:
-            kwargs["tensor_parallel_size"] = trt.tp_size
+        if trt.tensor_parallel_size is not None:
+            kwargs["tensor_parallel_size"] = trt.tensor_parallel_size
         if trt.max_batch_size is not None:
             kwargs["max_batch_size"] = trt.max_batch_size
         if trt.max_input_len is not None:

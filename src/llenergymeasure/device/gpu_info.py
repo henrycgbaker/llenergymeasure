@@ -540,7 +540,7 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
       NVML-visible GPUs. Model sharding is determined at load time inside
       harness.run(), but gpu_indices must be passed *before* load. Using all
       visible GPUs is correct and safe.
-    - **TensorRT-LLM**: tp_size GPUs. Known from config before harness runs.
+    - **TensorRT-LLM**: tensor_parallel_size GPUs. Known from config before harness runs.
     - **Otherwise**: [0] (single-GPU default, backward compatible).
 
     Note: num_processes > 1 (data parallelism via Accelerate) is not handled here.
@@ -557,7 +557,7 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         if total > 1:
             return list(range(total))
     elif config.engine == ENGINE_TENSORRT and config.tensorrt is not None:
-        tp = config.tensorrt.tp_size or 1
+        tp = config.tensorrt.tensor_parallel_size or 1
         if tp > 1:
             return list(range(tp))
     elif (
