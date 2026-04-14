@@ -181,7 +181,7 @@ class TransformersConfig(BaseModel):
         description="Use KV cache during generation (None -> True)",
         json_schema_extra=CurationMetadata(
             clauses=("R1", "R2", "E2"),
-            rationale="Turning it off changes inference from AR to prefill-only (~100× latency delta).",
+            rationale="Turning it off changes inference from AR to prefill-only (~100x latency delta).",
             native_mapping="GenerationConfig.use_cache",
         ).to_schema_extra(),
     )
