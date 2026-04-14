@@ -26,6 +26,12 @@ ENGINE_TENSORRT: Final = "tensorrt"
 
 EngineName = Literal["transformers", "vllm", "tensorrt"]
 
+ALL_ENGINES: Final[tuple[str, ...]] = (ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT)
+"""Ordered tuple of all engine names. Use instead of hardcoded lists when iterating or building sets."""
+
+ENGINE_SECTION_KEYS: Final[frozenset[str]] = frozenset(ALL_ENGINES)
+"""Frozenset of engine section names for O(1) membership tests in config parsing."""
+
 # ---------------------------------------------------------------------------
 # Runner mode constants
 # ---------------------------------------------------------------------------
@@ -166,12 +172,14 @@ ENGINE_PACKAGES: dict[str, str] = {
 }
 
 __all__ = [
+    "ALL_ENGINES",
     "CONTAINER_EXCHANGE_DIR",
     "DECODER_PARAM_SUPPORT",
     "DECODING_SUPPORT",
     "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
     "ENGINE_PACKAGES",
+    "ENGINE_SECTION_KEYS",
     "ENGINE_TENSORRT",
     "ENGINE_TRANSFORMERS",
     "ENGINE_VLLM",

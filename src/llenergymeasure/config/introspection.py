@@ -31,6 +31,8 @@ from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
+from llenergymeasure.config.ssot import ALL_ENGINES
+
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -353,7 +355,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     decoder_params = get_params_from_model(DecoderConfig, prefix="decoder")
     # Add engine_support to decoder params
     for param in decoder_params.values():
-        param["engine_support"] = ["transformers", "vllm", "tensorrt"]
+        param["engine_support"] = list(ALL_ENGINES)
     shared.update(decoder_params)
 
     # Top-level universal params — defined manually for explicit engine_support
@@ -367,7 +369,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["float32", "float16", "bfloat16"],
         "constraints": {},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": list(ALL_ENGINES),
     }
     shared["dataset.source"] = {
         "path": "dataset.source",
@@ -379,7 +381,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["aienergyscore"],
         "constraints": {"min_length": 1},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": list(ALL_ENGINES),
     }
     shared["dataset.n_prompts"] = {
         "path": "dataset.n_prompts",
@@ -391,7 +393,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [10, 100, 500],
         "constraints": {"ge": 1},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": list(ALL_ENGINES),
     }
     shared["dataset.order"] = {
         "path": "dataset.order",
@@ -403,7 +405,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["interleaved", "grouped", "shuffled"],
         "constraints": {},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": list(ALL_ENGINES),
     }
     shared["max_input_tokens"] = {
         "path": "max_input_tokens",
@@ -418,7 +420,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [64, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": list(ALL_ENGINES),
     }
     shared["max_output_tokens"] = {
         "path": "max_output_tokens",
@@ -433,7 +435,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [32, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": list(ALL_ENGINES),
     }
 
     return shared
@@ -464,12 +466,7 @@ def get_all_params() -> dict[str, dict[str, dict[str, Any]]]:
             "tensorrt": {...},
         }
     """
-    return {
-        "shared": get_shared_params(),
-        "transformers": get_engine_params("transformers"),
-        "vllm": get_engine_params("vllm"),
-        "tensorrt": get_engine_params("tensorrt"),
-    }
+    return {"shared": get_shared_params(), **{e: get_engine_params(e) for e in ALL_ENGINES}}
 
 
 def get_param_test_values(param_path: str) -> list[Any]:
@@ -956,7 +953,7 @@ def get_capability_matrix_markdown() -> str:
         display_name = display_names.get(cap_key, cap_key)
         cells = []
 
-        for engine in ["transformers", "vllm", "tensorrt"]:
+        for engine in ALL_ENGINES:
             value = cap_values.get(engine, False)
             if value is True:
                 cells.append("Yes")

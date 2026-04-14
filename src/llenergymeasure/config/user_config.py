@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from llenergymeasure.config.models import EnergySamplerName
 from llenergymeasure.config.ssot import (
+    ALL_ENGINES,
     ENV_CARBON_INTENSITY,
     ENV_DATACENTER_PUE,
     ENV_NO_PROMPT,
@@ -58,7 +59,7 @@ class UserRunnersConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_runner_format(self) -> UserRunnersConfig:
-        for field_name in ("transformers", "vllm", "tensorrt"):
+        for field_name in ALL_ENGINES:
             value = getattr(self, field_name)
             if value.startswith("singularity:"):
                 raise ValueError(
@@ -161,7 +162,7 @@ def _apply_env_overrides(config: UserConfig) -> UserConfig:
     Returns updated UserConfig (Pydantic models are immutable; use model_copy).
     """
     runners_updates: dict[str, str] = {}
-    for engine in ("transformers", "vllm", "tensorrt"):
+    for engine in ALL_ENGINES:
         env_key = f"{ENV_RUNNER_PREFIX}{engine.upper()}"
         if val := os.environ.get(env_key):
             runners_updates[engine] = val
