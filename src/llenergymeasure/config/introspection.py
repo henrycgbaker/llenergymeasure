@@ -39,6 +39,18 @@ if TYPE_CHECKING:
 # =============================================================================
 
 
+def is_curated_field(field_info: FieldInfo) -> bool:
+    """Return True if the field carries CurationMetadata (i.e. is a typed/curated field).
+
+    A curated field has a ``curation`` key in its ``json_schema_extra`` dict,
+    populated by :class:`llenergymeasure.config.curation.CurationMetadata`.
+    Use this as a single source of truth rather than duplicating the ``curation``
+    key check across scripts.
+    """
+    extra = field_info.json_schema_extra
+    return isinstance(extra, dict) and "curation" in extra
+
+
 def get_display_label(field_info: FieldInfo, field_name: str) -> str:
     """Return display label from json_schema_extra, falling back to title-cased name."""
     extra = field_info.json_schema_extra
