@@ -90,7 +90,7 @@ def test_vllm_none_engine_vllm_config_returns_single_gpu():
 
 
 # ---------------------------------------------------------------------------
-# TensorRT engine: uses tp_size
+# TensorRT engine: uses tensor_parallel_size
 # ---------------------------------------------------------------------------
 
 
@@ -122,7 +122,7 @@ def test_tensorrt_tp4_returns_four_gpus():
     assert result == [0, 1, 2, 3]
 
 
-def test_tensorrt_none_tp_size_returns_single_gpu():
+def test_tensorrt_none_tensor_parallel_size_returns_single_gpu():
     """tensorrt with tensor_parallel_size=None falls through to [0]."""
     from llenergymeasure.config.engine_configs import TensorRTConfig
 

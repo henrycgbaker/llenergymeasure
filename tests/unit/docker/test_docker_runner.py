@@ -747,7 +747,7 @@ class TestHFTokenSecure:
 
 
 class TestMpirunInjection:
-    """Verify mpirun is injected iff engine=tensorrt and tp_size > 1."""
+    """Verify mpirun is injected iff engine=tensorrt and tensor_parallel_size > 1."""
 
     def _capture_cmd(self, config, tmp_path) -> list[str]:
         """Run DockerRunner.run() with a fake subprocess and capture the docker cmd."""
