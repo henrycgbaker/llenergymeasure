@@ -794,7 +794,7 @@ relates to energy measurement.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `max_batch_size` | integer | None | `null` | Max batch size (compile-time constant, None -> 8) |
-| `tp_size` | integer | None | `null` | Tensor parallel size (None -> 1) |
+| `tensor_parallel_size` | integer | None | `null` | Tensor parallel size (None -> 1) |
 | `max_input_len` | integer | None | `null` | Max input sequence length (compile-time constant, None -> 1024) |
 | `max_seq_len` | integer | None | `null` | Max total sequence length (input + output, compile-time constant, None -> 2048) |
 | `dtype` | 'float16' | 'bfloat16' | None | `null` | Model dtype (None -> auto). TRT-LLM is optimised for fp16/bf16; fp32 not supported. |

@@ -169,9 +169,9 @@ class TestBuildLlmKwargs:
         assert kwargs["backend"] == "trt"
         assert kwargs.get("enable_build_cache") is True
 
-    def test_build_llm_kwargs_tp_size(self):
-        """tp_size=2 maps to tensor_parallel_size=2."""
-        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=2))
+    def test_build_llm_kwargs_tensor_parallel_size(self):
+        """tensor_parallel_size=2 maps to kwargs tensor_parallel_size=2."""
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=2))
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -215,7 +215,7 @@ class TestBuildLlmKwargs:
 
     def test_build_llm_kwargs_default_build_cache_when_no_build_cache_section(self):
         """When no build_cache section, enable_build_cache=True is set."""
-        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=1))
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
@@ -601,7 +601,9 @@ class TestBuildMetadata:
         import hashlib
         import json
 
-        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tp_size=2, max_batch_size=8))
+        config = make_config(
+            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=2, max_batch_size=8)
+        )
         engine = TensorRTEngine()
 
         # Reproduce the hash computation from load_model
@@ -714,7 +716,7 @@ class TestBuildLlmKwargsEnginePath:
         assert kwargs["backend"] == "trt"
 
     def test_build_llm_kwargs_engine_path_skips_compile_kwargs(self, tmp_path):
-        """engine_path set -> no compile-time kwargs (tp_size, max_batch_size, etc.)."""
+        """engine_path set -> no compile-time kwargs (tensor_parallel_size, max_batch_size, etc.)."""
         config_data = {"pretrained_config": {"mapping": {"tp_size": 2}}, "build_config": {}}
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
@@ -722,7 +724,9 @@ class TestBuildLlmKwargsEnginePath:
 
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(engine_path=str(tmp_path), tp_size=2, max_batch_size=16),
+            tensorrt=TensorRTConfig(
+                engine_path=str(tmp_path), tensor_parallel_size=2, max_batch_size=16
+            ),
         )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)

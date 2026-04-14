@@ -1,7 +1,7 @@
 """Unit tests for expanded TensorRT-LLM config validation.
 
 Tests cover all 7 config requirements (CFG-01 through CFG-07):
-- CFG-01: Compile-time params (tp_size, max_batch_size, max_input_len, max_seq_len, dtype, fast_build)
+- CFG-01: Compile-time params (tensor_parallel_size, max_batch_size, max_input_len, max_seq_len, dtype, fast_build)
 - CFG-02: Quantisation (QuantAlgo Literal type, kv_cache_quant_algo)
 - CFG-03: Calibration (calib_batches, calib_max_seq_length)
 - CFG-04: KV cache (enable_block_reuse, free_gpu_memory_fraction, max_tokens, host_cache_size)
@@ -40,14 +40,14 @@ class TestCompileTimeParams:
             max_batch_size=8,
             max_input_len=1024,
             max_seq_len=2048,
-            tp_size=2,
+            tensor_parallel_size=2,
             dtype="float16",
             fast_build=True,
         )
         assert config.max_batch_size == 8
         assert config.max_input_len == 1024
         assert config.max_seq_len == 2048
-        assert config.tp_size == 2
+        assert config.tensor_parallel_size == 2
         assert config.dtype == "float16"
         assert config.fast_build is True
 
@@ -61,10 +61,10 @@ class TestCompileTimeParams:
         config = TensorRTConfig(dtype="bfloat16")
         assert config.dtype == "bfloat16"
 
-    def test_tensorrt_tp_size_ge_1(self):
-        """tp_size=0 raises ValidationError."""
+    def test_tensorrt_tensor_parallel_size_ge_1(self):
+        """tensor_parallel_size=0 raises ValidationError."""
         with pytest.raises(ValidationError):
-            TensorRTConfig(tp_size=0)
+            TensorRTConfig(tensor_parallel_size=0)
 
     def test_tensorrt_max_batch_size_ge_1(self):
         """max_batch_size=0 raises ValidationError."""
@@ -288,7 +288,7 @@ class TestExperimentConfigIntegration:
             model="gpt2",
             engine="tensorrt",
             tensorrt={
-                "tp_size": 2,
+                "tensor_parallel_size": 2,
                 "max_batch_size": 8,
                 "max_input_len": 1024,
                 "max_seq_len": 2048,
@@ -319,7 +319,7 @@ class TestExperimentConfigIntegration:
         )
         assert config.engine == "tensorrt"
         assert config.tensorrt is not None
-        assert config.tensorrt.tp_size == 2
+        assert config.tensorrt.tensor_parallel_size == 2
         assert config.tensorrt.quant is not None
         assert config.tensorrt.quant.quant_algo == "W4A16_AWQ"
         assert config.tensorrt.kv_cache is not None
@@ -332,11 +332,11 @@ class TestExperimentConfigIntegration:
     def test_tensorrt_extra_allow_forwards_unknown(self):
         """Extra fields on TensorRTConfig and sub-configs are accepted (not rejected)."""
         config = TensorRTConfig(
-            tp_size=1,
+            tensor_parallel_size=1,
             custom_future_field="value",
         )
         # Should not raise - extra="allow"
-        assert config.tp_size == 1
+        assert config.tensor_parallel_size == 1
 
         quant = TensorRTQuantConfig(
             quant_algo="INT8",
@@ -348,7 +348,7 @@ class TestExperimentConfigIntegration:
         """All fields default to None when not specified."""
         config = TensorRTConfig()
         assert config.max_batch_size is None
-        assert config.tp_size is None
+        assert config.tensor_parallel_size is None
         assert config.max_input_len is None
         assert config.max_seq_len is None
         assert config.dtype is None

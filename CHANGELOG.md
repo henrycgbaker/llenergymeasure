@@ -52,6 +52,23 @@ All notable changes to this project are documented here.
 
 - **`Dockerfile.transformers` stale references.** The Dockerfile was renamed in #261 but still installed the now-nonexistent `[pytorch]` extra and carried header comments referencing the old `Dockerfile.pytorch` file and `llenergymeasure-pytorch` tag. Updated to install `.[transformers]` and corrected all header comments. The `pytorch/pytorch:*` base image tags are preserved - PyTorch the library is unchanged, only the engine identifier was renamed.
 
+- **`tensorrt.tp_size` → `tensorrt.tensor_parallel_size`.** Aligns the TensorRT-LLM Pydantic field name with `TrtLlmArgs.tensor_parallel_size`. `transformers.tp_size` is **preserved** — it follows the `accelerate` convention and HF has no single native `tensor_parallel_size` equivalent.
+
+  **Migrate YAML configs** (scope-limited — renames only inside `tensorrt:` blocks):
+  ```bash
+  # Manual edit is safer: 'tp_size' also appears legitimately under 'transformers:'
+  # In your tensorrt section, rename:  tp_size: N  →  tensor_parallel_size: N
+  ```
+
+  **Affected identifiers:**
+  - YAML field: `tensorrt.tp_size` → `tensorrt.tensor_parallel_size`
+  - Python: `TensorRTConfig(tp_size=N)` → `TensorRTConfig(tensor_parallel_size=N)`
+  - Sweep key: `"tensorrt.tp_size"` → `"tensorrt.tensor_parallel_size"`
+
+  **Preserved:**
+  - `transformers.tp_size` — HF accelerate convention, unchanged
+  - `vllm.engine.tensor_parallel_size` — already native name, unchanged
+
 ### Added
 
 - **Host/container schema fingerprint verification.** Docker images are now stamped at build time with a `llem.expconf.schema.fingerprint` OCI label (SHA-256 of `ExperimentConfig.model_json_schema()`) plus `org.opencontainers.image.version`. `StudyRunner._prepare_images` compares the label to the host fingerprint before any experiment runs and aborts with an actionable rebuild hint on mismatch. The check is bypassable via `LLEM_SKIP_IMAGE_CHECK=1`.
