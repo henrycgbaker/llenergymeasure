@@ -31,9 +31,9 @@ from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-from llenergymeasure.config.ssot import ALL_ENGINES
+from llenergymeasure.config.ssot import ALL_ENGINES, Engine
 
-_ALL_ENGINES_LIST: list[str] = list(ALL_ENGINES)
+_ALL_ENGINES_LIST: list[Engine] = list(ALL_ENGINES)
 
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig

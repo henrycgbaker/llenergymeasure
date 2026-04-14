@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from llenergymeasure.config.ssot import Engine
+
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
 
@@ -341,8 +343,8 @@ class ExperimentConfig(BaseModel):
     )
 
     # Engine selection
-    engine: Literal["transformers", "vllm", "tensorrt"] = Field(
-        default="transformers",
+    engine: Engine = Field(
+        default=Engine.TRANSFORMERS,
         description="Inference engine",
         json_schema_extra={"display_label": "Engine", "role": "experimental"},
     )

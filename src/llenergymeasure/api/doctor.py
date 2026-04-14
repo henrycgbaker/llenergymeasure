@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from llenergymeasure._version import __version__
-from llenergymeasure.config.ssot import ENGINE_TENSORRT, ENGINE_TRANSFORMERS, ENGINE_VLLM
+from llenergymeasure.config.ssot import Engine
 from llenergymeasure.infra.image_registry import get_default_image
 from llenergymeasure.infra.version_handshake import (
     SchemaStatus,
@@ -23,7 +23,7 @@ __all__ = [
     "run_doctor_checks",
 ]
 
-SUPPORTED_ENGINES: tuple[str, ...] = (ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT)
+SUPPORTED_ENGINES: tuple[Engine, ...] = tuple(Engine)
 
 _DETAIL_FOR_STATUS: dict[SchemaStatus, str] = {
     SchemaStatus.OK: "",

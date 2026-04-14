@@ -21,9 +21,9 @@ from llenergymeasure.cli._display import (
 from llenergymeasure.cli._vram import estimate_vram, get_gpu_vram_gb
 from llenergymeasure.config.loader import load_experiment_config
 from llenergymeasure.config.ssot import (
-    ENGINE_TRANSFORMERS,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
+    Engine,
 )
 from llenergymeasure.utils.exceptions import (
     ConfigError,
@@ -361,8 +361,8 @@ def _resolve_runner_tag(config: Any) -> str:
     if runner == RUNNER_DOCKER or (isinstance(runner, str) and runner.startswith("docker:")):
         return RUNNER_DOCKER
     # auto: pytorch defaults to local, vllm/tensorrt default to docker
-    engine = getattr(config, "engine", ENGINE_TRANSFORMERS)
-    return RUNNER_LOCAL if engine == ENGINE_TRANSFORMERS else RUNNER_DOCKER
+    engine = getattr(config, "engine", Engine.TRANSFORMERS)
+    return RUNNER_LOCAL if engine == Engine.TRANSFORMERS else RUNNER_DOCKER
 
 
 def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:

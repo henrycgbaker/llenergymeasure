@@ -21,12 +21,13 @@ from datetime import datetime
 from importlib import resources
 from typing import Any
 
-from llenergymeasure.config.ssot import ENGINE_TENSORRT, ENGINE_TRANSFORMERS, ENGINE_VLLM
+from llenergymeasure.config.ssot import Engine
 
 SUPPORTED_MAJOR_VERSION = 1
 
-# Engines known to ship a vendored schema.
-_KNOWN_ENGINES: tuple[str, ...] = (ENGINE_VLLM, ENGINE_TENSORRT, ENGINE_TRANSFORMERS)
+# Engines known to ship a vendored schema. Test-patchable module attribute
+# (tests monkeypatch this to inject fake engines); derived from Engine SSOT.
+_KNOWN_ENGINES: tuple[str, ...] = tuple(Engine)
 
 _PACKAGE = "llenergymeasure.config.discovered_schemas"
 

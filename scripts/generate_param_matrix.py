@@ -27,14 +27,14 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from llenergymeasure.config.ssot import ENGINE_ORDER
+from llenergymeasure.config.ssot import Engine
 
 
 def load_test_results(results_dir: Path) -> dict[str, list[dict[str, Any]]]:
     """Load test results from JSON files."""
     results: dict[str, list[dict[str, Any]]] = {}
 
-    for engine in ENGINE_ORDER:
+    for engine in Engine:
         result_file = results_dir / f"test_results_{engine}.json"
         if result_file.exists():
             with open(result_file) as f:
@@ -143,7 +143,7 @@ def generate_markdown(
     ]
 
     # Summary stats
-    for engine in ENGINE_ORDER:
+    for engine in Engine:
         tests = results.get(engine, [])
         if tests:
             # Note: test_all_params.py uses "status" field with values "passed"/"failed"/"skipped"
@@ -189,7 +189,7 @@ def generate_markdown(
             row = [f"`{param}`"]
 
             notes = []
-            for engine in ENGINE_ORDER:
+            for engine in Engine:
                 if engine in engines_map:
                     status = engines_map[engine]
                     if status["passed"]:

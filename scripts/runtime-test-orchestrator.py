@@ -47,7 +47,7 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from llenergymeasure.config.ssot import ENGINE_ORDER  # noqa: E402
+from llenergymeasure.config.ssot import Engine  # noqa: E402
 
 # =============================================================================
 # Configuration
@@ -58,7 +58,7 @@ TEST_SAMPLE_SIZE = 5
 TEST_MAX_OUTPUT = 32
 TEST_TIMEOUT_SECONDS = 300  # 5 minutes per test
 
-ENGINES = list(ENGINE_ORDER)
+ENGINES = [e.value for e in Engine]
 
 # Quick mode: reduced param set for faster iteration
 QUICK_PARAMS = {
