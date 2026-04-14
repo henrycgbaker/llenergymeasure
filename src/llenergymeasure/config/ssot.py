@@ -14,7 +14,7 @@ import from here.
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from typing import Final, Literal
 
 # ---------------------------------------------------------------------------
@@ -24,12 +24,21 @@ from typing import Final, Literal
 # ---------------------------------------------------------------------------
 
 
-class Engine(StrEnum):
-    """Supported inference backends. StrEnum so members compare/hash equal to their string values."""
+class Engine(str, Enum):
+    """Supported inference backends.
+
+    Uses (str, Enum) so members compare and hash equal to their string values
+    on Python 3.10+. The __str__ override ensures str(Engine.X) returns the
+    raw value (e.g. "transformers"), not "Engine.TRANSFORMERS".
+    StrEnum (3.11+) is intentionally avoided to keep requires-python = ">=3.10".
+    """
 
     TRANSFORMERS = "transformers"
     VLLM = "vllm"
     TENSORRT = "tensorrt"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 ALL_ENGINES: Final[frozenset[Engine]] = frozenset(Engine)

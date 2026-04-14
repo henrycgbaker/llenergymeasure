@@ -1,12 +1,15 @@
 """Unit tests for SSOT engine constants."""
 
-from enum import StrEnum
+from enum import Enum
 
 from llenergymeasure.config.ssot import ALL_ENGINES, Engine
 
 
 def test_engine_is_str_enum() -> None:
-    assert issubclass(Engine, StrEnum)
+    # Engine uses (str, Enum) for Python 3.10 compatibility — not StrEnum (3.11+).
+    # Assert the same behavioural guarantees: it is an Enum and a str subclass.
+    assert issubclass(Engine, Enum)
+    assert issubclass(Engine, str)
 
 
 def test_engine_members_are_strings() -> None:
