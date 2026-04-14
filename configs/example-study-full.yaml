@@ -1,600 +1,364 @@
-# Full-suite multi-engine study - comprehensive coverage across all engines
-# Run: llem run configs/example-study-full.yaml
+# =============================================================================
+# MAXIMALIST SHOWCASE CONFIG  —  NOT a runnable sweep
+# =============================================================================
 #
-# Reference config - not intended for end-to-end execution.
-# Experiment counts depend on sweep axes and groups; run `llem run --dry-run`
-# to see the exact expansion for your configuration.
+# Purpose: Every typed field from the post-C.2 Pydantic surface appears exactly
+# once with a representative value and an inline comment.
+#
+# Use cases:
+#   Discoverability  — researchers can see all available knobs at a glance.
+#   CI coverage      — `python scripts/verify_example_coverage.py` asserts
+#                      every typed field path is present here.
+#   Doc generation   — Plan E cross-references entries here for the
+#                      inclusion/exclusion table.
+#
+# This is NOT a practical study config:
+#   - All three engine sections are populated even though a real run uses one.
+#   - The Cartesian product of all axes would be enormous.
+#   - Use `llem run configs/example-study-full.yaml --dry-run` to validate parse.
+#
+# Run: uv run llem run configs/example-study-full.yaml --dry-run
+# Coverage: uv run python scripts/verify_example_coverage.py
 
-study_name: full-suite-all-engines
+study_name: maximalist-showcase-all-typed-fields
 
 # =====================================================================
 # Runner configuration
 # =====================================================================
-# Multi-engine runners auto-elevate to docker by default for better isolation and consistency (auto-elevation is configurable (TODO) but recommended).
-
 runners:
-  transformers: local                 # local | docker | Custom image override (e.g. "docker:ghcr.io/henrycgbaker/llenergymeasure/vllm:v0.9.0")
+  transformers: local                 # local | docker
   vllm: docker
   tensorrt: docker
 
 # =====================================================================
 # Execution controls (study-level)
 # =====================================================================
-# Study-level metadata and scheduling parameters.
-# Apply globally to all experiments. Non-sweepable.
-
 study_execution:
-  n_cycles: 3
-  experiment_order: shuffle       # sequential | interleave | shuffle | reverse | latin_square
-  shuffle_seed: null              # Explicit override for experiment shuffle order (null = derived from study_design_hash)
-  experiment_gap_seconds: 10.0    # Gap for thermal stabilisation
-  cycle_gap_seconds: 10.0
-  skip_preflight: false           # Skip Docker pre-flight checks (not recommended)
-  max_consecutive_failures: 10    # Circuit breaker: 0=disabled, 1=fail-fast, N=threshold
-  circuit_breaker_cooldown_seconds: 60.0  # Pause before half-open probe
-  wall_clock_timeout_hours: null  # Hard time limit in hours (null = no limit)
-  experiment_timeout_seconds: 600.0  # Per-experiment kill timeout (10 min). Raise for large n_prompts or slow engine builds.
+  n_cycles: 1
+  experiment_order: sequential        # sequential | interleave | shuffle | reverse | latin_square
+  shuffle_seed: null
+  experiment_gap_seconds: 5.0
+  cycle_gap_seconds: 5.0
+  skip_preflight: false
+  max_consecutive_failures: 3
+  circuit_breaker_cooldown_seconds: 30.0
+  wall_clock_timeout_hours: null
+  experiment_timeout_seconds: 300.0
 
 # =====================================================================
-# Shared fields (experiment-level)
+# Universal ExperimentConfig fields
 # =====================================================================
-# Experiment-level shared parameters.
-# Apply globally to all experiments, unless overridden by sweep or explicit experiments.
-# De facto treated as constant controls/defaults, but sweepable.
-# Add to sweep if you want to compare across different values of these fields
-# (e.g. random_seed for sampling variability, or max_tokens to test throughput scaling).
-
-random_seed: 42 # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset.order: shuffled)
+# These apply to all experiments unless overridden.
 
 model: Qwen/Qwen2.5-0.5B
 
-# --- Dataset ---
 dataset:
-  source: aienergyscore          # Built-in alias or .jsonl file path
-  n_prompts: 50                  # Number of prompts to load or generate
-  order: interleaved             # interleaved | grouped | shuffled
+  source: aienergyscore
+  n_prompts: 10
+  order: interleaved
 
-# Token limits - for FLOPs/computational workload control
-max_input_tokens: 256            # null = prompts keep natural length / model generates to EOS; FLOPs uncontrolled between experiments
-max_output_tokens: 256
+max_input_tokens: 128                 # Caps input token count; controls prefill FLOPs
+max_output_tokens: 128                # Caps output token count; controls decode FLOPs
+dtype: bfloat16                       # Global dtype (overridden per-engine if needed)
+random_seed: 42                       # Per-experiment RNG seed for prompt ordering + inference
 
-# --- Energy measurement ---
-energy_sampler: auto             # auto | nvml | zeus | codecarbon | null (disables)
+energy_sampler: auto                  # auto | nvml | zeus | codecarbon | null
 
-# --- Baseline power measurement ---
 baseline:
   enabled: true
-  duration_seconds: 30.0         # 5.0 - 120.0
+  duration_seconds: 30.0
 
-# --- Warmup ---
-# Two modes: fixed (default) or CV convergence (opt-in).
-# Fixed mode: runs exactly n_warmup prompts. CV computed for info only.
-# CV mode: replaces n_warmup; runs until CV < cv_threshold (up to max_prompts).
-# After warmup, thermal_floor_seconds wait lets GPU temperature plateau before measurement.
 warmup:
   enabled: true
-  n_warmup: 3                      # Fixed mode iteration count (default: 5)
-  thermal_floor_seconds: 30.0     # Post-warmup stabilisation wait. Minimum 30s (default: 60s)
-  #convergence_detection: true   # Enable CV-based warmup (replaces n_warmup). Default: false
-  #cv_threshold: 0.05            # Stop when CV < 5%. Default: 0.05
-  #max_prompts: 20               # Safety cap for CV mode. Default: 20
-  #window_size: 3                # Sliding window for CV calculation. Default: 3
-  #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
+  n_warmup: 3
+  thermal_floor_seconds: 30.0
 
-# --- Decoder / sampling (universal, shared across engines) ---
 decoder:
-  # preset: deterministic          # Presets override individual params below. Available: deterministic | standard | creative | factual
-  temperature: 1.0               # 0.0 (greedy) to 2.0
+  temperature: 1.0
   do_sample: true
-  top_k: 50                      # 0 = disabled
-  top_p: 1.0                     # 1.0 = disabled (nucleus sampling)
-  repetition_penalty: 1.0        # 1.0 = no penalty
-  min_p: null                    # Min probability filter (null = disabled)
-  min_new_tokens: null            # Minimum output tokens (null = no minimum)
-  #TODO: validate this works + how incompataible params resolution is handled
-  #TODO: consider moving this to sweep
-
-# --- LoRA adapter (optional, applies to all experiments) ---
-# lora:
-#   adapter_id: my-org/my-lora-adapter
-#   merge_weights: false
-# TODO: VALUDATE that this works as intended - does this apply to all engines? if not, need to clarify in docs and potentially add engine-specific lora config using dotted notation (e.g. lora.transformers.adapter_id, lora.vllm.adapter_id, etc.)
-
-# --- Passthrough kwargs ---
-# passthrough_kwargs:
-#   use_safetensors: true
-
-# =====================================================================
-# Output configuration (study-level)
-# =====================================================================
-# Controls where results are written and what auxiliary artefacts are persisted.
-# These are operational concerns, not part of the scientific specification.
+  top_k: 50
+  top_p: 1.0
+  repetition_penalty: 1.0
+  min_p: null
+  min_new_tokens: null
 
 output:
-  results_dir: ./results           # Base directory for study results (timestamped subdirectory created within)
-  save_timeseries: true            # Persist GPU power/thermal/memory timeseries as Parquet sidecar
+  results_dir: ./results
+  save_timeseries: true
 
 # =====================================================================
-# Sweep configuration (axes + dependent groups)
+# Experiments — one per engine section; each section is illustrative
 # =====================================================================
-# Two entry types under sweep:
-#   - Independent axes (list of scalars): Cartesian product across all axes.
-#   - Dependent groups (list of dicts): Union of variant dicts. Groups are
-#     crossed with each other and with independent axes, but entries *within*
-#     a group are alternatives (unioned, not crossed).
-#
-# Type-based disambiguation: list[scalar] = axis, list[dict] = group.
-# YAML anchors (&name) + merge keys (<<: *name) reduce repetition in groups.
-# See .product/designs/sweep-constraints.md for full design rationale.
-#
-# KNOWN-BAD CROSSES (do not add as independent axes):
-#   - transformers.torch_compile=true  x  bitsandbytes load_in_{4,8}bit
-#     (dequant ops trigger per-call recompilation; see transformers.compile_quant group)
-#   - transformers.torch_compile_mode=max-autotune  x  transformers.cache_implementation=static/sliding_window
-#     (per-shape kernel autotune on every cache reshape; slow but correct — follow-up)
-#   - Any engine x dataset.n_prompts > ~200 without raising
-#     study_execution.experiment_timeout_seconds above its 600s default
-# When in doubt, merge axes into a single group with hand-picked variants:
-# within-group variants are unioned (not crossed) while inter-group axes are.
-
-sweep: # TODO: maybe shared_sweep or global_sweep?
-  # --- Universal (applies to all three engines) ---
-  dtype: [float32, float16, bfloat16]
-
-  # --- Transformers parameter space ---
-  transformers.batch_size: [1, 4, 8, 16, 32]
-  transformers.attn_implementation: [sdpa, flash_attention_2, flash_attention_3, eager]
-
-  # --- Transformers: dependent groups ─────────────────────────────────
-
-  # torch.compile and bitsandbytes quantisation are merged into one group
-  # because their cross-product is pathological: bitsandbytes inserts dynamic
-  # dequant ops that trigger torch.compile recompilation on every call, and
-  # max-autotune compounds this with per-shape kernel search. Within-group
-  # variants are unioned (not crossed), so the variants below are exactly
-  # what runs — no bnb-with-compile cells exist.
-  transformers.compile_quant:
-    # Baseline: no compile, no quantisation
-    - {}
-    # bitsandbytes 8-bit (no compile)
-    - transformers.load_in_8bit: true
-    # bitsandbytes 4-bit, nf4 and fp4 (no compile)
-    - transformers.load_in_4bit: true
-      transformers.bnb_4bit_compute_dtype: float16
-      transformers.bnb_4bit_quant_type: [nf4, fp4]
-    # bitsandbytes 4-bit + double-quant (no compile)
-    - transformers.load_in_4bit: true
-      transformers.bnb_4bit_compute_dtype: float16
-      transformers.bnb_4bit_quant_type: nf4
-      transformers.bnb_4bit_use_double_quant: true
-    # torch.compile on unquantised weights — all three modes safe here
-    - transformers.torch_compile: true
-      transformers.torch_compile_backend: inductor
-      transformers.torch_compile_mode: [default, reduce-overhead, max-autotune]
-
-  # cache_implementation requires use_cache: true
-  transformers.caching:
-    - {}                                          # baseline: default caching
-    - transformers.use_cache: true
-      transformers.cache_implementation: [static, offloaded_static, sliding_window]
-
-  # beam search requires decoder.do_sample: false (cross-section dependency)
-  transformers.decoding:
-    - {}                                          # baseline: use shared decoder settings
-    - decoder.do_sample: false
-      decoder.temperature: 0.0
-      transformers.num_beams: 4
-      transformers.early_stopping: true
-      transformers.length_penalty: 1.0
-      transformers.no_repeat_ngram_size: 3
-
-  # --- vLLM parameter space ---
-  # (vLLM uses continuous batching - no user-facing batch_size parameter)
-  vllm.engine.gpu_memory_utilization: [0.7, 0.85, 0.95]
-  vllm.engine.enforce_eager: [true, false]
-  vllm.engine.max_num_seqs: [64, 128, 256]
-  vllm.engine.enable_chunked_prefill: [true, false]
-  # Moved from explicit experiments: these are independent single-axis variations
-  vllm.engine.enable_prefix_caching: [true, false]
-  vllm.engine.block_size: [8, 16, 32]
-  vllm.engine.kv_cache_dtype: [auto]  # fp8 requires SM >= 8.9 (Ada Lovelace / Hopper); add fp8 if hardware supports it
-  vllm.engine.quantization: [null]  # fp8 requires SM >= 8.9; awq/gptq/marlin/bitsandbytes require pre-quantised checkpoint
-  vllm.attention.backend: [flash_attn, flashinfer]  # xformers legacy, deprecated
-
-  # --- vLLM: dependent groups ─────────────────────────────────────
-
-  # vLLM requires max_num_batched_tokens >= max_model_len;
-  # independent axes would produce invalid combos (e.g. 2048 < 4096)
-  vllm.token_limits:
-    - vllm.engine.max_num_batched_tokens: 2048
-      vllm.engine.max_model_len: [1024, 2048]
-    - vllm.engine.max_num_batched_tokens: 4096
-      vllm.engine.max_model_len: [1024, 2048, 4096]
-    - vllm.engine.max_num_batched_tokens: 8192
-      vllm.engine.max_model_len: [1024, 2048, 4096]
-
-  # beam_search and sampling sections are mutually exclusive;
-  # beam search requires decoder.do_sample: false
-  vllm.decoding:
-    - {}                                          # baseline: use shared decoder settings
-    # beam_search requires vLLM >= 0.8; uncomment if installed version supports it:
-    # - decoder.do_sample: false
-    #   decoder.temperature: 0.0
-    #   vllm.beam_search.beam_width: 4
-    #   vllm.beam_search.early_stopping: true
-    #   vllm.beam_search.length_penalty: 1.0
-    #   vllm.beam_search.max_tokens: 256
-    - vllm.sampling.presence_penalty: 0.6
-      vllm.sampling.frequency_penalty: 0.6
-
-  # --- TensorRT parameter space ---
-  tensorrt.max_batch_size: [1, 4, 8, 16, 32]
-  tensorrt.max_seq_len: [1536, 2048]
-  # tensorrt.quant.quant_algo moved to tensorrt.quant_config group below
-  # (quant_algo has dependent sub-params: kv_cache_quant_algo, calib.*)
-  # TODO: is this not tensorrt.dtype??
-  tensorrt.max_input_len: [512, 1024]
-  tensorrt.scheduler.capacity_scheduling_policy: [MAX_UTILIZATION, STATIC_BATCH]
-  # tensorrt.tensor_parallel_size: [1, 2, 4]     # Tensor parallel (requires multi-GPU hardware)
-
-  # --- TensorRT: dependent groups ─────────────────────────────────
-
-  # kv_cache_quant_algo requires quant_algo; calib requires quant_algo
-  # FP8 quantisation (commented out - requires SM >= 8.9 / Ada Lovelace / Hopper)
-  tensorrt.quant_config:
-    - {}                                          # baseline: no quantisation
-    - tensorrt.quant.quant_algo: INT8
-    - tensorrt.quant.quant_algo: INT8
-      tensorrt.quant.kv_cache_quant_algo: INT8
-    - tensorrt.quant.quant_algo: INT8
-      tensorrt.calib.calib_batches: 512
-      tensorrt.calib.calib_dataset: cnn_dailymail
-      tensorrt.calib.calib_max_seq_length: 512
-    - tensorrt.quant.quant_algo: [W4A16_AWQ, W8A16]
-    # - tensorrt.quant.quant_algo: FP8  # Requires SM >= 8.9 (Ada Lovelace / Hopper)
-
-  # KV cache compound settings (block_reuse + memory_fraction travel together)
-  tensorrt.kv_cache_config:
-    - {}                                          # baseline: default KV cache
-    - tensorrt.kv_cache.enable_block_reuse: true
-      tensorrt.kv_cache.free_gpu_memory_fraction: 0.9
-    - tensorrt.kv_cache.host_cache_size: 1073741824
-    - tensorrt.kv_cache.max_tokens: 8192
-      tensorrt.kv_cache.free_gpu_memory_fraction: 0.85
-
-    # --- Shared TRT-LLM engine settings ---
-# Applied to all TensorRT sweep experiments. Explicit TRT experiments
-# override these where needed.
-tensorrt: #TODO - IM LEAVING THIS HERE AS REMINDER TO WORK OUT WHART THIS WAS AND WHY IT WAS HERE -> REMOVE AND ASSOCIATED PATHS WITHIN THE TOOL.
-  max_input_len: 1024
-
-# =====================================================================
-# Explicit experiments (truly unique overrides only)
-# =====================================================================
-# Most dependent experiments are now handled by sweep groups above.
-# This section is reserved for experiments that:
-#   - Override sweep axes (e.g. batch_size: 1 for speculative decoding)
-#   - Use params not in any sweep axis or group (e.g. cpu_offload_gb)
-#   - Require unique combinations spanning multiple unrelated groups
-# See .product/designs/sweep-constraints.md for the design.
+# All three engine blocks (transformers, vllm, tensorrt) are populated here.
+# In a real study you pick ONE engine per experiment. These are shown
+# together purely to exercise every typed field in a single parse.
 
 experiments:
 
-  # =================================================================
-  # TRANSFORMERS - unique experiments
-  # =================================================================
-  # torch.compile, quantisation, caching, and beam search are now handled
-  # by sweep groups above (transformers.compilation, transformers.quantization,
-  # transformers.caching, transformers.decoding).
-
-  # -----------------------------------------------------------------
-  # Transformers speculative decoding (prompt-lookup)
-  # -----------------------------------------------------------------
-  # Requires batch_size=1, overriding the sweep axis - must remain explicit.
+  # ===================================================================
+  # [ILLUSTRATIVE] TRANSFORMERS — all typed TransformersConfig fields
+  # ===================================================================
+  # clauses = rubric codes that justify inclusion (R=required, E=elevating,
+  # T=tie-breaker); rationale = one-line justification from CurationMetadata.
   - model: Qwen/Qwen2.5-0.5B
     engine: transformers
     dtype: bfloat16
-    dataset:
-      n_prompts: 50
     transformers:
-      batch_size: 1
-      prompt_lookup_num_tokens: 3
-      device_map: auto
-      trust_remote_code: true
 
-  # -----------------------------------------------------------------
-  # Tensor parallelism (requires multi-GPU; tp_plan and device_map are
-  # mutually exclusive, so this is a dependent experiment)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: transformers
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   transformers:
-  #     batch_size: 4
-  #     tp_plan: auto
-  #     tp_size: 2
-  #     trust_remote_code: true
+      # --- Batching ---
+      batch_size: 4               # [R1,R2,E1] Universal measurement axis; MLPerf/Optimum/LLM-Perf all split by it.
 
-  # -----------------------------------------------------------------
-  # Model loading with revision pin + memory limits
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: transformers
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   transformers:
-  #     batch_size: 4
-  #     revision: main
-  #     max_memory:
-  #       0: "10GiB"
-  #       cpu: "50GiB"
-  #     device_map: auto
-  #     trust_remote_code: true
+      # --- Attention implementation ---
+      attn_implementation: sdpa   # [R1,R2,E2,E3] Kernel selection is a latency/energy regime switch; Optimum types it.
+                                  # Literal: sdpa | flash_attention_2 | flash_attention_3 | eager
 
-  # Transformers LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: transformers
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   lora:
-  #     adapter_id: my-org/my-lora-adapter
-  #     merge_weights: false
-  #   transformers:
-  #     batch_size: 4
-  #     device_map: auto
-  #     trust_remote_code: true
+      # --- Compilation ---
+      torch_compile: true         # [R1,R2,E2] Compile vs eager is a regime switch; Optimum/Databricks report splits.
+      torch_compile_mode: default # [R1,R2,E3] 3-option enum with meaningful throughput deltas (default vs reduce-overhead vs max-autotune).
+                                  # Literal: default | reduce-overhead | max-autotune
+      torch_compile_backend: inductor  # [R1,E3] Compile-backend selects different codegen -> different kernels -> measurable energy delta.
 
-  # =================================================================
-  # VLLM - unique experiments
-  # =================================================================
-  # Beam search and sampling penalties are now handled by the
-  # vllm.decoding sweep group above.
+      # --- BitsAndBytes quantization ---
+      # Note: load_in_4bit and load_in_8bit are mutually exclusive; load_in_8bit shown commented.
+      load_in_4bit: true          # [R1,R2,E2] Regime switch -- 4-bit is its own measurement mode.
+      bnb_4bit_compute_dtype: bfloat16  # [R1,E3] Compute-path selection inside 4-bit; affects energy directly.
+                                        # Literal: float16 | bfloat16 | float32
+      bnb_4bit_quant_type: nf4    # [R1,E3] nf4 vs fp4 selects different dequantisation kernels -> different energy/token.
+                                  # Literal: nf4 | fp4
+      bnb_4bit_use_double_quant: false  # [R1,E2] Double quantisation changes memory footprint and dequant arithmetic -- regime toggle.
+      load_in_8bit: false         # [R1,R2,E2] Regime switch -- 8-bit is its own measurement mode. (false here; mutually exclusive with load_in_4bit=true)
 
-  # -----------------------------------------------------------------
-  # Tensor parallel (special: requires multi-GPU hardware)
-  # -----------------------------------------------------------------
+      # --- KV caching ---
+      use_cache: true             # [R1,R2,E2] Turning it off changes inference from AR to prefill-only (~100x latency delta).
+      cache_implementation: static  # [R1,E2,E3] 'static' enables CUDA graphs -- regime-changing; stable 3-value enum.
+                                    # Literal: static | offloaded_static | sliding_window
+
+      # --- Beam search ---
+      num_beams: 4                # [R1,R2,E1,E2] Linear compute scaling; beam search is its own measurement regime.
+      early_stopping: true        # [R1] Couples to beam search; affects final token count.
+      length_penalty: 1.0         # [R1] Tunes beam-search sequence length -> FLOPs.
+
+      # --- N-gram repetition ---
+      no_repeat_ngram_size: 3     # [R1] Affects generation length via repetition prevention -> indirect throughput/energy delta.
+
+      # --- Speculative decoding (prompt-lookup) ---
+      prompt_lookup_num_tokens: 3  # [R1,R2,E2] HF's speculative-decoding flavour (prompt-lookup); regime switch.
+
+      # --- Model loading ---
+      device_map: auto            # [R1,E2] Offload strategy; Optimum types it. Mutually exclusive with tp_plan.
+      max_memory:                 # [R1,E2,T4] Sets per-device memory budget; forces weight offload CPU<->GPU when exceeded.
+        "0": "10GiB"             # quote GPU index key to avoid mixed int/str JSON serialisation
+        cpu: "50GiB"
+
+      # --- Mixed precision ---
+      allow_tf32: true            # [R1] Ampere TF32 toggle; accuracy/throughput tradeoff affecting GEMM energy.
+      autocast_enabled: false     # [R1,E2] Mixed-precision runtime switch; determines whether AMP is applied during generation.
+      autocast_dtype: bfloat16    # [R1,E3] AMP compute dtype selector; different dtypes have distinct GEMM throughput.
+                                  # Literal: float16 | bfloat16
+      low_cpu_mem_usage: true     # [R1,E2] Affects load-time memory footprint; can trigger weight offload regime.
+
+      # --- Tensor parallelism (HF Transformers >=4.50) ---
+      # Note: tp_plan and device_map are mutually exclusive. tp_plan has its own
+      # experiment below to avoid the cross-validator error.
+      tp_size: 2                  # [R1,R2,E1] TP degree -- universal measurement axis. Preserved as tp_size (accelerate convention).
+
+  # ===================================================================
+  # [ILLUSTRATIVE] TRANSFORMERS tp_plan — mutually exclusive with device_map
+  # ===================================================================
+  # Separate experiment because tp_plan and device_map are mutually exclusive.
+  - model: Qwen/Qwen2.5-0.5B
+    engine: transformers
+    dtype: bfloat16
+    transformers:
+      tp_plan: auto               # [R1,R2,E2] Tensor parallelism enable; engine-native HF TP regime toggle. Mutually exclusive with device_map.
+                                  # Literal: auto
+
+  # ===================================================================
+  # [ILLUSTRATIVE] VLLM — all typed VLLMConfig fields
+  # ===================================================================
+  # Sub-configs: engine (VLLMEngineConfig), sampling (VLLMSamplingConfig),
+  # beam_search (VLLMBeamSearchConfig). Note: sampling and beam_search are
+  # mutually exclusive; beam_search fields shown commented out below.
   - model: Qwen/Qwen2.5-0.5B
     engine: vllm
     dtype: bfloat16
-    dataset:
-      n_prompts: 50
     vllm:
+
+      # -----------------------------------------------------------------
+      # engine: VLLMEngineConfig  (vllm.LLM() constructor arguments)
+      # -----------------------------------------------------------------
       engine:
-        tensor_parallel_size: 2
-        disable_custom_all_reduce: false  # Disable custom all-reduce for multi-GPU
-        gpu_memory_utilization: 0.9
 
-  # -----------------------------------------------------------------
-  # Attention backend fine-tuning (advanced: sub-fields of attention config)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     attention:
-  #       backend: flash_attn
-  #       flash_attn_version: 2            # Flash attention version (auto-detected)
-  #       flash_attn_max_num_splits_for_cuda_graph: 0  # Max splits for CUDA graph
-  #       use_prefill_decode_attention: true
-  #       use_prefill_query_quantization: false
-  #       use_cudnn_prefill: false
-  #       disable_flashinfer_prefill: false
-  #       disable_flashinfer_q_quantization: false
-  #       use_trtllm_attention: false      # Use TensorRT-LLM attention backend
-  #       use_trtllm_ragged_deepseek_prefill: false
-  #     engine:
-  #       enforce_eager: false
+        # --- Memory management ---
+        gpu_memory_utilization: 0.9   # [R1,R2,E1] Primary KV-cache sizing knob; MLPerf/AMD flag it. Mutually exclusive with kv_cache_memory_bytes.
+        swap_space: 4.0               # [R1,E2] CPU-swap budget for KV cache -- when exercised shifts KV blocks CPU<->GPU.
+        cpu_offload_gb: 4.0           # [R1,R2,E2] Weight-offload regime -- Optimum/Zhou flag offloading as a class.
 
-  # -----------------------------------------------------------------
-  # Speculative decoding (dependent: speculative_model requires
-  # num_speculative_tokens; commented out - requires a real draft model)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine:
-  #       speculative_model: my-org/my-draft-model
-  #       num_speculative_tokens: 5
-  #       gpu_memory_utilization: 0.9
+        # --- KV cache ---
+        block_size: 16                # [R1,R2,E1,E3] vLLM paper + KV survey; tractable 3-value enum.
+                                      # Literal: 8 | 16 | 32
+        kv_cache_dtype: auto          # [R1,R2,T3,E3] Energy-NVML research flags as bias source (T3); MLPerf/AMD/vLLM/TRT all report it.
+                                      # Literal: auto | fp8 | fp8_e5m2 | fp8_e4m3
 
-  # -----------------------------------------------------------------
-  # Pipeline parallel (special: requires multi-GPU hardware)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine:
-  #       pipeline_parallel_size: 2
-  #       gpu_memory_utilization: 0.9
+        # --- Execution mode ---
+        enforce_eager: false          # [R1,R2,E2] CUDA-graph regime switch.
+        enable_chunked_prefill: false # [R1,R2,E2] Scheduling regime switch; strong academic coverage (Yu/Orca, vLLM, Databricks).
 
-  # -----------------------------------------------------------------
-  # CPU offload (offloads model weight layers to CPU RAM)
-  # -----------------------------------------------------------------
+        # --- Scheduler / batching ---
+        max_num_seqs: 256             # [R1,R2,E1] Primary scheduler axis in AMD-MLPerf vLLM submissions.
+        max_num_batched_tokens: 4096  # [R1,R2,E1] Primary scheduler axis; controls per-step compute budget.
+        max_model_len: 4096           # [R1,R2] MLPerf core knob; caps KV-cache pre-allocation.
+        num_scheduler_steps: 1        # [R1,E1] AMD MLPerf v5.1 multi-step scheduling axis.
+
+        # --- Parallelism ---
+        tensor_parallel_size: 1       # [R1,R2,T3] Universal + energy-sampler-relevant (T3: must appear in results metadata).
+        pipeline_parallel_size: 1     # [R1,R2] NVIDIA MLPerf uses it; academic coverage.
+        distributed_executor_backend: mp  # [R1,E2] Multi-GPU dispatch regime toggle (mp vs ray) -- different overhead profiles.
+                                          # Literal: mp | ray
+
+        # --- Prefix caching and quantization ---
+        enable_prefix_caching: false  # [R1,R2,E2] Strong academic + vLLM-paper evidence (SGLang RadixAttention parallel).
+        quantization: null            # [R1,R2,E2,E3] Universal measurement axis; enum-validated.
+                                      # Literal: awq | gptq | fp8 | fp8_e5m2 | fp8_e4m3 | marlin | bitsandbytes
+
+        # --- CUDA graphs ---
+        max_seq_len_to_capture: 8192  # [R1,E1] CUDA-graph budget for long sequences; AMD MLPerf-derived.
+
+        # --- Speculative decoding (typed nested sub-config: VLLMSpeculativeConfig) ---
+        speculative:                  # [R1,E1,E2,T5] Regime switch; typed sub-config for inner-field sweep discoverability (T5).
+          model: gpt2                 # [R1,E2] Draft model identity -- primary axis for speculative-decoding measurement.
+          num_speculative_tokens: 3   # [R1,E1,E2] Draft-token count determines speculation depth; strongly peer-validated.
+          method: draft_model         # [R1,E2,E3] Method enum selects qualitatively different speculative-decoding regimes.
+
+        # --- CPU offload ---
+        offload_group_size: 4         # [R1] CPU-offload grouping granularity -- larger groups trade latency for throughput.
+        offload_num_in_group: 2       # [R1] Controls how many params are offloaded per group -- shifts memory/compute boundary.
+        offload_prefetch_step: 1      # [R1] Prefetch lookahead -- directly affects hide-latency effectiveness of CPU offload.
+        offload_params:               # [R1] Selects which parameter classes are offloaded -- shifts the memory/compute boundary.
+          - lm_head
+
+        # --- Multi-GPU ---
+        disable_custom_all_reduce: false  # [R1] Forces fallback to NCCL-native all-reduce -- affects collective-comm latency/energy on multi-GPU.
+
+        # Note: kv_cache_memory_bytes is mutually exclusive with gpu_memory_utilization.
+        # It appears in the dedicated experiment below; not set here.
+
+        # --- Compilation (opaque dict passthrough to vLLM CompilationConfig) ---
+        compilation_config:           # [R1,E2,T4] ~30-field dict controlling CUDA-graph capture, fusions -- major energy implications (T4).
+          level: 3
+
+        # --- Attention sub-config (VLLMAttentionConfig) ---
+        attention:                    # [R1,E1] Attention backend and kernel toggles; nested for future flashinfer/cuDNN additions.
+          backend: flash_attn         # [R1,E1,E3] Attention kernel selection (flash_attn, flashinfer, triton, xformers); peer-validated.
+          flash_attn_version: 2       # [R1] v2 vs v3 differ in kernel structure -> measurable energy delta.
+          flash_attn_max_num_splits_for_cuda_graph: 0  # [R1] Controls CUDA-graph tiling of attention -> throughput/energy tradeoff.
+          use_prefill_decode_attention: true  # [R1,E2] Routes prefill through decode kernel -- different compute path, regime toggle.
+          use_prefill_query_quantization: false  # [R1,E2] Quantises query tensor during prefill -> energy/memory delta, regime toggle.
+          use_cudnn_prefill: false    # [R1,E2] Selects cuDNN vs FlashAttention for prefill -- distinct kernel paths.
+          disable_flashinfer_prefill: false  # [R1,E2] Forces fallback when flashinfer prefill is active -- changes kernel used.
+          disable_flashinfer_q_quantization: false  # [R1] Disables an optimisation; straightforward energy/latency axis.
+          use_trtllm_attention: false  # [R1,E2] Routes attention through TRT-LLM kernel -- regime-changing kernel path switch.
+          use_trtllm_ragged_deepseek_prefill: false  # [R1,E2] TRT-LLM ragged prefill for DeepSeek architectures -- distinct kernel path.
+
+      # -----------------------------------------------------------------
+      # sampling: VLLMSamplingConfig  (vLLM-specific SamplingParams extensions)
+      # Note: beam_search section is mutually exclusive with sampling.
+      # -----------------------------------------------------------------
+      sampling:
+        min_tokens: 10              # [R1] Minimum output tokens before EOS; future native slot for DecoderConfig.min_new_tokens.
+        presence_penalty: 0.0       # [R1,R2] vLLM/TRT-native; not in DecoderConfig; routine in vLLM sampling studies.
+        frequency_penalty: 0.0      # [R1,R2] vLLM/TRT-native; not in DecoderConfig.
+        ignore_eos: false           # [R1,E2] Forces fixed output length -- measurement workload control.
+        n: 1                        # [R1,R2,E1] n-sequences multiplier; vLLM-bench first-class.
+
+      # Beam search section (mutually exclusive with sampling above):
+      # To exercise VLLMBeamSearchConfig fields, use a separate experiment with
+      # beam_search instead of sampling, and decoder.do_sample: false.
+      #
+      # beam_search:
+      #   beam_width: 4             # [R1,R2,E1] Linear compute scaling; beam search is its own measurement regime.
+      #   length_penalty: 1.0       # [R1] Tunes beam-search output length.
+      #   early_stopping: false     # [R1] Affects final token count.
+
+  # ===================================================================
+  # [ILLUSTRATIVE] VLLM beam_search — VLLMBeamSearchConfig typed fields
+  # ===================================================================
+  # Separate experiment because beam_search and sampling are mutually exclusive.
   - model: Qwen/Qwen2.5-0.5B
     engine: vllm
     dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    vllm:
-      engine:
-        cpu_offload_gb: 4
-        gpu_memory_utilization: 0.9
-
-  # -----------------------------------------------------------------
-  # CPU offload fine-tuning (layer-level control over offloading)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine:
-  #       cpu_offload_gb: 8
-  #       offload_group_size: 4          # Groups of layers for CPU offloading
-  #       offload_num_in_group: 2        # Layers offloaded per group
-  #       offload_prefetch_step: 1       # Prefetch steps ahead
-  #       # offload_params: ["lm_head"]  # Specific parameter names to offload
-  #       gpu_memory_utilization: 0.9
-
-  # -----------------------------------------------------------------
-  # Swap space for KV cache offloading
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: vllm
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    vllm:
-      engine:
-        swap_space: 8
-        gpu_memory_utilization: 0.85
-
-  # -----------------------------------------------------------------
-  # Sampling extensions (min_tokens, ignore_eos, multi-sequence)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: vllm
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
     decoder:
-      temperature: 0.8
-      do_sample: true
+      do_sample: false
+      temperature: 0.0
     vllm:
-      sampling:
-        max_tokens: 256              # Overrides universal max_output_tokens for this experiment
-        min_tokens: 10
-        ignore_eos: false
-        n: 1
+      beam_search:
+        beam_width: 4               # [R1,R2,E1] Linear compute scaling; beam search is its own measurement regime.
+        length_penalty: 1.0         # [R1] Tunes beam-search output length.
+        early_stopping: false       # [R1] Affects final token count.
 
-  # -----------------------------------------------------------------
-  # Compilation config (advanced: full vLLM compilation passthrough)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine:
-  #       compilation_config:
-  #         level: 3
-  #       enforce_eager: false
+  # ===================================================================
+  # [ILLUSTRATIVE] VLLM kv_cache_memory_bytes — mutually exclusive with gpu_memory_utilization
+  # ===================================================================
+  # Separate experiment because kv_cache_memory_bytes and gpu_memory_utilization are mutually exclusive.
+  - model: Qwen/Qwen2.5-0.5B
+    engine: vllm
+    dtype: bfloat16
+    vllm:
+      engine:
+        kv_cache_memory_bytes: 4294967296  # [R1,E4] Alternative to gpu_memory_utilization; parse-time mutex already wired.
+                                           # 4 GiB expressed as bytes. Mutually exclusive with gpu_memory_utilization.
 
-  # -----------------------------------------------------------------
-  # Absolute KV cache memory (mutually exclusive with gpu_memory_utilization)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: vllm
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   vllm:
-  #     engine:
-  #       kv_cache_memory_bytes: 4294967296    # 4 GiB
-  #       enforce_eager: false
-
-  # =================================================================
-  # TENSORRT - unique experiments
-  # =================================================================
-  # Quantisation configs and KV cache variants are now handled by the
-  # tensorrt.quant_config and tensorrt.kv_cache_config sweep groups above.
-
-  # -----------------------------------------------------------------
-  # Fast build mode (single flag, not part of any group)
-  # -----------------------------------------------------------------
+  # ===================================================================
+  # [ILLUSTRATIVE] TENSORRT — all typed TensorRTConfig fields
+  # ===================================================================
+  # Sub-configs: quant (TensorRTQuantConfig), kv_cache (TensorRTKvCacheConfig),
+  # scheduler (TensorRTSchedulerConfig), sampling (TensorRTSamplingConfig).
+  # Note: FP8 quant requires SM >= 8.9 (Ada Lovelace+); A100 use INT8/W4A16_AWQ/W8A16.
   - model: Qwen/Qwen2.5-0.5B
     engine: tensorrt
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
     tensorrt:
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      fast_build: true
-      build_cache:
-        max_cache_storage_gb: 256
 
-  # PTQ calibration is now handled by tensorrt.quant_config sweep group above.
+      # --- Compile-time parameters (LLM() constructor) ---
+      max_batch_size: 8             # [R1,R2,E1] MLPerf + trtllm-bench first-class; compile-time shape constant.
+      tensor_parallel_size: 1       # [R1,R2,T3] Universal + energy-sampler-relevant (T3: must appear in results metadata).
+      pipeline_parallel_size: 1     # [R1,E1] NVIDIA MLPerf v5.0 Blackwell submissions surface PP size as a primary knob.
+      max_input_len: 1024           # [R1,R2] Compile-time shape; MLPerf core knob.
+      max_seq_len: 2048             # [R1,R2] Compile-time shape; MLPerf core knob.
+      max_num_tokens: 4096          # [R1,E1] trtllm-bench scheduler axis alongside max_batch_size.
+      dtype: bfloat16               # [E4] TRT-LLM rejects fp32 -- narrowed Literal is a parse-time safety rail (E4).
+                                    # Literal: float16 | bfloat16
+      fast_build: false             # [R1] Skips some build-time optimisations -> produced engine may be less efficient.
 
-  # -----------------------------------------------------------------
-  # TRT-LLM sampling extensions (min_tokens, multi-sequence, perf metrics)
-  # -----------------------------------------------------------------
-  - model: Qwen/Qwen2.5-0.5B
-    engine: tensorrt
-    dtype: bfloat16
-    dataset:
-      n_prompts: 50
-    tensorrt:
-      max_batch_size: 8
-      max_input_len: 1024
-      max_seq_len: 2048
-      sampling:
-        min_tokens: 10
-        ignore_eos: false
-        return_perf_metrics: true
-        n: 1
-      build_cache:
-        max_cache_storage_gb: 256
+      # -----------------------------------------------------------------
+      # quant: TensorRTQuantConfig
+      # -----------------------------------------------------------------
+      quant:                        # [R1,E2,E3] Quantisation algorithm and KV-cache quantisation sub-config.
+        quant_algo: W4A16_AWQ       # [R1,R2,E2,E3,E4] Universal axis + FP8-on-A100 hardware rail (E4); enum-validated.
+                                    # Literal: FP8 | INT8 | W4A16_AWQ | W4A16_GPTQ | W8A16 | W8A16_GPTQ | W4A8_AWQ | NO_QUANT
+                                    # Note: FP8 requires SM >= 8.9; A100 (SM80): use INT8/W4A16_AWQ/W8A16.
+        kv_cache_quant_algo: INT8   # [R1,R2,T3,E3] KV-cache quantisation; aligns with vLLM's kv_cache_dtype. Energy-biasing (T3).
+                                    # Literal: FP8 | INT8
 
-  # -----------------------------------------------------------------
-  # Tensor parallel (special: requires multi-GPU hardware)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: tensorrt
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   tensorrt:
-  #     max_batch_size: 8
-  #     max_input_len: 1024
-  #     max_seq_len: 2048
-  #     tensor_parallel_size: 2
-  #     build_cache:
-  #       max_cache_storage_gb: 256
+      # -----------------------------------------------------------------
+      # kv_cache: TensorRTKvCacheConfig
+      # -----------------------------------------------------------------
+      kv_cache:                     # [R1] KV-cache configuration (memory fraction, block reuse, host offload).
+        enable_block_reuse: false   # [R1,R2,E2] TRT's prefix-caching analog -- regime toggle.
+        free_gpu_memory_fraction: 0.9  # [R1,R2] TRT's gpu_memory_utilization analog.
+        max_tokens: 8192            # [R1] KV-cache token cap -> concurrency ceiling.
+        host_cache_size: 0          # [R1,E2] CPU KV-offload regime -- cross-engine analog to vLLM swap_space.
 
-  # -----------------------------------------------------------------
-  # Pre-compiled engine (skip compilation, load existing engine)
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: tensorrt
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   tensorrt:
-  #     engine_path: /path/to/precompiled/engine
-  #     max_batch_size: 8
-  #     max_seq_len: 2048
+      # -----------------------------------------------------------------
+      # scheduler: TensorRTSchedulerConfig
+      # -----------------------------------------------------------------
+      scheduler:                    # [R1,E2,E3] Scheduling capacity policy sub-config.
+        capacity_scheduling_policy: GUARANTEED_NO_EVICT  # [R1,E2,E3] Scheduling regime; stable 3-value enum.
+                                                         # Literal: GUARANTEED_NO_EVICT | MAX_UTILIZATION | STATIC_BATCH
 
-  # KV cache max_tokens is now handled by tensorrt.kv_cache_config sweep group above.
-
-  # -----------------------------------------------------------------
-  # Build cache with custom root and record limits
-  # -----------------------------------------------------------------
-  # - model: Qwen/Qwen2.5-0.5B
-  #   engine: tensorrt
-  #   dtype: bfloat16
-  #   dataset:
-  #     n_prompts: 50
-  #   tensorrt:
-  #     max_batch_size: 8
-  #     max_input_len: 1024
-  #     max_seq_len: 2048
-  #     build_cache:
-  #       cache_root: /tmp/trt_cache
-  #       max_records: 5
-  #       max_cache_storage_gb: 128
+      # -----------------------------------------------------------------
+      # sampling: TensorRTSamplingConfig  (TRT-LLM-specific SamplingParams extensions)
+      # -----------------------------------------------------------------
+      sampling:                     # [R1] TRT-LLM-specific sampling parameters sub-config.
+        min_tokens: 10              # [R1] Minimum output tokens before EOS; future native slot for DecoderConfig.min_new_tokens.
+        n: 1                        # [R1,R2] n-sequences multiplier.
+        ignore_eos: false           # [R1,E2] Forces fixed output length -- measurement workload control.
