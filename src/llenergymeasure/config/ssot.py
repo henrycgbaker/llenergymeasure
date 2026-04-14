@@ -29,6 +29,9 @@ EngineName = Literal["transformers", "vllm", "tensorrt"]
 ALL_ENGINES: Final[frozenset[str]] = frozenset({ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT})
 """All engine section keys."""
 
+ENGINE_ORDER: Final[tuple[str, ...]] = (ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT)
+"""Canonical display/iteration order for engines. Use when stable ordering matters (docs, parametrized tests, CLI output)."""
+
 # ---------------------------------------------------------------------------
 # Runner mode constants
 # ---------------------------------------------------------------------------
