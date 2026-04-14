@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.ssot import ENGINE_PACKAGES
+from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine
 from llenergymeasure.utils.exceptions import PreFlightError
 
 logger = logging.getLogger(__name__)
@@ -38,9 +38,13 @@ def _check_cuda_available() -> bool:
 
 def _check_engine_installed(engine: str) -> bool:
     """Return True if the package that provides *engine* is importable."""
-    package = ENGINE_PACKAGES.get(engine)
-    if package is None:
+    try:
+        engine_key = Engine(engine)
+    except ValueError:
         # Unknown engine — Pydantic already blocked invalid values; treat as missing.
+        return False
+    package = ENGINE_PACKAGES.get(engine_key)
+    if package is None:
         return False
     return importlib.util.find_spec(package) is not None
 

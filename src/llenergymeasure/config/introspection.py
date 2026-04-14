@@ -31,6 +31,10 @@ from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
+from llenergymeasure.config.ssot import ALL_ENGINES, Engine
+
+_ALL_ENGINES_LIST: list[Engine] = list(ALL_ENGINES)
+
 if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
@@ -353,7 +357,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     decoder_params = get_params_from_model(DecoderConfig, prefix="decoder")
     # Add engine_support to decoder params
     for param in decoder_params.values():
-        param["engine_support"] = ["transformers", "vllm", "tensorrt"]
+        param["engine_support"] = _ALL_ENGINES_LIST
     shared.update(decoder_params)
 
     # Top-level universal params — defined manually for explicit engine_support
@@ -367,7 +371,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["float32", "float16", "bfloat16"],
         "constraints": {},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": _ALL_ENGINES_LIST,
     }
     shared["dataset.source"] = {
         "path": "dataset.source",
@@ -379,7 +383,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["aienergyscore"],
         "constraints": {"min_length": 1},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": _ALL_ENGINES_LIST,
     }
     shared["dataset.n_prompts"] = {
         "path": "dataset.n_prompts",
@@ -391,7 +395,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [10, 100, 500],
         "constraints": {"ge": 1},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": _ALL_ENGINES_LIST,
     }
     shared["dataset.order"] = {
         "path": "dataset.order",
@@ -403,7 +407,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": ["interleaved", "grouped", "shuffled"],
         "constraints": {},
         "optional": False,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": _ALL_ENGINES_LIST,
     }
     shared["max_input_tokens"] = {
         "path": "max_input_tokens",
@@ -418,7 +422,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [64, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": _ALL_ENGINES_LIST,
     }
     shared["max_output_tokens"] = {
         "path": "max_output_tokens",
@@ -433,7 +437,7 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
         "test_values": [32, 128, 256, None],
         "constraints": {"ge": 1},
         "optional": True,
-        "engine_support": ["transformers", "vllm", "tensorrt"],
+        "engine_support": _ALL_ENGINES_LIST,
     }
 
     return shared
@@ -464,12 +468,7 @@ def get_all_params() -> dict[str, dict[str, dict[str, Any]]]:
             "tensorrt": {...},
         }
     """
-    return {
-        "shared": get_shared_params(),
-        "transformers": get_engine_params("transformers"),
-        "vllm": get_engine_params("vllm"),
-        "tensorrt": get_engine_params("tensorrt"),
-    }
+    return {"shared": get_shared_params(), **{e: get_engine_params(e) for e in ALL_ENGINES}}
 
 
 def get_param_test_values(param_path: str) -> list[Any]:
@@ -534,39 +533,6 @@ def list_all_param_paths(engine: str | None = None) -> list[str]:
 # =============================================================================
 # Constraint Metadata for SSOT Architecture Hardening
 # =============================================================================
-
-
-def get_mutual_exclusions() -> dict[str, list[str]]:
-    """Get parameters that are mutually exclusive.
-
-    Returns:
-        Dict mapping param path to list of params it cannot be used with.
-        These combinations should be skipped during runtime testing.
-    """
-    return {
-        # Transformers: can't use both 4-bit and 8-bit quantization
-        "transformers.load_in_4bit": ["transformers.load_in_8bit"],
-        "transformers.load_in_8bit": ["transformers.load_in_4bit"],
-        # torch_compile sub-options require torch_compile=True
-        "transformers.torch_compile_mode": ["transformers.torch_compile=None|False"],
-        "transformers.torch_compile_backend": ["transformers.torch_compile=None|False"],
-        # BitsAndBytes 4-bit sub-options require load_in_4bit=True
-        "transformers.bnb_4bit_compute_dtype": ["transformers.load_in_4bit=None|False"],
-        "transformers.bnb_4bit_quant_type": ["transformers.load_in_4bit=None|False"],
-        "transformers.bnb_4bit_use_double_quant": ["transformers.load_in_4bit=None|False"],
-        # cache_implementation contradicts use_cache=False
-        "transformers.cache_implementation": ["transformers.use_cache=False"],
-        # vLLM speculative decoding: speculative_model requires num_speculative_tokens
-        "vllm.engine.speculative_model": ["vllm.engine.num_speculative_tokens=None"],
-        # vLLM kv_cache_memory_bytes vs gpu_memory_utilization
-        "vllm.engine.kv_cache_memory_bytes": ["vllm.engine.gpu_memory_utilization"],
-        "vllm.engine.gpu_memory_utilization": ["vllm.engine.kv_cache_memory_bytes"],
-        # vLLM beam_search vs sampling sections (cross-section mutual exclusion)
-        "vllm.beam_search": ["vllm.sampling"],
-        "vllm.sampling": ["vllm.beam_search"],
-        # TensorRT: quantisation method is exclusive
-        "tensorrt.quant.quant_algo": [],  # Handled by Literal type constraint
-    }
 
 
 def get_engine_specific_params() -> dict[str, list[str]]:
@@ -770,24 +736,6 @@ def get_param_skip_conditions() -> dict[str, str]:
     }
 
 
-def get_streaming_constraints() -> dict[str, str]:
-    """Streaming constraints (not yet implemented).
-
-    Returns:
-        Empty dict — streaming parameters are not in scope.
-    """
-    return {}
-
-
-def get_streaming_incompatible_tests() -> list[tuple[str, str]]:
-    """Streaming incompatible tests (not yet implemented).
-
-    Returns:
-        Empty list — streaming parameters are not in scope.
-    """
-    return []
-
-
 # =============================================================================
 # SSOT Engine Capability Matrix
 # =============================================================================
@@ -956,7 +904,7 @@ def get_capability_matrix_markdown() -> str:
         display_name = display_names.get(cap_key, cap_key)
         cells = []
 
-        for engine in ["transformers", "vllm", "tensorrt"]:
+        for engine in ALL_ENGINES:
             value = cap_values.get(engine, False)
             if value is True:
                 cells.append("Yes")

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from llenergymeasure.config.ssot import ENGINE_TENSORRT, ENGINE_TRANSFORMERS, ENGINE_VLLM
+from llenergymeasure.config.ssot import Engine
 
-KNOWN_ENGINES: list[str] = [ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT]
+KNOWN_ENGINES: list[Engine] = list(Engine)
 
 
 def is_engine_available(engine: str) -> bool:
@@ -17,11 +17,11 @@ def is_engine_available(engine: str) -> bool:
         True if engine is importable, False otherwise.
     """
     try:
-        if engine == ENGINE_TRANSFORMERS:
+        if engine == Engine.TRANSFORMERS:
             import torch  # noqa: F401
-        elif engine == ENGINE_VLLM:
+        elif engine == Engine.VLLM:
             import vllm  # noqa: F401
-        elif engine == ENGINE_TENSORRT:
+        elif engine == Engine.TENSORRT:
             import tensorrt_llm  # noqa: F401
         else:
             # Unknown engine

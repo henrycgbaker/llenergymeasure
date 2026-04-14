@@ -16,10 +16,8 @@ if TYPE_CHECKING:
     from llenergymeasure.config.models import ExperimentConfig
 
 from llenergymeasure.config.ssot import (
-    ENGINE_TENSORRT,
-    ENGINE_TRANSFORMERS,
-    ENGINE_VLLM,
     TIMEOUT_NVIDIA_SMI,
+    Engine,
 )
 
 logger = logging.getLogger(__name__)
@@ -547,7 +545,7 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
     For local runs this path is not yet implemented; for Docker each subprocess calls
     the harness independently.
     """
-    if config.engine == ENGINE_VLLM and config.vllm is not None:
+    if config.engine == Engine.VLLM and config.vllm is not None:
         tp = 1
         pp = 1
         if config.vllm.engine is not None:
@@ -556,12 +554,12 @@ def _resolve_gpu_indices(config: ExperimentConfig) -> list[int]:
         total = tp * pp
         if total > 1:
             return list(range(total))
-    elif config.engine == ENGINE_TENSORRT and config.tensorrt is not None:
+    elif config.engine == Engine.TENSORRT and config.tensorrt is not None:
         tp = config.tensorrt.tp_size or 1
         if tp > 1:
             return list(range(tp))
     elif (
-        config.engine == ENGINE_TRANSFORMERS
+        config.engine == Engine.TRANSFORMERS
         and config.transformers is not None
         and config.transformers.device_map is not None
     ):

@@ -26,7 +26,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 try:
     from llenergymeasure.config.introspection import (
         get_capability_matrix_markdown,
-        get_streaming_constraints,
         get_validation_rules,
     )
 
@@ -222,19 +221,8 @@ def generate_markdown() -> str:
         ]
     )
 
-    # Use introspection module if available (SSOT), otherwise fall back to static list
-    if USE_INTROSPECTION:
-        introspection_constraints = get_streaming_constraints()
-        for param, explanation in introspection_constraints.items():
-            engine = (
-                "transformers"
-                if param.startswith("transformers.")
-                else ("vllm" if param.startswith("vllm.") else "all")
-            )
-            lines.append(f"| {engine} | `{param}` | {explanation} | See docs |")
-    else:
-        for engine, param, behaviour, impact in STREAMING_CONSTRAINTS:
-            lines.append(f"| {engine} | `{param}` | {behaviour} | {impact} |")
+    for engine, param, behaviour, impact in STREAMING_CONSTRAINTS:
+        lines.append(f"| {engine} | `{param}` | {behaviour} | {impact} |")
 
     lines.extend(
         [

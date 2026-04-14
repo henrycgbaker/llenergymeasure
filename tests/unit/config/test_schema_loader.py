@@ -16,8 +16,9 @@ from llenergymeasure.config import (
     UnsupportedSchemaVersionError,
 )
 from llenergymeasure.config.schema_loader import _parse_envelope
+from llenergymeasure.config.ssot import Engine
 
-KNOWN_ENGINES = ("vllm", "tensorrt", "transformers")
+KNOWN_ENGINES = tuple(Engine)
 
 
 @pytest.mark.parametrize("engine", KNOWN_ENGINES)

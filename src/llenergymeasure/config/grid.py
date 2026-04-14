@@ -24,7 +24,7 @@ from llenergymeasure.config.introspection import (
     get_swept_field_paths,
 )
 from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
-from llenergymeasure.config.ssot import SOURCE_MULTI_ENGINE_ELEVATION
+from llenergymeasure.config.ssot import ALL_ENGINES, SOURCE_MULTI_ENGINE_ELEVATION
 from llenergymeasure.utils.exceptions import ConfigError
 
 if TYPE_CHECKING:
@@ -126,7 +126,7 @@ def expand_grid(
     for exp in explicit_entries:
         merged = {**merged_fixed, **exp}
         engine = merged.get("engine", merged_fixed.get("engine", "transformers"))
-        for key in _ENGINE_SECTION_KEYS:
+        for key in ALL_ENGINES:
             if key != engine and key in merged and key not in exp:
                 del merged[key]
         explicit_raw_configs.append(merged)
@@ -662,9 +662,6 @@ def _load_base(base_path_str: str | None, study_yaml_path: Path | None) -> dict[
     return {k: v for k, v in raw.items() if k not in _STUDY_ONLY_KEYS}
 
 
-_ENGINE_SECTION_KEYS = frozenset({"transformers", "vllm", "tensorrt"})
-
-
 def _strip_other_engine_sections(config_dict: dict[str, Any], engine: str) -> dict[str, Any]:
     """Remove engine-specific sections that don't match *engine*.
 
@@ -673,7 +670,7 @@ def _strip_other_engine_sections(config_dict: dict[str, Any], engine: str) -> di
     assigns a different engine, those sections must be stripped before Pydantic
     validation - otherwise ``validate_engine_section_match`` rejects the config.
     """
-    return {k: v for k, v in config_dict.items() if k not in _ENGINE_SECTION_KEYS or k == engine}
+    return {k: v for k, v in config_dict.items() if k not in ALL_ENGINES or k == engine}
 
 
 # =============================================================================
@@ -707,7 +704,7 @@ def _group_engine_scope(group_key: str) -> str | None:
     """Return engine name if a group key is engine-scoped, else None (universal)."""
     if "." in group_key:
         prefix = group_key.split(".", 1)[0]
-        if prefix in _ENGINE_SECTION_KEYS:
+        if prefix in ALL_ENGINES:
             return prefix
     return None
 
@@ -767,7 +764,7 @@ def _route_key_value(
     """
     if "." in key:
         prefix, param = key.split(".", 1)
-        if prefix in _ENGINE_SECTION_KEYS:
+        if prefix in ALL_ENGINES:
             engine_dict = config_dict.get(prefix, {})
             nested_update = _unflatten({param: value})
             config_dict[prefix] = deep_merge(engine_dict, nested_update)
@@ -841,7 +838,7 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
 
         if "." in key:
             prefix, _param = key.split(".", 1)
-            if prefix in _ENGINE_SECTION_KEYS:
+            if prefix in ALL_ENGINES:
                 scoped_dims.setdefault(prefix, {})[_param] = values
             else:
                 universal_dims[key] = values

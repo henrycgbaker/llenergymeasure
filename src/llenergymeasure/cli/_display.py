@@ -205,7 +205,7 @@ def format_validation_error(e: ValidationError) -> str:
     lines = [header]
 
     # Build a set of valid values for did-you-mean suggestions
-    valid_engines = list(DTYPE_SUPPORT.keys())
+    valid_engines: list[str] = [str(e) for e in DTYPE_SUPPORT]
     valid_dtypes = list({d for dtypes in DTYPE_SUPPORT.values() for d in dtypes})
 
     for err in errors:

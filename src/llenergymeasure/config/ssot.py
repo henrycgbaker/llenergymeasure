@@ -14,17 +14,35 @@ import from here.
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Final, Literal
 
 # ---------------------------------------------------------------------------
-# Engine name constants — use these instead of raw string literals
+# Engine enum — the ONE source of truth for backend engine identifiers.
+# Add a new backend by adding a member here; everything else derives from it
+# (Pydantic validation, membership checks, ordered iteration, CLI choices).
 # ---------------------------------------------------------------------------
 
-ENGINE_TRANSFORMERS: Final = "transformers"
-ENGINE_VLLM: Final = "vllm"
-ENGINE_TENSORRT: Final = "tensorrt"
 
-EngineName = Literal["transformers", "vllm", "tensorrt"]
+class Engine(str, Enum):
+    """Supported inference backends.
+
+    Uses (str, Enum) so members compare and hash equal to their string values
+    on Python 3.10+. The __str__ override ensures str(Engine.X) returns the
+    raw value (e.g. "transformers"), not "Engine.TRANSFORMERS".
+    StrEnum (3.11+) is intentionally avoided to keep requires-python = ">=3.10".
+    """
+
+    TRANSFORMERS = "transformers"
+    VLLM = "vllm"
+    TENSORRT = "tensorrt"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+ALL_ENGINES: Final[frozenset[Engine]] = frozenset(Engine)
+"""Unordered engine set — use for O(1) membership checks (``engine in ALL_ENGINES``)."""
 
 # ---------------------------------------------------------------------------
 # Runner mode constants
@@ -121,18 +139,18 @@ TIMEOUT_INTERRUPT_POLL: Final = 1
 # "float32" = full precision, "float16" = half, "bfloat16" = brain float16.
 # Note: fp16/bf16 require GPU. The cpu engine (future) would be fp32-only.
 # GPU detection and cpu-dtype cross-validation is handled at pre-flight.
-DTYPE_SUPPORT: dict[str, list[str]] = {
-    ENGINE_TRANSFORMERS: ["float32", "float16", "bfloat16"],
-    ENGINE_VLLM: ["float16", "bfloat16"],  # vLLM does not support fp32 inference
-    ENGINE_TENSORRT: ["float16", "bfloat16"],  # TRT-LLM does not support fp32 inference
+DTYPE_SUPPORT: dict[Engine, list[str]] = {
+    Engine.TRANSFORMERS: ["float32", "float16", "bfloat16"],
+    Engine.VLLM: ["float16", "bfloat16"],  # vLLM does not support fp32 inference
+    Engine.TENSORRT: ["float16", "bfloat16"],  # TRT-LLM does not support fp32 inference
 }
 
 # Decoding strategies supported by each engine.
 # "sampling" = do_sample=True path; "greedy" = do_sample=False path.
-DECODING_SUPPORT: dict[str, list[str]] = {
-    ENGINE_TRANSFORMERS: ["greedy", "sampling"],  # full HuggingFace generate() support
-    ENGINE_VLLM: ["greedy", "sampling"],  # vLLM supports both via SamplingParams
-    ENGINE_TENSORRT: ["greedy", "sampling"],  # TRT-LLM supports both
+DECODING_SUPPORT: dict[Engine, list[str]] = {
+    Engine.TRANSFORMERS: ["greedy", "sampling"],  # full HuggingFace generate() support
+    Engine.VLLM: ["greedy", "sampling"],  # vLLM supports both via SamplingParams
+    Engine.TENSORRT: ["greedy", "sampling"],  # TRT-LLM supports both
 }
 
 # Engines that support the full DecoderConfig temperature/top_k/top_p fields.
@@ -140,8 +158,8 @@ DECODING_SUPPORT: dict[str, list[str]] = {
 # engine additions explicit rather than implicit.
 # min_p and min_new_tokens: transformers and vLLM support them (identical semantics).
 # min_p/min_new_tokens: vLLM supports; TensorRT support varies by version.
-DECODER_PARAM_SUPPORT: dict[str, list[str]] = {
-    ENGINE_TRANSFORMERS: [
+DECODER_PARAM_SUPPORT: dict[Engine, list[str]] = {
+    Engine.TRANSFORMERS: [
         "temperature",
         "top_k",
         "top_p",
@@ -149,8 +167,8 @@ DECODER_PARAM_SUPPORT: dict[str, list[str]] = {
         "min_p",
         "min_new_tokens",
     ],
-    ENGINE_VLLM: ["temperature", "top_k", "top_p", "repetition_penalty"],
-    ENGINE_TENSORRT: [
+    Engine.VLLM: ["temperature", "top_k", "top_p", "repetition_penalty"],
+    Engine.TENSORRT: [
         "temperature",
         "top_k",
         "top_p",
@@ -159,22 +177,20 @@ DECODER_PARAM_SUPPORT: dict[str, list[str]] = {
 
 # Map from engine name to the Python package that provides it.
 # Used by preflight checks and CLI to verify engine availability.
-ENGINE_PACKAGES: dict[str, str] = {
-    ENGINE_TRANSFORMERS: "transformers",
-    ENGINE_VLLM: "vllm",
-    ENGINE_TENSORRT: "tensorrt_llm",
+ENGINE_PACKAGES: dict[Engine, str] = {
+    Engine.TRANSFORMERS: "transformers",
+    Engine.VLLM: "vllm",
+    Engine.TENSORRT: "tensorrt_llm",
 }
 
 __all__ = [
+    "ALL_ENGINES",
     "CONTAINER_EXCHANGE_DIR",
     "DECODER_PARAM_SUPPORT",
     "DECODING_SUPPORT",
     "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
     "ENGINE_PACKAGES",
-    "ENGINE_TENSORRT",
-    "ENGINE_TRANSFORMERS",
-    "ENGINE_VLLM",
     "ENV_BASELINE_SPEC_PATH",
     "ENV_CARBON_INTENSITY",
     "ENV_CONFIG_PATH",
@@ -202,6 +218,6 @@ __all__ = [
     "TIMEOUT_NVIDIA_SMI",
     "TIMEOUT_SIGTERM_GRACE",
     "TIMEOUT_THREAD_JOIN",
-    "EngineName",
+    "Engine",
     "RunnerMode",
 ]

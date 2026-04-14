@@ -1,14 +1,14 @@
 """Inference engines for llenergymeasure."""
 
 from llenergymeasure.config.engine_detection import is_engine_available
-from llenergymeasure.config.ssot import ENGINE_TENSORRT, ENGINE_TRANSFORMERS, ENGINE_VLLM
+from llenergymeasure.config.ssot import Engine
 from llenergymeasure.engines.protocol import EnginePlugin
 from llenergymeasure.utils.exceptions import EngineError
 
 __all__ = ["EnginePlugin", "detect_default_engine", "get_engine"]
 
 
-def detect_default_engine() -> str:
+def detect_default_engine() -> Engine:
     """Detect the default available inference engine.
 
     Returns 'transformers' if transformers is installed, 'tensorrt' if tensorrt_llm is
@@ -18,12 +18,12 @@ def detect_default_engine() -> str:
     Raises:
         EngineError: If no supported engine is installed.
     """
-    if is_engine_available(ENGINE_TRANSFORMERS):
-        return ENGINE_TRANSFORMERS
-    if is_engine_available(ENGINE_TENSORRT):
-        return ENGINE_TENSORRT
-    if is_engine_available(ENGINE_VLLM):
-        return ENGINE_VLLM
+    if is_engine_available(Engine.TRANSFORMERS):
+        return Engine.TRANSFORMERS
+    if is_engine_available(Engine.TENSORRT):
+        return Engine.TENSORRT
+    if is_engine_available(Engine.VLLM):
+        return Engine.VLLM
     raise EngineError(
         "No inference engine installed. Install one with: "
         "pip install llenergymeasure[transformers], "
@@ -44,16 +44,16 @@ def get_engine(name: str) -> EnginePlugin:
     Raises:
         EngineError: If the engine name is unknown.
     """
-    if name == ENGINE_TRANSFORMERS:
+    if name == Engine.TRANSFORMERS:
         from llenergymeasure.engines.transformers import TransformersEngine
 
         return TransformersEngine()
-    if name == ENGINE_VLLM:
+    if name == Engine.VLLM:
         from llenergymeasure.engines.vllm import VLLMEngine
 
         return VLLMEngine()
-    if name == ENGINE_TENSORRT:
+    if name == Engine.TENSORRT:
         from llenergymeasure.engines.tensorrt import TensorRTEngine
 
         return TensorRTEngine()
-    raise EngineError(f"Unknown engine: {name!r}. Available: transformers, vllm, tensorrt")
+    raise EngineError(f"Unknown engine: {name!r}. Available: {', '.join(Engine)}")

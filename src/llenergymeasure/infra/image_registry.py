@@ -35,9 +35,7 @@ import subprocess
 from functools import lru_cache
 
 from llenergymeasure.config.ssot import (
-    ENGINE_TENSORRT,
-    ENGINE_TRANSFORMERS,
-    ENGINE_VLLM,
+    ALL_ENGINES,
     ENV_IMAGE_PREFIX,
     RUNNER_DOCKER,
     RUNNER_LOCAL,
@@ -66,9 +64,6 @@ DEFAULT_IMAGE_TEMPLATE = "ghcr.io/henrycgbaker/llenergymeasure/{engine}:v{versio
 
 # Local image tag produced by `docker compose build` (no registry prefix).
 LOCAL_IMAGE_TEMPLATE = "llenergymeasure:{engine}"
-
-# Engines that have a Docker image in the registry.
-_SUPPORTED_ENGINES = frozenset({ENGINE_TRANSFORMERS, ENGINE_VLLM, ENGINE_TENSORRT})
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +271,7 @@ def show_image_resolution() -> None:
     ``make docker-images`` for quick diagnostics.
     """
     print("=== Image resolution ===")
-    for engine in sorted(_SUPPORTED_ENGINES):
+    for engine in sorted(ALL_ENGINES):
         image, source = resolve_image(engine)
         print(f"  {engine:10s} -> {image}  ({source})")
 

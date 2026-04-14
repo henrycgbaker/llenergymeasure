@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX
+from llenergymeasure.config.ssot import ENV_IMAGE_PREFIX, Engine
 
 
 @pytest.fixture(autouse=True)
@@ -97,7 +97,7 @@ class TestGetDefaultImage:
     def test_engine_name_included_in_image(self):
         from llenergymeasure.infra.image_registry import get_default_image
 
-        for engine in ("transformers", "vllm", "tensorrt"):
+        for engine in Engine:
             image = get_default_image(engine)
             assert engine in image, f"Expected engine {engine!r} in image {image!r}"
 

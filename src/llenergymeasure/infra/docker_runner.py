@@ -36,7 +36,6 @@ from llenergymeasure._version import __version__
 from llenergymeasure.config.ssot import (
     CONTAINER_EXCHANGE_DIR,
     DOCKER_PULL_TIMEOUT,
-    ENGINE_TENSORRT,
     ENV_CONFIG_PATH,
     ENV_HF_TOKEN,
     ENV_OUTPUT_DIR,
@@ -46,6 +45,7 @@ from llenergymeasure.config.ssot import (
     TEMP_PREFIX_TIMESERIES,
     TIMEOUT_DOCKER_INSPECT,
     TIMEOUT_THREAD_JOIN,
+    Engine,
 )
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
@@ -607,7 +607,7 @@ class DockerRunner:
             cmd.extend(["--env-file", str(env_path)])
 
         # TRT-LLM engine cache: persist compiled engines across ephemeral containers
-        if config.engine == ENGINE_TENSORRT:
+        if config.engine == Engine.TENSORRT:
             cache_host = str(Path.home() / ".cache" / "trt-llm")
             cache_container = "/root/.cache/trt-llm"
             # Only add if not already in extra_mounts (user may override path)
