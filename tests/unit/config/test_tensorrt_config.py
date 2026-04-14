@@ -1,13 +1,16 @@
-"""Unit tests for expanded TensorRT-LLM config validation.
+"""Unit tests for TensorRT-LLM config validation.
 
-Tests cover all 7 config requirements (CFG-01 through CFG-07):
-- CFG-01: Compile-time params (tensor_parallel_size, max_batch_size, max_input_len, max_seq_len, dtype, fast_build)
+Tests cover:
+- CFG-01: Compile-time params (tensor_parallel_size, pipeline_parallel_size, max_batch_size,
+          max_input_len, max_seq_len, max_num_tokens, dtype, fast_build)
 - CFG-02: Quantisation (QuantAlgo Literal type, kv_cache_quant_algo)
-- CFG-03: Calibration (calib_batches, calib_max_seq_length)
+- CFG-03: (Removed) Calibration sub-config dropped — D3 build-only PTQ, project consumes
+          pre-quantised checkpoints. Falls through extra="allow" if needed.
 - CFG-04: KV cache (enable_block_reuse, free_gpu_memory_fraction, max_tokens, host_cache_size)
 - CFG-05: Scheduler (capacity_scheduling_policy Literal)
-- CFG-06: Build cache (cache_root, max_records, max_cache_storage_gb)
-- CFG-07: Sampling (min_tokens, n, ignore_eos, return_perf_metrics)
+- CFG-06: (Removed) Build cache sub-config dropped — D1 engine-cache plumbing.
+          Falls through extra="allow" if needed.
+- CFG-07: Sampling (min_tokens, n, ignore_eos; return_perf_metrics dropped D1)
 """
 
 from __future__ import annotations
@@ -16,8 +19,6 @@ import pytest
 from pydantic import ValidationError
 
 from llenergymeasure.config.engine_configs import (
-    TensorRTBuildCacheConfig,
-    TensorRTCalibConfig,
     TensorRTConfig,
     TensorRTKvCacheConfig,
     TensorRTQuantConfig,
@@ -125,29 +126,8 @@ class TestQuantisation:
             TensorRTQuantConfig(kv_cache_quant_algo="INVALID")
 
 
-# ---------------------------------------------------------------------------
-# CFG-03: Calibration
-# ---------------------------------------------------------------------------
-
-
-class TestCalibration:
-    """Tests for TensorRT calibration config."""
-
-    def test_calib_config_accepted(self):
-        """Calibration section with valid values validates."""
-        config = TensorRTCalibConfig(
-            calib_batches=64,
-            calib_max_seq_length=256,
-            calib_dataset="cnn_dailymail",
-        )
-        assert config.calib_batches == 64
-        assert config.calib_max_seq_length == 256
-        assert config.calib_dataset == "cnn_dailymail"
-
-    def test_calib_batches_ge_1(self):
-        """calib_batches=0 raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTCalibConfig(calib_batches=0)
+# CFG-03: Calibration sub-config dropped (D3) — tests removed.
+# calib fields remain settable via TensorRTConfig extra="allow" passthrough.
 
 
 # ---------------------------------------------------------------------------
@@ -222,29 +202,8 @@ class TestScheduler:
             TensorRTSchedulerConfig(capacity_scheduling_policy="INVALID_POLICY")
 
 
-# ---------------------------------------------------------------------------
-# CFG-06: Build Cache
-# ---------------------------------------------------------------------------
-
-
-class TestBuildCache:
-    """Tests for TensorRT build cache config."""
-
-    def test_build_cache_config_accepted(self):
-        """Build cache section with valid values validates."""
-        config = TensorRTBuildCacheConfig(
-            cache_root="/tmp/trt_cache",
-            max_records=20,
-            max_cache_storage_gb=512.0,
-        )
-        assert config.cache_root == "/tmp/trt_cache"
-        assert config.max_records == 20
-        assert config.max_cache_storage_gb == 512.0
-
-    def test_build_cache_max_records_ge_1(self):
-        """max_records=0 raises ValidationError."""
-        with pytest.raises(ValidationError):
-            TensorRTBuildCacheConfig(max_records=0)
+# CFG-06: Build cache sub-config dropped (D1) — tests removed.
+# build_cache fields remain settable via TensorRTConfig extra="allow" passthrough.
 
 
 # ---------------------------------------------------------------------------
@@ -256,17 +215,21 @@ class TestSampling:
     """Tests for TensorRT sampling config."""
 
     def test_sampling_config_accepted(self):
-        """Sampling section with valid values validates."""
+        """Sampling section with valid values validates (return_perf_metrics dropped D1)."""
         config = TensorRTSamplingConfig(
             min_tokens=10,
             n=4,
             ignore_eos=True,
-            return_perf_metrics=True,
         )
         assert config.min_tokens == 10
         assert config.n == 4
         assert config.ignore_eos is True
-        assert config.return_perf_metrics is True
+
+    def test_sampling_return_perf_metrics_is_extra_allow(self):
+        """return_perf_metrics still accepted via extra='allow' passthrough."""
+        config = TensorRTSamplingConfig(return_perf_metrics=True)
+        # No ValidationError — extra="allow"
+        assert getattr(config, "return_perf_metrics", None) is True
 
     def test_sampling_n_ge_1(self):
         """n=0 raises ValidationError."""
@@ -289,9 +252,11 @@ class TestExperimentConfigIntegration:
             engine="tensorrt",
             tensorrt={
                 "tensor_parallel_size": 2,
+                "pipeline_parallel_size": 2,
                 "max_batch_size": 8,
                 "max_input_len": 1024,
                 "max_seq_len": 2048,
+                "max_num_tokens": 4096,
                 "dtype": "bfloat16",
                 "fast_build": True,
                 "quant": {"quant_algo": "W4A16_AWQ"},
@@ -302,24 +267,18 @@ class TestExperimentConfigIntegration:
                 "scheduler": {
                     "capacity_scheduling_policy": "MAX_UTILIZATION",
                 },
-                "calib": {
-                    "calib_batches": 128,
-                    "calib_max_seq_length": 512,
-                },
-                "build_cache": {
-                    "max_cache_storage_gb": 256,
-                    "max_records": 10,
-                },
                 "sampling": {
                     "min_tokens": 5,
                     "n": 1,
-                    "return_perf_metrics": True,
+                    "ignore_eos": False,
                 },
             },
         )
         assert config.engine == "tensorrt"
         assert config.tensorrt is not None
         assert config.tensorrt.tensor_parallel_size == 2
+        assert config.tensorrt.pipeline_parallel_size == 2
+        assert config.tensorrt.max_num_tokens == 4096
         assert config.tensorrt.quant is not None
         assert config.tensorrt.quant.quant_algo == "W4A16_AWQ"
         assert config.tensorrt.kv_cache is not None
@@ -327,7 +286,7 @@ class TestExperimentConfigIntegration:
         assert config.tensorrt.scheduler is not None
         assert config.tensorrt.scheduler.capacity_scheduling_policy == "MAX_UTILIZATION"
         assert config.tensorrt.sampling is not None
-        assert config.tensorrt.sampling.return_perf_metrics is True
+        assert config.tensorrt.sampling.n == 1
 
     def test_tensorrt_extra_allow_forwards_unknown(self):
         """Extra fields on TensorRTConfig and sub-configs are accepted (not rejected)."""
@@ -345,19 +304,20 @@ class TestExperimentConfigIntegration:
         assert quant.quant_algo == "INT8"
 
     def test_tensorrt_none_defaults(self):
-        """All fields default to None when not specified."""
+        """All typed fields default to None when not specified."""
         config = TensorRTConfig()
         assert config.max_batch_size is None
         assert config.tensor_parallel_size is None
+        assert config.pipeline_parallel_size is None
         assert config.max_input_len is None
         assert config.max_seq_len is None
+        assert config.max_num_tokens is None
         assert config.dtype is None
         assert config.fast_build is None
-        assert config.backend is None
-        assert config.engine_path is None
         assert config.quant is None
         assert config.kv_cache is None
         assert config.scheduler is None
-        assert config.calib is None
-        assert config.build_cache is None
         assert config.sampling is None
+        # backend and engine_path are no longer typed fields (D2/D1 drop)
+        # calib and build_cache sub-configs dropped (D3/D1)
+        # all remain passable via extra="allow"

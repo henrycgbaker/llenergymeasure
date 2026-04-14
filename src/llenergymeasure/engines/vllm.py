@@ -317,13 +317,25 @@ class VLLMEngine:
             _set("pipeline_parallel_size", engine.pipeline_parallel_size)
             _set("enable_prefix_caching", engine.enable_prefix_caching)
             _set("quantization", engine.quantization)
+            _set("num_scheduler_steps", engine.num_scheduler_steps)
+            _set("max_seq_len_to_capture", engine.max_seq_len_to_capture)
+            _set("distributed_executor_backend", engine.distributed_executor_backend)
 
-            if engine.speculative_model is not None:
-                # vLLM v0.6+ uses speculative_config dict, not direct speculative_model kwarg
-                kwargs["speculative_config"] = {
-                    "model": engine.speculative_model,
-                    "num_speculative_tokens": engine.num_speculative_tokens,
-                }
+            # Speculative decoding — build vLLM-native speculative_config dict from sub-config
+            if engine.speculative is not None:
+                spec = engine.speculative
+                spec_dict: dict[str, Any] = {}
+                if spec.model is not None:
+                    spec_dict["model"] = spec.model
+                if spec.num_speculative_tokens is not None:
+                    spec_dict["num_speculative_tokens"] = spec.num_speculative_tokens
+                if spec.method is not None:
+                    spec_dict["method"] = spec.method
+                # Forward any extra sub-fields the user passed through extra="allow"
+                if spec.model_extra:
+                    spec_dict.update(spec.model_extra)
+                if spec_dict:
+                    kwargs["speculative_config"] = spec_dict
 
             _set("disable_custom_all_reduce", engine.disable_custom_all_reduce)
             _set("kv_cache_memory_bytes", engine.kv_cache_memory_bytes)
@@ -395,8 +407,6 @@ class VLLMEngine:
         # Apply vLLM-specific sampling overrides
         if vllm_cfg is not None and vllm_cfg.sampling is not None:
             sampling = vllm_cfg.sampling
-            if sampling.max_tokens is not None:
-                kwargs["max_tokens"] = sampling.max_tokens
             if sampling.min_tokens is not None:
                 kwargs["min_tokens"] = sampling.min_tokens
             if sampling.presence_penalty is not None:
@@ -432,9 +442,8 @@ class VLLMEngine:
             kwargs["length_penalty"] = beam_cfg.length_penalty
         if beam_cfg.early_stopping is not None:
             kwargs["early_stopping"] = beam_cfg.early_stopping
-        max_tokens = beam_cfg.max_tokens or config.max_output_tokens
-        if max_tokens is not None:
-            kwargs["max_tokens"] = max_tokens
+        if config.max_output_tokens is not None:
+            kwargs["max_tokens"] = config.max_output_tokens
         if config.decoder.min_p is not None:
             kwargs["min_p"] = config.decoder.min_p
         if beam_cfg.model_extra:

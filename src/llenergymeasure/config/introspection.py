@@ -281,13 +281,8 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         "tensorrt.tensor_parallel_size": [0],  # ge=1: 0 violates ge
         "tensorrt.max_input_len": [0],  # ge=1: 0 violates ge
         "tensorrt.max_seq_len": [0],  # ge=1: 0 violates ge
-        # TensorRTCalibConfig: calibration params
-        "tensorrt.calib.calib_batches": [0],  # ge=1: 0 violates ge
-        "tensorrt.calib.calib_max_seq_length": [0],  # ge=1: 0 violates ge
         # TensorRTKvCacheConfig: cache params
         "tensorrt.kv_cache.max_tokens": [0],  # ge=1: 0 violates ge
-        # TensorRTBuildCacheConfig: engine cache params
-        "tensorrt.build_cache.max_records": [0],  # ge=1: 0 violates ge
         # TensorRTSamplingConfig: sampling params
         "tensorrt.sampling.n": [0],  # ge=1: 0 violates ge
     }
@@ -556,8 +551,6 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         "transformers.bnb_4bit_use_double_quant": ["transformers.load_in_4bit=None|False"],
         # cache_implementation contradicts use_cache=False
         "transformers.cache_implementation": ["transformers.use_cache=False"],
-        # vLLM speculative decoding: speculative_model requires num_speculative_tokens
-        "vllm.engine.speculative_model": ["vllm.engine.num_speculative_tokens=None"],
         # vLLM kv_cache_memory_bytes vs gpu_memory_utilization
         "vllm.engine.kv_cache_memory_bytes": ["vllm.engine.gpu_memory_utilization"],
         "vllm.engine.gpu_memory_utilization": ["vllm.engine.kv_cache_memory_bytes"],
@@ -597,8 +590,14 @@ def get_engine_specific_params() -> dict[str, list[str]]:
             "transformers.prompt_lookup_num_tokens",
             "transformers.device_map",
             "transformers.max_memory",
-            "transformers.revision",
-            "transformers.trust_remote_code",
+            "transformers.allow_tf32",
+            "transformers.autocast_enabled",
+            "transformers.autocast_dtype",
+            "transformers.low_cpu_mem_usage",
+            "transformers.tp_plan",
+            "transformers.tp_size",
+            # revision and trust_remote_code dropped as typed fields (D1);
+            # they remain settable via extra="allow" in YAML
         ],
         "vllm": [
             # Engine-level params (vllm.LLM() constructor args)
@@ -616,8 +615,13 @@ def get_engine_specific_params() -> dict[str, list[str]]:
             "vllm.engine.pipeline_parallel_size",
             "vllm.engine.enable_prefix_caching",
             "vllm.engine.quantization",
-            "vllm.engine.speculative_model",
-            "vllm.engine.num_speculative_tokens",
+            "vllm.engine.num_scheduler_steps",
+            "vllm.engine.max_seq_len_to_capture",
+            "vllm.engine.distributed_executor_backend",
+            # Speculative decoding sub-config (replaces flat speculative_model/num_speculative_tokens)
+            "vllm.engine.speculative.model",
+            "vllm.engine.speculative.num_speculative_tokens",
+            "vllm.engine.speculative.method",
             # Engine-level offloading + memory params
             "vllm.engine.offload_group_size",
             "vllm.engine.offload_num_in_group",
@@ -638,37 +642,31 @@ def get_engine_specific_params() -> dict[str, list[str]]:
             "vllm.engine.attention.use_trtllm_attention",
             "vllm.engine.attention.use_trtllm_ragged_deepseek_prefill",
             # Sampling-level params (vllm.SamplingParams args, vLLM-specific only)
-            "vllm.sampling.max_tokens",
+            # max_tokens dropped (R2 dup of ExperimentConfig.max_output_tokens; bridged in adapter)
             "vllm.sampling.min_tokens",
             "vllm.sampling.presence_penalty",
             "vllm.sampling.frequency_penalty",
             "vllm.sampling.ignore_eos",
             "vllm.sampling.n",
-            # Beam search section (all 4 fields)
+            # Beam search section (max_tokens dropped; bridged from ExperimentConfig.max_output_tokens)
             "vllm.beam_search.beam_width",
             "vllm.beam_search.length_penalty",
             "vllm.beam_search.early_stopping",
-            "vllm.beam_search.max_tokens",
         ],
         "tensorrt": [
             # Compile-time parameters (LLM() constructor)
             "tensorrt.max_batch_size",
             "tensorrt.tensor_parallel_size",
+            "tensorrt.pipeline_parallel_size",
             "tensorrt.max_input_len",
             "tensorrt.max_seq_len",
+            "tensorrt.max_num_tokens",
             "tensorrt.dtype",
             "tensorrt.fast_build",
-            # TRT-LLM internal backend selection
-            "tensorrt.backend",
-            # Engine path
-            "tensorrt.engine_path",
+            # backend and engine_path dropped (D2/D1); settable via extra="allow"
             # Quantisation sub-config
             "tensorrt.quant.quant_algo",
             "tensorrt.quant.kv_cache_quant_algo",
-            # Calibration sub-config
-            "tensorrt.calib.calib_batches",
-            "tensorrt.calib.calib_dataset",
-            "tensorrt.calib.calib_max_seq_length",
             # KV cache sub-config
             "tensorrt.kv_cache.enable_block_reuse",
             "tensorrt.kv_cache.free_gpu_memory_fraction",
@@ -676,15 +674,12 @@ def get_engine_specific_params() -> dict[str, list[str]]:
             "tensorrt.kv_cache.host_cache_size",
             # Scheduler sub-config
             "tensorrt.scheduler.capacity_scheduling_policy",
-            # Build cache sub-config
-            "tensorrt.build_cache.cache_root",
-            "tensorrt.build_cache.max_records",
-            "tensorrt.build_cache.max_cache_storage_gb",
-            # Sampling sub-config
+            # calib sub-config dropped (D3 build-only PTQ)
+            # build_cache sub-config dropped (D1 engine-cache plumbing)
+            # Sampling sub-config (return_perf_metrics dropped D1)
             "tensorrt.sampling.min_tokens",
             "tensorrt.sampling.n",
             "tensorrt.sampling.ignore_eos",
-            "tensorrt.sampling.return_perf_metrics",
         ],
     }
 

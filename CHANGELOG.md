@@ -65,6 +65,24 @@ All notable changes to this project are documented here.
   - `transformers.tp_size` — HF accelerate convention, unchanged
   - `vllm.engine.tensor_parallel_size` — already native name, unchanged
 
+- **Typed-field curation for engine configs (maximalist rubric, Phase 48 Plan C.2).** Applies the rubric "type anything with a plausible energy/throughput/latency path" to each engine's Pydantic surface. Every typed field carries `CurationMetadata` (structured dataclass in `json_schema_extra`) with rubric clauses, rationale, and native mapping. Dropped fields remain settable via YAML (`extra="allow"` passthrough unless noted). A new CI assertion test verifies all typed fields carry `CurationMetadata`.
+
+  **Transformers** — drops 2 typed fields, adds 4:
+  - Dropped: `revision` (D1 reproducibility metadata), `trust_remote_code` (D1 security toggle). Both remain settable via `extra="allow"`.
+  - Added: `allow_tf32`, `autocast_enabled`, `autocast_dtype`, `low_cpu_mem_usage`.
+  - Also adds `tp_plan` and `tp_size` to the introspection param list (were missing).
+
+  **vLLM** — drops 4 typed fields, adds 3, replaces 2 with typed sub-config:
+  - Dropped: `sampling.max_tokens`, `beam_search.max_tokens` (R2 dups of `ExperimentConfig.max_output_tokens`; bridged in adapter). `speculative_model` and `num_speculative_tokens` replaced (not simply dropped).
+  - Added: `num_scheduler_steps`, `max_seq_len_to_capture`, `distributed_executor_backend`.
+  - Replaced: flat `speculative_model` + `num_speculative_tokens` → typed nested `VLLMSpeculativeConfig` sub-config (mirrors vLLM native shape; sweepable via dotted paths). Migration: `{speculative_model: m, num_speculative_tokens: k}` → `{speculative: {model: m, num_speculative_tokens: k}}`.
+  - `VLLMAttentionConfig` stays nested; all 10 fields (including `use_trtllm_attention`, `use_trtllm_ragged_deepseek_prefill`) remain typed.
+
+  **TensorRT-LLM** — drops 9 typed fields (incl. 2 sub-config classes), adds 2:
+  - Dropped: `backend: Literal["trt"]` (D2), `engine_path` (D1), entire `TensorRTCalibConfig` (D3 build-only PTQ), entire `TensorRTBuildCacheConfig` (D1 cache plumbing), `sampling.return_perf_metrics` (D1). All remain passable via `extra="allow"`.
+  - Added: `pipeline_parallel_size` (MLPerf v5.0 Blackwell), `max_num_tokens` (trtllm-bench axis).
+  - `fast_build` kept typed — build-time knob with runtime consequences.
+
 ### Added
 
 - **Host/container schema fingerprint verification.** Docker images are now stamped at build time with a `llem.expconf.schema.fingerprint` OCI label (SHA-256 of `ExperimentConfig.model_json_schema()`) plus `org.opencontainers.image.version`. `StudyRunner._prepare_images` compares the label to the host fingerprint before any experiment runs and aborts with an actionable rebuild hint on mismatch. The check is bypassable via `LLEM_SKIP_IMAGE_CHECK=1`.
