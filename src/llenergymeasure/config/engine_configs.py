@@ -180,7 +180,9 @@ class TransformersConfig(BaseModel):
         default=None,
         ge=1,
         description=(
-            "Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set."
+            "Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set. "
+            "Field name preserved to match HuggingFace accelerate convention "
+            "(distinct from TensorRTConfig.tensor_parallel_size which aligns with TrtLlmArgs)."
         ),
     )
 
@@ -876,11 +878,7 @@ class TensorRTConfig(BaseModel):
     tensor_parallel_size: int | None = Field(
         default=None,
         ge=1,
-        description=(
-            "Tensor parallel size — number of GPUs to shard across (None -> 1). "
-            "Aligns with TrtLlmArgs.tensor_parallel_size. "
-            "Note: TransformersConfig.tp_size follows accelerate convention and is preserved."
-        ),
+        description="Tensor parallel size — number of GPUs to shard across (None -> 1).",
     )
     max_input_len: int | None = Field(
         default=None,
