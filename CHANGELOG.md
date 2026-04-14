@@ -54,11 +54,7 @@ All notable changes to this project are documented here.
 
 - **`tensorrt.tp_size` → `tensorrt.tensor_parallel_size`.** Aligns the TensorRT-LLM Pydantic field name with `TrtLlmArgs.tensor_parallel_size`. `transformers.tp_size` is **preserved** — it follows the `accelerate` convention and HF has no single native `tensor_parallel_size` equivalent.
 
-  **Migrate YAML configs** (scope-limited — renames only inside `tensorrt:` blocks):
-  ```bash
-  # Manual edit is safer: 'tp_size' also appears legitimately under 'transformers:'
-  # In your tensorrt section, rename:  tp_size: N  →  tensor_parallel_size: N
-  ```
+  **Migrate YAML configs** (scope-limited — manual edit is safer as `tp_size` also appears legitimately under `transformers:`; in your `tensorrt:` section rename `tp_size: N` → `tensor_parallel_size: N`).
 
   **Affected identifiers:**
   - YAML field: `tensorrt.tp_size` → `tensorrt.tensor_parallel_size`
