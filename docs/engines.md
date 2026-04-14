@@ -448,7 +448,7 @@ directly, skipping engine compilation entirely. This is useful when:
 ```yaml
 tensorrt:
   engine_path: /engines/llama-7b-fp16-tp1
-  tp_size: 1  # Must match the engine's tp_size
+  tensor_parallel_size: 1  # Must match the engine's tensor_parallel_size
 ```
 
 > **Note:** Engines are not portable across GPU architectures. An engine compiled
