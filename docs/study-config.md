@@ -836,3 +836,29 @@ measurement:
 
 Run `llem config` to display the current effective configuration and check which engines
 are installed. Use `llem config --verbose` for detailed environment information.
+
+---
+
+## Maximalist Showcase Config
+
+`configs/example-study-full.yaml` is a **full-surface reference config** covering every
+curated typed field across all three engine backends (Transformers, vLLM, TensorRT-LLM).
+It is not a practical run config — all three engine sections are populated simultaneously,
+which would be invalid for an actual sweep — but it serves as a single authoritative
+reference for every knob the library exposes.
+
+**Use cases:**
+- Discoverability: see all available parameters and their accepted values at a glance.
+- CI coverage: `scripts/verify_example_coverage.py` asserts all 94 curated fields appear.
+- Doc generation: cross-referenced by the parameter inclusion/exclusion table.
+
+**It is not intended to be run directly.** Use `llem run configs/example-study-full.yaml
+--dry-run` to validate that the YAML parses correctly.
+
+To verify the config covers the full typed field surface:
+
+```bash
+uv run python scripts/verify_example_coverage.py
+```
+
+For practical runnable examples, see `configs/README.md`.
