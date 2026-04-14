@@ -62,7 +62,7 @@ vllm:
 
 
 def create_tensorrt_config(config_dir: Path) -> Path:
-    """Create TensorRT config with tp_size=4."""
+    """Create TensorRT config with tensor_parallel_size=4."""
     config = config_dir / "tensorrt_tp4.yaml"
     config.write_text("""
 # TensorRT-LLM with tensor parallelism across 4 GPUs
@@ -77,7 +77,7 @@ parallelism:
   degree: 4
 
 tensorrt:
-  tp_size: 4
+  tensor_parallel_size: 4
   max_batch_size: 4
 """)
     return config
@@ -154,7 +154,6 @@ def check_gpu_utilization(output: str, expected_gpus: int = 4) -> bool:
         "GPUs: [0, 1, 2, 3]",
         f"Processes: {expected_gpus}",
         "tensor_parallel",
-        f"tp_size: {expected_gpus}",
         f"tensor_parallel_size: {expected_gpus}",
     ]
 
