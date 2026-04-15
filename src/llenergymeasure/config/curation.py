@@ -23,7 +23,7 @@ Usage::
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Literal
+from typing import Any, Literal
 
 RubricClause = Literal[
     "R1",
@@ -68,6 +68,6 @@ class CurationMetadata:
     native_mapping: str | None = None
     notes: str | None = None
 
-    def to_schema_extra(self) -> dict[str, object]:
+    def to_schema_extra(self) -> dict[str, Any]:
         """Render to the dict shape Pydantic expects in ``json_schema_extra``."""
         return {"curation": asdict(self)}
