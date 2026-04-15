@@ -1,8 +1,33 @@
 """Security utilities for llenergymeasure."""
 
+import os
 from pathlib import Path
+from typing import Final
 
 from llenergymeasure.utils.exceptions import ConfigError
+
+ENV_TRUST_REMOTE_CODE: Final = "LLEM_TRUST_REMOTE_CODE"
+"""Opt-in for HuggingFace `trust_remote_code=True`. Unset → HF default (False).
+
+Phase 51+ is expected to centralise env-var registration (likely in
+``config/ssot.py``) once layer rules permit; for now the constant lives here
+because ``utils/`` cannot import from ``config/``.
+"""
+
+
+def trust_remote_code_enabled() -> bool:
+    """Return whether HuggingFace `trust_remote_code` should be enabled.
+
+    Reads ``LLEM_TRUST_REMOTE_CODE`` from the environment. Treats
+    ``1``/``true``/``yes``/``on`` (case-insensitive) as True; anything else
+    (including unset) as False — matching HuggingFace's own default.
+
+    Setting True allows loading models that ship custom Python implementations
+    (Qwen, DeepSeek, ChatGLM, etc.) at the cost of executing repo-supplied
+    code. Phase 51+ is expected to surface this through a typed config field
+    or CLI flag; this helper is the interim single source of truth.
+    """
+    return os.environ.get(ENV_TRUST_REMOTE_CODE, "").lower() in {"1", "true", "yes", "on"}
 
 
 def validate_path(path: Path, must_exist: bool = False, allow_relative: bool = True) -> Path:

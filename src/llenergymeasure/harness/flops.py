@@ -77,7 +77,9 @@ def _count_params_from_config(model_name: str) -> int | None:
     try:
         from transformers import AutoConfig
 
-        cfg = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+        from llenergymeasure.utils.security import trust_remote_code_enabled
+
+        cfg = AutoConfig.from_pretrained(model_name, trust_remote_code=trust_remote_code_enabled())
         h = cfg.hidden_size
         layers = cfg.num_hidden_layers
         intermediate = getattr(cfg, "intermediate_size", h * 4)
