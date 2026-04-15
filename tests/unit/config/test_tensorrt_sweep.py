@@ -61,19 +61,19 @@ class TestDottedNestedSweep:
         algos = [c.tensorrt.quant.quant_algo for c in valid]
         assert set(algos) == {"INT8", "FP8", "W4A16_AWQ"}
 
-    def test_dotted_nested_build_cache_sweep(self):
-        """tensorrt.build_cache.max_cache_storage_gb: [128, 256] produces 2 configs."""
+    def test_dotted_nested_max_num_tokens_sweep(self):
+        """tensorrt.max_num_tokens: [2048, 4096] produces 2 configs."""
         raw_study = {
             "model": "gpt2",
             "engine": "tensorrt",
             "sweep": {
-                "tensorrt.build_cache.max_cache_storage_gb": [128, 256],
+                "tensorrt.max_num_tokens": [2048, 4096],
             },
         }
         valid, _skipped = expand_grid(raw_study)
         assert len(valid) == 2
-        storage_values = {c.tensorrt.build_cache.max_cache_storage_gb for c in valid}
-        assert storage_values == {128, 256}
+        token_values = {c.tensorrt.max_num_tokens for c in valid}
+        assert token_values == {2048, 4096}
 
     def test_full_tensorrt_study_yaml_parses(self):
         """Comprehensive study YAML with all sub-sections and quant sweep round-trips."""
@@ -93,14 +93,8 @@ class TestDottedNestedSweep:
                 "scheduler": {
                     "capacity_scheduling_policy": "MAX_UTILIZATION",
                 },
-                "calib": {
-                    "calib_batches": 128,
-                },
-                "build_cache": {
-                    "max_cache_storage_gb": 256,
-                },
                 "sampling": {
-                    "return_perf_metrics": True,
+                    "n": 1,
                 },
             },
             "sweep": {
@@ -119,7 +113,7 @@ class TestDottedNestedSweep:
             assert config.tensorrt.kv_cache.enable_block_reuse is True
             assert config.tensorrt.scheduler is not None
             assert config.tensorrt.sampling is not None
-            assert config.tensorrt.sampling.return_perf_metrics is True
+            assert config.tensorrt.sampling.n == 1
         algos = {c.tensorrt.quant.quant_algo for c in valid}
         assert algos == {"INT8", "W4A16_AWQ"}
 

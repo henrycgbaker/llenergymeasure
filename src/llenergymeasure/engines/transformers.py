@@ -74,10 +74,12 @@ class TransformersEngine:
         kwargs = self._model_load_kwargs(config)
         logger.info("Loading model %r with kwargs: %s", config.model, list(kwargs.keys()))
 
-        # trust_remote_code for tokenizer — respects config, defaults True
+        # trust_remote_code for tokenizer — defaults True; user can override via extra="allow"
         trust = True
-        if config.transformers is not None and config.transformers.trust_remote_code is not None:
-            trust = config.transformers.trust_remote_code
+        if config.transformers is not None:
+            _trc = getattr(config.transformers, "trust_remote_code", None)
+            if _trc is not None:
+                trust = _trc
 
         t0 = _time.perf_counter()
         tokenizer = AutoTokenizer.from_pretrained(config.model, trust_remote_code=trust)
@@ -91,6 +93,12 @@ class TransformersEngine:
         model.eval()
         if on_substep is not None:
             on_substep("model weights loaded", _time.perf_counter() - t0)
+
+        # Apply allow_tf32 (Ampere+ TF32 toggle)
+        if config.transformers is not None and config.transformers.allow_tf32 is not None:
+            import torch as _torch
+
+            _torch.backends.cuda.matmul.allow_tf32 = config.transformers.allow_tf32
 
         # Apply torch.compile post-load (must be AFTER from_pretrained + eval)
         if config.transformers is not None and config.transformers.torch_compile:
@@ -297,11 +305,9 @@ class TransformersEngine:
         else:
             kwargs["device_map"] = "auto"
 
-        # Trust remote code — default True unless researcher overrides
-        if pt is not None and pt.trust_remote_code is not None:
-            kwargs["trust_remote_code"] = pt.trust_remote_code
-        else:
-            kwargs["trust_remote_code"] = True
+        # trust_remote_code — no longer typed (D1 drop); defaults True; user can override via extra="allow"
+        _trc_from_pt = getattr(pt, "trust_remote_code", None) if pt is not None else None
+        kwargs["trust_remote_code"] = _trc_from_pt if _trc_from_pt is not None else True
 
         # Apply Transformers-specific config options
         if pt is not None:
@@ -335,10 +341,11 @@ class TransformersEngine:
                 kwargs["quantization_config"] = BitsAndBytesConfig(**bnb_kwargs)
 
             # Additional from_pretrained() fields
-            if pt.revision is not None:
-                kwargs["revision"] = pt.revision
+            # revision dropped as typed field (D1); flows through model_extra if set
             if pt.max_memory is not None:
                 kwargs["max_memory"] = pt.max_memory
+            if pt.low_cpu_mem_usage is not None:
+                kwargs["low_cpu_mem_usage"] = pt.low_cpu_mem_usage
 
         # Transformers extra="allow" passthrough: forward unknown fields to from_pretrained()
         if pt is not None and pt.model_extra:
@@ -446,8 +453,21 @@ class TransformersEngine:
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
         input_token_count = int(inputs["attention_mask"].sum().item())
 
+        # Determine autocast settings
+        from contextlib import nullcontext
+
+        _pt = config.transformers
+        _autocast_enabled = _pt is not None and _pt.autocast_enabled is True
+        if _autocast_enabled and torch.cuda.is_available():
+            _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
+            _amp_ctx = torch.autocast(
+                device_type="cuda", dtype=_dtype_map[_pt.autocast_dtype or "bfloat16"]
+            )
+        else:
+            _amp_ctx = nullcontext()  # type: ignore[assignment]
+
         t0 = time.perf_counter()
-        with torch.inference_mode():
+        with torch.inference_mode(), _amp_ctx:
             gen_kwargs = {**generate_kwargs}
             if config.max_output_tokens is not None:
                 gen_kwargs["max_new_tokens"] = config.max_output_tokens

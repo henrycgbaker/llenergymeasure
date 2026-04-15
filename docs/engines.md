@@ -105,8 +105,15 @@ Note: `load_in_4bit` and `load_in_8bit` are mutually exclusive.
 |-----------|------|---------|-------------|
 | `device_map` | str | `auto` | Device placement strategy |
 | `max_memory` | dict | null | Per-device memory limits, e.g. `{0: "10GiB", cpu: "50GiB"}` |
-| `revision` | str | null | Model commit hash for reproducibility |
-| `trust_remote_code` | bool | true | Allow executing remote code in model repo |
+| `low_cpu_mem_usage` | bool | true | Load weights incrementally to minimise peak CPU RAM |
+
+**Floating-Point Precision:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `allow_tf32` | bool | null | Allow TF32 for matrix multiplications on Ampere+ (affects energy/throughput) |
+| `autocast_enabled` | bool | false | Enable `torch.autocast` during generation |
+| `autocast_dtype` | `float16` \| `bfloat16` | `bfloat16` | AMP dtype (only used when `autocast_enabled: true`) |
 
 **Beam Search:**
 
@@ -228,12 +235,32 @@ initialisation time. All fields default to `null` (use vLLM's own default).
 | `quantization` | `awq` \| `gptq` \| `fp8` \| `marlin` \| `bitsandbytes` \| ... | null | Quantization method (requires pre-quantised checkpoint) |
 | `enable_prefix_caching` | bool | false | Automatic prefix caching for shared prompt prefixes |
 
+**Scheduler Tuning:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `num_scheduler_steps` | int | 1 | Multi-step scheduling: run N decode steps before returning to the scheduler (increases throughput at the cost of more VRAM per step) |
+| `max_seq_len_to_capture` | int | 8192 | Maximum sequence length eligible for CUDA graph capture (sequences longer than this fall back to eager mode) |
+
+**Distributed Execution:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `distributed_executor_backend` | `mp` \| `ray` | `mp` | Multi-GPU executor backend (`mp` = multiprocessing, `ray` = Ray cluster) |
+
 **Speculative Decoding:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `speculative_model` | str | null | HF model name for draft model (speculative decoding) |
-| `num_speculative_tokens` | int | null | Tokens to draft per step (required when `speculative_model` set) |
+| `speculative` | VLLMSpeculativeConfig | null | Speculative decoding sub-config (see below) |
+
+`speculative` sub-config fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `model` | str | null | HF model name or path for the draft model |
+| `num_speculative_tokens` | int | null | Tokens to draft per step |
+| `method` | str | null | Speculative method (e.g. `eagle`, `medusa`; null = draft-model mode) |
 
 ### vLLM Sampling Parameters
 
@@ -311,11 +338,10 @@ runners:
 tensorrt:
   tensor_parallel_size: 2
   max_batch_size: 8
+  max_num_tokens: 4096
   dtype: bfloat16
   quant:
     quant_algo: W4A16_AWQ
-  build_cache:
-    max_cache_storage_gb: 256
 ```
 
 > **Engine compilation on first run.** The first run with a given config will compile a
@@ -331,12 +357,14 @@ Changing any **[recompile]** field invalidates the cached engine and triggers a 
 |-----------|------|---------|-------------|
 | `max_batch_size` | int | 8 | Maximum batch size the engine accepts. **[recompile]** |
 | `tensor_parallel_size` | int | 1 | Tensor parallel degree (number of GPUs). **[recompile]** |
+| `pipeline_parallel_size` | int | 1 | Pipeline parallel stages (number of pipeline stages across GPUs). **[recompile]** |
 | `max_input_len` | int | 1024 | Maximum input sequence length in tokens. **[recompile]** |
 | `max_seq_len` | int | 2048 | Maximum total sequence length (input + output). **[recompile]** |
+| `max_num_tokens` | int | auto | Maximum tokens the engine handles per iteration (scheduler throughput axis alongside `max_batch_size`). **[recompile]** |
 | `dtype` | `float16` \| `bfloat16` | auto | Model compute dtype. TRT-LLM is optimised for fp16/bf16; fp32 is not supported. **[recompile]** |
 | `fast_build` | bool | false | Enable fast engine build mode (reduced optimisation, faster compilation). **[recompile]** |
 | `engine` | `trt` | `trt` | TRT-LLM internal backend selector. This is the `LLM(backend=...)` parameter, not the `llem` engine field. Leave unset unless you have a specific reason to override. |
-| `engine_path` | str | null | Path to a pre-compiled engine directory. When set, skips compilation and loads the engine directly. All compile-time parameters and `build_cache` are ignored. See [Pre-Compiled Engine Loading](#pre-compiled-engine-loading) below. |
+| `engine_path` | str | null | Path to a pre-compiled engine directory. When set, skips compilation and loads the engine directly. See [Pre-Compiled Engine Loading](#pre-compiled-engine-loading) below. |
 
 ### tensorrt.quant: Quantization
 
@@ -363,17 +391,6 @@ Quantization is applied at engine compile time — changing `quant_algo` trigger
 > **A100 note:** A100 (SM 8.0) does not support FP8. Valid A100 quantization options:
 > `INT8`, `W4A16_AWQ`, `W4A16_GPTQ`, `W8A16`, `W8A16_GPTQ`, `W4A8_AWQ`, `NO_QUANT`.
 
-### tensorrt.calib: PTQ Calibration
-
-Only relevant when `quant_algo` requires post-training quantization (PTQ) calibration
-(e.g. `INT8`, `W4A16_AWQ`).
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `calib_batches` | int | 512 | Number of calibration batches |
-| `calib_dataset` | str | `cnn_dailymail` | Calibration dataset name or HuggingFace path |
-| `calib_max_seq_length` | int | 512 | Max sequence length for calibration samples |
-
 ### tensorrt.kv_cache: KV Cache
 
 | Parameter | Type | Default | Description |
@@ -393,17 +410,6 @@ Only relevant when `quant_algo` requires post-training quantization (PTQ) calibr
 - `GUARANTEED_NO_EVICT` — guarantees no request eviction; may reduce throughput
 - `MAX_UTILIZATION` — maximises GPU utilisation; may evict requests under memory pressure
 - `STATIC_BATCH` — fixed batch size; useful for reproducible benchmarking
-
-### tensorrt.build_cache: Engine Build Cache
-
-Engine caching is enabled by default even without an explicit `build_cache:` section.
-Compiled engines are stored in `~/.cache/tensorrt_llm` and reused across runs.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `cache_root` | str | `~/.cache/tensorrt_llm` | Root directory for engine cache storage |
-| `max_records` | int | 10 | Maximum number of cached engine records |
-| `max_cache_storage_gb` | float | 256 | Maximum total cache size in GB |
 
 ### Pre-Compiled Engine Loading
 
@@ -470,7 +476,6 @@ all engines.
 | `min_tokens` | int | 0 | Minimum output tokens before EOS is allowed |
 | `n` | int | 1 | Number of output sequences per prompt |
 | `ignore_eos` | bool | false | Continue generating past EOS token (forces full `max_output_tokens` generation) |
-| `return_perf_metrics` | bool | false | Return TRT-LLM internal performance metrics in output |
 
 For advanced TRT-LLM parameters, see the [TensorRT-LLM documentation](https://nvidia.github.io/TensorRT-LLM/).
 

@@ -406,10 +406,14 @@ class TestEngineConfigFields:
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["block_size"] == 16
 
-    def test_speculative_model_produces_speculative_config_dict(self):
-        """speculative_model + num_speculative_tokens → speculative_config dict (vLLM v0.6+ API)."""
+    def test_speculative_sub_config_produces_speculative_config_dict(self):
+        """VLLMSpeculativeConfig → speculative_config dict (vLLM native shape)."""
+        from llenergymeasure.config.engine_configs import VLLMSpeculativeConfig
+
         vllm_cfg = VLLMConfig(
-            engine=VLLMEngineConfig(speculative_model="draft-model", num_speculative_tokens=5)
+            engine=VLLMEngineConfig(
+                speculative=VLLMSpeculativeConfig(model="draft-model", num_speculative_tokens=5)
+            )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         kwargs = VLLMEngine()._build_llm_kwargs(config)
@@ -418,6 +422,21 @@ class TestEngineConfigFields:
             "model": "draft-model",
             "num_speculative_tokens": 5,
         }
+
+    def test_speculative_sub_config_with_method(self):
+        """VLLMSpeculativeConfig.method is forwarded in speculative_config dict."""
+        from llenergymeasure.config.engine_configs import VLLMSpeculativeConfig
+
+        vllm_cfg = VLLMConfig(
+            engine=VLLMEngineConfig(
+                speculative=VLLMSpeculativeConfig(
+                    model="eagle-model", num_speculative_tokens=3, method="eagle"
+                )
+            )
+        )
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
+        assert kwargs["speculative_config"]["method"] == "eagle"
 
     def test_all_engine_fields_wired(self):
         """All 14 non-speculative engine fields are forwarded when set."""
@@ -463,12 +482,14 @@ class TestEngineConfigFields:
 
 
 class TestSamplingConfigOverrides:
-    def test_sampling_max_tokens_overrides_config_max_output_tokens(self):
-        """VLLMSamplingConfig.max_tokens overrides ExperimentConfig.max_output_tokens."""
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(max_tokens=256))
-        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg, max_output_tokens=128)
+    def test_max_output_tokens_bridges_to_max_tokens(self):
+        """ExperimentConfig.max_output_tokens bridges to SamplingParams.max_tokens.
+
+        max_tokens was dropped from VLLMSamplingConfig (R2 dup); bridged at adapter level.
+        """
+        config = make_config(**_VLLM_DEFAULTS, max_output_tokens=128)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
-        assert params._kwargs["max_tokens"] == 256  # override wins
+        assert params._kwargs["max_tokens"] == 128
 
     def test_sampling_presence_penalty_applied(self):
         """VLLMSamplingConfig.presence_penalty appears in SamplingParams kwargs."""
@@ -501,13 +522,13 @@ class TestSamplingConfigOverrides:
     def test_sampling_overrides_applied_to_greedy_path(self):
         """VLLMSamplingConfig overrides work on the greedy (temperature=0.0) path too."""
         decoder = DecoderConfig(temperature=0.0, do_sample=False)
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(max_tokens=512))
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(presence_penalty=0.1))
         config = make_config(
             **_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg, max_output_tokens=128
         )
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["temperature"] == 0.0
-        assert params._kwargs["max_tokens"] == 512  # override wins on greedy path
+        assert params._kwargs["max_tokens"] == 128  # from max_output_tokens bridge
 
     def test_none_sampling_config_does_not_add_extra_kwargs(self):
         """When vllm.sampling is None, no extra sampling kwargs are added."""
@@ -967,10 +988,10 @@ class TestBeamSearchMinP:
         assert "min_p" not in params._kwargs
 
     def test_beam_width_and_min_p_together(self, monkeypatch):
-        """beam_width and min_p both appear in kwargs when set."""
+        """beam_width and min_p both appear in kwargs; max_tokens bridged from max_output_tokens."""
         decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.1)
-        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=8, max_tokens=64))
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg)
+        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=8))
+        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg, max_output_tokens=64)
         params = self._build_beam_params(config, monkeypatch)
         assert params._kwargs["beam_width"] == 8
         assert params._kwargs["min_p"] == pytest.approx(0.1)

@@ -720,8 +720,10 @@ relates to energy measurement.
 | `prompt_lookup_num_tokens` | integer | None | `null` | Prompt-lookup speculative decoding tokens (None -> disabled) |
 | `device_map` | string | None | `null` | Device placement strategy (None -> 'auto') |
 | `max_memory` | dict | None | `null` | Per-device memory limits, e.g. {0: '10GiB', 'cpu': '50GiB'} |
-| `revision` | string | None | `null` | Model revision/commit hash for reproducibility |
-| `trust_remote_code` | boolean | None | `null` | Trust remote code in model repo (None -> True) |
+| `low_cpu_mem_usage` | boolean | None | `null` | Load weights incrementally to minimise peak CPU RAM (None -> True) |
+| `allow_tf32` | boolean | None | `null` | Allow TF32 for matmul on Ampere+ (None -> PyTorch default). Affects energy/throughput. |
+| `autocast_enabled` | boolean | None | `null` | Enable torch.autocast during generation (None -> False) |
+| `autocast_dtype` | 'float16' | 'bfloat16' | None | `null` | AMP dtype (None -> 'bfloat16'). Only used when autocast_enabled is true. |
 | `tp_plan` | string | None | `null` | Tensor parallelism plan for native HF TP (None -> disabled). Only 'auto' is currently supported by Transformers. Mutually exclusive with device_map. Requires torchrun launch. |
 | `tp_size` | integer | None | `null` | Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set. |
 
@@ -743,8 +745,10 @@ relates to energy measurement.
 | `pipeline_parallel_size` | integer | None | `null` | Pipeline parallel stages — memory per GPU changes with PP (None -> 1). |
 | `enable_prefix_caching` | boolean | None | `null` | Automatic prefix caching for repeated shared prompts (None -> False). |
 | `quantization` | 'awq' | 'gptq' | 'fp8' | 'fp8_e5m2' | 'fp8_e4m3' | 'marlin' | 'bitsandbytes' | None | `null` | Quantization method. Requires pre-quantized model checkpoint. |
-| `speculative_model` | string | None | `null` | HF model name or path of draft model for speculative decoding (None -> disabled). Requires num_speculative_tokens. |
-| `num_speculative_tokens` | integer | None | `null` | Tokens to draft per speculative step (None -> required if speculative_model is set). |
+| `num_scheduler_steps` | integer | None | `null` | Multi-step scheduling: decode steps per scheduler iteration (None -> 1). Increases throughput at the cost of more VRAM per step. |
+| `max_seq_len_to_capture` | integer | None | `null` | Max sequence length eligible for CUDA graph capture (None -> 8192). Longer sequences fall back to eager mode. |
+| `distributed_executor_backend` | 'mp' | 'ray' | None | `null` | Multi-GPU executor backend (None -> 'mp'). |
+| `speculative` | VLLMSpeculativeConfig | None | `null` | Speculative decoding sub-config. Fields: model (str), num_speculative_tokens (int), method (str). |
 | `offload_group_size` | integer | None | `null` | Groups of layers for CPU offloading (None -> 0). |
 | `offload_num_in_group` | integer | None | `null` | Number of layers offloaded per group (None -> 1). |
 | `offload_prefetch_step` | integer | None | `null` | Prefetch steps ahead for CPU offload (None -> 1). |
@@ -795,8 +799,10 @@ relates to energy measurement.
 |-------|------|---------|-------------|
 | `max_batch_size` | integer | None | `null` | Max batch size (compile-time constant, None -> 8) |
 | `tensor_parallel_size` | integer | None | `null` | Tensor parallel size (None -> 1) |
+| `pipeline_parallel_size` | integer | None | `null` | Pipeline parallel stages (None -> 1) |
 | `max_input_len` | integer | None | `null` | Max input sequence length (compile-time constant, None -> 1024) |
 | `max_seq_len` | integer | None | `null` | Max total sequence length (input + output, compile-time constant, None -> 2048) |
+| `max_num_tokens` | integer | None | `null` | Max tokens per engine iteration (None -> auto). Scheduler throughput axis alongside max_batch_size. |
 | `dtype` | 'float16' | 'bfloat16' | None | `null` | Model dtype (None -> auto). TRT-LLM is optimised for fp16/bf16; fp32 not supported. |
 | `fast_build` | boolean | None | `null` | Enable fast engine build mode (reduced optimisation, None -> False) |
 | `engine` | string | None | `null` | TRT-LLM internal backend: 'trt' for TensorRT engine (None -> 'trt'). This is the TRT-LLM LLM(backend=...) parameter, not the llem engine field. |
@@ -804,8 +810,6 @@ relates to energy measurement.
 | `quant` | TensorRTQuantConfig | None | `null` | Quantisation configuration (QuantConfig) |
 | `kv_cache` | TensorRTKvCacheConfig | None | `null` | KV cache configuration |
 | `scheduler` | TensorRTSchedulerConfig | None | `null` | Scheduler configuration |
-| `calib` | TensorRTCalibConfig | None | `null` | PTQ calibration configuration (CalibConfig) |
-| `build_cache` | TensorRTBuildCacheConfig | None | `null` | Engine build cache configuration (BuildCacheConfig) |
 | `sampling` | TensorRTSamplingConfig | None | `null` | Sampling configuration (TRT-LLM-specific SamplingParams extensions) |
 
 <!-- END CONFIG REFERENCE — Auto-generated by scripts/generate_config_docs.py -->

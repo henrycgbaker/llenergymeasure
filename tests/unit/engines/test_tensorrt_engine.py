@@ -21,7 +21,6 @@ import sys
 import types
 
 from llenergymeasure.config.engine_configs import (
-    TensorRTBuildCacheConfig,
     TensorRTConfig,
     TensorRTKvCacheConfig,
     TensorRTQuantConfig,
@@ -237,29 +236,13 @@ class TestBuildLlmKwargs:
         assert isinstance(kwargs["quantization"], _MockQuantConfig)
         assert kwargs["quantization"]._kwargs["quant_algo"] == "INT8"
 
-    def test_build_llm_kwargs_build_cache_config(self, monkeypatch):
-        """build_cache section maps to BuildCacheConfig kwargs."""
-        mock_trt = _make_fake_tensorrt_llm_module()
-        monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
-        monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
-
-        config = make_config(
-            **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(
-                build_cache=TensorRTBuildCacheConfig(
-                    cache_root="/tmp/trt_cache",
-                    max_records=5,
-                    max_cache_storage_gb=128.0,
-                )
-            ),
-        )
+    def test_build_llm_kwargs_always_has_enable_build_cache(self):
+        """enable_build_cache=True is always set (TensorRTBuildCacheConfig dropped D1)."""
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig())
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
-        assert "enable_build_cache" in kwargs
-        assert isinstance(kwargs["enable_build_cache"], _MockBuildCacheConfig)
-        assert kwargs["enable_build_cache"]._kwargs["max_records"] == 5
-        assert kwargs["enable_build_cache"]._kwargs["max_cache_storage_gb"] == 128.0
+        assert kwargs.get("enable_build_cache") is True
 
     def test_build_llm_kwargs_kv_cache_config(self, monkeypatch):
         """kv_cache section maps to KvCacheConfig kwargs."""
