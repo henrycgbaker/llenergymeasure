@@ -74,8 +74,10 @@ class TransformersEngine:
         kwargs = self._model_load_kwargs(config)
         logger.info("Loading model %r with kwargs: %s", config.model, list(kwargs.keys()))
 
-        # trust_remote_code for tokenizer — respects config, defaults True
-        trust = True
+        from llenergymeasure.utils.security import trust_remote_code_enabled
+
+        # trust_remote_code precedence: typed field > LLEM_TRUST_REMOTE_CODE env var > False
+        trust = trust_remote_code_enabled()
         if config.transformers is not None and config.transformers.trust_remote_code is not None:
             trust = config.transformers.trust_remote_code
 
@@ -297,11 +299,13 @@ class TransformersEngine:
         else:
             kwargs["device_map"] = "auto"
 
-        # Trust remote code — default True unless researcher overrides
+        from llenergymeasure.utils.security import trust_remote_code_enabled
+
+        # trust_remote_code precedence: typed field > LLEM_TRUST_REMOTE_CODE env var > False
         if pt is not None and pt.trust_remote_code is not None:
             kwargs["trust_remote_code"] = pt.trust_remote_code
         else:
-            kwargs["trust_remote_code"] = True
+            kwargs["trust_remote_code"] = trust_remote_code_enabled()
 
         # Apply Transformers-specific config options
         if pt is not None:

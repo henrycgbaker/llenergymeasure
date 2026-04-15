@@ -155,6 +155,21 @@ def test_model_load_kwargs_contains_base_keys():
 
     assert "torch_dtype" in kwargs
     assert kwargs["device_map"] == "auto"
+    # HF default — env var LLEM_TRUST_REMOTE_CODE not set, no typed override
+    assert kwargs["trust_remote_code"] is False
+
+
+def test_model_load_kwargs_trust_remote_code_env_var_opt_in(monkeypatch):
+    """LLEM_TRUST_REMOTE_CODE=1 enables trust_remote_code=True at the model load."""
+    pytest.importorskip("torch")
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.transformers import TransformersEngine
+
+    monkeypatch.setenv("LLEM_TRUST_REMOTE_CODE", "1")
+    engine = TransformersEngine()
+    config = ExperimentConfig(model="gpt2")
+    kwargs = engine._model_load_kwargs(config)
+
     assert kwargs["trust_remote_code"] is True
 
 
