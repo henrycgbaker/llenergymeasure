@@ -76,13 +76,10 @@ class TransformersEngine:
 
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
-        # trust_remote_code precedence: typed field > LLEM_TRUST_REMOTE_CODE env var > False
-        trust = trust_remote_code_enabled()
-        if config.transformers is not None and config.transformers.trust_remote_code is not None:
-            trust = config.transformers.trust_remote_code
-
         t0 = _time.perf_counter()
-        tokenizer = AutoTokenizer.from_pretrained(config.model, trust_remote_code=trust)
+        tokenizer = AutoTokenizer.from_pretrained(
+            config.model, trust_remote_code=trust_remote_code_enabled()
+        )
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         if on_substep is not None:
@@ -307,11 +304,7 @@ class TransformersEngine:
 
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
-        # trust_remote_code precedence: typed field > LLEM_TRUST_REMOTE_CODE env var > False
-        if pt is not None and pt.trust_remote_code is not None:
-            kwargs["trust_remote_code"] = pt.trust_remote_code
-        else:
-            kwargs["trust_remote_code"] = trust_remote_code_enabled()
+        kwargs["trust_remote_code"] = trust_remote_code_enabled()
 
         # Apply Transformers-specific config options
         if pt is not None:
