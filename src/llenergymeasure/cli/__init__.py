@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Annotated
 
-import typer
+from dotenv import load_dotenv
 
-from llenergymeasure._version import __version__
-from llenergymeasure.config.ssot import ENV_LOG_LEVEL
+# Load `.env` from the user's CWD before any other imports read env vars
+# (e.g. logging setup reads LLEM_LOG_LEVEL). Anchoring to Path.cwd() rather
+# than dotenv's default walk-up-from-__file__ is deliberate: once llem is
+# pip-installed the module sits under site-packages and the walk-up never
+# reaches the user's project directory. override=False so shell env wins.
+load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
+
+import typer  # noqa: E402
+
+from llenergymeasure._version import __version__  # noqa: E402
+from llenergymeasure.config.ssot import ENV_LOG_LEVEL  # noqa: E402
 
 app = typer.Typer(
     name="llem",
