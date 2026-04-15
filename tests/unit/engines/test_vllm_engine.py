@@ -130,9 +130,19 @@ class TestBuildLlmKwargs:
         kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["model"] == "test-model"
-        assert kwargs["trust_remote_code"] is True
+        # HF default — env var LLEM_TRUST_REMOTE_CODE not set
+        assert kwargs["trust_remote_code"] is False
         assert kwargs["seed"] == 42
         assert "dtype" in kwargs
+
+    def test_trust_remote_code_env_var_opt_in(self, monkeypatch):
+        """LLEM_TRUST_REMOTE_CODE=1 enables trust_remote_code=True."""
+        monkeypatch.setenv("LLEM_TRUST_REMOTE_CODE", "1")
+        config = make_config(**_VLLM_DEFAULTS)
+        engine = VLLMEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert kwargs["trust_remote_code"] is True
 
     def test_minimal_config_dtype_passthrough(self):
         """Default dtype (bfloat16) passes through in kwargs."""

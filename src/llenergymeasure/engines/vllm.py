@@ -287,10 +287,12 @@ class VLLMEngine:
 
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build kwargs dict for vllm.LLM() constructor."""
+        from llenergymeasure.utils.security import trust_remote_code_enabled
+
         kwargs: dict[str, Any] = {
             "model": config.model,
             "dtype": config.dtype,
-            "trust_remote_code": True,
+            "trust_remote_code": trust_remote_code_enabled(),
             "seed": config.random_seed,
         }
 
