@@ -184,10 +184,6 @@ class TensorRTEngine:
             "built_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        trt = config.tensorrt
-        if trt is not None and trt.engine_path is not None:
-            self._build_metadata["engine_path"] = trt.engine_path
-
         sampling_params = self._build_sampling_params(config)
         if on_substep is not None:
             on_substep("sampling params built", 0.0)

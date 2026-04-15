@@ -562,123 +562,19 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
 def get_engine_specific_params() -> dict[str, list[str]]:
     """Get params that are only valid for specific engines.
 
+    Derived from the Pydantic engine models via ``get_engine_params`` — never
+    hand-maintained. Adding or removing a typed field in
+    ``engine_configs.py`` is automatically reflected here.
+
+    Fields reachable only through ``extra="allow"`` passthrough (e.g. dropped
+    typed fields still settable in YAML) are not included, since they are not
+    part of the typed contract this function describes.
+
     Returns:
-        Dict mapping engine name to list of exclusive param paths.
-        Derived from v2.0 minimal engine config fields.
+        Dict mapping engine name to list of dotted param paths exclusive to
+        that engine.
     """
-    return {
-        "transformers": [
-            "transformers.batch_size",
-            "transformers.attn_implementation",
-            "transformers.torch_compile",
-            "transformers.torch_compile_mode",
-            "transformers.torch_compile_backend",
-            "transformers.load_in_4bit",
-            "transformers.load_in_8bit",
-            "transformers.bnb_4bit_compute_dtype",
-            "transformers.bnb_4bit_quant_type",
-            "transformers.bnb_4bit_use_double_quant",
-            "transformers.use_cache",
-            "transformers.cache_implementation",
-            "transformers.num_beams",
-            "transformers.early_stopping",
-            "transformers.length_penalty",
-            "transformers.no_repeat_ngram_size",
-            "transformers.prompt_lookup_num_tokens",
-            "transformers.device_map",
-            "transformers.max_memory",
-            "transformers.allow_tf32",
-            "transformers.autocast_enabled",
-            "transformers.autocast_dtype",
-            "transformers.low_cpu_mem_usage",
-            "transformers.tp_plan",
-            "transformers.tp_size",
-            # revision and trust_remote_code dropped as typed fields (D1);
-            # they remain settable via extra="allow" in YAML
-        ],
-        "vllm": [
-            # Engine-level params (vllm.LLM() constructor args)
-            "vllm.engine.gpu_memory_utilization",
-            "vllm.engine.swap_space",
-            "vllm.engine.cpu_offload_gb",
-            "vllm.engine.block_size",
-            "vllm.engine.kv_cache_dtype",
-            "vllm.engine.enforce_eager",
-            "vllm.engine.enable_chunked_prefill",
-            "vllm.engine.max_num_seqs",
-            "vllm.engine.max_num_batched_tokens",
-            "vllm.engine.max_model_len",
-            "vllm.engine.tensor_parallel_size",
-            "vllm.engine.pipeline_parallel_size",
-            "vllm.engine.enable_prefix_caching",
-            "vllm.engine.quantization",
-            "vllm.engine.num_scheduler_steps",
-            "vllm.engine.max_seq_len_to_capture",
-            "vllm.engine.distributed_executor_backend",
-            # Speculative decoding sub-config (replaces flat speculative_model/num_speculative_tokens)
-            "vllm.engine.speculative.model",
-            "vllm.engine.speculative.num_speculative_tokens",
-            "vllm.engine.speculative.method",
-            # Engine-level offloading + memory params
-            "vllm.engine.offload_group_size",
-            "vllm.engine.offload_num_in_group",
-            "vllm.engine.offload_prefetch_step",
-            "vllm.engine.offload_params",
-            "vllm.engine.disable_custom_all_reduce",
-            "vllm.engine.kv_cache_memory_bytes",
-            "vllm.engine.compilation_config",
-            # Attention sub-model
-            "vllm.engine.attention.backend",
-            "vllm.engine.attention.flash_attn_version",
-            "vllm.engine.attention.flash_attn_max_num_splits_for_cuda_graph",
-            "vllm.engine.attention.use_prefill_decode_attention",
-            "vllm.engine.attention.use_prefill_query_quantization",
-            "vllm.engine.attention.use_cudnn_prefill",
-            "vllm.engine.attention.disable_flashinfer_prefill",
-            "vllm.engine.attention.disable_flashinfer_q_quantization",
-            "vllm.engine.attention.use_trtllm_attention",
-            "vllm.engine.attention.use_trtllm_ragged_deepseek_prefill",
-            # Sampling-level params (vllm.SamplingParams args, vLLM-specific only)
-            # max_tokens dropped (R2 dup of ExperimentConfig.max_output_tokens; bridged in adapter)
-            "vllm.sampling.min_tokens",
-            "vllm.sampling.presence_penalty",
-            "vllm.sampling.frequency_penalty",
-            "vllm.sampling.ignore_eos",
-            "vllm.sampling.n",
-            # Beam search section (max_tokens dropped; bridged from ExperimentConfig.max_output_tokens)
-            "vllm.beam_search.beam_width",
-            "vllm.beam_search.length_penalty",
-            "vllm.beam_search.early_stopping",
-        ],
-        "tensorrt": [
-            # Compile-time parameters (LLM() constructor)
-            "tensorrt.max_batch_size",
-            "tensorrt.tensor_parallel_size",
-            "tensorrt.pipeline_parallel_size",
-            "tensorrt.max_input_len",
-            "tensorrt.max_seq_len",
-            "tensorrt.max_num_tokens",
-            "tensorrt.dtype",
-            "tensorrt.fast_build",
-            # backend and engine_path dropped (D2/D1); settable via extra="allow"
-            # Quantisation sub-config
-            "tensorrt.quant.quant_algo",
-            "tensorrt.quant.kv_cache_quant_algo",
-            # KV cache sub-config
-            "tensorrt.kv_cache.enable_block_reuse",
-            "tensorrt.kv_cache.free_gpu_memory_fraction",
-            "tensorrt.kv_cache.max_tokens",
-            "tensorrt.kv_cache.host_cache_size",
-            # Scheduler sub-config
-            "tensorrt.scheduler.capacity_scheduling_policy",
-            # calib sub-config dropped (D3 build-only PTQ)
-            # build_cache sub-config dropped (D1 engine-cache plumbing)
-            # Sampling sub-config (return_perf_metrics dropped D1)
-            "tensorrt.sampling.min_tokens",
-            "tensorrt.sampling.n",
-            "tensorrt.sampling.ignore_eos",
-        ],
-    }
+    return {engine: sorted(get_engine_params(engine).keys()) for engine in _ALL_ENGINES_LIST}
 
 
 def get_special_test_models() -> dict[str, str]:

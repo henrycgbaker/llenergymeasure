@@ -457,8 +457,7 @@ class TransformersEngine:
         from contextlib import nullcontext
 
         _pt = config.transformers
-        _autocast_enabled = _pt is not None and _pt.autocast_enabled is True
-        if _autocast_enabled and torch.cuda.is_available():
+        if _pt is not None and _pt.autocast_enabled is True and torch.cuda.is_available():
             _dtype_map = {"float16": torch.float16, "bfloat16": torch.bfloat16}
             _amp_ctx = torch.autocast(
                 device_type="cuda", dtype=_dtype_map[_pt.autocast_dtype or "bfloat16"]
