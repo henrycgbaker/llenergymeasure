@@ -379,15 +379,18 @@ class TensorRTEngine:
     def _build_llm_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build kwargs dict for tensorrt_llm.LLM() constructor.
 
-        Starts with {"model": config.model, "backend": "trt"} and applies
-        all non-None fields from TensorRTConfig.
+        Starts with {"model": config.model} and applies all non-None fields
+        from TensorRTConfig, including the typed ``backend`` field when set.
+        When ``backend`` is unset (None), TRT-LLM auto-picks (respecting
+        ``TLLM_USE_TRT_ENGINE``) — the previous hardcoded ``"trt"`` default
+        is removed.
 
-        When engine_path is set, returns early with only {"model": engine_path, "backend": "trt"}.
-        Compile-time kwargs are baked into the engine and must not be re-specified.
+        When engine_path is set, returns early with only {"model": engine_path}
+        plus ``backend`` iff the typed field was supplied. Compile-time kwargs
+        are baked into the engine and must not be re-specified.
         """
         kwargs: dict[str, Any] = {
             "model": config.model,
-            "backend": "trt",
         }
 
         trt = config.tensorrt
@@ -404,7 +407,10 @@ class TensorRTEngine:
             # Pass engine dir as model - TRT-LLM auto-detects TLLM_ENGINE format.
             # Compile-time kwargs are baked into the engine; don't pass them.
             # enable_build_cache is not set - engine format bypasses it.
-            return {"model": str(raw_engine_path), "backend": "trt"}
+            early_kwargs: dict[str, Any] = {"model": str(raw_engine_path)}
+            if trt.backend is not None:
+                early_kwargs["backend"] = trt.backend
+            return early_kwargs
 
         if trt is None:
             # No tensorrt section — use defaults + enable build cache
@@ -428,11 +434,8 @@ class TensorRTEngine:
             kwargs["dtype"] = trt.dtype
         if trt.fast_build is not None:
             kwargs["fast_build"] = trt.fast_build
-
-        # TRT-LLM internal backend — no longer typed; accessed via extra="allow" if explicitly set.
-        raw_backend = getattr(trt, "backend", None)
-        if raw_backend is not None:
-            kwargs["backend"] = raw_backend
+        if trt.backend is not None:
+            kwargs["backend"] = trt.backend
 
         # Quantisation config
         if trt.quant is not None:

@@ -891,10 +891,16 @@ class TensorRTConfig(BaseModel):
     live in DecoderConfig and are shared across all engines.
 
     Dropped (falls through extra="allow"):
-    - backend: Literal["trt"] — D2 single-option enum, no information content
     - engine_path — D1 deployment path, not a measurement axis
     - calib sub-config — D3 build-only PTQ calibration (we consume pre-quantised checkpoints)
     - build_cache sub-config — D1 engine-cache housekeeping
+
+    Re-added after audit:
+    - backend: Literal["trt","pytorch","_autodeploy"] — measurement-relevant
+      axis in TRT-LLM >=0.13. "trt" is the AOT-compiled engine; "pytorch" is
+      TRT-LLM's eager runtime (same scheduler/KV cache, no compile); "_autodeploy"
+      is the experimental model-porter. Original drop rubric (D2 single-option
+      enum) was incorrect for contemporary TRT-LLM.
 
     Example YAML:
         engine: tensorrt
@@ -955,6 +961,17 @@ class TensorRTConfig(BaseModel):
     fast_build: bool | None = Field(
         default=None,
         description="Enable fast engine build mode (reduced optimisation, None -> False)",
+    )
+    backend: Literal["trt", "pytorch", "_autodeploy"] | None = Field(
+        default=None,
+        description=(
+            "TRT-LLM runtime backend — a measurement axis, not a per-host knob. "
+            "'trt' = AOT-compiled TensorRT engine (best steady-state, minutes-hours "
+            "compile); 'pytorch' = TRT-LLM's eager runtime (same scheduler/KV cache, "
+            "no compile, supports newer model archs without hand-written converters); "
+            "'_autodeploy' = experimental autoporter. None -> TRT-LLM auto-picks "
+            "(respects TLLM_USE_TRT_ENGINE env)."
+        ),
     )
 
     # -------------------------------------------------------------------------

@@ -96,6 +96,7 @@ All notable changes to this project are documented here.
 ### Changed
 
 - **Per-experiment timeout is now configurable** via `study_execution.experiment_timeout_seconds` (default 600s). Replaces the previous `max(n_prompts*2, 600)` heuristic. Both the local subprocess path and the Docker container path honour the same field, and Docker-path timeouts are normalised to `TimeoutError` so the circuit breaker counts them consistently across both paths.
+- **Re-typed `tensorrt.backend` as `Literal["trt", "pytorch", "_autodeploy"] | None`.** Reverses the prior curation-pass drop for this one field — the original `D2 single-option enum` verdict was incorrect for TRT-LLM >= 0.13, where `backend` selects between three runtime paths with distinct measurement signatures (`trt` = AOT-compiled engine, `pytorch` = eager runtime with the same scheduler/KV cache, `_autodeploy` = experimental). Default `None` lets TRT-LLM auto-pick. The consumer side no longer hardcodes `"backend": "trt"`; the kwarg is only set when the typed field is explicitly provided.
 
 ### Fixed
 

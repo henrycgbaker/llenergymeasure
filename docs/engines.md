@@ -363,7 +363,7 @@ Changing any **[recompile]** field invalidates the cached engine and triggers a 
 | `max_num_tokens` | int | auto | Maximum tokens the engine handles per iteration (scheduler throughput axis alongside `max_batch_size`). **[recompile]** |
 | `dtype` | `float16` \| `bfloat16` | auto | Model compute dtype. TRT-LLM is optimised for fp16/bf16; fp32 is not supported. **[recompile]** |
 | `fast_build` | bool | false | Enable fast engine build mode (reduced optimisation, faster compilation). **[recompile]** |
-| `engine` | `trt` | `trt` | TRT-LLM internal backend selector. This is the `LLM(backend=...)` parameter, not the `llem` engine field. Leave unset unless you have a specific reason to override. |
+| `backend` | `trt` \| `pytorch` \| `_autodeploy` | null (TRT-LLM auto-picks) | TRT-LLM runtime backend — a measurement axis, not a per-host knob. `trt` = AOT-compiled TensorRT engine (best steady-state, minutes-hours compile). `pytorch` = TRT-LLM's eager runtime (same scheduler/KV cache, no compile, supports newer archs without hand-written converters). `_autodeploy` = experimental model-porter. null → TRT-LLM auto-picks (respects `TLLM_USE_TRT_ENGINE` env). Distinct from the top-level `engine:` field. |
 | `engine_path` | str | null | Path to a pre-compiled engine directory. When set, skips compilation and loads the engine directly. See [Pre-Compiled Engine Loading](#pre-compiled-engine-loading) below. |
 
 ### tensorrt.quant: Quantization
