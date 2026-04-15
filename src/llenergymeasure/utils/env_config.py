@@ -18,6 +18,7 @@ consumed by engine plugins in Layer 2.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Final
 
 ENV_TRANSFORMERS_DEFAULT_DEVICE_MAP: Final = "LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP"
@@ -44,3 +45,43 @@ def default_device_map() -> str | None:
     helper. If this returns ``None``, callers should omit the kwarg.
     """
     return os.environ.get(ENV_TRANSFORMERS_DEFAULT_DEVICE_MAP) or None
+
+
+ENV_TRT_BUILD_CACHE_ENABLED: Final = "LLEM_TRT_BUILD_CACHE_ENABLED"
+"""Toggle for TRT-LLM on-disk engine build cache.
+
+Unset / empty / any falsy value (``0``, ``false``, ``no``, ``off``) → False,
+matching TRT-LLM's own default. Truthy values (``1``, ``true``, ``yes``,
+``on``, case-insensitive) → True. The opinionated default ``1`` is shipped
+via ``.env.example`` — not baked into this helper.
+"""
+
+
+ENV_TRT_BUILD_CACHE_PATH: Final = "LLEM_TRT_BUILD_CACHE_PATH"
+"""User-supplied cache directory for TRT-LLM engine build cache.
+
+If set and non-empty, the engine plugin wraps it into TRT-LLM's
+``BuildCacheConfig.cache_root``. Unset / empty leaves TRT-LLM's internal
+default cache location in place.
+"""
+
+
+def trt_build_cache_enabled() -> bool:
+    """Return whether TRT-LLM on-disk engine build cache should be enabled.
+
+    Pure passthrough: no opinionated default is baked in. The repo-root
+    ``.env.example`` ships ``LLEM_TRT_BUILD_CACHE_ENABLED=1`` so the
+    out-of-the-box experience preserves the cache (engine compilation takes
+    minutes); deleting the line reverts to TRT-LLM's disabled default.
+    """
+    return os.environ.get(ENV_TRT_BUILD_CACHE_ENABLED, "").lower() in {"1", "true", "yes", "on"}
+
+
+def trt_build_cache_path() -> Path | None:
+    """Return the user-supplied TRT-LLM build cache root, if any.
+
+    Returns a ``Path`` when set to a non-empty value; otherwise ``None`` so
+    TRT-LLM uses its internal default location (``~/.cache/tensorrt_llm/``).
+    """
+    raw = os.environ.get(ENV_TRT_BUILD_CACHE_PATH)
+    return Path(raw) if raw else None
