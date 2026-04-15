@@ -282,7 +282,7 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         "vllm.beam_search.max_tokens": [0],  # ge=1: 0 violates ge
         # TensorRTConfig: compile-time params
         "tensorrt.max_batch_size": [0],  # ge=1: 0 violates ge
-        "tensorrt.tp_size": [0],  # ge=1: 0 violates ge
+        "tensorrt.tensor_parallel_size": [0],  # ge=1: 0 violates ge
         "tensorrt.max_input_len": [0],  # ge=1: 0 violates ge
         "tensorrt.max_seq_len": [0],  # ge=1: 0 violates ge
         # TensorRTCalibConfig: calibration params
@@ -619,7 +619,7 @@ def get_engine_specific_params() -> dict[str, list[str]]:
         "tensorrt": [
             # Compile-time parameters (LLM() constructor)
             "tensorrt.max_batch_size",
-            "tensorrt.tp_size",
+            "tensorrt.tensor_parallel_size",
             "tensorrt.max_input_len",
             "tensorrt.max_seq_len",
             "tensorrt.dtype",
@@ -708,7 +708,7 @@ def get_param_skip_conditions() -> dict[str, str]:
     return {
         # Multi-GPU params - skip if single GPU
         "vllm.engine.tensor_parallel_size>1": "Requires 2+ GPUs",
-        "tensorrt.tp_size>1": "Requires 2+ GPUs",
+        "tensorrt.tensor_parallel_size>1": "Requires 2+ GPUs",
         # Flash Attention 2 - requires flash-attn package
         "transformers.attn_implementation=flash_attention_2": "Requires flash-attn package",
         # Flash Attention 3 - requires flash_attn_3 package (built from flash-attn hopper/)
@@ -793,7 +793,7 @@ def get_engine_capabilities() -> dict[str, dict[str, bool | str]]:
             # Transformers does NOT support tensor parallelism for HuggingFace models
             "transformers": False,
             "vllm": "tensor_parallel_size" in vllm_fields,
-            "tensorrt": "tp_size" in tensorrt_fields,
+            "tensorrt": "tensor_parallel_size" in tensorrt_fields,
         },
         "data_parallel": {
             # Transformers data parallelism via Accelerate is not supported in this version

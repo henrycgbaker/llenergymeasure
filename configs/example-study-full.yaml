@@ -235,7 +235,7 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
   # TODO: is this not tensorrt.dtype??
   tensorrt.max_input_len: [512, 1024]
   tensorrt.scheduler.capacity_scheduling_policy: [MAX_UTILIZATION, STATIC_BATCH]
-  # tensorrt.tp_size: [1, 2, 4]     # Tensor parallel (requires multi-GPU hardware)
+  # tensorrt.tensor_parallel_size: [1, 2, 4]     # Tensor parallel (requires multi-GPU hardware)
 
   # --- TensorRT: dependent groups ─────────────────────────────────
 
@@ -563,7 +563,7 @@ experiments:
   #     max_batch_size: 8
   #     max_input_len: 1024
   #     max_seq_len: 2048
-  #     tp_size: 2
+  #     tensor_parallel_size: 2
   #     build_cache:
   #       max_cache_storage_gb: 256
 

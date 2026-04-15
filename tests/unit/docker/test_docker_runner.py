@@ -747,7 +747,7 @@ class TestHFTokenSecure:
 
 
 class TestMpirunInjection:
-    """Verify mpirun is injected iff engine=tensorrt and tp_size > 1."""
+    """Verify mpirun is injected iff engine=tensorrt and tensor_parallel_size > 1."""
 
     def _capture_cmd(self, config, tmp_path) -> list[str]:
         """Run DockerRunner.run() with a fake subprocess and capture the docker cmd."""
@@ -777,10 +777,10 @@ class TestMpirunInjection:
         return captured_cmds[0]
 
     def test_mpirun_injected_for_tensorrt_tp2(self, tmp_path):
-        """TRT-LLM with tp_size=2 gets mpirun -n 2 --allow-run-as-root before python3."""
+        """TRT-LLM with tensor_parallel_size=2 gets mpirun -n 2 --allow-run-as-root before python3."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
-        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tp_size=2))
+        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=2))
         cmd = self._capture_cmd(config, tmp_path)
 
         assert "mpirun" in cmd
@@ -795,10 +795,10 @@ class TestMpirunInjection:
         assert image_idx < mpirun_idx < python_idx
 
     def test_mpirun_injected_for_tensorrt_tp4(self, tmp_path):
-        """TRT-LLM with tp_size=4 gets mpirun -n 4 with correct stringified count."""
+        """TRT-LLM with tensor_parallel_size=4 gets mpirun -n 4 with correct stringified count."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
-        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tp_size=4))
+        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=4))
         cmd = self._capture_cmd(config, tmp_path)
 
         assert "mpirun" in cmd
@@ -806,19 +806,19 @@ class TestMpirunInjection:
         assert cmd[n_idx + 1] == "4"
 
     def test_no_mpirun_for_tensorrt_tp1(self, tmp_path):
-        """TRT-LLM with tp_size=1 does NOT get mpirun (single-GPU path)."""
+        """TRT-LLM with tensor_parallel_size=1 does NOT get mpirun (single-GPU path)."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
-        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tp_size=1))
+        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1))
         cmd = self._capture_cmd(config, tmp_path)
 
         assert "mpirun" not in cmd
 
     def test_no_mpirun_for_tensorrt_tp_none(self, tmp_path):
-        """TRT-LLM with tp_size=None (default) does NOT get mpirun."""
+        """TRT-LLM with tensor_parallel_size=None (default) does NOT get mpirun."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
-        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tp_size=None))
+        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=None))
         cmd = self._capture_cmd(config, tmp_path)
 
         assert "mpirun" not in cmd
@@ -891,7 +891,7 @@ class TestExtraMounts:
         """TRT-LLM engine auto-mounts ~/.cache/trt-llm:/root/.cache/trt-llm."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
-        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tp_size=1))
+        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1))
         runner = DockerRunner(image=IMAGE)
 
         with patch(
@@ -907,7 +907,7 @@ class TestExtraMounts:
         """User's custom /root/.cache/trt-llm path prevents auto-mount duplication."""
         from llenergymeasure.config.engine_configs import TensorRTConfig
 
-        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tp_size=1))
+        config = make_config(engine="tensorrt", tensorrt=TensorRTConfig(tensor_parallel_size=1))
         runner = DockerRunner(
             image=IMAGE,
             extra_mounts=[("/custom/cache", "/root/.cache/trt-llm")],

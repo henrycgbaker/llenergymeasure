@@ -22,7 +22,7 @@ Usage in YAML:
 
     engine: tensorrt
     tensorrt:
-      tp_size: 2
+      tensor_parallel_size: 2
       dtype: bfloat16
       quant:
         quant_algo: FP8
@@ -180,7 +180,9 @@ class TransformersConfig(BaseModel):
         default=None,
         ge=1,
         description=(
-            "Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set."
+            "Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set. "
+            "Field name preserved to match HuggingFace accelerate convention "
+            "(distinct from TensorRTConfig.tensor_parallel_size which aligns with TrtLlmArgs)."
         ),
     )
 
@@ -855,7 +857,7 @@ class TensorRTConfig(BaseModel):
     Example YAML:
         engine: tensorrt
         tensorrt:
-          tp_size: 2
+          tensor_parallel_size: 2
           max_batch_size: 8
           dtype: bfloat16
           quant:
@@ -873,7 +875,11 @@ class TensorRTConfig(BaseModel):
     max_batch_size: int | None = Field(
         default=None, ge=1, description="Max batch size (compile-time constant, None -> 8)"
     )
-    tp_size: int | None = Field(default=None, ge=1, description="Tensor parallel size (None -> 1)")
+    tensor_parallel_size: int | None = Field(
+        default=None,
+        ge=1,
+        description="Tensor parallel size — number of GPUs to shard across (None -> 1).",
+    )
     max_input_len: int | None = Field(
         default=None,
         ge=1,
