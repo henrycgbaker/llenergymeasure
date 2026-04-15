@@ -632,3 +632,66 @@ def test_n_prompts_default_is_100() -> None:
     from llenergymeasure.config.models import DatasetConfig
 
     assert DatasetConfig().n_prompts == 100
+
+
+# ---------------------------------------------------------------------------
+# CurationMetadata presence assertion (C.2)
+# ---------------------------------------------------------------------------
+
+
+def test_every_typed_engine_field_has_curation_metadata() -> None:
+    """Every typed field in engine_configs.py carries CurationMetadata.
+
+    This is the CI gate introduced in Phase 48 Plan C.2. A field that lacks
+    CurationMetadata was added without a rubric verdict and must be fixed.
+    """
+    from llenergymeasure.config.engine_configs import (
+        TensorRTConfig,
+        TensorRTKvCacheConfig,
+        TensorRTQuantConfig,
+        TensorRTSamplingConfig,
+        TensorRTSchedulerConfig,
+        TransformersConfig,
+        VLLMAttentionConfig,
+        VLLMBeamSearchConfig,
+        VLLMEngineConfig,
+        VLLMSamplingConfig,
+        VLLMSpeculativeConfig,
+    )
+
+    engine_models = [
+        TransformersConfig,
+        VLLMSpeculativeConfig,
+        VLLMAttentionConfig,
+        VLLMEngineConfig,
+        VLLMSamplingConfig,
+        VLLMBeamSearchConfig,
+        TensorRTQuantConfig,
+        TensorRTKvCacheConfig,
+        TensorRTSchedulerConfig,
+        TensorRTSamplingConfig,
+        TensorRTConfig,
+    ]
+
+    missing: list[str] = []
+    for model_cls in engine_models:
+        for name, info in model_cls.model_fields.items():
+            extra = info.json_schema_extra
+            if not isinstance(extra, dict):
+                missing.append(
+                    f"{model_cls.__name__}.{name}: json_schema_extra not a dict ({extra!r})"
+                )
+                continue
+            curation = extra.get("curation")
+            if curation is None:
+                missing.append(f"{model_cls.__name__}.{name}: missing 'curation' key")
+                continue
+            if not curation.get("clauses"):
+                missing.append(f"{model_cls.__name__}.{name}: CurationMetadata.clauses is empty")
+            if not curation.get("rationale"):
+                missing.append(f"{model_cls.__name__}.{name}: CurationMetadata.rationale is empty")
+
+    assert not missing, (
+        f"{len(missing)} engine config field(s) missing CurationMetadata:\n"
+        + "\n".join(f"  {m}" for m in missing)
+    )
