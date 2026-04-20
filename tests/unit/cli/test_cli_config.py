@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
+import llenergymeasure.cli.config_cmd as cli_config_mod
 from llenergymeasure.cli import app
 
 runner = CliRunner()
@@ -49,7 +50,7 @@ def test_config_basic_output() -> None:
         return None
 
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=mock_gpu),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=mock_gpu),
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
     ):
         result = runner.invoke(app, ["config"])
@@ -63,7 +64,7 @@ def test_config_basic_output() -> None:
 
 def test_config_no_gpu() -> None:
     """When _probe_gpu returns None, output contains 'No GPU detected'."""
-    with patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None):
+    with patch.object(cli_config_mod, "_probe_gpu", return_value=None):
         result = runner.invoke(app, ["config"])
 
     assert result.exit_code == 0
@@ -72,7 +73,7 @@ def test_config_no_gpu() -> None:
 
 def test_config_verbose_shows_python_version() -> None:
     """--verbose output contains Python and a version number."""
-    with patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None):
+    with patch.object(cli_config_mod, "_probe_gpu", return_value=None):
         result = runner.invoke(app, ["config", "--verbose"])
 
     assert result.exit_code == 0
@@ -88,7 +89,7 @@ def test_config_user_config_path_shown() -> None:
     """User config path is printed in the Config section."""
     fake_path = Path("/home/user/.config/llenergymeasure/config.yaml")
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=None),
         patch("llenergymeasure.config.user_config.get_user_config_path", return_value=fake_path),
     ):
         result = runner.invoke(app, ["config"])
@@ -99,7 +100,7 @@ def test_config_user_config_path_shown() -> None:
 
 def test_config_exits_0() -> None:
     """Config command always exits 0 regardless of environment state."""
-    with patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None):
+    with patch.object(cli_config_mod, "_probe_gpu", return_value=None):
         result = runner.invoke(app, ["config"])
     assert result.exit_code == 0
 
@@ -123,7 +124,7 @@ def test_config_verbose_gpu_driver() -> None:
     mock_nvml_context.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=mock_gpu),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=mock_gpu),
         patch.dict("sys.modules", {"pynvml": mock_pynvml}),
         patch("llenergymeasure.device.gpu_info.nvml_context", mock_nvml_context),
     ):
@@ -144,8 +145,8 @@ def test_config_verbose_engine_versions() -> None:
         return None
 
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
-        patch("llenergymeasure.cli.config_cmd._probe_engine_version", return_value="2.2.0"),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=None),
+        patch.object(cli_config_mod, "_probe_engine_version", return_value="2.2.0"),
         patch("importlib.util.find_spec", side_effect=fake_find_spec),
     ):
         result = runner.invoke(app, ["config", "-v"])
@@ -168,7 +169,7 @@ def test_config_energy_samplers_zeus() -> None:
         return None
 
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=None),
         patch("importlib.util.find_spec", side_effect=fake_find_spec_zeus),
     ):
         result = runner.invoke(app, ["config"])
@@ -184,7 +185,7 @@ def test_config_energy_samplers_none() -> None:
         return None
 
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=None),
         patch("importlib.util.find_spec", side_effect=fake_find_spec_none),
     ):
         result = runner.invoke(app, ["config"])
@@ -203,7 +204,7 @@ def test_config_user_config_not_found() -> None:
     fake_path = Path("/nonexistent/.config/llenergymeasure/config.yaml")
 
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=None),
         patch("llenergymeasure.config.user_config.get_user_config_path", return_value=fake_path),
     ):
         result = runner.invoke(app, ["config"])
@@ -240,7 +241,7 @@ def test_config_user_config_loaded_verbose_non_defaults() -> None:
     # load_user_config and UserConfig are lazy-imported inside the function body —
     # patch at the source module, not at config_cmd
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=None),
         patch("llenergymeasure.config.user_config.get_user_config_path", return_value=fake_path),
         patch("llenergymeasure.config.user_config.load_user_config", return_value=mock_user_cfg),
         patch("llenergymeasure.config.user_config.UserConfig", return_value=defaults_cfg),
@@ -332,7 +333,7 @@ def test_config_verbose_driver_exception_handled() -> None:
     mock_nvml_context.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=mock_gpu),
+        patch.object(cli_config_mod, "_probe_gpu", return_value=mock_gpu),
         patch.dict("sys.modules", {"pynvml": mock_pynvml}),
         patch("llenergymeasure.device.gpu_info.nvml_context", mock_nvml_context),
     ):
@@ -358,7 +359,7 @@ def test_config_cmd_renders_without_rich() -> None:
         sys.modules.pop(k)
 
     try:
-        with patch("llenergymeasure.cli.config_cmd._probe_gpu", return_value=None):
+        with patch.object(cli_config_mod, "_probe_gpu", return_value=None):
             result = runner.invoke(app, ["config"])
         assert result.exit_code == 0, f"config command failed: {result.output}"
     finally:

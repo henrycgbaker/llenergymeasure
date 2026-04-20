@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import llenergymeasure.cli.run as cli_run_mod
 from tests.conftest import make_result, make_study_result, make_user_config
 
 # =============================================================================
@@ -295,15 +296,10 @@ class TestPipelineDryRun:
 
         # Patch VRAM utilities to avoid GPU hardware dependency.
         # estimate_vram returns dict[str, float] | None (not a plain float).
+
         _fake_vram = {"weights_gb": 1.0, "kv_cache_gb": 0.5, "overhead_gb": 0.2, "total_gb": 1.7}
-        monkeypatch.setattr(
-            "llenergymeasure.cli.run.estimate_vram",
-            lambda config: _fake_vram,
-        )
-        monkeypatch.setattr(
-            "llenergymeasure.cli.run.get_gpu_vram_gb",
-            lambda: 40.0,
-        )
+        monkeypatch.setattr(cli_run_mod, "estimate_vram", lambda config: _fake_vram)
+        monkeypatch.setattr(cli_run_mod, "get_gpu_vram_gb", lambda: 40.0)
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", str(yaml_path), "--dry-run"])
@@ -327,6 +323,7 @@ class TestCLIE2ESingleExperiment:
         """CLI run command exits 0 and prints result summary for a single experiment."""
         from typer.testing import CliRunner
 
+        import llenergymeasure.cli.run as cli_run_mod
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
@@ -334,11 +331,7 @@ class TestCLIE2ESingleExperiment:
 
         mock_result = make_result(experiment_id="cli-e2e-001")
 
-        # Patch run_experiment at the CLI module import (tqdm requires the real sys.stderr)
-        monkeypatch.setattr(
-            "llenergymeasure.cli.run.run_experiment",
-            lambda config, **kw: mock_result,
-        )
+        monkeypatch.setattr(cli_run_mod, "run_experiment", lambda config, **kw: mock_result)
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", str(yaml_path)])
@@ -350,14 +343,12 @@ class TestCLIE2ESingleExperiment:
         """CLI run --model gpt2 via CliRunner exits 0."""
         from typer.testing import CliRunner
 
+        import llenergymeasure.cli.run as cli_run_mod
         from llenergymeasure.cli import app
 
         mock_result = make_result(experiment_id="cli-flag-001")
 
-        monkeypatch.setattr(
-            "llenergymeasure.cli.run.run_experiment",
-            lambda config, **kw: mock_result,
-        )
+        monkeypatch.setattr(cli_run_mod, "run_experiment", lambda config, **kw: mock_result)
 
         runner = CliRunner()
         result = runner.invoke(app, ["run", "--model", "gpt2", "--engine", "transformers"])
@@ -431,6 +422,7 @@ class TestCLIE2EErrorExitCodes:
         """llem run exits with correct code when run_experiment raises an error."""
         from typer.testing import CliRunner
 
+        import llenergymeasure.cli.run as cli_run_mod
         import llenergymeasure.utils.exceptions
         from llenergymeasure.cli import app
 
@@ -441,7 +433,8 @@ class TestCLIE2EErrorExitCodes:
         exc_instance = error_cls(f"test {error_class}")
 
         monkeypatch.setattr(
-            "llenergymeasure.cli.run.run_experiment",
+            cli_run_mod,
+            "run_experiment",
             lambda config, **kw: (_ for _ in ()).throw(exc_instance),
         )
 

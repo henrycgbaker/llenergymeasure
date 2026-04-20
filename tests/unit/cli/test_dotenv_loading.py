@@ -18,8 +18,21 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     restored at teardown — a raw ``del sys.modules[...]`` would leak the
     reimport across subsequent tests and cause test-pollution failures
     (e.g. preflight spec lookups returning None in unrelated CLI tests).
+
+    Also saves/restores the ``llenergymeasure.cli`` attribute on the parent
+    package: Python's import machinery sets ``parent.child = module`` as a
+    side effect when importing a subpackage, and ``monkeypatch.delitem`` on
+    ``sys.modules`` alone does not undo that.  Without this, pytest's
+    ``resolve()`` (used by string-target ``monkeypatch.setattr``) follows the
+    stale parent attribute and patches a ghost module that nothing actually
+    calls, making unrelated CLI tests flaky under xdist.
     """
     monkeypatch.chdir(tmp_path)
+    # Save the parent-package attribute so teardown undoes the reimport side effect.
+    import llenergymeasure
+
+    if hasattr(llenergymeasure, "cli"):
+        monkeypatch.setattr(llenergymeasure, "cli", llenergymeasure.cli)
     for modname in list(sys.modules):
         if modname == "llenergymeasure.cli" or modname.startswith("llenergymeasure.cli."):
             monkeypatch.delitem(sys.modules, modname)

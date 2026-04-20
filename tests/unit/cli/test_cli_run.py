@@ -15,6 +15,8 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
+import llenergymeasure.cli._display as cli_display_mod
+import llenergymeasure.cli.run as cli_run_mod
 from llenergymeasure.cli import app
 
 runner = CliRunner()
@@ -179,7 +181,7 @@ def test_run_config_error_exits_2():
     """ConfigError raised by load_experiment_config exits with code 2."""
     from llenergymeasure.utils.exceptions import ConfigError
 
-    with patch("llenergymeasure.cli.run.load_experiment_config") as mock_load:
+    with patch.object(cli_run_mod, "load_experiment_config") as mock_load:
         mock_load.side_effect = ConfigError("bad config: unknown field 'foop'")
         result = runner.invoke(app, ["run", "nonexistent.yaml"])
 
@@ -206,8 +208,8 @@ def test_run_preflight_error_exits_1():
     mock_config = _make_mock_config()
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment") as mock_run,
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "run_experiment") as mock_run,
     ):
         mock_run.side_effect = PreFlightError("no GPU available")
         result = runner.invoke(app, ["run", "--model", "gpt2"])
@@ -225,8 +227,8 @@ def test_run_experiment_error_exits_1():
     mock_config = _make_mock_config()
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment") as mock_run,
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "run_experiment") as mock_run,
     ):
         mock_run.side_effect = ExperimentError("inference crashed")
         result = runner.invoke(app, ["run", "--model", "gpt2"])
@@ -253,10 +255,10 @@ def test_run_dry_run_exits_0():
     }
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.estimate_vram", return_value=mock_vram),
-        patch("llenergymeasure.cli.run.get_gpu_vram_gb", return_value=None),
-        patch("llenergymeasure.cli.run.print_dry_run") as mock_print_dry,
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "estimate_vram", return_value=mock_vram),
+        patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None),
+        patch.object(cli_run_mod, "print_dry_run") as mock_print_dry,
     ):
         result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run"])
 
@@ -271,10 +273,10 @@ def test_run_dry_run_calls_estimate_vram():
     mock_config = _make_mock_config()
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.estimate_vram", return_value=None) as mock_vram,
-        patch("llenergymeasure.cli.run.get_gpu_vram_gb", return_value=None) as mock_gpu_vram,
-        patch("llenergymeasure.cli.run.print_dry_run"),
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "estimate_vram", return_value=None) as mock_vram,
+        patch.object(cli_run_mod, "get_gpu_vram_gb", return_value=None) as mock_gpu_vram,
+        patch.object(cli_run_mod, "print_dry_run"),
     ):
         result = runner.invoke(app, ["run", "--model", "gpt2", "--dry-run"])
 
@@ -294,9 +296,9 @@ def test_run_quiet_flag_accepted():
     mock_result = _make_mock_result()
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result) as mock_run,
-        patch("llenergymeasure.cli.run.print_result_summary"),
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "run_experiment", return_value=mock_result) as mock_run,
+        patch.object(cli_run_mod, "print_result_summary"),
     ):
         result = runner.invoke(app, ["run", "--model", "gpt2", "--quiet"])
 
@@ -320,9 +322,9 @@ def test_run_success_prints_summary():
     mock_result = _make_mock_result()
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result),
-        patch("llenergymeasure.cli.run.print_result_summary") as mock_summary,
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "run_experiment", return_value=mock_result),
+        patch.object(cli_run_mod, "print_result_summary") as mock_summary,
     ):
         result = runner.invoke(app, ["run", "--model", "gpt2"])
 
@@ -454,7 +456,7 @@ def test_run_study_routing_sweep_yaml(tmp_path):
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.loader.load_study_config") as mock_load,
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         mock_config = MagicMock()
         mock_config.experiments = [MagicMock(), MagicMock()]
@@ -483,7 +485,7 @@ def test_run_study_routing_experiments_yaml(tmp_path):
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.loader.load_study_config") as mock_load,
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         mock_config = MagicMock()
         mock_config.experiments = [MagicMock(), MagicMock()]
@@ -506,9 +508,9 @@ def test_run_saves_to_output_dir(tmp_path):
     output_dir = tmp_path / "out"
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment", return_value=mock_result) as mock_run,
-        patch("llenergymeasure.cli.run.print_result_summary"),
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "run_experiment", return_value=mock_result) as mock_run,
+        patch.object(cli_run_mod, "print_result_summary"),
     ):
         result = runner.invoke(app, ["run", "--model", "gpt2", "--output", str(output_dir)])
 
@@ -535,7 +537,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml)])
 
@@ -561,8 +563,8 @@ def test_run_engine_error_exits_1():
     mock_config = _make_mock_config()
 
     with (
-        patch("llenergymeasure.cli.run.load_experiment_config", return_value=mock_config),
-        patch("llenergymeasure.cli.run.run_experiment") as mock_run,
+        patch.object(cli_run_mod, "load_experiment_config", return_value=mock_config),
+        patch.object(cli_run_mod, "run_experiment") as mock_run,
     ):
         mock_run.side_effect = EngineError("OOM during forward pass")
         result = runner.invoke(app, ["run", "--model", "gpt2"])
@@ -603,7 +605,7 @@ def test_fail_fast_sets_max_consecutive_failures(tmp_path):
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--fail-fast"])
 
@@ -624,7 +626,7 @@ def test_no_circuit_breaker_sets_max_failures_zero(tmp_path):
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--no-circuit-breaker"])
 
@@ -644,7 +646,7 @@ def test_timeout_flag_sets_wall_clock_timeout(tmp_path):
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "24"])
 
@@ -664,7 +666,7 @@ def test_timeout_flag_fractional(tmp_path):
         patch("llenergymeasure.config.loader.load_study_config", side_effect=_capture_load),
         patch("llenergymeasure.run_study", return_value=mock_study_result),
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--timeout", "1.5"])
 
@@ -689,7 +691,7 @@ def test_resume_flag_passes_resume_to_api(tmp_path):
         patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
         patch(
             "llenergymeasure.api.find_resumable_study",
             return_value=tmp_path / "fake-study",
@@ -722,7 +724,7 @@ def test_resume_dir_flag_passes_path_to_api(tmp_path):
         patch("llenergymeasure.config.loader.load_study_config", return_value=mock_study_config),
         patch("llenergymeasure.run_study", return_value=mock_study_result) as mock_run,
         patch("llenergymeasure.config.grid.build_preflight_panel"),
-        patch("llenergymeasure.cli._display.print_study_summary"),
+        patch.object(cli_display_mod, "print_study_summary"),
     ):
         result = runner.invoke(app, ["run", str(study_yaml), "--resume-dir", str(explicit_dir)])
 
