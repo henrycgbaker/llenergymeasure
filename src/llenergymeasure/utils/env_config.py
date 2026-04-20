@@ -21,6 +21,14 @@ import os
 from pathlib import Path
 from typing import Final
 
+_TRUTHY: Final = frozenset({"1", "true", "yes", "on"})
+
+
+def parse_bool_env(var: str) -> bool:
+    """Parse an env var as a boolean (``1``/``true``/``yes``/``on`` -> True)."""
+    return os.environ.get(var, "").strip().lower() in _TRUTHY
+
+
 ENV_TRANSFORMERS_DEFAULT_DEVICE_MAP: Final = "LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP"
 """Override for the HuggingFace ``device_map`` argument at model load.
 
@@ -74,7 +82,7 @@ def trt_build_cache_enabled() -> bool:
     out-of-the-box experience preserves the cache (engine compilation takes
     minutes); deleting the line reverts to TRT-LLM's disabled default.
     """
-    return os.environ.get(ENV_TRT_BUILD_CACHE_ENABLED, "").lower() in {"1", "true", "yes", "on"}
+    return parse_bool_env(ENV_TRT_BUILD_CACHE_ENABLED)
 
 
 def trt_build_cache_path() -> Path | None:

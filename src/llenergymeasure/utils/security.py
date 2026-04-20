@@ -1,9 +1,9 @@
 """Security utilities for llenergymeasure."""
 
-import os
 from pathlib import Path
 from typing import Final
 
+from llenergymeasure.utils.env_config import parse_bool_env
 from llenergymeasure.utils.exceptions import ConfigError
 
 ENV_TRUST_REMOTE_CODE: Final = "LLEM_TRUST_REMOTE_CODE"
@@ -20,7 +20,7 @@ def trust_remote_code_enabled() -> bool:
     Setting True allows loading models that ship custom Python implementations
     (Qwen, DeepSeek, ChatGLM, etc.) at the cost of executing repo-supplied code.
     """
-    return os.environ.get(ENV_TRUST_REMOTE_CODE, "").lower() in {"1", "true", "yes", "on"}
+    return parse_bool_env(ENV_TRUST_REMOTE_CODE)
 
 
 def validate_path(path: Path, must_exist: bool = False, allow_relative: bool = True) -> Path:

@@ -17,7 +17,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import subprocess
 from dataclasses import dataclass
 from functools import cache
@@ -155,6 +154,7 @@ def rebuild_hint(engine: str) -> str:
 
 
 def skip_check_enabled() -> bool:
-    """True iff ``LLEM_SKIP_IMAGE_CHECK`` is set to ``1``/``true``/``yes``."""
-    raw = os.environ.get(ENV_SKIP_IMAGE_CHECK, "")
-    return raw.strip().lower() in {"1", "true", "yes"}
+    """True iff ``LLEM_SKIP_IMAGE_CHECK`` is set to a truthy value."""
+    from llenergymeasure.utils.env_config import parse_bool_env
+
+    return parse_bool_env(ENV_SKIP_IMAGE_CHECK)
