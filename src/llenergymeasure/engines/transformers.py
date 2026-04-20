@@ -290,6 +290,9 @@ class TransformersEngine:
 
         pt = config.transformers
 
+        from llenergymeasure.utils.env_config import default_device_map
+        from llenergymeasure.utils.security import trust_remote_code_enabled
+
         # Device placement / tensor parallelism — mutually exclusive
         if pt is not None and pt.tp_plan is not None:
             # Tensor parallelism: tp_plan replaces device_map entirely
@@ -300,9 +303,12 @@ class TransformersEngine:
         elif pt is not None and pt.device_map is not None:
             kwargs["device_map"] = pt.device_map
         else:
-            kwargs["device_map"] = "auto"
-
-        from llenergymeasure.utils.security import trust_remote_code_enabled
+            # Precedence: typed pt.device_map (above) > LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP
+            # env var (set by .env) > HF default (None = CPU). Helper is pure
+            # passthrough; .env.example ships `=auto` as the opinionated default.
+            dm = default_device_map()
+            if dm is not None:
+                kwargs["device_map"] = dm
 
         kwargs["trust_remote_code"] = trust_remote_code_enabled()
 

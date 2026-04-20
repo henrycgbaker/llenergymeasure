@@ -487,8 +487,10 @@ def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
         call_count += 1
         return vram_small if call_count == 1 else vram_large
 
-    monkeypatch.setattr("llenergymeasure.cli._vram.estimate_vram", mock_estimate)
-    monkeypatch.setattr("llenergymeasure.cli._vram.get_gpu_vram_gb", lambda: 40.0)
+    import llenergymeasure.cli._vram as _vram_mod
+
+    monkeypatch.setattr(_vram_mod, "estimate_vram", mock_estimate)
+    monkeypatch.setattr(_vram_mod, "get_gpu_vram_gb", lambda: 40.0)
 
     print_study_dry_run(study)
     out = capsys.readouterr().out
