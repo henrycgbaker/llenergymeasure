@@ -54,11 +54,7 @@ class TransformersEngine:
         config: ExperimentConfig,
         on_substep: Callable[[str, float], None] | None = None,
     ) -> tuple[Any, Any]:
-        """Load model and tokenizer directly — no intermediate loader class.
-
-        The P0 fix: kwargs are built by _model_load_kwargs() and passed
-        directly to from_pretrained(). The v1.x bug was that _build_model_kwargs()
-        built the dict but loader.load(config) ignored it.
+        """Load model and tokenizer via from_pretrained().
 
         Args:
             config: Experiment configuration.
@@ -74,11 +70,9 @@ class TransformersEngine:
         kwargs = self._model_load_kwargs(config)
         logger.info("Loading model %r with kwargs: %s", config.model, list(kwargs.keys()))
 
-        from llenergymeasure.utils.security import trust_remote_code_enabled
-
         t0 = _time.perf_counter()
         tokenizer = AutoTokenizer.from_pretrained(
-            config.model, trust_remote_code=trust_remote_code_enabled()
+            config.model, trust_remote_code=kwargs.get("trust_remote_code", False)
         )
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -275,9 +269,6 @@ class TransformersEngine:
     def _model_load_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build the full kwargs dict for AutoModelForCausalLM.from_pretrained().
 
-        This is the P0 fix location: passthrough_kwargs and transformers config
-        options are ALL collected here and ALL passed to from_pretrained().
-
         Args:
             config: Experiment configuration.
 
@@ -303,9 +294,6 @@ class TransformersEngine:
         elif pt is not None and pt.device_map is not None:
             kwargs["device_map"] = pt.device_map
         else:
-            # Precedence: typed pt.device_map (above) > LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP
-            # env var (set by .env) > HF default (None = CPU). Helper is pure
-            # passthrough; .env.example ships `=auto` as the opinionated default.
             dm = default_device_map()
             if dm is not None:
                 kwargs["device_map"] = dm
