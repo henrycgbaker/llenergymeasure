@@ -303,7 +303,7 @@ class TransformersEngine:
         elif pt is not None and pt.device_map is not None:
             kwargs["device_map"] = pt.device_map
         else:
-            # Precedence: typed pt.device_map (above) > LLEM_DEFAULT_DEVICE_MAP
+            # Precedence: typed pt.device_map (above) > LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP
             # env var (set by .env) > HF default (None = CPU). Helper is pure
             # passthrough; .env.example ships `=auto` as the opinionated default.
             dm = default_device_map()

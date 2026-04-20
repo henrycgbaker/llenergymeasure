@@ -146,15 +146,15 @@ def test_detect_default_engine_error_message_has_install_hint():
 def test_model_load_kwargs_contains_base_keys(monkeypatch):
     """_model_load_kwargs always includes torch_dtype and trust_remote_code.
 
-    device_map is present only when LLEM_DEFAULT_DEVICE_MAP is set — simulate
-    the production default (``.env`` loaded, ``LLEM_DEFAULT_DEVICE_MAP=auto``)
+    device_map is present only when LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP is set — simulate
+    the production default (``.env`` loaded, ``LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP=auto``)
     via monkeypatch so the assertion does not depend on the test host's env.
     """
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
-    monkeypatch.setenv("LLEM_DEFAULT_DEVICE_MAP", "auto")
+    monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")
     kwargs = engine._model_load_kwargs(config)
@@ -166,12 +166,12 @@ def test_model_load_kwargs_contains_base_keys(monkeypatch):
 
 
 def test_device_map_absent_when_env_unset(monkeypatch):
-    """With LLEM_DEFAULT_DEVICE_MAP unset, helper returns None and kwarg is omitted."""
+    """With LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP unset, helper returns None and kwarg is omitted."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
-    monkeypatch.delenv("LLEM_DEFAULT_DEVICE_MAP", raising=False)
+    monkeypatch.delenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", raising=False)
     engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")
     kwargs = engine._model_load_kwargs(config)
@@ -180,12 +180,12 @@ def test_device_map_absent_when_env_unset(monkeypatch):
 
 
 def test_device_map_env_var_override(monkeypatch):
-    """LLEM_DEFAULT_DEVICE_MAP=balanced → kwargs['device_map'] == 'balanced'."""
+    """LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP=balanced → kwargs['device_map'] == 'balanced'."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
-    monkeypatch.setenv("LLEM_DEFAULT_DEVICE_MAP", "balanced")
+    monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "balanced")
     engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")
     kwargs = engine._model_load_kwargs(config)
@@ -194,12 +194,12 @@ def test_device_map_env_var_override(monkeypatch):
 
 
 def test_device_map_env_var_empty_is_unset(monkeypatch):
-    """LLEM_DEFAULT_DEVICE_MAP='' is treated as unset: kwarg absent, HF default applies."""
+    """LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP='' is treated as unset: kwarg absent, HF default applies."""
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
-    monkeypatch.setenv("LLEM_DEFAULT_DEVICE_MAP", "")
+    monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "")
     engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")
     kwargs = engine._model_load_kwargs(config)
@@ -252,14 +252,14 @@ def test_model_load_kwargs_passthrough_can_override_defaults():
 def test_model_load_kwargs_no_passthrough_when_none(monkeypatch):
     """No extra keys added when passthrough_kwargs is None.
 
-    Sets LLEM_DEFAULT_DEVICE_MAP=auto to mimic the production .env state so
+    Sets LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP=auto to mimic the production .env state so
     device_map appears in the expected-keys set.
     """
     pytest.importorskip("torch")
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
-    monkeypatch.setenv("LLEM_DEFAULT_DEVICE_MAP", "auto")
+    monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2")  # passthrough_kwargs=None by default
     kwargs = engine._model_load_kwargs(config)
@@ -675,7 +675,7 @@ def test_model_load_kwargs_tp_plan_and_tp_size_forwarded():
 def test_model_load_kwargs_tp_size_without_tp_plan_ignored(monkeypatch):
     """With TransformersConfig(tp_size=4) and no tp_plan, tp_size is not in kwargs and device_map defaults.
 
-    Sets LLEM_DEFAULT_DEVICE_MAP=auto explicitly to mimic the production .env state,
+    Sets LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP=auto explicitly to mimic the production .env state,
     since the helper is now pure passthrough (unset → None → kwarg omitted).
     """
     pytest.importorskip("torch")
@@ -683,7 +683,7 @@ def test_model_load_kwargs_tp_size_without_tp_plan_ignored(monkeypatch):
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
-    monkeypatch.setenv("LLEM_DEFAULT_DEVICE_MAP", "auto")
+    monkeypatch.setenv("LLEM_TRANSFORMERS_DEFAULT_DEVICE_MAP", "auto")
     engine = TransformersEngine()
     config = ExperimentConfig(model="gpt2", transformers=TransformersConfig(tp_size=4))
     kwargs = engine._model_load_kwargs(config)
