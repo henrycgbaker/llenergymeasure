@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import llenergymeasure.cli.run as cli_run_mod
 from tests.conftest import make_result, make_study_result, make_user_config
 
 # =============================================================================
@@ -295,7 +296,6 @@ class TestPipelineDryRun:
 
         # Patch VRAM utilities to avoid GPU hardware dependency.
         # estimate_vram returns dict[str, float] | None (not a plain float).
-        import llenergymeasure.cli.run as cli_run_mod
 
         _fake_vram = {"weights_gb": 1.0, "kv_cache_gb": 0.5, "overhead_gb": 0.2, "total_gb": 1.7}
         monkeypatch.setattr(cli_run_mod, "estimate_vram", lambda config: _fake_vram)
