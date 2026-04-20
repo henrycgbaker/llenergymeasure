@@ -158,13 +158,13 @@ class TestProtocolCompliance:
 
 
 class TestBuildLlmKwargs:
-    def test_build_llm_kwargs_minimal(self):
+    def test_build_llm_kwargs_minimal(self, monkeypatch):
         """No tensorrt config → kwargs has model and enable_build_cache; no backend kwarg.
 
-        With the typed backend field absent, TRT-LLM auto-picks (respecting
-        TLLM_USE_TRT_ENGINE); the old hardcoded "trt" default is removed so
-        the kwarg is omitted.
+        Sets LLEM_TRT_BUILD_CACHE_ENABLED=1 to mimic the production .env state,
+        since the helper is now pure passthrough (unset → False → kwarg omitted).
         """
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
         config = make_config(**_TRT_DEFAULTS)
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
@@ -249,8 +249,9 @@ class TestBuildLlmKwargs:
         assert "max_seq_len" not in kwargs
         assert "fast_build" not in kwargs
 
-    def test_build_llm_kwargs_default_build_cache_when_no_build_cache_section(self):
-        """When no build_cache section, enable_build_cache=True is set."""
+    def test_build_llm_kwargs_default_build_cache_when_no_build_cache_section(self, monkeypatch):
+        """When no build_cache section and .env ships LLEM_TRT_BUILD_CACHE_ENABLED=1, enable_build_cache=True."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
@@ -273,13 +274,77 @@ class TestBuildLlmKwargs:
         assert isinstance(kwargs["quantization"], _MockQuantConfig)
         assert kwargs["quantization"]._kwargs["quant_algo"] == "INT8"
 
-    def test_build_llm_kwargs_always_has_enable_build_cache(self):
-        """enable_build_cache=True is always set (TensorRTBuildCacheConfig dropped D1)."""
+    def test_build_llm_kwargs_enable_build_cache_when_env_set(self, monkeypatch):
+        """LLEM_TRT_BUILD_CACHE_ENABLED=1 with tensorrt section → enable_build_cache=True."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig())
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs.get("enable_build_cache") is True
+
+    def test_trt_build_cache_absent_when_env_unset(self, monkeypatch):
+        """Pure passthrough: LLEM_TRT_BUILD_CACHE_ENABLED unset → kwarg absent (TRT-LLM default)."""
+        monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_ENABLED", raising=False)
+        monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_PATH", raising=False)
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert "enable_build_cache" not in kwargs
+
+    def test_trt_build_cache_disabled_by_env_var(self, monkeypatch):
+        """LLEM_TRT_BUILD_CACHE_ENABLED=0 → kwarg absent."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "0")
+        monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_PATH", raising=False)
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert "enable_build_cache" not in kwargs
+
+        # Also covers the no-tensorrt-section branch.
+        config_no_trt = make_config(**_TRT_DEFAULTS)
+        kwargs_no_trt = engine._build_llm_kwargs(config_no_trt)
+        assert "enable_build_cache" not in kwargs_no_trt
+
+    def test_trt_build_cache_path_used_when_both_env_vars_set(self, monkeypatch):
+        """LLEM_TRT_BUILD_CACHE_ENABLED=1 + LLEM_TRT_BUILD_CACHE_PATH=... → BuildCacheConfig(cache_root=path)."""
+        mock_trt = _make_fake_tensorrt_llm_module()
+        monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
+        monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_PATH", "/tmp/test")
+
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        from pathlib import Path as _Path
+
+        assert "enable_build_cache" in kwargs
+        assert isinstance(kwargs["enable_build_cache"], _MockBuildCacheConfig)
+        assert kwargs["enable_build_cache"]._kwargs["cache_root"] == _Path("/tmp/test")
+
+    def test_trt_build_cache_enabled_alone_is_bare_true(self, monkeypatch):
+        """LLEM_TRT_BUILD_CACHE_ENABLED=1, path unset → enable_build_cache is bare True."""
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_ENABLED", "1")
+        monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_PATH", raising=False)
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert kwargs["enable_build_cache"] is True
+
+    def test_trt_build_cache_path_requires_enabled(self, monkeypatch):
+        """LLEM_TRT_BUILD_CACHE_PATH set but ENABLED unset → kwarg absent (passthrough rule)."""
+        monkeypatch.delenv("LLEM_TRT_BUILD_CACHE_ENABLED", raising=False)
+        monkeypatch.setenv("LLEM_TRT_BUILD_CACHE_PATH", "/tmp/test")
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(tensor_parallel_size=1))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert "enable_build_cache" not in kwargs
 
     def test_build_llm_kwargs_kv_cache_config(self, monkeypatch):
         """kv_cache section maps to KvCacheConfig kwargs."""

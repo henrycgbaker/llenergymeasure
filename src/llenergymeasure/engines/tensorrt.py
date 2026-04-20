@@ -79,6 +79,44 @@ def _validate_engine_directory(engine_path: Path, tp_size: int) -> list[str]:
     return errors
 
 
+def _apply_default_build_cache(kwargs: dict[str, Any]) -> None:
+    """Apply the env-var-gated default TRT-LLM build cache to ``kwargs``.
+
+    The opinionated llenergymeasure default is enabled (engine compilation is
+    expensive; the cache is a large time-saver for repeat runs) — shipped via
+    ``LLEM_TRT_BUILD_CACHE_ENABLED=1`` in ``.env.example``. The helpers are
+    pure passthrough (see :mod:`llenergymeasure.utils.env_config`), so
+    removing the line reverts to TRT-LLM's disabled default.
+
+    - Disabled by env → ``enable_build_cache`` is not set (TRT-LLM default is
+      False, matching the discovered schema).
+    - Enabled with a user-supplied path → build a ``BuildCacheConfig`` whose
+      ``cache_root`` is that path. Falls back to bare ``True`` if the
+      ``tensorrt_llm.llmapi`` import is unavailable (mirrors the behaviour of
+      the explicit YAML-driven path).
+    - Enabled without a path → set ``enable_build_cache = True`` (preserves the
+      pre-env-var behaviour).
+    """
+    from llenergymeasure.utils.env_config import trt_build_cache_enabled, trt_build_cache_path
+
+    if not trt_build_cache_enabled():
+        return
+
+    cache_root = trt_build_cache_path()
+    if cache_root is not None:
+        try:
+            from tensorrt_llm.llmapi import BuildCacheConfig
+
+            kwargs["enable_build_cache"] = BuildCacheConfig(cache_root=cache_root)
+            return
+        except ImportError:
+            logger.debug(
+                "tensorrt_llm.llmapi not available; falling back to bare enable_build_cache=True"
+            )
+
+    kwargs["enable_build_cache"] = True
+
+
 class TensorRTEngine:
     """TensorRT-LLM inference engine — offline batch mode, thin plugin.
 
@@ -413,8 +451,8 @@ class TensorRTEngine:
             return early_kwargs
 
         if trt is None:
-            # No tensorrt section — use defaults + enable build cache
-            kwargs["enable_build_cache"] = True
+            # No tensorrt section — apply env-var-gated default build cache.
+            _apply_default_build_cache(kwargs)
             return kwargs
 
         # Scalar fields: map directly
@@ -452,10 +490,9 @@ class TensorRTEngine:
             except ImportError:
                 logger.debug("tensorrt_llm.llmapi not available; skipping QuantConfig")
 
-        # Build cache — enable by default; advanced config via extra="allow" passthrough.
-        # TensorRTBuildCacheConfig was dropped (D1 plumbing). Users can still pass
-        # build_cache fields through extra="allow" if needed.
-        kwargs["enable_build_cache"] = True
+        # Build cache — env-var-gated default.
+        # TensorRTBuildCacheConfig was dropped (D1); advanced config via extra="allow".
+        _apply_default_build_cache(kwargs)
 
         # KV cache config
         if trt.kv_cache is not None:
