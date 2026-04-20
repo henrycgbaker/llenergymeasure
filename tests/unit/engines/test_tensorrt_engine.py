@@ -159,14 +159,51 @@ class TestProtocolCompliance:
 
 class TestBuildLlmKwargs:
     def test_build_llm_kwargs_minimal(self):
-        """No tensorrt config → kwargs has model and backend='trt' and enable_build_cache."""
+        """No tensorrt config → kwargs has model and enable_build_cache; no backend kwarg.
+
+        With the typed backend field absent, TRT-LLM auto-picks (respecting
+        TLLM_USE_TRT_ENGINE); the old hardcoded "trt" default is removed so
+        the kwarg is omitted.
+        """
         config = make_config(**_TRT_DEFAULTS)
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
         assert kwargs["model"] == "test-model"
-        assert kwargs["backend"] == "trt"
+        assert "backend" not in kwargs
         assert kwargs.get("enable_build_cache") is True
+
+    def test_build_llm_kwargs_backend_trt(self):
+        """tensorrt.backend='trt' → kwargs['backend'] == 'trt' (AOT-compiled engine path)."""
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(backend="trt"))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert kwargs["backend"] == "trt"
+
+    def test_build_llm_kwargs_backend_pytorch(self):
+        """tensorrt.backend='pytorch' → kwargs['backend'] == 'pytorch' (eager runtime, no compile)."""
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(backend="pytorch"))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert kwargs["backend"] == "pytorch"
+
+    def test_build_llm_kwargs_backend_autodeploy(self):
+        """tensorrt.backend='_autodeploy' → kwargs['backend'] == '_autodeploy' (experimental)."""
+        config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(backend="_autodeploy"))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert kwargs["backend"] == "_autodeploy"
+
+    def test_build_llm_kwargs_backend_invalid_rejected_by_pydantic(self):
+        """Literal rejects non-enumerated values at config construction."""
+        import pytest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            TensorRTConfig(backend="invalid")
 
     def test_build_llm_kwargs_tensor_parallel_size(self):
         """tensor_parallel_size=2 maps to kwargs tensor_parallel_size=2."""
@@ -686,12 +723,28 @@ class TestValidateEngineDirectory:
 
 class TestBuildLlmKwargsEnginePath:
     def test_build_llm_kwargs_engine_path(self, tmp_path):
-        """engine_path set -> kwargs has model=engine_path as string and engine=trt."""
+        """engine_path set → kwargs has model=engine_path as string; backend kwarg absent unless typed field set."""
         config_data = {"pretrained_config": {"mapping": {"tp_size": 1}}, "build_config": {}}
         (tmp_path / "config.json").write_text(json.dumps(config_data))
         (tmp_path / "rank0.engine").write_bytes(b"fake")
 
         config = make_config(**_TRT_DEFAULTS, tensorrt=TensorRTConfig(engine_path=str(tmp_path)))
+        engine = TensorRTEngine()
+        kwargs = engine._build_llm_kwargs(config)
+
+        assert kwargs["model"] == str(tmp_path)
+        assert "backend" not in kwargs
+
+    def test_build_llm_kwargs_engine_path_with_typed_backend(self, tmp_path):
+        """engine_path + typed backend → both present in the early-return kwargs."""
+        config_data = {"pretrained_config": {"mapping": {"tp_size": 1}}, "build_config": {}}
+        (tmp_path / "config.json").write_text(json.dumps(config_data))
+        (tmp_path / "rank0.engine").write_bytes(b"fake")
+
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(engine_path=str(tmp_path), backend="trt"),
+        )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
 
