@@ -449,9 +449,10 @@ def test_print_study_dry_run_shows_configs(capsys, monkeypatch):
     ]
     study = StudyConfig(experiments=configs, study_name="test-sweep")
 
-    # Mock VRAM functions to avoid GPU dependency
-    monkeypatch.setattr("llenergymeasure.cli._vram.estimate_vram", lambda c: None)
-    monkeypatch.setattr("llenergymeasure.cli._vram.get_gpu_vram_gb", lambda: None)
+    import llenergymeasure.cli._vram as _vram_mod
+
+    monkeypatch.setattr(_vram_mod, "estimate_vram", lambda c: None)
+    monkeypatch.setattr(_vram_mod, "get_gpu_vram_gb", lambda: None)
 
     print_study_dry_run(study)
     out = capsys.readouterr().out
