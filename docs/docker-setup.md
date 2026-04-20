@@ -510,6 +510,21 @@ llem run experiment.yaml --skip-preflight
 
 ---
 
+## Keeping Engine Schemas Fresh
+
+When you update an engine version (by bumping the `ARG` in a Dockerfile), the
+vendored parameter schemas must be regenerated. This happens automatically via
+the [Schema Refresh Pipeline](schema-refresh.md) for Renovate-managed bumps.
+For manual bumps, run:
+
+```bash
+./scripts/update_engine_schema.sh <engine>
+```
+
+See [Schema Refresh Pipeline](schema-refresh.md) for the full workflow.
+
+---
+
 ## Next Steps
 
 - [Getting Started](getting-started.md) — run your first vLLM or TensorRT-LLM experiment
