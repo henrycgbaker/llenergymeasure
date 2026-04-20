@@ -269,7 +269,6 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         "vllm.engine.pipeline_parallel_size": [0],  # ge=1: 0 violates ge
         "vllm.engine.num_speculative_tokens": [0],  # ge=1: 0 violates ge
         # VLLMSamplingConfig: one known-invalid value per constrained field
-        "vllm.sampling.max_tokens": [0],  # ge=1: 0 violates ge
         "vllm.sampling.presence_penalty": [3.0],  # ge=-2.0, le=2.0: 3.0 violates le
         "vllm.sampling.frequency_penalty": [-3.0],  # ge=-2.0, le=2.0: -3.0 violates ge
         # VLLMEngineConfig: constrained fields
@@ -279,19 +278,13 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         "vllm.sampling.n": [0],  # ge=1: 0 violates ge
         # VLLMBeamSearchConfig: constrained fields
         "vllm.beam_search.beam_width": [0],  # ge=1: 0 violates ge
-        "vllm.beam_search.max_tokens": [0],  # ge=1: 0 violates ge
         # TensorRTConfig: compile-time params
         "tensorrt.max_batch_size": [0],  # ge=1: 0 violates ge
         "tensorrt.tensor_parallel_size": [0],  # ge=1: 0 violates ge
         "tensorrt.max_input_len": [0],  # ge=1: 0 violates ge
         "tensorrt.max_seq_len": [0],  # ge=1: 0 violates ge
-        # TensorRTCalibConfig: calibration params
-        "tensorrt.calib.calib_batches": [0],  # ge=1: 0 violates ge
-        "tensorrt.calib.calib_max_seq_length": [0],  # ge=1: 0 violates ge
         # TensorRTKvCacheConfig: cache params
         "tensorrt.kv_cache.max_tokens": [0],  # ge=1: 0 violates ge
-        # TensorRTBuildCacheConfig: engine cache params
-        "tensorrt.build_cache.max_records": [0],  # ge=1: 0 violates ge
         # TensorRTSamplingConfig: sampling params
         "tensorrt.sampling.n": [0],  # ge=1: 0 violates ge
     }
@@ -535,124 +528,53 @@ def list_all_param_paths(engine: str | None = None) -> list[str]:
 # =============================================================================
 
 
+def get_mutual_exclusions() -> dict[str, list[str]]:
+    """Get parameters that are mutually exclusive.
+
+    Returns:
+        Dict mapping param path to list of params it cannot be used with.
+        These combinations should be skipped during runtime testing.
+    """
+    return {
+        # Transformers: can't use both 4-bit and 8-bit quantization
+        "transformers.load_in_4bit": ["transformers.load_in_8bit"],
+        "transformers.load_in_8bit": ["transformers.load_in_4bit"],
+        # torch_compile sub-options require torch_compile=True
+        "transformers.torch_compile_mode": ["transformers.torch_compile=None|False"],
+        "transformers.torch_compile_backend": ["transformers.torch_compile=None|False"],
+        # BitsAndBytes 4-bit sub-options require load_in_4bit=True
+        "transformers.bnb_4bit_compute_dtype": ["transformers.load_in_4bit=None|False"],
+        "transformers.bnb_4bit_quant_type": ["transformers.load_in_4bit=None|False"],
+        "transformers.bnb_4bit_use_double_quant": ["transformers.load_in_4bit=None|False"],
+        # cache_implementation contradicts use_cache=False
+        "transformers.cache_implementation": ["transformers.use_cache=False"],
+        # vLLM kv_cache_memory_bytes vs gpu_memory_utilization
+        "vllm.engine.kv_cache_memory_bytes": ["vllm.engine.gpu_memory_utilization"],
+        "vllm.engine.gpu_memory_utilization": ["vllm.engine.kv_cache_memory_bytes"],
+        # vLLM beam_search vs sampling sections (cross-section mutual exclusion)
+        "vllm.beam_search": ["vllm.sampling"],
+        "vllm.sampling": ["vllm.beam_search"],
+        # TensorRT: quantisation method is exclusive
+        "tensorrt.quant.quant_algo": [],  # Handled by Literal type constraint
+    }
+
+
 def get_engine_specific_params() -> dict[str, list[str]]:
     """Get params that are only valid for specific engines.
 
+    Derived from the Pydantic engine models via ``get_engine_params`` — never
+    hand-maintained. Adding or removing a typed field in
+    ``engine_configs.py`` is automatically reflected here.
+
+    Fields reachable only through ``extra="allow"`` passthrough (e.g. dropped
+    typed fields still settable in YAML) are not included, since they are not
+    part of the typed contract this function describes.
+
     Returns:
-        Dict mapping engine name to list of exclusive param paths.
-        Derived from v2.0 minimal engine config fields.
+        Dict mapping engine name to list of dotted param paths exclusive to
+        that engine.
     """
-    return {
-        "transformers": [
-            "transformers.batch_size",
-            "transformers.attn_implementation",
-            "transformers.torch_compile",
-            "transformers.torch_compile_mode",
-            "transformers.torch_compile_backend",
-            "transformers.load_in_4bit",
-            "transformers.load_in_8bit",
-            "transformers.bnb_4bit_compute_dtype",
-            "transformers.bnb_4bit_quant_type",
-            "transformers.bnb_4bit_use_double_quant",
-            "transformers.use_cache",
-            "transformers.cache_implementation",
-            "transformers.num_beams",
-            "transformers.early_stopping",
-            "transformers.length_penalty",
-            "transformers.no_repeat_ngram_size",
-            "transformers.prompt_lookup_num_tokens",
-            "transformers.device_map",
-            "transformers.max_memory",
-            "transformers.revision",
-            "transformers.trust_remote_code",
-        ],
-        "vllm": [
-            # Engine-level params (vllm.LLM() constructor args)
-            "vllm.engine.gpu_memory_utilization",
-            "vllm.engine.swap_space",
-            "vllm.engine.cpu_offload_gb",
-            "vllm.engine.block_size",
-            "vllm.engine.kv_cache_dtype",
-            "vllm.engine.enforce_eager",
-            "vllm.engine.enable_chunked_prefill",
-            "vllm.engine.max_num_seqs",
-            "vllm.engine.max_num_batched_tokens",
-            "vllm.engine.max_model_len",
-            "vllm.engine.tensor_parallel_size",
-            "vllm.engine.pipeline_parallel_size",
-            "vllm.engine.enable_prefix_caching",
-            "vllm.engine.quantization",
-            "vllm.engine.speculative_model",
-            "vllm.engine.num_speculative_tokens",
-            # Engine-level offloading + memory params
-            "vllm.engine.offload_group_size",
-            "vllm.engine.offload_num_in_group",
-            "vllm.engine.offload_prefetch_step",
-            "vllm.engine.offload_params",
-            "vllm.engine.disable_custom_all_reduce",
-            "vllm.engine.kv_cache_memory_bytes",
-            "vllm.engine.compilation_config",
-            # Attention sub-model
-            "vllm.engine.attention.backend",
-            "vllm.engine.attention.flash_attn_version",
-            "vllm.engine.attention.flash_attn_max_num_splits_for_cuda_graph",
-            "vllm.engine.attention.use_prefill_decode_attention",
-            "vllm.engine.attention.use_prefill_query_quantization",
-            "vllm.engine.attention.use_cudnn_prefill",
-            "vllm.engine.attention.disable_flashinfer_prefill",
-            "vllm.engine.attention.disable_flashinfer_q_quantization",
-            "vllm.engine.attention.use_trtllm_attention",
-            "vllm.engine.attention.use_trtllm_ragged_deepseek_prefill",
-            # Sampling-level params (vllm.SamplingParams args, vLLM-specific only)
-            "vllm.sampling.max_tokens",
-            "vllm.sampling.min_tokens",
-            "vllm.sampling.presence_penalty",
-            "vllm.sampling.frequency_penalty",
-            "vllm.sampling.ignore_eos",
-            "vllm.sampling.n",
-            # Beam search section (all 4 fields)
-            "vllm.beam_search.beam_width",
-            "vllm.beam_search.length_penalty",
-            "vllm.beam_search.early_stopping",
-            "vllm.beam_search.max_tokens",
-        ],
-        "tensorrt": [
-            # Compile-time parameters (LLM() constructor)
-            "tensorrt.max_batch_size",
-            "tensorrt.tensor_parallel_size",
-            "tensorrt.max_input_len",
-            "tensorrt.max_seq_len",
-            "tensorrt.dtype",
-            "tensorrt.fast_build",
-            # TRT-LLM internal backend selection
-            "tensorrt.backend",
-            # Engine path
-            "tensorrt.engine_path",
-            # Quantisation sub-config
-            "tensorrt.quant.quant_algo",
-            "tensorrt.quant.kv_cache_quant_algo",
-            # Calibration sub-config
-            "tensorrt.calib.calib_batches",
-            "tensorrt.calib.calib_dataset",
-            "tensorrt.calib.calib_max_seq_length",
-            # KV cache sub-config
-            "tensorrt.kv_cache.enable_block_reuse",
-            "tensorrt.kv_cache.free_gpu_memory_fraction",
-            "tensorrt.kv_cache.max_tokens",
-            "tensorrt.kv_cache.host_cache_size",
-            # Scheduler sub-config
-            "tensorrt.scheduler.capacity_scheduling_policy",
-            # Build cache sub-config
-            "tensorrt.build_cache.cache_root",
-            "tensorrt.build_cache.max_records",
-            "tensorrt.build_cache.max_cache_storage_gb",
-            # Sampling sub-config
-            "tensorrt.sampling.min_tokens",
-            "tensorrt.sampling.n",
-            "tensorrt.sampling.ignore_eos",
-            "tensorrt.sampling.return_perf_metrics",
-        ],
-    }
+    return {engine: sorted(get_engine_params(engine).keys()) for engine in _ALL_ENGINES_LIST}
 
 
 def get_special_test_models() -> dict[str, str]:

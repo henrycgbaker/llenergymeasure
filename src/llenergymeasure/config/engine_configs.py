@@ -17,7 +17,6 @@ Usage in YAML:
         gpu_memory_utilization: 0.9
         kv_cache_dtype: fp8
       sampling:
-        max_tokens: 512
         presence_penalty: 0.0
 
     engine: tensorrt
@@ -25,9 +24,7 @@ Usage in YAML:
       tensor_parallel_size: 2
       dtype: bfloat16
       quant:
-        quant_algo: FP8
-      build_cache:
-        max_cache_storage_gb: 256
+        quant_algo: W4A16_AWQ
 """
 
 from __future__ import annotations
@@ -59,7 +56,11 @@ class TransformersConfig(BaseModel):
     # Batching
     # -------------------------------------------------------------------------
 
-    batch_size: int | None = Field(default=None, ge=1, description="Batch size (None -> 1)")
+    batch_size: int | None = Field(
+        default=None,
+        ge=1,
+        description="Batch size (None -> 1)",
+    )
 
     # -------------------------------------------------------------------------
     # Attention implementation
@@ -67,38 +68,51 @@ class TransformersConfig(BaseModel):
 
     attn_implementation: (
         Literal["sdpa", "flash_attention_2", "flash_attention_3", "eager"] | None
-    ) = Field(default=None, description="Attention implementation (None -> sdpa)")
+    ) = Field(
+        default=None,
+        description="Attention implementation (None -> sdpa)",
+    )
 
     # -------------------------------------------------------------------------
     # Compilation
     # -------------------------------------------------------------------------
 
     torch_compile: bool | None = Field(
-        default=None, description="Enable torch.compile (None -> False)"
+        default=None,
+        description="Enable torch.compile (None -> False)",
     )
     torch_compile_mode: str | None = Field(
         default=None,
         description="torch.compile mode: 'default', 'reduce-overhead', 'max-autotune' (None -> 'default')",
     )
     torch_compile_backend: str | None = Field(
-        default=None, description="torch.compile backend (None -> 'inductor')"
+        default=None,
+        description="torch.compile backend (None -> 'inductor')",
     )
 
     # -------------------------------------------------------------------------
     # BitsAndBytes quantization
     # -------------------------------------------------------------------------
 
-    load_in_4bit: bool | None = Field(default=None, description="BitsAndBytes 4-bit quantization")
-    load_in_8bit: bool | None = Field(default=None, description="BitsAndBytes 8-bit quantization")
+    load_in_4bit: bool | None = Field(
+        default=None,
+        description="BitsAndBytes 4-bit quantization",
+    )
+    load_in_8bit: bool | None = Field(
+        default=None,
+        description="BitsAndBytes 8-bit quantization",
+    )
     bnb_4bit_compute_dtype: Literal["float16", "bfloat16", "float32"] | None = Field(
         default=None,
         description="Compute dtype for 4-bit (None -> float32, usually want bfloat16)",
     )
     bnb_4bit_quant_type: Literal["nf4", "fp4"] | None = Field(
-        default=None, description="4-bit quantization type (None -> 'nf4')"
+        default=None,
+        description="4-bit quantization type (None -> 'nf4')",
     )
     bnb_4bit_use_double_quant: bool | None = Field(
-        default=None, description="Double quantization saves ~0.4 bits/param (None -> False)"
+        default=None,
+        description="Double quantization saves ~0.4 bits/param (None -> False)",
     )
 
     # -------------------------------------------------------------------------
@@ -106,7 +120,8 @@ class TransformersConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     use_cache: bool | None = Field(
-        default=None, description="Use KV cache during generation (None -> True)"
+        default=None,
+        description="Use KV cache during generation (None -> True)",
     )
     cache_implementation: Literal["static", "offloaded_static", "sliding_window"] | None = Field(
         default=None,
@@ -118,10 +133,13 @@ class TransformersConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     num_beams: int | None = Field(
-        default=None, ge=1, description="Beam search width (None -> 1, greedy/sampling)"
+        default=None,
+        ge=1,
+        description="Beam search width (None -> 1, greedy/sampling)",
     )
     early_stopping: bool | None = Field(
-        default=None, description="Stop beam search when all beams hit EOS (None -> False)"
+        default=None,
+        description="Stop beam search when all beams hit EOS (None -> False)",
     )
     length_penalty: float | None = Field(
         default=None,
@@ -133,7 +151,9 @@ class TransformersConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     no_repeat_ngram_size: int | None = Field(
-        default=None, ge=0, description="Prevent n-gram repetition (None -> 0, disabled)"
+        default=None,
+        ge=0,
+        description="Prevent n-gram repetition (None -> 0, disabled)",
     )
 
     # -------------------------------------------------------------------------
@@ -151,17 +171,33 @@ class TransformersConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     device_map: str | None = Field(
-        default=None, description="Device placement strategy (None -> 'auto')"
+        default=None,
+        description="Device placement strategy (None -> 'auto')",
     )
     max_memory: dict[str | int, str] | None = Field(
         default=None,
         description="Per-device memory limits, e.g. {0: '10GiB', 'cpu': '50GiB'}",
     )
-    revision: str | None = Field(
-        default=None, description="Model revision/commit hash for reproducibility"
+
+    # -------------------------------------------------------------------------
+    # Mixed precision
+    # -------------------------------------------------------------------------
+
+    allow_tf32: bool | None = Field(
+        default=None,
+        description="Allow TF32 on Ampere GPUs (None -> PyTorch default)",
     )
-    trust_remote_code: bool | None = Field(
-        default=None, description="Trust remote code in model repo (None -> True)"
+    autocast_enabled: bool | None = Field(
+        default=None,
+        description="Enable torch.autocast mixed precision (None -> False)",
+    )
+    autocast_dtype: Literal["float16", "bfloat16"] | None = Field(
+        default=None,
+        description="torch.autocast dtype (None -> bfloat16 on Ampere)",
+    )
+    low_cpu_mem_usage: bool | None = Field(
+        default=None,
+        description="Low CPU memory usage during model loading (None -> False)",
     )
 
     # -------------------------------------------------------------------------
@@ -242,6 +278,35 @@ class TransformersConfig(BaseModel):
 # =============================================================================
 # vLLM Engine Configuration
 # =============================================================================
+
+
+class VLLMSpeculativeConfig(BaseModel):
+    """vLLM speculative-decoding configuration.
+
+    Replaces flat ``speculative_model`` + ``num_speculative_tokens`` fields.
+    Mirrors vLLM's native ``speculative_config`` dict shape.
+    Unknown fields are forwarded via extra="allow" to vLLM.
+    """
+
+    model_config = {"extra": "allow"}  # mirror native shape; CI diff catches drift
+
+    model: str | None = Field(
+        default=None,
+        description="Draft model name/path for speculative decoding.",
+    )
+    num_speculative_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description="Tokens to draft per speculative step.",
+    )
+    method: str | None = Field(
+        default=None,
+        description=(
+            "Speculative-decoding method (e.g. 'draft_model', 'ngram', 'medusa', 'eagle'). "
+            "Kept as str because the Literal has drifted across vLLM releases — verify against "
+            "EngineArgs.speculative_config.method in the vendored schema before narrowing."
+        ),
+    )
 
 
 class VLLMAttentionConfig(BaseModel):
@@ -401,6 +466,11 @@ class VLLMEngineConfig(BaseModel):
             "Overrides model config (None -> model default). Caps KV cache allocation."
         ),
     )
+    num_scheduler_steps: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of scheduler steps per iteration (multi-step scheduling, None -> 1).",
+    )
 
     # -------------------------------------------------------------------------
     # Parallelism
@@ -417,6 +487,10 @@ class VLLMEngineConfig(BaseModel):
         default=None,
         ge=1,
         description=("Pipeline parallel stages — memory per GPU changes with PP (None -> 1)."),
+    )
+    distributed_executor_backend: Literal["mp", "ray"] | None = Field(
+        default=None,
+        description="Multi-GPU executor backend: 'mp' (multiprocessing) or 'ray' (None -> mp).",
     )
 
     # -------------------------------------------------------------------------
@@ -435,21 +509,24 @@ class VLLMEngineConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
-    # Speculative decoding
+    # CUDA graphs
     # -------------------------------------------------------------------------
 
-    speculative_model: str | None = Field(
-        default=None,
-        description=(
-            "HF model name or path of draft model for speculative decoding (None -> disabled). "
-            "Requires num_speculative_tokens."
-        ),
-    )
-    num_speculative_tokens: int | None = Field(
+    max_seq_len_to_capture: int | None = Field(
         default=None,
         ge=1,
+        description="Maximum sequence length for CUDA graph capture (None -> 8192).",
+    )
+
+    # -------------------------------------------------------------------------
+    # Speculative decoding (typed nested sub-config)
+    # -------------------------------------------------------------------------
+
+    speculative: VLLMSpeculativeConfig | None = Field(
+        default=None,
         description=(
-            "Tokens to draft per speculative step (None -> required if speculative_model is set)."
+            "Speculative decoding configuration. Replaces flat speculative_model / "
+            "num_speculative_tokens fields. Mirrors vLLM native speculative_config shape."
         ),
     )
 
@@ -525,13 +602,6 @@ class VLLMEngineConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     @model_validator(mode="after")
-    def validate_speculative(self) -> VLLMEngineConfig:
-        """speculative_model requires num_speculative_tokens to be set."""
-        if self.speculative_model is not None and self.num_speculative_tokens is None:
-            raise ValueError("speculative_model requires num_speculative_tokens to be set")
-        return self
-
-    @model_validator(mode="after")
     def validate_kv_cache_memory(self) -> VLLMEngineConfig:
         """kv_cache_memory_bytes and gpu_memory_utilization are mutually exclusive."""
         if self.kv_cache_memory_bytes is not None and self.gpu_memory_utilization is not None:
@@ -566,18 +636,13 @@ class VLLMSamplingConfig(BaseModel):
 
     All fields default to None — None means "use vLLM's own default".
     Unknown fields are forwarded to vllm.SamplingParams() via extra="allow".
+
+    Note: max_tokens is intentionally absent — it is bridged from
+    ExperimentConfig.max_output_tokens in _build_sampling_kwargs().
     """
 
     model_config = {"extra": "allow"}
 
-    max_tokens: int | None = Field(
-        default=None,
-        ge=1,
-        description=(
-            "Max output tokens. Overrides ExperimentConfig.max_output_tokens for vLLM sweeps "
-            "(None -> uses max_output_tokens). Use for engine-specific max_tokens sweeps."
-        ),
-    )
     min_tokens: int | None = Field(
         default=None,
         ge=0,
@@ -622,6 +687,9 @@ class VLLMBeamSearchConfig(BaseModel):
     Nested under VLLMConfig.beam_search.
     All fields default to None — None means "use vLLM's own default".
     Uses extra="allow" for forward compatibility with new vLLM beam search options.
+
+    Note: max_tokens is intentionally absent — it is bridged from
+    ExperimentConfig.max_output_tokens in _build_beam_search_kwargs().
     """
 
     model_config = {"extra": "allow"}
@@ -638,11 +706,6 @@ class VLLMBeamSearchConfig(BaseModel):
     early_stopping: bool | None = Field(
         default=None,
         description="Stop when beam_width complete sequences found (None -> False).",
-    )
-    max_tokens: int | None = Field(
-        default=None,
-        ge=1,
-        description="Max output tokens for beam search (None -> max_output_tokens).",
     )
 
 
@@ -663,8 +726,10 @@ class VLLMConfig(BaseModel):
             enforce_eager: false
             gpu_memory_utilization: 0.9
             kv_cache_dtype: fp8
+            speculative:
+              model: gpt2
+              num_speculative_tokens: 3
           sampling:
-            max_tokens: 512
             presence_penalty: 0.0
     """
 
@@ -726,30 +791,13 @@ class TensorRTQuantConfig(BaseModel):
             "NO_QUANT",
         ]
         | None
-    ) = Field(default=None, description="Quantisation algorithm (native QuantAlgo enum name)")
+    ) = Field(
+        default=None,
+        description="Quantisation algorithm (native QuantAlgo enum name)",
+    )
     kv_cache_quant_algo: Literal["FP8", "INT8"] | None = Field(
         default=None,
         description="KV cache quantisation algorithm (None -> no KV cache quantisation)",
-    )
-
-
-class TensorRTCalibConfig(BaseModel):
-    """TRT-LLM PTQ calibration configuration.
-
-    Maps to tensorrt_llm.llmapi.CalibConfig.
-    Only relevant when quant_algo requires calibration (INT8, W4A16_AWQ, etc.).
-    """
-
-    model_config = {"extra": "allow"}
-
-    calib_batches: int | None = Field(
-        default=None, ge=1, description="Number of calibration batches (None -> 512)"
-    )
-    calib_dataset: str | None = Field(
-        default=None, description="Calibration dataset name or path (None -> 'cnn_dailymail')"
-    )
-    calib_max_seq_length: int | None = Field(
-        default=None, ge=1, description="Max sequence length for calibration (None -> 512)"
     )
 
 
@@ -759,7 +807,8 @@ class TensorRTKvCacheConfig(BaseModel):
     model_config = {"extra": "allow"}
 
     enable_block_reuse: bool | None = Field(
-        default=None, description="Enable KV cache block reuse (None -> False)"
+        default=None,
+        description="Enable KV cache block reuse (None -> False)",
     )
     free_gpu_memory_fraction: float | None = Field(
         default=None,
@@ -768,7 +817,9 @@ class TensorRTKvCacheConfig(BaseModel):
         description="Fraction of free GPU memory for KV cache (None -> 0.9)",
     )
     max_tokens: int | None = Field(
-        default=None, ge=1, description="Maximum tokens in KV cache (None -> auto)"
+        default=None,
+        ge=1,
+        description="Maximum tokens in KV cache (None -> auto)",
     )
     host_cache_size: int | None = Field(
         default=None,
@@ -789,26 +840,9 @@ class TensorRTSchedulerConfig(BaseModel):
             "STATIC_BATCH",
         ]
         | None
-    ) = Field(default=None, description="Scheduling capacity policy (None -> GUARANTEED_NO_EVICT)")
-
-
-class TensorRTBuildCacheConfig(BaseModel):
-    """TRT-LLM engine build cache configuration.
-
-    Maps to tensorrt_llm.llmapi.BuildCacheConfig.
-    """
-
-    model_config = {"extra": "allow"}
-
-    cache_root: str | None = Field(
+    ) = Field(
         default=None,
-        description="Root directory for engine cache (None -> ~/.cache/tensorrt_llm)",
-    )
-    max_records: int | None = Field(
-        default=None, ge=1, description="Maximum cached engine records (None -> 10)"
-    )
-    max_cache_storage_gb: float | None = Field(
-        default=None, ge=0.0, description="Maximum cache storage in GB (None -> 256)"
+        description="Scheduling capacity policy (None -> GUARANTEED_NO_EVICT)",
     )
 
 
@@ -818,21 +852,25 @@ class TensorRTSamplingConfig(BaseModel):
     Maps to tensorrt_llm.SamplingParams (TRT-LLM-specific extensions only).
     Universal sampling params (temperature, top_p, top_k, repetition_penalty)
     live in DecoderConfig and are shared across all engines.
+
+    Note: return_perf_metrics dropped (D1 observability flag).
     """
 
     model_config = {"extra": "allow"}
 
     min_tokens: int | None = Field(
-        default=None, ge=0, description="Minimum output tokens before EOS allowed (None -> 0)"
+        default=None,
+        ge=0,
+        description="Minimum output tokens before EOS allowed (None -> 0)",
     )
     n: int | None = Field(
-        default=None, ge=1, description="Number of output sequences per prompt (None -> 1)"
+        default=None,
+        ge=1,
+        description="Number of output sequences per prompt (None -> 1)",
     )
     ignore_eos: bool | None = Field(
-        default=None, description="Continue generating past EOS token (None -> False)"
-    )
-    return_perf_metrics: bool | None = Field(
-        default=None, description="Return performance metrics in output (None -> False)"
+        default=None,
+        description="Continue generating past EOS token (None -> False)",
     )
 
 
@@ -847,12 +885,16 @@ class TensorRTConfig(BaseModel):
     - quant: QuantConfig (quantisation algorithm + KV cache quantisation)
     - kv_cache: KvCacheConfig (block reuse, memory fraction)
     - scheduler: SchedulerConfig (capacity policy)
-    - calib: CalibConfig (PTQ calibration parameters)
-    - build_cache: BuildCacheConfig (engine cache persistence)
     - sampling: SamplingParams (TRT-LLM-specific extensions only)
 
     Universal sampling params (temperature, top_p, top_k, repetition_penalty)
     live in DecoderConfig and are shared across all engines.
+
+    Dropped (falls through extra="allow"):
+    - backend: Literal["trt"] — D2 single-option enum, no information content
+    - engine_path — D1 deployment path, not a measurement axis
+    - calib sub-config — D3 build-only PTQ calibration (we consume pre-quantised checkpoints)
+    - build_cache sub-config — D1 engine-cache housekeeping
 
     Example YAML:
         engine: tensorrt
@@ -862,8 +904,6 @@ class TensorRTConfig(BaseModel):
           dtype: bfloat16
           quant:
             quant_algo: W4A16_AWQ
-          build_cache:
-            max_cache_storage_gb: 256
     """
 
     model_config = {"extra": "allow"}
@@ -873,12 +913,23 @@ class TensorRTConfig(BaseModel):
     # -------------------------------------------------------------------------
 
     max_batch_size: int | None = Field(
-        default=None, ge=1, description="Max batch size (compile-time constant, None -> 8)"
+        default=None,
+        ge=1,
+        description="Max batch size (compile-time constant, None -> 8)",
     )
     tensor_parallel_size: int | None = Field(
         default=None,
         ge=1,
-        description="Tensor parallel size — number of GPUs to shard across (None -> 1).",
+        description=(
+            "Tensor parallel size — number of GPUs to shard across (None -> 1). "
+            "Aligns with TrtLlmArgs.tensor_parallel_size. "
+            "Note: TransformersConfig.tp_size follows accelerate convention and is preserved."
+        ),
+    )
+    pipeline_parallel_size: int | None = Field(
+        default=None,
+        ge=1,
+        description="Pipeline parallel stages (None -> 1).",
     )
     max_input_len: int | None = Field(
         default=None,
@@ -889,6 +940,11 @@ class TensorRTConfig(BaseModel):
         default=None,
         ge=1,
         description="Max total sequence length (input + output, compile-time constant, None -> 2048)",
+    )
+    max_num_tokens: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum number of tokens the engine can handle per iteration (None -> auto).",
     )
     dtype: Literal["float16", "bfloat16"] | None = Field(
         default=None,
@@ -902,43 +958,20 @@ class TensorRTConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
-    # TRT-LLM internal backend selection
-    # -------------------------------------------------------------------------
-
-    backend: Literal["trt"] | None = Field(
-        default=None,
-        description=(
-            "TRT-LLM internal backend: 'trt' for TensorRT engine (None -> 'trt'). "
-            "This is the TRT-LLM LLM(backend=...) parameter, not the llem engine field."
-        ),
-    )
-
-    # -------------------------------------------------------------------------
-    # Engine path (pre-compiled engine)
-    # -------------------------------------------------------------------------
-
-    engine_path: str | None = Field(
-        default=None, description="Pre-compiled engine path (skip compilation)"
-    )
-
-    # -------------------------------------------------------------------------
     # Nested sub-configs
     # -------------------------------------------------------------------------
 
     quant: TensorRTQuantConfig | None = Field(
-        default=None, description="Quantisation configuration (QuantConfig)"
+        default=None,
+        description="Quantisation configuration (QuantConfig)",
     )
     kv_cache: TensorRTKvCacheConfig | None = Field(
-        default=None, description="KV cache configuration"
+        default=None,
+        description="KV cache configuration",
     )
     scheduler: TensorRTSchedulerConfig | None = Field(
-        default=None, description="Scheduler configuration"
-    )
-    calib: TensorRTCalibConfig | None = Field(
-        default=None, description="PTQ calibration configuration (CalibConfig)"
-    )
-    build_cache: TensorRTBuildCacheConfig | None = Field(
-        default=None, description="Engine build cache configuration (BuildCacheConfig)"
+        default=None,
+        description="Scheduler configuration",
     )
     sampling: TensorRTSamplingConfig | None = Field(
         default=None,

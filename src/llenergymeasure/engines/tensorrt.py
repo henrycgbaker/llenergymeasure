@@ -184,10 +184,6 @@ class TensorRTEngine:
             "built_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        trt = config.tensorrt
-        if trt is not None and trt.engine_path is not None:
-            self._build_metadata["engine_path"] = trt.engine_path
-
         sampling_params = self._build_sampling_params(config)
         if on_substep is not None:
             on_substep("sampling params built", 0.0)
@@ -397,8 +393,10 @@ class TensorRTEngine:
         trt = config.tensorrt
 
         # engine_path early-return: pass engine dir as model, skip all compile-time kwargs
-        if trt is not None and trt.engine_path is not None:
-            engine_path = Path(trt.engine_path)
+        # engine_path is no longer a typed field (D1 drop); accessed via extra="allow" passthrough.
+        raw_engine_path = getattr(trt, "engine_path", None) if trt is not None else None
+        if trt is not None and raw_engine_path is not None:
+            engine_path = Path(str(raw_engine_path))
             tp_size = trt.tensor_parallel_size if trt.tensor_parallel_size is not None else 1
             errors = _validate_engine_directory(engine_path, tp_size=tp_size)
             if errors:
@@ -406,30 +404,35 @@ class TensorRTEngine:
             # Pass engine dir as model - TRT-LLM auto-detects TLLM_ENGINE format.
             # Compile-time kwargs are baked into the engine; don't pass them.
             # enable_build_cache is not set - engine format bypasses it.
-            return {"model": str(trt.engine_path), "backend": "trt"}
+            return {"model": str(raw_engine_path), "backend": "trt"}
 
         if trt is None:
             # No tensorrt section — use defaults + enable build cache
             kwargs["enable_build_cache"] = True
             return kwargs
 
-        # Scalar fields: map directly (same name or renamed)
+        # Scalar fields: map directly
         if trt.tensor_parallel_size is not None:
             kwargs["tensor_parallel_size"] = trt.tensor_parallel_size
+        if trt.pipeline_parallel_size is not None:
+            kwargs["pipeline_parallel_size"] = trt.pipeline_parallel_size
         if trt.max_batch_size is not None:
             kwargs["max_batch_size"] = trt.max_batch_size
         if trt.max_input_len is not None:
             kwargs["max_input_len"] = trt.max_input_len
         if trt.max_seq_len is not None:
             kwargs["max_seq_len"] = trt.max_seq_len
+        if trt.max_num_tokens is not None:
+            kwargs["max_num_tokens"] = trt.max_num_tokens
         if trt.dtype is not None:
             kwargs["dtype"] = trt.dtype
         if trt.fast_build is not None:
             kwargs["fast_build"] = trt.fast_build
 
-        # TRT-LLM internal backend (overrides default "trt" if explicitly set)
-        if trt.backend is not None:
-            kwargs["backend"] = trt.backend
+        # TRT-LLM internal backend — no longer typed; accessed via extra="allow" if explicitly set.
+        raw_backend = getattr(trt, "backend", None)
+        if raw_backend is not None:
+            kwargs["backend"] = raw_backend
 
         # Quantisation config
         if trt.quant is not None:
@@ -446,26 +449,10 @@ class TensorRTEngine:
             except ImportError:
                 logger.debug("tensorrt_llm.llmapi not available; skipping QuantConfig")
 
-        # Build cache config
-        if trt.build_cache is not None:
-            try:
-                from tensorrt_llm.llmapi import BuildCacheConfig
-
-                bc = trt.build_cache
-                bc_kwargs: dict[str, Any] = {}
-                if bc.cache_root is not None:
-                    bc_kwargs["cache_root"] = Path(bc.cache_root)
-                if bc.max_records is not None:
-                    bc_kwargs["max_records"] = bc.max_records
-                if bc.max_cache_storage_gb is not None:
-                    bc_kwargs["max_cache_storage_gb"] = bc.max_cache_storage_gb
-                kwargs["enable_build_cache"] = BuildCacheConfig(**bc_kwargs)
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; enabling default build cache")
-                kwargs["enable_build_cache"] = True
-        else:
-            # Enable default build cache when no explicit config given
-            kwargs["enable_build_cache"] = True
+        # Build cache — enable by default; advanced config via extra="allow" passthrough.
+        # TensorRTBuildCacheConfig was dropped (D1 plumbing). Users can still pass
+        # build_cache fields through extra="allow" if needed.
+        kwargs["enable_build_cache"] = True
 
         # KV cache config
         if trt.kv_cache is not None:
@@ -502,24 +489,6 @@ class TensorRTEngine:
                     kwargs["scheduler_config"] = SchedulerConfig(**sc_kwargs)
             except ImportError:
                 logger.debug("tensorrt_llm.llmapi not available; skipping SchedulerConfig")
-
-        # Calibration config
-        if trt.calib is not None:
-            try:
-                from tensorrt_llm.llmapi import CalibConfig
-
-                calib = trt.calib
-                calib_kwargs: dict[str, Any] = {}
-                if calib.calib_batches is not None:
-                    calib_kwargs["calib_batches"] = calib.calib_batches
-                if calib.calib_dataset is not None:
-                    calib_kwargs["calib_dataset"] = calib.calib_dataset
-                if calib.calib_max_seq_length is not None:
-                    calib_kwargs["calib_max_seq_length"] = calib.calib_max_seq_length
-                if calib_kwargs:
-                    kwargs["calib_config"] = CalibConfig(**calib_kwargs)
-            except ImportError:
-                logger.debug("tensorrt_llm.llmapi not available; skipping CalibConfig")
 
         return kwargs
 
@@ -568,7 +537,6 @@ class TensorRTEngine:
                 kwargs["n"] = sampling.n
             if sampling.ignore_eos is not None:
                 kwargs["ignore_eos"] = sampling.ignore_eos
-            if sampling.return_perf_metrics is not None:
-                kwargs["return_perf_metrics"] = sampling.return_perf_metrics
+            # return_perf_metrics dropped (D1 observability flag); falls through extra="allow"
 
         return SamplingParams(**kwargs)

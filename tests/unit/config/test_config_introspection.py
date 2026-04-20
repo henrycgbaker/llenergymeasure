@@ -61,9 +61,13 @@ def test_get_engine_params_tensorrt_returns_params():
     assert "tensorrt.quant.quant_algo" in params
     assert "tensorrt.kv_cache.free_gpu_memory_fraction" in params
     assert "tensorrt.scheduler.capacity_scheduling_policy" in params
-    assert "tensorrt.build_cache.max_records" in params
-    assert "tensorrt.sampling.return_perf_metrics" in params
-    assert len(params) >= 20
+    # build_cache and calib sub-configs dropped (D1/D3); return_perf_metrics dropped (D1)
+    assert "tensorrt.build_cache.max_records" not in params
+    assert "tensorrt.sampling.return_perf_metrics" not in params
+    # New fields from C.2
+    assert "tensorrt.pipeline_parallel_size" in params
+    assert "tensorrt.max_num_tokens" in params
+    assert len(params) >= 10
 
 
 def test_get_engine_params_unknown_engine_raises():
