@@ -210,3 +210,15 @@ jobs:
         run: |
           docker run --rm smoke-${{ matrix.dockerfile }} llem --version
           docker run --rm smoke-${{ matrix.dockerfile }} llem config
+
+  schema-version-check:
+    needs: filter
+    if: >-
+      always()
+      && needs.filter.outputs.docker == 'true'
+      && !contains(github.event.pull_request.labels.*.name, 'renovate')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check schema versions match Dockerfiles
+        run: python3 scripts/check_schema_versions.py

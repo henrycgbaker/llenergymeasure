@@ -1,0 +1,34 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["dockerfile"],
+  "dockerfile": {
+    "fileMatch": ["docker/Dockerfile\\..*"]
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["vllm/vllm-openai"],
+      "labels": ["renovate", "engine-vllm"],
+      "automerge": false,
+      "stabilityDays": 3
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["nvcr.io/nvidia/tensorrt-llm/release"],
+      "labels": ["renovate", "engine-tensorrt"],
+      "registryUrls": ["https://nvcr.io"],
+      "automerge": false,
+      "stabilityDays": 3
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["pytorch/pytorch"],
+      "labels": ["renovate", "engine-transformers"],
+      "automerge": false,
+      "stabilityDays": 3
+    }
+  ],
+  "schedule": ["before 9am on Monday"],
+  "labels": ["renovate"]
+}
