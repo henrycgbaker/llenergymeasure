@@ -59,14 +59,6 @@ def run(
         int | None,
         typer.Option("--n-prompts", "-n", help="Number of prompts to run"),
     ] = None,
-    batch_size: Annotated[
-        int | None,
-        typer.Option("--batch-size", help="Batch size (Transformers engine)"),
-    ] = None,
-    dtype: Annotated[
-        str | None,
-        typer.Option("--dtype", "-p", help="Model dtype (float32, float16, bfloat16)"),
-    ] = None,
     output: Annotated[
         str | None,
         typer.Option("--output", "-o", help="Output directory for results"),
@@ -152,8 +144,6 @@ def run(
             engine=engine,
             dataset=dataset,
             n_prompts=n_prompts,
-            batch_size=batch_size,
-            dtype=dtype,
             output=output,
             dry_run=dry_run,
             quiet=quiet,
@@ -194,8 +184,6 @@ def _run_impl(
     engine: str | None,
     dataset: str | None,
     n_prompts: int | None,
-    batch_size: int | None,
-    dtype: str | None,
     output: str | None,
     dry_run: bool,
     quiet: bool,
@@ -222,10 +210,6 @@ def _run_impl(
         cli_overrides["task.dataset.source"] = dataset
     if n_prompts is not None:
         cli_overrides["task.dataset.n_prompts"] = n_prompts
-    if batch_size is not None:
-        cli_overrides["transformers.batch_size"] = batch_size
-    if dtype is not None:
-        cli_overrides["dtype"] = dtype
 
     # Validate we have enough information to resolve a config
     if config is None and model is None:
