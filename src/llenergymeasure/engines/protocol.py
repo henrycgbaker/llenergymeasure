@@ -31,6 +31,53 @@ class InferenceOutput:
         return self.input_tokens + self.output_tokens
 
 
+@dataclass(frozen=True)
+class DormantField:
+    """A user-declared config field that the engine ignored or overrode.
+
+    Distinguishes two shapes of dormancy:
+      - Stripped: declared_value set, effective_value is None (field absent from
+        effective kwargs, e.g. temperature under greedy decoding).
+      - Overridden: effective_value != declared_value (engine remapped it).
+    """
+
+    declared_value: Any
+    effective_value: Any | None
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ConfigProbe:
+    """Outcome of probing an ExperimentConfig against an engine.
+
+    The probe observes what the engine would do with this config without
+    loading weights, allocating GPU memory, or initialising engine contexts.
+
+    Attributes:
+        effective_engine_params: Kwargs that would be passed to the engine
+            constructor (vllm.LLM, AutoModelForCausalLM, tensorrt_llm.LLM).
+        effective_sampling_params: Kwargs that would be passed to the
+            sampling-params constructor after any greedy stripping.
+        dormant_fields: Keyed by dotted path (e.g. ``"vllm.sampling.top_p"``)
+            — fields the user declared that the engine will silently ignore
+            or override.
+        errors: Engine-reported framework errors (T1/T2 construction,
+            hardware checks). Non-empty means the config will not run as-is.
+        warnings: Non-fatal observations.
+    """
+
+    effective_engine_params: dict[str, Any]
+    effective_sampling_params: dict[str, Any]
+    dormant_fields: dict[str, DormantField]
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def is_valid(self) -> bool:
+        """True when the probe captured no framework errors."""
+        return len(self.errors) == 0
+
+
 @runtime_checkable
 class EnginePlugin(Protocol):
     """Contract for thin inference plugins.
@@ -100,4 +147,18 @@ class EnginePlugin(Protocol):
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
         """Validate config against hardware capabilities. Returns error strings (empty = valid)."""
+        ...
+
+    def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
+        """Probe *config* for dormancy, framework errors, and effective params.
+
+        Observes what the engine would do with the configuration without side
+        effects: never loads model weights, allocates GPU memory, initialises
+        engine contexts, or runs inference. Implementations MAY import engine
+        libraries, download small metadata files (e.g. HF ``config.json``),
+        construct meta-device models, and query NVML.
+
+        Contract: this method never raises. All exceptions are caught and
+        appended to :attr:`ConfigProbe.errors`.
+        """
         ...
