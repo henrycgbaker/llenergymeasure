@@ -28,7 +28,6 @@ from llenergymeasure.config.engine_configs import (
     VLLMEngineConfig,
     VLLMSamplingConfig,
 )
-from llenergymeasure.config.models import DecoderConfig
 from llenergymeasure.engines.vllm import VLLMEngine
 from llenergymeasure.utils.exceptions import EngineError
 from tests.conftest import make_config
@@ -245,86 +244,73 @@ class TestBuildLlmKwargs:
 
 class TestBuildSamplingParams:
     def test_greedy_via_temperature_zero(self):
-        """temperature=0.0 triggers greedy mode: temperature=0.0, only max_tokens set."""
-        decoder = DecoderConfig(temperature=0.0, do_sample=False)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, max_output_tokens=64)
+        """temperature=0.0 on VLLMSamplingConfig forwards as-is."""
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.0))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg, max_output_tokens=64)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == 0.0
         assert params._kwargs["max_tokens"] == 64
-        # Greedy path: top_p, top_k, repetition_penalty NOT set (minimal kwargs)
-        assert "top_p" not in params._kwargs
-        assert "top_k" not in params._kwargs
-
-    def test_greedy_via_do_sample_false_temperature_nonzero(self):
-        """do_sample=False overrides temperature to produce greedy mode."""
-        decoder = DecoderConfig(temperature=0.8, do_sample=False)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
-
-        assert params._kwargs["temperature"] == 0.0
 
     def test_sampling_mode_temperature(self):
-        """Non-zero temperature with do_sample=True sets temperature in kwargs."""
-        decoder = DecoderConfig(temperature=0.7, do_sample=True)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
+        """temperature=0.7 on VLLMSamplingConfig forwards as-is."""
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.7))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["temperature"] == pytest.approx(0.7)
 
     def test_sampling_mode_top_p(self):
-        """top_p from DecoderConfig propagates to SamplingParams kwargs."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, top_p=0.9)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
+        """top_p on VLLMSamplingConfig propagates to SamplingParams kwargs."""
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(top_p=0.9))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_p"] == pytest.approx(0.9)
 
-    def test_top_k_zero_sentinel_maps_to_minus_one(self):
-        """Our top_k=0 (disabled) maps to vLLM's top_k=-1 (disabled sentinel)."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, top_k=0)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
+    def test_top_k_minus_one_disabled_passthrough(self):
+        """top_k=-1 (vLLM disabled sentinel) passes through without translation."""
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(top_k=-1))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_k"] == -1
 
     def test_top_k_nonzero_preserved(self):
-        """Non-zero top_k passes through unchanged."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, top_k=40)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
+        """Positive top_k passes through unchanged."""
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(top_k=40))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["top_k"] == 40
 
     def test_repetition_penalty_propagated(self):
-        """repetition_penalty from DecoderConfig is forwarded."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, repetition_penalty=1.1)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
+        """repetition_penalty on VLLMSamplingConfig is forwarded."""
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(repetition_penalty=1.1))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["repetition_penalty"] == pytest.approx(1.1)
 
     def test_max_tokens_from_config(self):
         """max_tokens kwarg matches config.max_output_tokens."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, max_output_tokens=256)
+        config = make_config(**_VLLM_DEFAULTS, max_output_tokens=256)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert params._kwargs["max_tokens"] == 256
 
     def test_min_p_included_when_set(self):
-        """min_p is added to kwargs when provided in DecoderConfig."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.05)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
+        """min_p is added to kwargs when provided on VLLMSamplingConfig."""
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(min_p=0.05))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert "min_p" in params._kwargs
         assert params._kwargs["min_p"] == pytest.approx(0.05)
 
     def test_min_p_absent_when_none(self):
-        """min_p is NOT in kwargs when DecoderConfig.min_p is None."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=None)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
+        """min_p is NOT in kwargs when VLLMSamplingConfig.min_p is unset."""
+        config = make_config(**_VLLM_DEFAULTS)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
 
         assert "min_p" not in params._kwargs
@@ -531,11 +517,8 @@ class TestSamplingConfigOverrides:
 
     def test_sampling_overrides_applied_to_greedy_path(self):
         """VLLMSamplingConfig overrides work on the greedy (temperature=0.0) path too."""
-        decoder = DecoderConfig(temperature=0.0, do_sample=False)
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(presence_penalty=0.1))
-        config = make_config(
-            **_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg, max_output_tokens=128
-        )
+        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.0, presence_penalty=0.1))
+        config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg, max_output_tokens=128)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert params._kwargs["temperature"] == 0.0
         assert params._kwargs["max_tokens"] == 128  # from max_output_tokens bridge
@@ -543,8 +526,6 @@ class TestSamplingConfigOverrides:
     def test_none_sampling_config_does_not_add_extra_kwargs(self):
         """When vllm.sampling is None, no extra sampling kwargs are added."""
         config = make_config(**_VLLM_DEFAULTS)  # vllm=None by default
-        decoder = DecoderConfig(temperature=1.0, do_sample=True)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
         params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
         assert "presence_penalty" not in params._kwargs
         assert "frequency_penalty" not in params._kwargs
@@ -752,42 +733,6 @@ class TestBeamSearchParams:
 
 
 # =============================================================================
-# Test Group 14: min_new_tokens -> min_tokens mapping (H4)
-# =============================================================================
-
-
-class TestMinNewTokensMapping:
-    def test_min_new_tokens_maps_to_min_tokens_sampling(self):
-        """decoder.min_new_tokens=5 flows through to kwargs['min_tokens']=5 (sampling path)."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=5)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
-        assert params._kwargs.get("min_tokens") == 5
-
-    def test_min_new_tokens_maps_to_min_tokens_greedy(self):
-        """decoder.min_new_tokens=3 flows through to kwargs['min_tokens']=3 (greedy path)."""
-        decoder = DecoderConfig(temperature=0.0, do_sample=False, min_new_tokens=3)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
-        assert params._kwargs.get("min_tokens") == 3
-
-    def test_min_new_tokens_absent_when_none(self):
-        """When decoder.min_new_tokens is None, min_tokens is NOT in kwargs."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=None)
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder)
-        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
-        assert "min_tokens" not in params._kwargs
-
-    def test_vllm_sampling_min_tokens_overrides_decoder_min_new_tokens(self):
-        """vllm.sampling.min_tokens=10 overrides decoder.min_new_tokens=5 (engine-specific wins)."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_new_tokens=5)
-        vllm_cfg = VLLMConfig(sampling=VLLMSamplingConfig(min_tokens=10))
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg)
-        params = VLLMEngine._build_sampling_params(config, _FakeSamplingParams)
-        assert params._kwargs.get("min_tokens") == 10
-
-
-# =============================================================================
 # Test Group 15: Multi-output token counting (H3 audit fix)
 # =============================================================================
 
@@ -956,53 +901,3 @@ class TestFlashAttnFieldsWired:
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["flash_attn_version"] == 2
         assert kwargs["flash_attn_max_num_splits_for_cuda_graph"] == 16
-
-
-# =============================================================================
-# Test Group 18: M2 — min_p forwarded in _build_beam_search_params
-# =============================================================================
-
-
-class TestBeamSearchMinP:
-    """Verify min_p from DecoderConfig flows through to BeamSearchParams."""
-
-    def _build_beam_params(self, config, monkeypatch):
-        """Call _build_beam_search_params with a fake BeamSearchParams to avoid vLLM import."""
-        import sys
-        import types
-
-        # Inject a fake vllm module with our _FakeBeamSearchParams so the lazy
-        # `from vllm import BeamSearchParams` inside _build_beam_search_params succeeds.
-        fake_vllm = types.ModuleType("vllm")
-        fake_vllm.BeamSearchParams = _FakeBeamSearchParams
-        monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
-
-        beam_cfg = config.vllm.beam_search
-        return VLLMEngine._build_beam_search_params(config, beam_cfg)
-
-    def test_min_p_forwarded_to_beam_search_params(self, monkeypatch):
-        """min_p=0.05 from DecoderConfig appears in BeamSearchParams kwargs."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.05)
-        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg)
-        params = self._build_beam_params(config, monkeypatch)
-        assert "min_p" in params._kwargs
-        assert params._kwargs["min_p"] == pytest.approx(0.05)
-
-    def test_min_p_absent_when_none(self, monkeypatch):
-        """min_p is NOT in BeamSearchParams kwargs when DecoderConfig.min_p is None."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=None)
-        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=4))
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg)
-        params = self._build_beam_params(config, monkeypatch)
-        assert "min_p" not in params._kwargs
-
-    def test_beam_width_and_min_p_together(self, monkeypatch):
-        """beam_width and min_p both appear in kwargs; max_tokens bridged from max_output_tokens."""
-        decoder = DecoderConfig(temperature=1.0, do_sample=True, min_p=0.1)
-        vllm_cfg = VLLMConfig(beam_search=VLLMBeamSearchConfig(beam_width=8))
-        config = make_config(**_VLLM_DEFAULTS, decoder=decoder, vllm=vllm_cfg, max_output_tokens=64)
-        params = self._build_beam_params(config, monkeypatch)
-        assert params._kwargs["beam_width"] == 8
-        assert params._kwargs["min_p"] == pytest.approx(0.1)
-        assert params._kwargs["max_tokens"] == 64

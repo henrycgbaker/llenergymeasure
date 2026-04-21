@@ -15,7 +15,21 @@ import from here.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Final, Literal
+from typing import Any, Final, Literal
+
+# ---------------------------------------------------------------------------
+# Sampling presets (shared across engines)
+# ---------------------------------------------------------------------------
+# Preset values are aligned with industry conventions (vLLM, OpenAI, MLPerf).
+# do_sample is intentionally absent from presets — it's HF-specific; the
+# transformers engine builder infers do_sample=False from temperature=0.
+
+SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
+    "deterministic": {"temperature": 0.0},
+    "standard": {"temperature": 1.0, "top_p": 0.95},
+    "creative": {"temperature": 0.8, "top_p": 0.9, "repetition_penalty": 1.1},
+    "factual": {"temperature": 0.3},
+}
 
 # ---------------------------------------------------------------------------
 # Engine enum — the ONE source of truth for backend engine identifiers.
@@ -153,27 +167,9 @@ DECODING_SUPPORT: dict[Engine, list[str]] = {
     Engine.TENSORRT: ["greedy", "sampling"],  # TRT-LLM supports both
 }
 
-# Engines that support the full DecoderConfig temperature/top_k/top_p fields.
-# All current engines support these — this dict exists to make future
-# engine additions explicit rather than implicit.
-# min_p and min_new_tokens: transformers and vLLM support them (identical semantics).
-# min_p/min_new_tokens: vLLM supports; TensorRT support varies by version.
-DECODER_PARAM_SUPPORT: dict[Engine, list[str]] = {
-    Engine.TRANSFORMERS: [
-        "temperature",
-        "top_k",
-        "top_p",
-        "repetition_penalty",
-        "min_p",
-        "min_new_tokens",
-    ],
-    Engine.VLLM: ["temperature", "top_k", "top_p", "repetition_penalty"],
-    Engine.TENSORRT: [
-        "temperature",
-        "top_k",
-        "top_p",
-    ],  # TRT-LLM: repetition_penalty support varies
-}
+# Sampling parameter support is now derivable via Pydantic introspection of
+# each engine's <Engine>SamplingConfig model (get_engine_params), so the
+# DECODER_PARAM_SUPPORT constant is no longer needed.
 
 # Map from engine name to the Python package that provides it.
 # Used by preflight checks and CLI to verify engine availability.
@@ -186,7 +182,6 @@ ENGINE_PACKAGES: dict[Engine, str] = {
 __all__ = [
     "ALL_ENGINES",
     "CONTAINER_EXCHANGE_DIR",
-    "DECODER_PARAM_SUPPORT",
     "DECODING_SUPPORT",
     "DOCKER_PULL_TIMEOUT",
     "DTYPE_SUPPORT",
@@ -205,6 +200,7 @@ __all__ = [
     "ENV_TABLE_ROWS",
     "RUNNER_DOCKER",
     "RUNNER_LOCAL",
+    "SAMPLING_PRESETS",
     "SOURCE_MULTI_ENGINE_ELEVATION",
     "TEMP_PREFIX_ENV_FILE",
     "TEMP_PREFIX_EXCHANGE",

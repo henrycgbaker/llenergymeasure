@@ -432,31 +432,30 @@ class TestBuildSamplingParams:
 
         assert params._kwargs["random_seed"] == 123
 
-    def test_build_sampling_params_greedy(self, monkeypatch):
-        """temperature=0 omits temperature key (greedy decoding)."""
+    def test_build_sampling_params_default_no_temperature(self, monkeypatch):
+        """Unset sampling -> no temperature in kwargs (TRT-LLM uses its own default)."""
         mock_trt = _make_fake_tensorrt_llm_module()
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        from llenergymeasure.config.models import DecoderConfig
-
-        config = make_config(**_TRT_DEFAULTS, decoder=DecoderConfig(temperature=0.0))
+        config = make_config(**_TRT_DEFAULTS)
         engine = TensorRTEngine()
         params = engine._build_sampling_params(config)
 
         assert isinstance(params, _FakeSamplingParams)
-        # temperature=0.0 should NOT be in kwargs (greedy check: not != 0.0)
+        # Sampling unset on engine section -> no temperature forwarded
         assert "temperature" not in params._kwargs
 
     def test_build_sampling_params_with_temperature(self, monkeypatch):
-        """Non-zero temperature is included in SamplingParams kwargs."""
+        """Explicit temperature on TensorRTSamplingConfig is forwarded."""
         mock_trt = _make_fake_tensorrt_llm_module()
         monkeypatch.setitem(sys.modules, "tensorrt_llm", mock_trt)
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
-        from llenergymeasure.config.models import DecoderConfig
-
-        config = make_config(**_TRT_DEFAULTS, decoder=DecoderConfig(temperature=0.7))
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(sampling=TensorRTSamplingConfig(temperature=0.7)),
+        )
         engine = TensorRTEngine()
         params = engine._build_sampling_params(config)
 

@@ -335,16 +335,16 @@ class TestExpandGridSweepGroups:
         assert len(valid) == 4  # 2 dtype x 2 compilation
 
     def test_cross_section_group_overlay(self):
-        """Group entries can override non-engine fields like decoder settings."""
+        """Group entries can override sampling fields and other engine sections together."""
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.decoding": [
-                    {},  # baseline: use shared decoder settings
+                    {},  # baseline: use engine default sampling
                     {
-                        "decoder.do_sample": False,
-                        "decoder.temperature": 0.0,
+                        "transformers.sampling.do_sample": False,
+                        "transformers.sampling.temperature": 0.0,
                         "transformers.num_beams": 4,
                     },
                 ],
@@ -355,8 +355,8 @@ class TestExpandGridSweepGroups:
         beam_config = next(
             c for c in valid if c.transformers is not None and c.transformers.num_beams is not None
         )
-        assert beam_config.decoder.do_sample is False
-        assert beam_config.decoder.temperature == 0.0
+        assert beam_config.transformers.sampling.do_sample is False
+        assert beam_config.transformers.sampling.temperature == 0.0
         assert beam_config.transformers.num_beams == 4
 
     def test_group_plus_explicit_experiments(self):
