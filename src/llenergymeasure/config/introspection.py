@@ -522,42 +522,6 @@ def list_all_param_paths(engine: str | None = None) -> list[str]:
     return sorted(set(paths))
 
 
-# =============================================================================
-# Constraint Metadata for SSOT Architecture Hardening
-# =============================================================================
-
-
-def get_mutual_exclusions() -> dict[str, list[str]]:
-    """Get parameters that are mutually exclusive.
-
-    Returns:
-        Dict mapping param path to list of params it cannot be used with.
-        These combinations should be skipped during runtime testing.
-    """
-    return {
-        # Transformers: can't use both 4-bit and 8-bit quantization
-        "transformers.load_in_4bit": ["transformers.load_in_8bit"],
-        "transformers.load_in_8bit": ["transformers.load_in_4bit"],
-        # torch_compile sub-options require torch_compile=True
-        "transformers.torch_compile_mode": ["transformers.torch_compile=None|False"],
-        "transformers.torch_compile_backend": ["transformers.torch_compile=None|False"],
-        # BitsAndBytes 4-bit sub-options require load_in_4bit=True
-        "transformers.bnb_4bit_compute_dtype": ["transformers.load_in_4bit=None|False"],
-        "transformers.bnb_4bit_quant_type": ["transformers.load_in_4bit=None|False"],
-        "transformers.bnb_4bit_use_double_quant": ["transformers.load_in_4bit=None|False"],
-        # cache_implementation contradicts use_cache=False
-        "transformers.cache_implementation": ["transformers.use_cache=False"],
-        # vLLM kv_cache_memory_bytes vs gpu_memory_utilization
-        "vllm.engine.kv_cache_memory_bytes": ["vllm.engine.gpu_memory_utilization"],
-        "vllm.engine.gpu_memory_utilization": ["vllm.engine.kv_cache_memory_bytes"],
-        # vLLM beam_search vs sampling sections (cross-section mutual exclusion)
-        "vllm.beam_search": ["vllm.sampling"],
-        "vllm.sampling": ["vllm.beam_search"],
-        # TensorRT: quantisation method is exclusive
-        "tensorrt.quant.quant_algo": [],  # Handled by Literal type constraint
-    }
-
-
 def get_engine_specific_params() -> dict[str, list[str]]:
     """Get params that are only valid for specific engines.
 
@@ -904,44 +868,6 @@ def get_validation_rules() -> list[dict[str, str]]:
             "combination": "load_in_4bit or load_in_8bit",
             "reason": "vLLM does not support bitsandbytes quantization",
             "resolution": "Use vllm.quantization (awq, gptq, fp8) for quantized inference",
-        },
-    ]
-
-
-def get_streaming_constraints() -> list[dict[str, str]]:
-    """Get streaming mode constraints for documentation.
-
-    Returns parameters that are ignored or behave differently when
-    streaming=True, because streaming requires sequential per-request
-    processing to measure TTFT/ITL.
-
-    Returns:
-        List of dicts with keys: engine, parameter, behaviour, impact.
-    """
-    return [
-        {
-            "engine": "all",
-            "parameter": "transformers.batch_size / vllm.max_num_seqs",
-            "behaviour": "Ignored - processes 1 request at a time",
-            "impact": "Reduced throughput but accurate latency",
-        },
-        {
-            "engine": "transformers",
-            "parameter": "transformers.torch_compile",
-            "behaviour": "May cause graph-tracing errors",
-            "impact": "Falls back to non-compiled inference",
-        },
-        {
-            "engine": "transformers",
-            "parameter": "transformers.batching_strategy",
-            "behaviour": "Ignored - always sequential",
-            "impact": "No batching optimisation",
-        },
-        {
-            "engine": "vllm",
-            "parameter": "vllm.enable_chunked_prefill",
-            "behaviour": "May interfere with TTFT measurement",
-            "impact": "Consider disabling for accurate TTFT",
         },
     ]
 
