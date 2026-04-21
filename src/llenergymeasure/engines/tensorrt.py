@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.engines.protocol import InferenceOutput
+from llenergymeasure.engines.protocol import ConfigProbe, DormantField, InferenceOutput
 from llenergymeasure.utils.exceptions import ConfigError, EngineError
 
 logger = logging.getLogger(__name__)
@@ -364,21 +364,28 @@ class TensorRTEngine:
     def validate_config(self, config: ExperimentConfig) -> list[str]:
         """Validate TensorRT-LLM hardware and quantisation compatibility.
 
-        Checks:
+        Thin wrapper around :meth:`_check_hardware_compat`. Retained on the
+        plugin protocol during the PR 50.1 → 50.3 transition; callers will be
+        migrated to :meth:`probe_config` in a later PR.
+        """
+        return self._check_hardware_compat(config)
+
+    @staticmethod
+    def _check_hardware_compat(config: ExperimentConfig) -> list[str]:
+        """Check SM capability + FP8 requirements against the visible GPU.
+
+        Shared between :meth:`validate_config` and :meth:`probe_config` (T5
+        fallback). Checks:
           - SM >= 7.5 (Turing minimum for TRT-LLM)
           - FP8 requires SM >= 8.9 (Ada Lovelace / Hopper); A100 is SM 8.0
 
-        Args:
-            config: Experiment configuration.
-
-        Returns:
-            List of error strings. Empty list means config is valid.
+        Returns empty list when no GPU is visible (cannot block at config
+        time inside a container without a visible device).
         """
         from llenergymeasure.device.gpu_info import get_compute_capability
 
         sm = get_compute_capability()
         if sm is None:
-            # Cannot detect GPU — don't block (may be inside container at config time)
             return []
 
         major, minor = sm
@@ -390,7 +397,6 @@ class TensorRTEngine:
                 f"TensorRT-LLM requires SM >= 7.5 (Turing). This GPU has SM {major}.{minor}."
             )
 
-        # Check FP8 quant requirements (SM >= 8.9)
         trt = config.tensorrt
         if trt is not None and trt.quant_config is not None:
             if trt.quant_config.quant_algo == "FP8" and sm_float < 8.9:
@@ -409,6 +415,16 @@ class TensorRTEngine:
                 )
 
         return errors
+
+    @staticmethod
+    def _probe_has_gpu_access() -> bool:
+        """True when NVML reports a compute capability (GPU visible to probe)."""
+        try:
+            from llenergymeasure.device.gpu_info import get_compute_capability
+
+            return get_compute_capability() is not None
+        except Exception:
+            return False
 
     # -------------------------------------------------------------------------
     # Private: model loading helpers
@@ -534,15 +550,13 @@ class TensorRTEngine:
 
         return kwargs
 
-    def _build_sampling_params(self, config: ExperimentConfig) -> Any:
-        """Build tensorrt_llm.SamplingParams from TensorRTSamplingConfig.
+    def _build_sampling_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
+        """Build the effective TRT-LLM SamplingParams kwargs (no constructor call).
 
-        All sampling fields live on ``config.tensorrt.sampling``. None values
-        mean "use TRT-LLM's default", so we forward only explicit values.
-        User writes top_k=0 to disable (TRT convention, matches HF).
+        Pure extraction of the kwargs-assembly portion of
+        :meth:`_build_sampling_params`. Separated so :meth:`probe_config` can
+        observe the effective kwargs without importing tensorrt_llm.
         """
-        from tensorrt_llm import SamplingParams
-
         trt = config.tensorrt
         sampling = trt.sampling if trt is not None else None
 
@@ -552,5 +566,123 @@ class TensorRTEngine:
         kwargs["random_seed"] = config.task.random_seed
         if config.task.max_output_tokens is not None:
             kwargs["max_new_tokens"] = config.task.max_output_tokens
+        return kwargs
 
+    def _declared_sampling_params(self, config: ExperimentConfig) -> dict[str, Any]:
+        """Return the user-declared TRT-LLM sampling kwargs.
+
+        Excludes engine-appended fields (``random_seed``, ``max_new_tokens``)
+        so the declared view matches exactly what the user wrote in
+        ``config.tensorrt.sampling``. ``compute_dormant_fields`` already
+        ignores effective-only keys, so the diff stays clean.
+        """
+        trt = config.tensorrt
+        sampling = trt.sampling if trt is not None else None
+        if sampling is None:
+            return {}
+        return sampling.model_dump(exclude_none=True)
+
+    @staticmethod
+    def _dormancy_reason(key: str, declared_val: Any, effective_val: Any | None) -> str | None:
+        """Explain why a declared TRT-LLM sampling field went dormant.
+
+        In the current data model TRT-LLM doesn't strip sampling fields. Any
+        dormancy observed here would indicate an unexpected engine-side filter
+        — worth surfacing without prejudging the reason.
+        """
+        return None
+
+    def _build_sampling_params(self, config: ExperimentConfig) -> Any:
+        """Build tensorrt_llm.SamplingParams from TensorRTSamplingConfig.
+
+        All sampling fields live on ``config.tensorrt.sampling``. None values
+        mean "use TRT-LLM's default", so we forward only explicit values.
+        User writes top_k=0 to disable (TRT convention, matches HF).
+        """
+        from tensorrt_llm import SamplingParams
+
+        kwargs = self._build_sampling_kwargs(config)
         return SamplingParams(**kwargs)
+
+    # -------------------------------------------------------------------------
+    # EnginePlugin: probe_config
+    # -------------------------------------------------------------------------
+
+    def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
+        """Observe what TRT-LLM would do with *config* without compiling engines.
+
+        Tier breakdown:
+          - T0: build effective LLM + SamplingParams kwargs; diff against
+                declared sampling params.
+          - T1+T2 (collapsed): construct ``tensorrt_llm.llmapi.LlmArgs`` from
+                the flat LLM() kwargs. LlmArgs is Pydantic-validated and runs
+                cross-resolution internally.
+          - T5: when the probe has no GPU access, run the static
+                SM / FP8 hardware compatibility check.
+
+        Never raises: every exception is captured into :attr:`ConfigProbe.errors`.
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+        effective_engine: dict[str, Any] = {}
+        effective_sampling: dict[str, Any] = {}
+        dormant: dict[str, DormantField] = {}
+
+        # --- T0: Build effective kwargs ---
+        try:
+            effective_engine = self._build_llm_kwargs(config)
+        except Exception as e:
+            errors.append(f"T0 engine kwargs: {type(e).__name__}: {e}")
+            return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
+
+        try:
+            effective_sampling = self._build_sampling_kwargs(config)
+        except Exception as e:
+            errors.append(f"T0 sampling kwargs: {type(e).__name__}: {e}")
+
+        # --- T0: Dormancy diff ---
+        try:
+            from llenergymeasure.engines._helpers import compute_dormant_fields
+
+            declared = self._declared_sampling_params(config)
+            dormant = compute_dormant_fields(
+                declared,
+                effective_sampling,
+                prefix="tensorrt.sampling.",
+                reason_fn=self._dormancy_reason,
+            )
+        except Exception as e:
+            errors.append(f"T0 dormancy diff: {type(e).__name__}: {e}")
+
+        # --- T1+T2: LlmArgs construction (Pydantic cross-resolution) ---
+        llmargs_ran = False
+        llmargs_cls: Any = None
+        try:
+            from tensorrt_llm.llmapi import LlmArgs as _LlmArgs
+
+            llmargs_cls = _LlmArgs
+        except Exception:
+            # tensorrt_llm not importable in the probe execution environment
+            # (not installed, or partial install — e.g. missing libpython).
+            # By design, the probe usually runs inside a per-backend probe
+            # container where the library is available; this branch is the
+            # degenerate fallback. Skip T1+T2 entirely; T5 below covers
+            # hardware compat from NVML alone.
+            llmargs_cls = None
+
+        if llmargs_cls is not None:
+            try:
+                llmargs_cls(**effective_engine)
+                llmargs_ran = True
+            except Exception as e:
+                errors.append(f"T1+T2 LlmArgs: {type(e).__name__}: {e}")
+
+        # --- T5: Static hardware compat (fallback when no GPU or LlmArgs unavailable) ---
+        # When LlmArgs ran it already calls NVML internally (OQ-4); re-running
+        # the static check would duplicate errors. Skip T5 in that case.
+        if not llmargs_ran or not self._probe_has_gpu_access():
+            for err in self._check_hardware_compat(config):
+                if err not in errors:
+                    errors.append(err)
+
+        return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
