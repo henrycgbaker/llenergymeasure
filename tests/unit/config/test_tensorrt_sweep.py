@@ -15,7 +15,7 @@ class TestEngineSweepAxis:
     def test_engine_sweep_axis_produces_distinct_configs(self):
         """sweep over engine: [pytorch, tensorrt] produces 2 ExperimentConfig objects."""
         raw_study = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "sweep": {
                 "engine": ["transformers", "tensorrt"],
             },
@@ -27,7 +27,7 @@ class TestEngineSweepAxis:
     def test_engine_sweep_with_trt_scoped_params(self):
         """engine: [transformers, tensorrt] with tensorrt.tensor_parallel_size: [1, 2] produces 3 configs."""
         raw_study = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": ["transformers", "tensorrt"],
             "sweep": {
                 "tensorrt.tensor_parallel_size": [1, 2],
@@ -50,7 +50,7 @@ class TestDottedNestedSweep:
     def test_dotted_quant_algo_sweep(self):
         """tensorrt.quant.quant_algo: [INT8, FP8, W4A16_AWQ] produces 3 configs."""
         raw_study = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "tensorrt",
             "sweep": {
                 "tensorrt.quant.quant_algo": ["INT8", "FP8", "W4A16_AWQ"],
@@ -64,7 +64,7 @@ class TestDottedNestedSweep:
     def test_dotted_nested_max_num_tokens_sweep(self):
         """tensorrt.max_num_tokens: [2048, 4096] produces 2 configs."""
         raw_study = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "tensorrt",
             "sweep": {
                 "tensorrt.max_num_tokens": [2048, 4096],
@@ -78,7 +78,7 @@ class TestDottedNestedSweep:
     def test_full_tensorrt_study_yaml_parses(self):
         """Comprehensive study YAML with all sub-sections and quant sweep round-trips."""
         raw_study = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "tensorrt",
             "tensorrt": {
                 "tensor_parallel_size": 2,
@@ -120,7 +120,7 @@ class TestDottedNestedSweep:
     def test_invalid_quant_algo_in_sweep_is_skipped(self):
         """Sweep with invalid quant algo produces 1 valid + 1 skipped."""
         raw_study = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "tensorrt",
             "sweep": {
                 "tensorrt.quant.quant_algo": ["INT8", "INVALID_VALUE"],

@@ -248,7 +248,7 @@ class TestExperimentConfigIntegration:
     def test_experiment_config_with_full_tensorrt(self):
         """ExperimentConfig with engine='tensorrt' and full tensorrt section validates."""
         config = ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="tensorrt",
             tensorrt={
                 "tensor_parallel_size": 2,

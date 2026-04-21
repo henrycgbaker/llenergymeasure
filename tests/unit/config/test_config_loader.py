@@ -35,23 +35,23 @@ def _write_yaml(tmp_path: Path, content: str, name: str = "config.yaml") -> Path
 
 def test_load_valid_yaml(tmp_path):
     """Minimal valid YAML loads successfully into ExperimentConfig."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
     config = load_experiment_config(path)
     assert isinstance(config, ExperimentConfig)
-    assert config.model == "gpt2"
+    assert config.task.model == "gpt2"
     assert config.engine == "transformers"
 
 
 def test_load_yaml_with_dtype(tmp_path):
     """YAML with optional fields loads correctly."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\ndtype: float16\n")
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\ndtype: float16\n")
     config = load_experiment_config(path)
     assert config.dtype == "float16"
 
 
 def test_load_yaml_with_pytorch_section(tmp_path):
     """YAML with nested pytorch: section loads correctly."""
-    yaml_content = "model: gpt2\nengine: transformers\ntransformers:\n  batch_size: 4\n"
+    yaml_content = "task:\n  model: gpt2\nengine: transformers\ntransformers:\n  batch_size: 4\n"
     path = _write_yaml(tmp_path, yaml_content)
     config = load_experiment_config(path)
     assert config.transformers is not None
@@ -60,9 +60,9 @@ def test_load_yaml_with_pytorch_section(tmp_path):
 
 def test_load_yaml_with_version_field_stripped(tmp_path):
     """Optional 'version' field in YAML is stripped before validation (not ExperimentConfig field)."""
-    path = _write_yaml(tmp_path, "version: 2.0\nmodel: gpt2\nengine: transformers\n")
+    path = _write_yaml(tmp_path, "version: 2.0\ntask:\n  model: gpt2\nengine: transformers\n")
     config = load_experiment_config(path)
-    assert config.model == "gpt2"
+    assert config.task.model == "gpt2"
 
 
 # ---------------------------------------------------------------------------
@@ -72,15 +72,15 @@ def test_load_yaml_with_version_field_stripped(tmp_path):
 
 def test_load_unknown_yaml_key_raises_config_error(tmp_path):
     """YAML with unknown top-level key raises ConfigError (not ValidationError)."""
-    path = _write_yaml(tmp_path, "model: gpt2\nthis_key_does_not_exist: bad\n")
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nthis_key_does_not_exist: bad\n")
     with pytest.raises(ConfigError, match="Unknown field"):
         load_experiment_config(path)
 
 
 def test_load_unknown_key_includes_did_you_mean(tmp_path):
     """ConfigError for a close typo includes a 'did you mean' suggestion."""
-    # 'modul' is close enough to 'model' to get a suggestion
-    path = _write_yaml(tmp_path, "modul: gpt2\n")
+    # 'engin' is close enough to 'engine' to get a suggestion
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengin: transformers\n")
     with pytest.raises(ConfigError, match="did you mean"):
         load_experiment_config(path)
 
@@ -102,14 +102,14 @@ def test_pydantic_validation_error_passes_through(tmp_path):
 
     dataset.n_prompts=-1 is a valid field path but has an invalid value (ge=1 constraint).
     """
-    path = _write_yaml(tmp_path, "model: gpt2\ndataset:\n  n_prompts: -1\n")
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\n  dataset:\n    n_prompts: -1\n")
     with pytest.raises(ValidationError):
         load_experiment_config(path)
 
 
 def test_pydantic_validation_error_not_wrapped_in_config_error(tmp_path):
     """ValidationError from field value failures is not wrapped in ConfigError."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: totally_invalid_backend\n")
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: totally_invalid_backend\n")
     # engine is a valid field name, but the value is invalid → ValidationError
     with pytest.raises(ValidationError):
         load_experiment_config(path)
@@ -122,31 +122,31 @@ def test_pydantic_validation_error_not_wrapped_in_config_error(tmp_path):
 
 def test_cli_overrides_merged(tmp_path):
     """cli_overrides override YAML values at highest priority."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
-    config = load_experiment_config(path, cli_overrides={"model": "bert-base"})
-    assert config.model == "bert-base"
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
+    config = load_experiment_config(path, cli_overrides={"task.model": "bert-base"})
+    assert config.task.model == "bert-base"
 
 
 def test_cli_overrides_none_values_ignored(tmp_path):
     """None values in cli_overrides are ignored (unset CLI flags)."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
-    config = load_experiment_config(path, cli_overrides={"model": None, "dtype": None})
-    assert config.model == "gpt2"  # file value retained
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
+    config = load_experiment_config(path, cli_overrides={"task.model": None, "dtype": None})
+    assert config.task.model == "gpt2"  # file value retained
 
 
 def test_cli_overrides_without_file():
     """load_experiment_config with cli_overrides and no file works."""
     config = load_experiment_config(
         path=None,
-        cli_overrides={"model": "gpt2", "engine": "transformers"},
+        cli_overrides={"task.model": "gpt2", "engine": "transformers"},
     )
-    assert config.model == "gpt2"
+    assert config.task.model == "gpt2"
     assert config.engine == "transformers"
 
 
 def test_cli_override_dotted_key(tmp_path):
     """Dotted CLI override keys are unflattened into nested dicts."""
-    path = _write_yaml(tmp_path, "model: gpt2\nengine: transformers\n")
+    path = _write_yaml(tmp_path, "task:\n  model: gpt2\nengine: transformers\n")
     config = load_experiment_config(
         path,
         cli_overrides={"transformers.batch_size": 8},
@@ -222,11 +222,11 @@ def test_load_study_config_grid_sweep(tmp_path):
     study_yaml.write_text(
         yaml.dump(
             {
-                "model": "gpt2",
+                "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
                     "dtype": ["float16", "bfloat16"],
-                    "dataset.n_prompts": [50, 100],
+                    "task.dataset.n_prompts": [50, 100],
                 },
             }
         )
@@ -251,9 +251,9 @@ def test_load_study_config_explicit_experiments(tmp_path):
         yaml.dump(
             {
                 "experiments": [
-                    {"model": "gpt2", "engine": "transformers"},
-                    {"model": "gpt2", "engine": "transformers", "dtype": "float16"},
-                    {"model": "gpt2", "engine": "transformers", "dtype": "bfloat16"},
+                    {"task": {"model": "gpt2"}, "engine": "transformers"},
+                    {"task": {"model": "gpt2"}, "engine": "transformers", "dtype": "float16"},
+                    {"task": {"model": "gpt2"}, "engine": "transformers", "dtype": "bfloat16"},
                 ],
             }
         )
@@ -268,13 +268,13 @@ def test_load_study_config_combined_mode(tmp_path):
     study_yaml.write_text(
         yaml.dump(
             {
-                "model": "gpt2",
+                "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
                     "dtype": ["float16", "bfloat16"],
                 },
                 "experiments": [
-                    {"model": "gpt2-xl", "engine": "transformers"},
+                    {"task": {"model": "gpt2-xl"}, "engine": "transformers"},
                 ],
             }
         )
@@ -290,7 +290,7 @@ def test_load_study_config_with_execution_block(tmp_path):
     study_yaml.write_text(
         yaml.dump(
             {
-                "model": "gpt2",
+                "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {
                     "dtype": ["float16", "bfloat16"],
@@ -315,7 +315,7 @@ def test_load_study_config_cli_overrides(tmp_path):
     study_yaml.write_text(
         yaml.dump(
             {
-                "model": "gpt2",
+                "task": {"model": "gpt2"},
                 "engine": "transformers",
                 "sweep": {"dtype": ["float16", "bfloat16"]},
                 "study_execution": {"n_cycles": 1},
@@ -334,9 +334,8 @@ def test_load_study_config_with_base(tmp_path):
     base_yaml.write_text(
         yaml.dump(
             {
-                "model": "gpt2",
+                "task": {"model": "gpt2", "dataset": {"n_prompts": 75}},
                 "engine": "transformers",
-                "dataset": {"n_prompts": 75},
             }
         )
     )
@@ -355,8 +354,8 @@ def test_load_study_config_with_base(tmp_path):
     assert len(sc.experiments) == 2
     # All experiments should inherit n_prompts=75 from base
     for exp in sc.experiments:
-        assert exp.model == "gpt2"
-        assert exp.dataset.n_prompts == 75
+        assert exp.task.model == "gpt2"
+        assert exp.task.dataset.n_prompts == 75
 
 
 def test_load_study_config_empty_study_raises(tmp_path):
@@ -383,9 +382,17 @@ def test_load_study_config_all_invalid_raises(tmp_path):
             {
                 "experiments": [
                     # Invalid: pytorch section with vllm engine
-                    {"model": "gpt2", "engine": "vllm", "transformers": {"batch_size": 4}},
+                    {
+                        "task": {"model": "gpt2"},
+                        "engine": "vllm",
+                        "transformers": {"batch_size": 4},
+                    },
                     # Invalid: vllm section with pytorch engine
-                    {"model": "gpt2", "engine": "transformers", "vllm": {"max_num_seqs": 64}},
+                    {
+                        "task": {"model": "gpt2"},
+                        "engine": "transformers",
+                        "vllm": {"max_num_seqs": 64},
+                    },
                 ],
             }
         )
@@ -405,7 +412,7 @@ def test_load_study_config_hash_excludes_execution(tmp_path):
     study_yaml_a = tmp_path / "study_a.yaml"
     study_yaml_b = tmp_path / "study_b.yaml"
     sweep_content = {
-        "model": "gpt2",
+        "task": {"model": "gpt2"},
         "engine": "transformers",
         "sweep": {"dtype": ["float16", "bfloat16"]},
     }

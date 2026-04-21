@@ -19,15 +19,15 @@ from tests.conftest import make_config
 
 
 def test_minimal_valid_config():
-    """ExperimentConfig(model='gpt2', engine='transformers') succeeds."""
-    config = ExperimentConfig(model="gpt2", engine="transformers")
-    assert config.model == "gpt2"
+    """ExperimentConfig(task={'model': 'gpt2'}, engine='transformers') succeeds."""
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
+    assert config.task.model == "gpt2"
     assert config.engine == "transformers"
 
 
 def test_model_only_uses_pytorch_default():
     """ExperimentConfig with only model= uses engine='transformers' default."""
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     assert config.engine == "transformers"
 
 
@@ -39,13 +39,13 @@ def test_model_only_uses_pytorch_default():
 def test_extra_fields_forbidden():
     """Unknown top-level fields are rejected with ValidationError (extra='forbid')."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", engine="transformers", unknown_field="x")
+        ExperimentConfig(task={"model": "gpt2"}, engine="transformers", unknown_field="x")
 
 
 def test_multiple_extra_fields_all_rejected():
     """Multiple unknown fields are all rejected."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", engine="transformers", foo="a", bar="b")
+        ExperimentConfig(task={"model": "gpt2"}, engine="transformers", foo="a", bar="b")
 
 
 # ---------------------------------------------------------------------------
@@ -55,13 +55,13 @@ def test_multiple_extra_fields_all_rejected():
 
 def test_field_name_model():
     """v2.0 'model' field (not 'model_name') is accepted."""
-    config = ExperimentConfig(model="gpt2")
-    assert config.model == "gpt2"
+    config = ExperimentConfig(task={"model": "gpt2"})
+    assert config.task.model == "gpt2"
 
 
 def test_field_name_dtype():
     """v2.0 'dtype' field is accepted."""
-    config = ExperimentConfig(model="gpt2", dtype="float16")
+    config = ExperimentConfig(task={"model": "gpt2"}, dtype="float16")
     assert config.dtype == "float16"
 
 
@@ -69,20 +69,20 @@ def test_field_name_n():
     """v2.0 dataset.n_prompts field (not 'num_input_prompts') is accepted."""
     from llenergymeasure.config.models import DatasetConfig
 
-    config = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
-    assert config.dataset.n_prompts == 50
+    config = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)})
+    assert config.task.dataset.n_prompts == 50
 
 
 def test_v1x_field_model_name_rejected():
     """v1.x 'model_name' field is NOT accepted (extra='forbid')."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model_name="gpt2")  # type: ignore[call-arg]
+        ExperimentConfig(task={"model": "gpt2"}, model_name="gpt2")  # type: ignore[call-arg]
 
 
 def test_v1x_field_fp_precision_rejected():
     """v1.x 'fp_precision' field is NOT accepted (extra='forbid')."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", fp_dtype="float16")  # type: ignore[call-arg]
+        ExperimentConfig(task={"model": "gpt2"}, fp_dtype="float16")  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------
@@ -93,24 +93,24 @@ def test_v1x_field_fp_precision_rejected():
 def test_invalid_engine_raises_validation_error():
     """Unknown engine value raises ValidationError."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", engine="invalid_backend")
+        ExperimentConfig(task={"model": "gpt2"}, engine="invalid_backend")
 
 
 def test_default_engine_is_pytorch():
     """Default engine is 'transformers' when not specified."""
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     assert config.engine == "transformers"
 
 
 def test_vllm_engine_accepted():
     """engine='vllm' is accepted."""
-    config = ExperimentConfig(model="gpt2", engine="vllm")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
     assert config.engine == "vllm"
 
 
 def test_tensorrt_engine_accepted():
     """engine='tensorrt' is accepted."""
-    config = ExperimentConfig(model="gpt2", engine="tensorrt")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="tensorrt")
     assert config.engine == "tensorrt"
 
 
@@ -122,7 +122,7 @@ def test_tensorrt_engine_accepted():
 def test_pytorch_config_section_composition():
     """config with transformers={batch_size: 4} engine section is accepted."""
     config = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="transformers",
         transformers={"batch_size": 4},
     )
@@ -163,7 +163,7 @@ def test_pytorch_section_with_wrong_engine_rejected():
     """pytorch: section with engine='vllm' raises ValidationError (cross-validator)."""
     with pytest.raises(ValidationError, match=r"transformers.*config section provided.*engine"):
         ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="vllm",
             transformers={"batch_size": 4},
         )
@@ -173,7 +173,7 @@ def test_vllm_section_with_pytorch_engine_rejected():
     """vllm: section with engine='transformers' raises ValidationError (cross-validator)."""
     with pytest.raises(ValidationError, match=r"vllm.*config section provided.*engine"):
         ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="transformers",
             vllm={"engine": {"max_num_seqs": 16}},
         )
@@ -183,7 +183,7 @@ def test_tensorrt_section_with_wrong_engine_rejected():
     """tensorrt: section with engine='transformers' raises ValidationError."""
     with pytest.raises(ValidationError, match=r"tensorrt.*config section provided.*engine"):
         ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="transformers",
             tensorrt={"max_batch_size": 8},
         )
@@ -197,24 +197,24 @@ def test_tensorrt_section_with_wrong_engine_rejected():
 def test_invalid_dtype_raises_validation_error():
     """Invalid dtype value raises ValidationError."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", dtype="fp16")  # old shorthand
+        ExperimentConfig(task={"model": "gpt2"}, dtype="fp16")  # old shorthand
 
 
 def test_valid_dtype_float32():
     """dtype='float32' is valid."""
-    config = ExperimentConfig(model="gpt2", dtype="float32")
+    config = ExperimentConfig(task={"model": "gpt2"}, dtype="float32")
     assert config.dtype == "float32"
 
 
 def test_valid_dtype_float16():
     """dtype='float16' is valid."""
-    config = ExperimentConfig(model="gpt2", dtype="float16")
+    config = ExperimentConfig(task={"model": "gpt2"}, dtype="float16")
     assert config.dtype == "float16"
 
 
 def test_valid_dtype_bfloat16():
     """dtype='bfloat16' is valid."""
-    config = ExperimentConfig(model="gpt2", dtype="bfloat16")
+    config = ExperimentConfig(task={"model": "gpt2"}, dtype="bfloat16")
     assert config.dtype == "bfloat16"
 
 
@@ -233,7 +233,7 @@ def test_all_pytorch_dtypes_valid(dt):
 def test_passthrough_kwargs_accepted():
     """passthrough_kwargs with non-colliding keys are accepted."""
     config = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         passthrough_kwargs={"custom_flag": True, "my_special_param": 42},
     )
     assert config.passthrough_kwargs is not None
@@ -244,8 +244,8 @@ def test_passthrough_kwargs_collision_with_top_level_field_rejected():
     """passthrough_kwargs keys colliding with ExperimentConfig fields are rejected."""
     with pytest.raises(ValidationError, match=r"passthrough_kwargs.*collide"):
         ExperimentConfig(
-            model="gpt2",
-            passthrough_kwargs={"model": "override"},  # 'model' is a top-level field
+            task={"model": "gpt2"},
+            passthrough_kwargs={"task": "override"},  # 'task' is a top-level field
         )
 
 
@@ -258,14 +258,14 @@ def test_make_config_helper_returns_valid_config():
     """make_config() factory from conftest creates a valid ExperimentConfig."""
     config = make_config()
     assert isinstance(config, ExperimentConfig)
-    assert config.model == "gpt2"
+    assert config.task.model == "gpt2"
     assert config.engine == "transformers"
 
 
 def test_make_config_override():
     """make_config(**overrides) applies overrides over defaults."""
     config = make_config(model="bert-base", dtype="float32")
-    assert config.model == "bert-base"
+    assert config.task.model == "bert-base"
     assert config.dtype == "float32"
 
 
@@ -276,33 +276,33 @@ def test_make_config_override():
 
 def test_energy_sampler_default() -> None:
     """energy_sampler defaults to 'auto'."""
-    cfg = ExperimentConfig(model="gpt2")
-    assert cfg.energy_sampler == "auto"
+    cfg = ExperimentConfig(task={"model": "gpt2"})
+    assert cfg.measurement.energy_sampler == "auto"
 
 
 def test_energy_sampler_null_disables() -> None:
     """energy_sampler=None disables energy measurement."""
-    cfg = ExperimentConfig(model="gpt2", energy_sampler=None)
-    assert cfg.energy_sampler is None
+    cfg = ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": None})
+    assert cfg.measurement.energy_sampler is None
 
 
 def test_energy_sampler_valid_engines() -> None:
     """All energy_sampler literal values are accepted."""
     for engine in ("auto", "nvml", "zeus", "codecarbon"):
-        cfg = ExperimentConfig(model="gpt2", energy_sampler=engine)
-        assert cfg.energy_sampler == engine
+        cfg = ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": engine})
+        assert cfg.measurement.energy_sampler == engine
 
 
 def test_energy_sampler_invalid_engine() -> None:
     """Unknown energy_sampler values raise ValidationError."""
     with pytest.raises(ValidationError):
-        ExperimentConfig(model="gpt2", energy_sampler="unknown_backend")
+        ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": "unknown_backend"})
 
 
 def test_energy_sampler_override() -> None:
     """ExperimentConfig allows overriding energy_sampler."""
-    cfg = ExperimentConfig(model="gpt2", energy_sampler="nvml")
-    assert cfg.energy_sampler == "nvml"
+    cfg = ExperimentConfig(task={"model": "gpt2"}, measurement={"energy_sampler": "nvml"})
+    assert cfg.measurement.energy_sampler == "nvml"
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +397,7 @@ def test_vllm_fp8_float32_rejected():
 
     with pytest.raises(ValidationError, match=r"fp8.*incompatible.*float32"):
         ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="vllm",
             dtype="float32",
             vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
@@ -409,7 +409,7 @@ def test_vllm_fp8_float16_accepted():
     from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="vllm",
         dtype="float16",
         vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
@@ -422,7 +422,7 @@ def test_vllm_fp8_bfloat16_accepted():
     from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="vllm",
         dtype="bfloat16",
         vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="fp8")),
@@ -435,7 +435,7 @@ def test_vllm_non_fp8_float32_accepted():
     from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="vllm",
         dtype="float32",
         vllm=VLLMConfig(engine=VLLMEngineConfig(quantization="awq")),
@@ -448,7 +448,7 @@ def test_vllm_no_quantization_float32_accepted():
     from llenergymeasure.config.engine_configs import VLLMConfig, VLLMEngineConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="vllm",
         dtype="float32",
         vllm=VLLMConfig(engine=VLLMEngineConfig()),
@@ -506,7 +506,7 @@ def test_pytorch_flash_attn2_float32_rejected():
 
     with pytest.raises(ValidationError, match=r"flash_attention_2.*requires.*float16"):
         ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="transformers",
             dtype="float32",
             transformers=TransformersConfig(attn_implementation="flash_attention_2"),
@@ -519,7 +519,7 @@ def test_pytorch_flash_attn3_float32_rejected():
 
     with pytest.raises(ValidationError, match=r"flash_attention_3.*requires.*float16"):
         ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="transformers",
             dtype="float32",
             transformers=TransformersConfig(attn_implementation="flash_attention_3"),
@@ -531,7 +531,7 @@ def test_pytorch_flash_attn2_bfloat16_accepted():
     from llenergymeasure.config.engine_configs import TransformersConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="transformers",
         dtype="bfloat16",
         transformers=TransformersConfig(attn_implementation="flash_attention_2"),
@@ -544,7 +544,7 @@ def test_pytorch_eager_float32_accepted():
     from llenergymeasure.config.engine_configs import TransformersConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="transformers",
         dtype="float32",
         transformers=TransformersConfig(attn_implementation="eager"),
@@ -557,7 +557,7 @@ def test_pytorch_no_attn_impl_float32_accepted():
     from llenergymeasure.config.engine_configs import TransformersConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="transformers",
         dtype="float32",
         transformers=TransformersConfig(),
@@ -576,7 +576,7 @@ def test_trt_fp8_rejects_float32() -> None:
 
     with pytest.raises(ValidationError, match=r"FP8.*incompatible.*float32"):
         ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2"},
             engine="tensorrt",
             dtype="float32",
             tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
@@ -588,7 +588,7 @@ def test_trt_fp8_accepts_float16() -> None:
     from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="tensorrt",
         dtype="float16",
         tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
@@ -601,7 +601,7 @@ def test_trt_fp8_accepts_bfloat16() -> None:
     from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="tensorrt",
         dtype="bfloat16",
         tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
@@ -614,7 +614,7 @@ def test_trt_non_fp8_accepts_float32() -> None:
     from llenergymeasure.config.engine_configs import TensorRTConfig, TensorRTQuantConfig
 
     cfg = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="tensorrt",
         dtype="float32",
         tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8")),

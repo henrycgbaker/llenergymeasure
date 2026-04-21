@@ -11,20 +11,22 @@ from typing import Any
 
 
 def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
-    """Expand dotted keys into nested dicts. Non-dotted keys pass through.
+    """Expand dotted keys into nested dicts (recursive). Non-dotted keys pass through.
 
     Example:
-        {"engine.block_size": 16} -> {"engine": {"block_size": 16}}
-        {"batch_size": 4}         -> {"batch_size": 4}
+        {"engine.block_size": 16}        -> {"engine": {"block_size": 16}}
+        {"task.dataset.n_prompts": 50}   -> {"task": {"dataset": {"n_prompts": 50}}}
+        {"batch_size": 4}                -> {"batch_size": 4}
     """
     result: dict[str, Any] = {}
     for key, value in flat.items():
         if "." in key:
-            parts = key.split(".", 1)
-            if parts[0] not in result:
-                result[parts[0]] = {}
-            if isinstance(result[parts[0]], dict):
-                result[parts[0]][parts[1]] = value
+            prefix, rest = key.split(".", 1)
+            if prefix not in result:
+                result[prefix] = {}
+            if isinstance(result[prefix], dict):
+                nested = _unflatten({rest: value})
+                result[prefix] = deep_merge(result[prefix], nested)
         else:
             result[key] = value
     return result

@@ -192,12 +192,12 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     # --- Load baseline from disk cache (mounted by host StudyRunner) ---
     baseline = None
     baseline_cache_path = Path(f"{CONTAINER_EXCHANGE_DIR}/baseline_cache.json")
-    if baseline_cache_path.exists() and config.baseline.enabled:
+    if baseline_cache_path.exists() and config.measurement.baseline.enabled:
         from llenergymeasure.harness.baseline import load_baseline_cache
 
         baseline = load_baseline_cache(
             baseline_cache_path,
-            ttl=config.baseline.cache_ttl_seconds,
+            ttl=config.measurement.baseline.cache_ttl_seconds,
         )
 
     # --- Run experiment via library API (not CLI) ---

@@ -53,7 +53,7 @@ def load_prompts(config: ExperimentConfig) -> list[str]:
         ValueError: If dataset source is unknown or file not found.
         ValueError: If the dataset has fewer prompts than requested.
     """
-    ds = config.dataset
+    ds = config.task.dataset
     source = ds.source
 
     # Built-in alias
@@ -64,7 +64,7 @@ def load_prompts(config: ExperimentConfig) -> list[str]:
             n=ds.n_prompts,
             name=source,
             order=ds.order,
-            seed=config.random_seed,
+            seed=config.task.random_seed,
         )
 
     # User-supplied file path
@@ -75,7 +75,7 @@ def load_prompts(config: ExperimentConfig) -> list[str]:
             n=ds.n_prompts,
             name=str(path),
             order=ds.order,
-            seed=config.random_seed,
+            seed=config.task.random_seed,
         )
 
     valid = ", ".join(f'"{k}"' for k in sorted(BUILTIN_DATASETS))

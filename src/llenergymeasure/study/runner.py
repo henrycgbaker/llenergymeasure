@@ -824,7 +824,7 @@ class StudyRunner:
         of the same engine image, so the CUDA init state matches the experiment
         container (see ``.product/research/baseline-measurement-location.md``).
         """
-        strategy = config.baseline.strategy
+        strategy = config.measurement.baseline.strategy
 
         if strategy == "fresh":
             return None
@@ -836,11 +836,11 @@ class StudyRunner:
         # TTL expiry check
         if cached is not None:
             age = time.time() - cached.timestamp
-            if age >= config.baseline.cache_ttl_seconds:
+            if age >= config.measurement.baseline.cache_ttl_seconds:
                 logger.info(
                     "Baseline expired (age=%.0fs > ttl=%.0fs). Re-measuring.",
                     age,
-                    config.baseline.cache_ttl_seconds,
+                    config.measurement.baseline.cache_ttl_seconds,
                 )
                 cached = None
                 self._baselines.pop(cache_key, None)
@@ -850,7 +850,10 @@ class StudyRunner:
             self._experiments_since_validation[cache_key] = (
                 self._experiments_since_validation.get(cache_key, 0) + 1
             )
-            if self._experiments_since_validation[cache_key] >= config.baseline.validation_interval:
+            if (
+                self._experiments_since_validation[cache_key]
+                >= config.measurement.baseline.validation_interval
+            ):
                 self._validate_baseline(config, cache_key)
                 cached = self._baselines.get(cache_key)  # may have been re-measured
 
@@ -877,7 +880,9 @@ class StudyRunner:
                 )
                 t0_load = time.perf_counter()
 
-            loaded = load_baseline_cache(disk_path, ttl=config.baseline.cache_ttl_seconds)
+            loaded = load_baseline_cache(
+                disk_path, ttl=config.measurement.baseline.cache_ttl_seconds
+            )
 
             if self._progress is not None:
                 load_elapsed = time.perf_counter() - t0_load
@@ -894,7 +899,7 @@ class StudyRunner:
                 return loaded
 
         # Measure fresh baseline (in-container for Docker targets)
-        dur = config.baseline.duration_seconds
+        dur = config.measurement.baseline.duration_seconds
         # Prefer the image tag over engine name so users see which container
         # is running in multi-engine studies.
         spec = self._runner_specs.get(config.engine) if self._runner_specs else None
@@ -1078,7 +1083,7 @@ class StudyRunner:
             from llenergymeasure.harness.baseline import measure_baseline_power
 
             return measure_baseline_power(
-                duration_sec=config.baseline.duration_seconds,
+                duration_sec=config.measurement.baseline.duration_seconds,
                 gpu_indices=gpu_indices,
             )
 
@@ -1092,7 +1097,7 @@ class StudyRunner:
         return run_baseline_container(
             image=spec.image,
             mode="measure",
-            duration_sec=config.baseline.duration_seconds,
+            duration_sec=config.measurement.baseline.duration_seconds,
             gpu_indices=gpu_indices,
             on_stage=on_stage,
         )
@@ -1162,21 +1167,21 @@ class StudyRunner:
             return
 
         drift = abs(spot - cached.power_w) / cached.power_w
-        if drift > config.baseline.drift_threshold:
-            dur = config.baseline.duration_seconds
+        if drift > config.measurement.baseline.drift_threshold:
+            dur = config.measurement.baseline.duration_seconds
             logger.info(
                 "Baseline drift detected: %.1fW -> %.1fW (%.1f%% > %.1f%% threshold). "
                 "Re-measuring full baseline.",
                 cached.power_w,
                 spot,
                 drift * 100,
-                config.baseline.drift_threshold * 100,
+                config.measurement.baseline.drift_threshold * 100,
             )
             if self._progress is not None:
                 self._progress.on_step_update(
                     STEP_BASELINE,
                     f"{location} · drift {drift * 100:.1f}% > "
-                    f"{config.baseline.drift_threshold * 100:.0f}%, "
+                    f"{config.measurement.baseline.drift_threshold * 100:.0f}%, "
                     f"re-measuring ({dur:.0f}s)",
                 )
 
@@ -1190,7 +1195,7 @@ class StudyRunner:
             logger.debug(
                 "Baseline validation passed: drift=%.1f%% (threshold=%.1f%%)",
                 drift * 100,
-                config.baseline.drift_threshold * 100,
+                config.measurement.baseline.drift_threshold * 100,
             )
 
         if self._progress is not None:
@@ -1499,7 +1504,7 @@ class StudyRunner:
         snapshot = self._get_env_snapshot()
 
         # Resolve cached baseline in parent — avoids 30s re-measurement per subprocess
-        baseline = self._get_baseline(config) if config.baseline.enabled else None
+        baseline = self._get_baseline(config) if config.measurement.baseline.enabled else None
 
         parent_conn, child_conn = mp_ctx.Pipe(duplex=False)
         progress_queue = mp_ctx.Queue()
@@ -1702,7 +1707,10 @@ class StudyRunner:
         if self._progress:
             from llenergymeasure.utils.formatting import format_experiment_header
 
-            host_baseline = config.baseline.enabled and config.baseline.strategy != "fresh"
+            host_baseline = (
+                config.measurement.baseline.enabled
+                and config.measurement.baseline.strategy != "fresh"
+            )
             steps = docker_steps(
                 images_prepared=self._images_prepared,
                 host_baseline=host_baseline,
@@ -1718,7 +1726,7 @@ class StudyRunner:
 
         extra_mounts = list(spec.extra_mounts) if spec.extra_mounts else []
         cache_key = self._baseline_cache_key(config)
-        baseline = self._get_baseline(config) if config.baseline.enabled else None
+        baseline = self._get_baseline(config) if config.measurement.baseline.enabled else None
         if baseline is not None:
             # Experiment container reads /run/llem/baseline_cache.json; the host
             # picks the right per-cache-key file at dispatch time. Docker parses

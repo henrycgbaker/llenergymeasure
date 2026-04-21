@@ -243,15 +243,27 @@ def _to_study_config(
                 "run_experiment() requires either a config argument or model= keyword.\n"
                 "Example: run_experiment(model='meta-llama/Llama-3.1-8B')"
             )
-        # Build kwargs dict for ExperimentConfig — only include non-default values
-        # to let Pydantic defaults apply for omitted fields.
-        ec_kwargs: dict[str, Any] = {
+        # Build kwargs dict for ExperimentConfig — route fields into sub-models.
+        task_kwargs: dict[str, Any] = {
             "model": model,
             "dataset": DatasetConfig(source=dataset, n_prompts=n_prompts),
         }
+        ec_kwargs: dict[str, Any] = {"task": task_kwargs}
         if engine is not None:
             ec_kwargs["engine"] = engine
-        ec_kwargs.update(kwargs)
+        # Route remaining kwargs into correct sub-model or top-level
+        _TASK_FIELDS = {"max_input_tokens", "max_output_tokens", "random_seed"}
+        _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler"}
+        measurement_kwargs: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if key in _TASK_FIELDS:
+                task_kwargs[key] = value
+            elif key in _MEASUREMENT_FIELDS:
+                measurement_kwargs[key] = value
+            else:
+                ec_kwargs[key] = value
+        if measurement_kwargs:
+            ec_kwargs["measurement"] = measurement_kwargs
         experiment = ExperimentConfig(**ec_kwargs)
     else:
         raise ConfigError(
@@ -464,7 +476,10 @@ def _run(
             spec = runner_specs.get(config.engine) if runner_specs else None
             is_docker = spec and spec.mode == RUNNER_DOCKER
             if is_docker:
-                host_baseline = config.baseline.enabled and config.baseline.strategy != "fresh"
+                host_baseline = (
+                    config.measurement.baseline.enabled
+                    and config.measurement.baseline.strategy != "fresh"
+                )
                 steps = docker_steps(images_prepared=False, host_baseline=host_baseline)
             else:
                 steps = list(STEPS_LOCAL)

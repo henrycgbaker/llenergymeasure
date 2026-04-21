@@ -37,7 +37,7 @@ def print_study_progress(
     icons = {"running": "...", "completed": "OK", "failed": "FAIL"}
     icon = icons.get(status, "?")
 
-    parts = [f"[{index}/{total}]", icon, config.model, config.engine, config.dtype]
+    parts = [f"[{index}/{total}]", icon, config.task.model, config.engine, config.dtype]
 
     if elapsed is not None:
         parts.append("--")

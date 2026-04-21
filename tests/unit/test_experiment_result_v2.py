@@ -288,7 +288,7 @@ def test_tokens_per_joule_zero_energy(make_result):
 
 def test_compute_measurement_config_hash():
     """Known ExperimentConfig produces 16-char hex string."""
-    cfg = ExperimentConfig(model="gpt2")
+    cfg = ExperimentConfig(task={"model": "gpt2"})
     h = compute_measurement_config_hash(cfg)
     assert len(h) == 16
     assert all(c in "0123456789abcdef" for c in h)
@@ -296,7 +296,7 @@ def test_compute_measurement_config_hash():
 
 def test_config_hash_deterministic():
     """Same config always produces same hash."""
-    cfg = ExperimentConfig(model="gpt2")
+    cfg = ExperimentConfig(task={"model": "gpt2"})
     h1 = compute_measurement_config_hash(cfg)
     h2 = compute_measurement_config_hash(cfg)
     assert h1 == h2
@@ -304,8 +304,8 @@ def test_config_hash_deterministic():
 
 def test_config_hash_different_configs():
     """Different configs produce different hashes."""
-    cfg1 = ExperimentConfig(model="gpt2")
-    cfg2 = ExperimentConfig(model="meta-llama/Llama-2-7b-hf")
+    cfg1 = ExperimentConfig(task={"model": "gpt2"})
+    cfg2 = ExperimentConfig(task={"model": "meta-llama/Llama-2-7b-hf"})
     h1 = compute_measurement_config_hash(cfg1)
     h2 = compute_measurement_config_hash(cfg2)
     assert h1 != h2

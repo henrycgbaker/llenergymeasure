@@ -114,7 +114,9 @@ class TestPipelineSingleExperiment:
 
         # Write minimal experiment YAML
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text(
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+        )
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -122,9 +124,9 @@ class TestPipelineSingleExperiment:
 
         # Real YAML parsing and config validation (not mocked)
         experiment_config = load_experiment_config(path=yaml_path)
-        assert experiment_config.model == "gpt2"
+        assert experiment_config.task.model == "gpt2"
         assert experiment_config.engine == "transformers"
-        assert experiment_config.dataset.n_prompts == 5
+        assert experiment_config.task.dataset.n_prompts == 5
 
         # Full run_experiment call
         result = run_experiment(experiment_config, skip_preflight=True)
@@ -141,7 +143,7 @@ class TestPipelineSingleExperiment:
         from llenergymeasure.domain.experiment import ExperimentResult
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\ndataset:\n  n_prompts: 3\n")
+        yaml_path.write_text("task:\n  model: gpt2\n  dataset:\n    n_prompts: 3\n")
 
         mock_result = make_result()
         _patch_infra(monkeypatch, tmp_path, mock_result)
@@ -165,17 +167,19 @@ class TestPipelineMultiExperimentSweep:
         from llenergymeasure.config.loader import load_study_config
 
         yaml_content = """\
-model: gpt2
+task:
+  model: gpt2
 sweep:
   dtype: [float16, bfloat16]
 study_execution:
   n_cycles: 1
   experiment_order: sequential
   experiment_gap_seconds: 0
-warmup:
-  enabled: false
-baseline:
-  enabled: false
+measurement:
+  warmup:
+    enabled: false
+  baseline:
+    enabled: false
 """
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
@@ -193,7 +197,7 @@ baseline:
 
         yaml_content = """\
 sweep:
-  model: [gpt2, distilgpt2]
+  task.model: [gpt2, distilgpt2]
   engine: [transformers]
 study_execution:
   n_cycles: 1
@@ -205,16 +209,14 @@ study_execution:
         study_config = load_study_config(yaml_path)
 
         assert len(study_config.experiments) == 2
-        models = {exp.model for exp in study_config.experiments}
+        models = {exp.task.model for exp in study_config.experiments}
         assert models == {"gpt2", "distilgpt2"}
 
     def test_study_config_study_design_hash_set(self, tmp_path: Path) -> None:
         """StudyConfig.study_design_hash is populated after loading."""
         from llenergymeasure.config.loader import load_study_config
 
-        yaml_content = (
-            "model: gpt2\nstudy_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
-        )
+        yaml_content = "task:\n  model: gpt2\nstudy_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(yaml_content)
 
@@ -239,7 +241,7 @@ class TestPipelineErrorPropagation:
         from llenergymeasure.utils.exceptions import EngineError
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: transformers\n")
+        yaml_path.write_text("task:\n  model: gpt2\nengine: transformers\n")
 
         _patch_infra(monkeypatch, tmp_path, make_result())
 
@@ -259,7 +261,7 @@ class TestPipelineErrorPropagation:
         from llenergymeasure.utils.exceptions import ConfigError
 
         yaml_path = tmp_path / "bad.yaml"
-        yaml_path.write_text("model: gpt2\nunknown_field: value\n")
+        yaml_path.write_text("task:\n  model: gpt2\nunknown_field: value\n")
 
         with pytest.raises(ConfigError, match="Unknown field"):
             load_experiment_config(path=yaml_path)
@@ -284,7 +286,9 @@ class TestPipelineDryRun:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text(
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+        )
 
         engine_call_count = []
 
@@ -327,7 +331,9 @@ class TestCLIE2ESingleExperiment:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text(
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+        )
 
         mock_result = make_result(experiment_id="cli-e2e-001")
 
@@ -368,7 +374,7 @@ class TestCLIE2EStudy:
 
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(
-            "model: gpt2\nsweep:\n  dtype: [float16, bfloat16]\n"
+            "task:\n  model: gpt2\nsweep:\n  dtype: [float16, bfloat16]\n"
             "study_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         )
 
@@ -427,7 +433,9 @@ class TestCLIE2EErrorExitCodes:
         from llenergymeasure.cli import app
 
         yaml_path = tmp_path / "experiment.yaml"
-        yaml_path.write_text("model: gpt2\nengine: transformers\ndataset:\n  n_prompts: 5\n")
+        yaml_path.write_text(
+            "task:\n  model: gpt2\n  dataset:\n    n_prompts: 5\nengine: transformers\n"
+        )
 
         error_cls = getattr(llenergymeasure.utils.exceptions, error_class)
         exc_instance = error_cls(f"test {error_class}")

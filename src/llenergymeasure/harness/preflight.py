@@ -142,7 +142,7 @@ def run_preflight(config: ExperimentConfig) -> None:
         )
 
     # Check 3: Model accessible
-    model_error = _check_model_accessible(config.model)
+    model_error = _check_model_accessible(config.task.model)
     if model_error is not None:
         failures.append(model_error)
 

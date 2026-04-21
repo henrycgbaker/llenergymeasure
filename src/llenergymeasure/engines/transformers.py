@@ -68,11 +68,11 @@ class TransformersEngine:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         kwargs = self._model_load_kwargs(config)
-        logger.info("Loading model %r with kwargs: %s", config.model, list(kwargs.keys()))
+        logger.info("Loading model %r with kwargs: %s", config.task.model, list(kwargs.keys()))
 
         t0 = _time.perf_counter()
         tokenizer = AutoTokenizer.from_pretrained(
-            config.model, trust_remote_code=kwargs.get("trust_remote_code", False)
+            config.task.model, trust_remote_code=kwargs.get("trust_remote_code", False)
         )
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -80,7 +80,7 @@ class TransformersEngine:
             on_substep("tokenizer loaded", _time.perf_counter() - t0)
 
         t0 = _time.perf_counter()
-        model = AutoModelForCausalLM.from_pretrained(config.model, **kwargs)
+        model = AutoModelForCausalLM.from_pretrained(config.task.model, **kwargs)
         model.eval()
         if on_substep is not None:
             on_substep("model weights loaded", _time.perf_counter() - t0)
@@ -134,7 +134,7 @@ class TransformersEngine:
         if torch.cuda.is_available():
             inputs = {k: v.to(hf_model.device) for k, v in inputs.items()}
         with torch.no_grad():
-            hf_model.generate(**inputs, max_new_tokens=min(config.max_output_tokens or 32, 32))
+            hf_model.generate(**inputs, max_new_tokens=min(config.task.max_output_tokens or 32, 32))
         return (time.perf_counter() - start) * 1000.0
 
     # -------------------------------------------------------------------------
@@ -176,7 +176,7 @@ class TransformersEngine:
         # manual_seed seeds both CPU and all CUDA devices since PyTorch 1.12+.
         import torch as _torch
 
-        _torch.manual_seed(config.random_seed)
+        _torch.manual_seed(config.task.random_seed)
 
         generate_kwargs = self._build_generate_kwargs(config)
         total_input_tokens = 0
@@ -188,7 +188,7 @@ class TransformersEngine:
             "Starting measurement: %d prompts, batch_size=%d, max_new_tokens=%s",
             len(prompts),
             batch_size,
-            config.max_output_tokens or "unlimited",
+            config.task.max_output_tokens or "unlimited",
         )
 
         for batch_start in range(0, len(prompts), batch_size):
@@ -436,9 +436,9 @@ class TransformersEngine:
             "return_tensors": "pt",
             "padding": True,
         }
-        if config.max_input_tokens is not None:
+        if config.task.max_input_tokens is not None:
             tokenizer_kwargs["truncation"] = True
-            tokenizer_kwargs["max_length"] = config.max_input_tokens
+            tokenizer_kwargs["max_length"] = config.task.max_input_tokens
 
         inputs = tokenizer(batch, **tokenizer_kwargs)
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
@@ -459,8 +459,8 @@ class TransformersEngine:
         t0 = time.perf_counter()
         with torch.inference_mode(), _amp_ctx:
             gen_kwargs = {**generate_kwargs}
-            if config.max_output_tokens is not None:
-                gen_kwargs["max_new_tokens"] = config.max_output_tokens
+            if config.task.max_output_tokens is not None:
+                gen_kwargs["max_new_tokens"] = config.task.max_output_tokens
             outputs = model.generate(**inputs, **gen_kwargs)
         elapsed = time.perf_counter() - t0
 

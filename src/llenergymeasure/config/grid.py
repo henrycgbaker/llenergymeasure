@@ -23,7 +23,12 @@ from llenergymeasure.config.introspection import (
     get_field_role,
     get_swept_field_paths,
 )
-from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
+from llenergymeasure.config.models import (
+    DatasetConfig,
+    ExperimentConfig,
+    MeasurementConfig,
+    TaskConfig,
+)
 from llenergymeasure.config.ssot import ALL_ENGINES, SOURCE_MULTI_ENGINE_ELEVATION
 from llenergymeasure.utils.exceptions import ConfigError
 
@@ -419,7 +424,9 @@ def build_preflight_panel(
     # --- Resolve energy sampler display ---
     unique_energy = sorted(
         {
-            str(exp.energy_sampler) if exp.energy_sampler is not None else "disabled"
+            str(exp.measurement.energy_sampler)
+            if exp.measurement.energy_sampler is not None
+            else "disabled"
             for exp in experiments
         }
     )
@@ -477,43 +484,44 @@ def build_preflight_panel(
             _line(body, b, mode_str)
 
     # -- Workload section --
-    # All workload-role fields.  Swept fields annotated with "+" and bold.
+    # Task fields + energy sampler. Swept fields annotated with "+" and bold.
     workload_rows: list[tuple[str, str, bool, bool]] = []  # (label, value, is_declared, is_swept)
 
     first_exp = experiments[0]
-    declared_fields = first_exp.model_fields_set
+    task_declared = first_exp.task.model_fields_set
 
-    for field_name, fi in ExperimentConfig.model_fields.items():
-        role = get_field_role(fi)
-        if role != "workload":
-            continue
-
+    for field_name, fi in TaskConfig.model_fields.items():
         if field_name == "dataset":
-            dataset_first = first_exp.dataset
+            dataset_first = first_exp.task.dataset
             dataset_declared = dataset_first.model_fields_set
             for ds_field, ds_fi in DatasetConfig.model_fields.items():
                 ds_role = get_field_role(ds_fi)
                 if ds_role != "workload":
                     continue
-                ds_path = f"dataset.{ds_field}"
+                ds_path = f"task.dataset.{ds_field}"
                 is_swept = ds_path in swept_paths
-                unique_vals = sorted({str(getattr(exp.dataset, ds_field)) for exp in experiments})
+                unique_vals = sorted(
+                    {str(getattr(exp.task.dataset, ds_field)) for exp in experiments}
+                )
                 val_str = ", ".join(unique_vals)
                 is_decl = ds_field in dataset_declared
                 label = get_display_label(ds_fi, ds_field)
                 workload_rows.append((label, val_str, is_decl, is_swept))
             continue
 
-        is_swept = field_name in swept_paths
-        if field_name == "energy_sampler":
-            val_str = energy_display
-        else:
-            unique_vals = sorted({str(getattr(exp, field_name)) for exp in experiments})
-            val_str = ", ".join(unique_vals)
-
+        task_path = f"task.{field_name}"
+        is_swept = task_path in swept_paths
+        unique_vals = sorted({str(getattr(exp.task, field_name)) for exp in experiments})
+        val_str = ", ".join(unique_vals)
         label = get_display_label(fi, field_name)
-        is_decl = field_name in declared_fields
+        is_decl = field_name in task_declared
         workload_rows.append((label, val_str, is_decl, is_swept))
+
+    # Energy sampler (from measurement)
+    energy_fi = MeasurementConfig.model_fields["energy_sampler"]
+    is_swept = "measurement.energy_sampler" in swept_paths
+    label = get_display_label(energy_fi, "energy_sampler")
+    workload_rows.append((label, energy_display, True, is_swept))
 
     if workload_rows:
         _section(body, "Workload")
@@ -818,7 +826,9 @@ def _expand_sweep(sweep: dict[str, Any], fixed: dict[str, Any]) -> list[dict[str
     Type-based disambiguation: ``list[scalar]`` = axis, ``list[dict]`` = group.
     """
     if not sweep:
-        if fixed.get("model"):
+        task = fixed.get("task")
+        has_model = isinstance(task, dict) and task.get("model")
+        if has_model:
             engine = fixed.get("engine", "transformers")
             return [_strip_other_engine_sections(dict(fixed), engine)]
         return []

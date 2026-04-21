@@ -82,31 +82,33 @@ def _make_runner(tmp_path: Path, config: ExperimentConfig) -> StudyRunner:
 def config_cached() -> ExperimentConfig:
     """ExperimentConfig with strategy='cached' (default)."""
     return ExperimentConfig(
-        model="test/model",
+        task={"model": "test/model"},
         engine="transformers",
-        baseline=BaselineConfig(strategy="cached", duration_seconds=30.0),
+        measurement={"baseline": BaselineConfig(strategy="cached", duration_seconds=30.0)},
     )
 
 
 @pytest.fixture
 def config_fresh() -> ExperimentConfig:
     return ExperimentConfig(
-        model="test/model",
+        task={"model": "test/model"},
         engine="transformers",
-        baseline=BaselineConfig(strategy="fresh"),
+        measurement={"baseline": BaselineConfig(strategy="fresh")},
     )
 
 
 @pytest.fixture
 def config_validated() -> ExperimentConfig:
     return ExperimentConfig(
-        model="test/model",
+        task={"model": "test/model"},
+        measurement={
+            "baseline": BaselineConfig(
+                strategy="validated",
+                validation_interval=3,
+                drift_threshold=0.10,
+            )
+        },
         engine="transformers",
-        baseline=BaselineConfig(
-            strategy="validated",
-            validation_interval=3,
-            drift_threshold=0.10,
-        ),
     )
 
 
@@ -253,9 +255,9 @@ class TestStrategyCached:
     def test_ttl_expiry_triggers_remeasurement(self, tmp_path: Path):
         """In-memory baseline is re-measured when TTL expires."""
         config = ExperimentConfig(
-            model="test/model",
+            task={"model": "test/model"},
+            measurement={"baseline": BaselineConfig(strategy="cached", cache_ttl_seconds=3600.0)},
             engine="transformers",
-            baseline=BaselineConfig(strategy="cached", cache_ttl_seconds=3600.0),
         )
         runner = _make_runner(tmp_path, config)
 
@@ -1065,7 +1067,7 @@ class TestBaselineContainerDispatch:
         kwargs = mock_dispatch.call_args.kwargs
         assert kwargs["mode"] == "measure"
         assert kwargs["image"] == "test/pytorch:v0"
-        assert kwargs["duration_sec"] == config_cached.baseline.duration_seconds
+        assert kwargs["duration_sec"] == config_cached.measurement.baseline.duration_seconds
         assert kwargs["gpu_indices"] == [0]
         mock_host_measure.assert_not_called()
 

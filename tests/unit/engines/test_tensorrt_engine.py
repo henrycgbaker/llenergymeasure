@@ -418,7 +418,7 @@ class TestBuildSamplingParams:
         params = engine._build_sampling_params(config)
 
         assert isinstance(params, _FakeSamplingParams)
-        assert params._kwargs["max_new_tokens"] == config.max_output_tokens
+        assert params._kwargs["max_new_tokens"] == config.task.max_output_tokens
 
     def test_build_sampling_params_passes_random_seed(self, monkeypatch):
         """random_seed from ExperimentConfig is forwarded to SamplingParams."""

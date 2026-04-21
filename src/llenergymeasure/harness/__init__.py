@@ -224,7 +224,7 @@ class MeasurementHarness:
             save_timeseries: Whether to persist GPU timeseries to Parquet sidecar.
                              Controlled by OutputConfig.save_timeseries at study level.
             baseline: Pre-measured baseline power (study-level cache). When provided
-                      and config.baseline.enabled, skips fresh measurement and reuses
+                      and config.measurement.baseline.enabled, skips fresh measurement and reuses
                       this value (marked as cached in the energy breakdown).
 
         Returns:
@@ -248,7 +248,7 @@ class MeasurementHarness:
             snapshot_future = collect_environment_snapshot_async()
 
         # 2. Baseline power measurement (before model load)
-        if baseline is not None and config.baseline.enabled:
+        if baseline is not None and config.measurement.baseline.enabled:
             # For cached/validated strategies, progress events are emitted by
             # study/runner.py::_get_baseline. Here we only mark from_cache for
             # create_energy_breakdown method attribution.
@@ -260,8 +260,8 @@ class MeasurementHarness:
                 baseline.power_w,
                 baseline.sample_count,
             )
-        elif config.baseline.enabled:
-            dur = config.baseline.duration_seconds
+        elif config.measurement.baseline.enabled:
+            dur = config.measurement.baseline.duration_seconds
             logger.debug("Measuring baseline power (%.0fs)...", dur)
             if _p:
                 _p.on_step_start(STEP_BASELINE, "Measuring", f"baseline idle power ({dur:.0f}s)")
@@ -283,7 +283,7 @@ class MeasurementHarness:
 
         # 3. Load model via engine plugin
         if _p:
-            _p.on_step_start("model", "Loading", f"model {config.model}")
+            _p.on_step_start("model", "Loading", f"model {config.task.model}")
             t0 = time.perf_counter()
 
         # Build model substep callback
@@ -310,7 +310,7 @@ class MeasurementHarness:
             _p.on_step_start(
                 "prompts",
                 "Loading",
-                f"prompts ({config.dataset.n_prompts} {config.dataset.source})",
+                f"prompts ({config.task.dataset.n_prompts} {config.task.dataset.source})",
             )
             t0_prompts = time.perf_counter()
         prompts = load_prompts(config)
@@ -323,13 +323,13 @@ class MeasurementHarness:
             # 5. Warmup
             if _p:
                 _p.on_step_start(
-                    "warmup", "Warming up", f"up to {config.warmup.max_prompts} prompts"
+                    "warmup", "Warming up", f"up to {config.measurement.warmup.max_prompts} prompts"
                 )
                 t0_warmup = time.perf_counter()
 
             # Probe call determines warmup strategy:
             # > 0.0 → CV-based convergence (Transformers), 0.0 → kernel warmup (vLLM/TRT-LLM)
-            if config.warmup.enabled:
+            if config.measurement.warmup.enabled:
                 first_latency = engine.run_warmup_prompt(config, model, prompts[0])
             else:
                 first_latency = 0.0
@@ -340,7 +340,7 @@ class MeasurementHarness:
                 )
                 warmup_result = warmup_until_converged(
                     lambda: engine.run_warmup_prompt(config, model, prompts[0]),
-                    config.warmup,
+                    config.measurement.warmup,
                     on_substep=warmup_substep,
                 )
             else:
@@ -349,9 +349,9 @@ class MeasurementHarness:
                 warmup_result = WarmupResult(
                     converged=True,
                     final_cv=0.0,
-                    iterations_completed=1 if config.warmup.enabled else 0,
-                    target_cv=config.warmup.cv_threshold,
-                    max_prompts=config.warmup.max_prompts,
+                    iterations_completed=1 if config.measurement.warmup.enabled else 0,
+                    target_cv=config.measurement.warmup.cv_threshold,
+                    max_prompts=config.measurement.warmup.max_prompts,
                 )
 
             if _p:
@@ -360,7 +360,7 @@ class MeasurementHarness:
                 converged = "converged" if warmup_result.converged else "not converged"
                 iters_label = f"{iters} iteration{'s' if iters != 1 else ''}"
                 # Kernel-only warmup (vLLM/TRT-LLM): no CV-based convergence
-                if first_latency == 0.0 and config.warmup.enabled:
+                if first_latency == 0.0 and config.measurement.warmup.enabled:
                     _p.on_step_update("warmup", f"engine kernel warmup ({iters_label})")
                 else:
                     _p.on_step_update("warmup", f"{iters_label} ({converged}{cv_info})")
@@ -373,7 +373,11 @@ class MeasurementHarness:
             )
 
             # 6. Thermal floor — show step before sleeping
-            floor_secs = config.warmup.thermal_floor_seconds if config.warmup.enabled else 0
+            floor_secs = (
+                config.measurement.warmup.thermal_floor_seconds
+                if config.measurement.warmup.enabled
+                else 0
+            )
             if _p:
                 if floor_secs > 0:
                     _p.on_step_start(
@@ -392,7 +396,9 @@ class MeasurementHarness:
             if _p:
                 _p.on_step_start("energy_select", "Selecting", "energy sampler")
                 t0_energy = time.perf_counter()
-            energy_sampler = select_energy_sampler(config.energy_sampler, gpu_indices=gpu_indices)
+            energy_sampler = select_energy_sampler(
+                config.measurement.energy_sampler, gpu_indices=gpu_indices
+            )
             sampler_name = type(energy_sampler).__name__ if energy_sampler else "none"
             _substep("energy_select", f"selected: {sampler_name}")
             if _p:
@@ -410,7 +416,7 @@ class MeasurementHarness:
 
             if _p:
                 _p.on_step_start(
-                    "measure", "Measuring", f"inference ({config.dataset.n_prompts} prompts)"
+                    "measure", "Measuring", f"inference ({config.task.dataset.n_prompts} prompts)"
                 )
             _substep("measure", "energy tracker started")
 
@@ -547,7 +553,7 @@ class MeasurementHarness:
         """Estimate FLOPs from model and token counts.
 
         Fallback chain:
-        1. AutoConfig path — uses estimate_flops_palm_from_config(config.model).
+        1. AutoConfig path — uses estimate_flops_palm_from_config(config.task.model).
            Works for all engines (no model weights needed).
         2. hf_model path — uses estimate_flops_palm(hf_model) when extras['hf_model'] is set.
            Higher-confidence since it counts actual loaded parameters.
@@ -556,7 +562,7 @@ class MeasurementHarness:
         # Step 1: AutoConfig path (works without loaded model weights)
         try:
             result = estimate_flops_palm_from_config(
-                model_name=config.model,
+                model_name=config.task.model,
                 n_input_tokens=output.input_tokens,
                 n_output_tokens=output.output_tokens,
             )
@@ -658,7 +664,7 @@ class MeasurementHarness:
         )
         from llenergymeasure.harness.baseline import create_energy_breakdown
 
-        experiment_id = f"{config.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
+        experiment_id = f"{config.task.model}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 
         avg_tokens_per_second = (
             output.total_tokens / output.inference_time_sec
@@ -770,7 +776,7 @@ class MeasurementHarness:
             end_time=end_time,
             thermal_throttle=thermal_info,
             energy_breakdown=energy_breakdown,
-            model_name=config.model,
+            model_name=config.task.model,
             timeseries=timeseries_path,
             mj_per_tok_total=_mj_total,
             mj_per_tok_adjusted=_mj_adjusted,

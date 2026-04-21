@@ -44,42 +44,37 @@ study_execution:
 # Add to sweep if you want to compare across different values of these fields
 # (e.g. random_seed for sampling variability, or max_tokens to test throughput scaling).
 
-random_seed: 42 # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset.order: shuffled)
+# --- Task (what to measure) ---
+task:
+  model: Qwen/Qwen2.5-0.5B
+  random_seed: 42                  # per-experiment stochasticity, consumed by (i) inference RNG, (ii) prompt ordering (when dataset.order: shuffled)
+  dataset:
+    source: aienergyscore          # Built-in alias or .jsonl file path
+    n_prompts: 50                  # Number of prompts to load or generate
+    order: interleaved             # interleaved | grouped | shuffled
+  # Token limits - for FLOPs/computational workload control
+  max_input_tokens: 256            # null = prompts keep natural length / model generates to EOS; FLOPs uncontrolled between experiments
+  max_output_tokens: 256
 
-model: Qwen/Qwen2.5-0.5B
-
-# --- Dataset ---
-dataset:
-  source: aienergyscore          # Built-in alias or .jsonl file path
-  n_prompts: 50                  # Number of prompts to load or generate
-  order: interleaved             # interleaved | grouped | shuffled
-
-# Token limits - for FLOPs/computational workload control
-max_input_tokens: 256            # null = prompts keep natural length / model generates to EOS; FLOPs uncontrolled between experiments
-max_output_tokens: 256
-
-# --- Energy measurement ---
-energy_sampler: auto             # auto | nvml | zeus | codecarbon | null (disables)
-
-# --- Baseline power measurement ---
-baseline:
-  enabled: true
-  duration_seconds: 30.0         # 5.0 - 120.0
-
-# --- Warmup ---
-# Two modes: fixed (default) or CV convergence (opt-in).
-# Fixed mode: runs exactly n_warmup prompts. CV computed for info only.
-# CV mode: replaces n_warmup; runs until CV < cv_threshold (up to max_prompts).
-# After warmup, thermal_floor_seconds wait lets GPU temperature plateau before measurement.
-warmup:
-  enabled: true
-  n_warmup: 3                      # Fixed mode iteration count (default: 5)
-  thermal_floor_seconds: 30.0     # Post-warmup stabilisation wait. Minimum 30s (default: 60s)
-  #convergence_detection: true   # Enable CV-based warmup (replaces n_warmup). Default: false
-  #cv_threshold: 0.05            # Stop when CV < 5%. Default: 0.05
-  #max_prompts: 20               # Safety cap for CV mode. Default: 20
-  #window_size: 3                # Sliding window for CV calculation. Default: 3
-  #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
+# --- Measurement (how to measure) ---
+measurement:
+  energy_sampler: auto             # auto | nvml | zeus | codecarbon | null (disables)
+  baseline:
+    enabled: true
+    duration_seconds: 30.0         # 5.0 - 120.0
+  # Warmup - Two modes: fixed (default) or CV convergence (opt-in).
+  # Fixed mode: runs exactly n_warmup prompts. CV computed for info only.
+  # CV mode: replaces n_warmup; runs until CV < cv_threshold (up to max_prompts).
+  # After warmup, thermal_floor_seconds wait lets GPU temperature plateau before measurement.
+  warmup:
+    enabled: true
+    n_warmup: 3                      # Fixed mode iteration count (default: 5)
+    thermal_floor_seconds: 30.0     # Post-warmup stabilisation wait. Minimum 30s (default: 60s)
+    #convergence_detection: true   # Enable CV-based warmup (replaces n_warmup). Default: false
+    #cv_threshold: 0.05            # Stop when CV < 5%. Default: 0.05
+    #max_prompts: 20               # Safety cap for CV mode. Default: 20
+    #window_size: 3                # Sliding window for CV calculation. Default: 3
+    #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
 
 # --- Decoder / sampling (universal, shared across engines) ---
 decoder:

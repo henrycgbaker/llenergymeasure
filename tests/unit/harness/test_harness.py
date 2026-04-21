@@ -87,11 +87,13 @@ def minimal_config():
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     return ExperimentConfig(
-        model="fake/model",
+        task={
+            "model": "fake/model",
+            "dataset": DatasetConfig(n_prompts=1),
+            "max_input_tokens": 32,
+            "max_output_tokens": 32,
+        },
         engine="transformers",
-        dataset=DatasetConfig(n_prompts=1),
-        max_input_tokens=32,
-        max_output_tokens=32,
     )
 
 
@@ -364,12 +366,14 @@ def test_harness_passes_gpu_indices_to_baseline(minimal_config):
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     config_with_baseline = ExperimentConfig(
-        model="fake/model",
+        task={
+            "model": "fake/model",
+            "dataset": DatasetConfig(n_prompts=1),
+            "max_input_tokens": 32,
+            "max_output_tokens": 32,
+        },
+        measurement={"baseline": {"enabled": True, "duration_seconds": 5.0}},
         engine="transformers",
-        dataset=DatasetConfig(n_prompts=1),
-        max_input_tokens=32,
-        max_output_tokens=32,
-        baseline={"enabled": True, "duration_seconds": 5.0},
     )
 
     engine = FakeBackend()
@@ -876,7 +880,7 @@ def test_build_result_includes_model_name(minimal_config):
     with _apply_patches():
         result = harness.run(engine, minimal_config)
 
-    assert result.model_name == minimal_config.model
+    assert result.model_name == minimal_config.task.model
 
 
 def test_build_result_populates_mj_per_tok(minimal_config):
@@ -936,11 +940,13 @@ def test_harness_save_timeseries_false_skips_parquet(tmp_path):
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     config = ExperimentConfig(
-        model="fake/model",
+        task={
+            "model": "fake/model",
+            "dataset": DatasetConfig(n_prompts=1),
+            "max_input_tokens": 32,
+            "max_output_tokens": 32,
+        },
         engine="transformers",
-        dataset=DatasetConfig(n_prompts=1),
-        max_input_tokens=32,
-        max_output_tokens=32,
     )
 
     engine = FakeBackend()
@@ -972,11 +978,13 @@ def test_harness_save_timeseries_true_writes_parquet(tmp_path):
     from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
 
     config = ExperimentConfig(
-        model="fake/model",
+        task={
+            "model": "fake/model",
+            "dataset": DatasetConfig(n_prompts=1),
+            "max_input_tokens": 32,
+            "max_output_tokens": 32,
+        },
         engine="transformers",
-        dataset=DatasetConfig(n_prompts=1),
-        max_input_tokens=32,
-        max_output_tokens=32,
     )
 
     engine = FakeBackend()

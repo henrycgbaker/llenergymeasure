@@ -74,16 +74,29 @@ class TestDockerRunnerIntegration:
             WarmupConfig,
         )
 
-        defaults = dict(
-            model="gpt2",
-            engine="transformers",
-            dataset=DatasetConfig(n_prompts=3),
-            output_dir=str(tmp_path),
-            warmup=WarmupConfig(enabled=False),
-            baseline=BaselineConfig(enabled=False),
-        )
-        defaults.update(overrides)
-        return ExperimentConfig(**defaults)
+        task_fields = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
+        measurement_fields = {"warmup", "baseline", "energy_sampler"}
+
+        task_defaults = {"model": "gpt2", "dataset": DatasetConfig(n_prompts=3)}
+        ec_defaults = {"engine": "transformers"}
+        measurement_defaults = {
+            "warmup": WarmupConfig(enabled=False),
+            "baseline": BaselineConfig(enabled=False),
+        }
+
+        task_kw = {**task_defaults}
+        ec_kw = {**ec_defaults}
+        measurement_kw = {**measurement_defaults}
+
+        for key, value in overrides.items():
+            if key in task_fields:
+                task_kw[key] = value
+            elif key in measurement_fields:
+                measurement_kw[key] = value
+            else:
+                ec_kw[key] = value
+
+        return ExperimentConfig(task=task_kw, measurement=measurement_kw, **ec_kw)
 
     def test_round_trip_single_experiment(self, tmp_path):
         """DockerRunner.run() dispatches to container and returns ExperimentResult."""
@@ -157,12 +170,12 @@ class TestDockerRunnerIntegration:
         from llenergymeasure.study.runner import StudyRunner
 
         config = ExperimentConfig(
-            model="gpt2",
+            task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=3)},
             engine="transformers",
-            dataset=DatasetConfig(n_prompts=3),
-            output_dir=str(tmp_path),
-            warmup=WarmupConfig(enabled=False),
-            baseline=BaselineConfig(enabled=False),
+            measurement={
+                "warmup": WarmupConfig(enabled=False),
+                "baseline": BaselineConfig(enabled=False),
+            },
         )
         study = StudyConfig(
             experiments=[config],
