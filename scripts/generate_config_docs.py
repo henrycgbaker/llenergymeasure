@@ -19,62 +19,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from llenergymeasure.config._doc_helpers import default_label, type_label
 
 # ---------------------------------------------------------------------------
 # Schema helpers
 # ---------------------------------------------------------------------------
-
-
-def _resolve_ref(ref: str, defs: dict[str, Any]) -> dict[str, Any]:
-    """Resolve a $ref string to its definition dict."""
-    name = ref.split("/")[-1]
-    return defs.get(name, {})
-
-
-def _type_label(prop: dict[str, Any], defs: dict[str, Any]) -> str:
-    """Return a human-readable type string for a schema property."""
-    if "$ref" in prop:
-        return _resolve_ref(prop["$ref"], defs).get("title", prop["$ref"].split("/")[-1])
-
-    prop_type = prop.get("type")
-
-    # anyOf / allOf patterns (Optional[X] → anyOf: [X, null])
-    any_of = prop.get("anyOf") or prop.get("allOf")
-    if any_of:
-        non_null = [p for p in any_of if p.get("type") != "null"]
-        parts = [_type_label(p, defs) for p in non_null]
-        has_null = any(p.get("type") == "null" for p in any_of)
-        label = " | ".join(parts)
-        return f"{label} | None" if has_null else label
-
-    if "enum" in prop:
-        return " | ".join(repr(v) for v in prop["enum"])
-
-    if prop_type == "array":
-        items = prop.get("items", {})
-        return f"list[{_type_label(items, defs)}]"
-
-    if prop_type == "object":
-        return "dict"
-
-    return prop_type or "any"
-
-
-def _default_label(prop: dict[str, Any]) -> str:
-    """Return a human-readable default value for a schema property."""
-    if "default" not in prop:
-        return "*(required)*"
-    val = prop["default"]
-    if val is None:
-        return "`null`"
-    if isinstance(val, bool):
-        return f"`{str(val).lower()}`"
-    if isinstance(val, str):
-        return f"`{val}`"
-    return f"`{val}`"
 
 
 def _description(prop: dict[str, Any]) -> str:
@@ -135,12 +86,12 @@ def _render_table(props: dict[str, Any], defs: dict[str, Any]) -> list[str]:
             desc = _description(prop)
             has_null = any(p.get("type") == "null" for p in any_of)
             type_str = f"{section_name} | None" if has_null else section_name
-            default = _default_label(prop)
+            default = default_label(prop)
             lines.append(f"| `{name}` | {type_str} | {default} | {desc} |")
             continue
 
-        type_str = _type_label(prop, defs)
-        default = _default_label(prop)
+        type_str = type_label(prop, defs)
+        default = default_label(prop)
         desc = _description(prop)
         lines.append(f"| `{name}` | {type_str} | {default} | {desc} |")
     return lines

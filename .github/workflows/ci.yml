@@ -176,6 +176,9 @@ jobs:
           uv run python scripts/generate_config_docs.py > /dev/null
           uv run python scripts/generate_cli_reference.py > /dev/null
           uv run python scripts/generate_invalid_combos_doc.py > /dev/null
+          uv run python scripts/generate_curation_doc.py > /dev/null
+      - name: Check Pydantic-discovered schema alignment
+        run: uv run python scripts/check_pydantic_matches_discovered.py > /dev/null
 
   docker-smoke:
     needs: filter

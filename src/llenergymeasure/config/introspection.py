@@ -906,3 +906,108 @@ def get_validation_rules() -> list[dict[str, str]]:
             "resolution": "Use vllm.quantization (awq, gptq, fp8) for quantized inference",
         },
     ]
+
+
+def get_streaming_constraints() -> list[dict[str, str]]:
+    """Get streaming mode constraints for documentation.
+
+    Returns parameters that are ignored or behave differently when
+    streaming=True, because streaming requires sequential per-request
+    processing to measure TTFT/ITL.
+
+    Returns:
+        List of dicts with keys: engine, parameter, behaviour, impact.
+    """
+    return [
+        {
+            "engine": "all",
+            "parameter": "transformers.batch_size / vllm.max_num_seqs",
+            "behaviour": "Ignored - processes 1 request at a time",
+            "impact": "Reduced throughput but accurate latency",
+        },
+        {
+            "engine": "transformers",
+            "parameter": "transformers.torch_compile",
+            "behaviour": "May cause graph-tracing errors",
+            "impact": "Falls back to non-compiled inference",
+        },
+        {
+            "engine": "transformers",
+            "parameter": "transformers.batching_strategy",
+            "behaviour": "Ignored - always sequential",
+            "impact": "No batching optimisation",
+        },
+        {
+            "engine": "vllm",
+            "parameter": "vllm.enable_chunked_prefill",
+            "behaviour": "May interfere with TTFT measurement",
+            "impact": "Consider disabling for accurate TTFT",
+        },
+    ]
+
+
+def get_runtime_limitations() -> list[dict[str, str]]:
+    """Get known runtime limitations for documentation.
+
+    These combinations pass config validation but may fail at runtime
+    due to hardware, model, or package requirements.
+
+    Returns:
+        List of dicts with keys: engine, parameter, limitation, resolution.
+    """
+    return [
+        {
+            "engine": "transformers",
+            "parameter": "transformers.attn_implementation=flash_attention_2",
+            "limitation": "flash-attn requires Ampere+ GPU (SM80+); fails on older architectures",
+            "resolution": "Use attn_implementation='sdpa' on pre-Ampere GPUs",
+        },
+        {
+            "engine": "transformers",
+            "parameter": "transformers.attn_implementation=flash_attention_3",
+            "limitation": "FA3 requires the flash_attn_3 package (built from flash-attn hopper/ directory) and Ampere+ GPU (SM80+). The Docker PyTorch image includes it pre-built",
+            "resolution": "Install flash_attn_3 from source, or use the Docker runner",
+        },
+        {
+            "engine": "vllm",
+            "parameter": "vllm.kv_cache_dtype=fp8",
+            "limitation": "FP8 KV cache requires Hopper (H100) or newer GPU",
+            "resolution": "Use kv_cache_dtype='auto' for automatic selection",
+        },
+        {
+            "engine": "vllm",
+            "parameter": "vllm.attention.engine=FLASHINFER",
+            "limitation": "FlashInfer requires JIT compilation on first use",
+            "resolution": "Use attention.engine='auto' or 'FLASH_ATTN'",
+        },
+        {
+            "engine": "vllm",
+            "parameter": "vllm.attention.engine=TORCH_SDPA",
+            "limitation": "TORCH_SDPA not registered in vLLM attention backends",
+            "resolution": "Use attention.engine='auto' or 'FLASH_ATTN'",
+        },
+        {
+            "engine": "vllm",
+            "parameter": "vllm.quantization_method=awq/gptq",
+            "limitation": "Requires a pre-quantized model checkpoint",
+            "resolution": "Use a quantized model (e.g., TheBloke/*-AWQ) or omit",
+        },
+        {
+            "engine": "vllm",
+            "parameter": "vllm.load_format=pt",
+            "limitation": "Model checkpoint must have .bin files (not just safetensors)",
+            "resolution": "Use load_format='auto' or 'safetensors'",
+        },
+        {
+            "engine": "tensorrt",
+            "parameter": "tensorrt.quant.quant_algo=FP8",
+            "limitation": "FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback",
+            "resolution": "Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100",
+        },
+        {
+            "engine": "tensorrt",
+            "parameter": "tensorrt.quantization.method=int8_sq",
+            "limitation": "INT8 SmoothQuant requires calibration dataset",
+            "resolution": "Provide tensorrt.quantization.calibration config or use a supported quantization method",
+        },
+    ]

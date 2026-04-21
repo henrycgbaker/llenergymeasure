@@ -18,13 +18,7 @@ import argparse
 import sys
 from pathlib import Path
 
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "src"))
-
-
-def _option_names(opts: list[str]) -> str:
-    """Format option names as a comma-separated string."""
-    return ", ".join(f"`{o}`" for o in opts if o.startswith("-"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def _type_label(param: object) -> str:

@@ -45,13 +45,6 @@ repos:
         pass_filenames: false
         files: ^(src/llenergymeasure/config/.*\.py|scripts/generate_invalid_combos_doc\.py)$
 
-      - id: generate-param-matrix
-        name: Regenerate param-matrix.md
-        entry: python scripts/generate_param_matrix.py
-        language: system
-        pass_filenames: false
-        files: ^(src/llenergymeasure/config/.*\.py|scripts/generate_param_matrix\.py)$
-
       - id: generate-config-docs
         name: Regenerate config docs
         entry: python scripts/generate_config_docs.py
