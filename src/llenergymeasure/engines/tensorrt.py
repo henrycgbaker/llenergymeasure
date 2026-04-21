@@ -535,39 +535,20 @@ class TensorRTEngine:
     def _build_sampling_params(self, config: ExperimentConfig) -> Any:
         """Build tensorrt_llm.SamplingParams from TensorRTSamplingConfig.
 
-        All sampling fields (temperature, top_k, top_p, repetition_penalty,
-        min_p, plus TRT-LLM-specific ones) now live on
-        ``config.tensorrt.sampling`` (PR 49.5). None values mean "use TRT-LLM's
-        default", so we forward only explicit values.
+        All sampling fields live on ``config.tensorrt.sampling``. None values
+        mean "use TRT-LLM's default", so we forward only explicit values.
+        User writes top_k=0 to disable (TRT convention, matches HF).
         """
         from tensorrt_llm import SamplingParams
 
         trt = config.tensorrt
         sampling = trt.sampling if trt is not None else None
 
-        kwargs: dict[str, Any] = {
-            "random_seed": config.task.random_seed,
-        }
+        kwargs: dict[str, Any] = (
+            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+        )
+        kwargs["random_seed"] = config.task.random_seed
         if config.task.max_output_tokens is not None:
             kwargs["max_new_tokens"] = config.task.max_output_tokens
-
-        if sampling is not None:
-            # User writes top_k=0 to disable (TRT convention, matches HF).
-            for field_name in (
-                "temperature",
-                "top_k",
-                "top_p",
-                "repetition_penalty",
-                "min_p",
-                "min_tokens",
-                "n",
-                "ignore_eos",
-            ):
-                value = getattr(sampling, field_name)
-                if value is not None:
-                    kwargs[field_name] = value
-            # Unknown fields (extra="allow") fall through
-            if sampling.model_extra:
-                kwargs.update(sampling.model_extra)
 
         return SamplingParams(**kwargs)

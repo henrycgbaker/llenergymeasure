@@ -367,9 +367,9 @@ class VLLMEngine:
     def _build_sampling_params(config: ExperimentConfig, sampling_params_cls: Any) -> Any:
         """Build vllm.SamplingParams from VLLMSamplingConfig.
 
-        All sampling fields (temperature, top_k, top_p, repetition_penalty, min_p,
-        plus vLLM-specific ones) now live on ``config.vllm.sampling`` (PR 49.5).
-        None values mean "use vLLM's default", so we forward only explicit values.
+        All sampling fields live on ``config.vllm.sampling``. None values mean
+        "use vLLM's default", so we forward only explicit values.
+        User writes top_k=-1 directly to disable (vLLM convention). No translation.
         """
         vllm_cfg = config.vllm
         if vllm_cfg is not None and vllm_cfg.beam_search is not None:
@@ -377,27 +377,9 @@ class VLLMEngine:
 
         sampling = vllm_cfg.sampling if vllm_cfg is not None else None
 
-        kwargs: dict[str, Any] = {}
-        if sampling is not None:
-            # User writes top_k=-1 directly to disable (vLLM convention). No translation.
-            for field_name in (
-                "temperature",
-                "top_k",
-                "top_p",
-                "repetition_penalty",
-                "min_p",
-                "min_tokens",
-                "presence_penalty",
-                "frequency_penalty",
-                "ignore_eos",
-                "n",
-            ):
-                value = getattr(sampling, field_name)
-                if value is not None:
-                    kwargs[field_name] = value
-            if sampling.model_extra:
-                kwargs.update(sampling.model_extra)
-
+        kwargs: dict[str, Any] = (
+            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+        )
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
 

@@ -474,31 +474,17 @@ class TransformersEngine:
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
         """Build generation kwargs from TransformersSamplingConfig and TransformersConfig.
 
-        Sampling params (temperature, top_k, top_p, etc.) now live on
-        ``config.transformers.sampling`` (PR 49.5). None values mean "use HF's
-        default", so we only forward fields the user explicitly set.
+        None values mean "use HF's default"; only explicit fields are forwarded.
+        Greedy decoding (temperature=0 or do_sample=False) strips sampling params
+        and forces do_sample=False, matching HF's own greedy semantics.
         """
         pt = config.transformers
         sampling = pt.sampling if pt is not None else None
 
-        kwargs: dict[str, Any] = {}
+        kwargs: dict[str, Any] = (
+            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+        )
 
-        # Forward each sampling field only when the user set it (None = HF default)
-        if sampling is not None:
-            for field_name in (
-                "do_sample",
-                "temperature",
-                "top_k",
-                "top_p",
-                "repetition_penalty",
-                "min_p",
-                "min_new_tokens",
-            ):
-                value = getattr(sampling, field_name)
-                if value is not None:
-                    kwargs[field_name] = value
-
-        # TransformersConfig generate() fields
         if pt is not None:
             if pt.use_cache is not None:
                 kwargs["use_cache"] = pt.use_cache
@@ -515,15 +501,9 @@ class TransformersEngine:
             if pt.prompt_lookup_num_tokens is not None:
                 kwargs["prompt_lookup_num_tokens"] = pt.prompt_lookup_num_tokens
 
-        # Greedy decoding: temperature=0 or do_sample=False — strip sampling params.
-        # temperature=0 implies greedy; infer do_sample=False for HF.
-        temperature = kwargs.get("temperature")
-        do_sample = kwargs.get("do_sample")
-        if temperature == 0.0 or do_sample is False:
+        if kwargs.get("temperature") == 0.0 or kwargs.get("do_sample") is False:
             kwargs["do_sample"] = False
-            kwargs.pop("temperature", None)
-            kwargs.pop("top_k", None)
-            kwargs.pop("top_p", None)
-            kwargs.pop("min_p", None)
+            for key in ("temperature", "top_k", "top_p", "min_p"):
+                kwargs.pop(key, None)
 
         return kwargs

@@ -393,10 +393,9 @@ class ExperimentConfig(BaseModel):
     def expand_sampling_preset(cls, data: Any) -> Any:
         """Merge ``sampling_preset`` values into the active engine's sampling section.
 
-        Explicit YAML values take precedence over preset values: we ``setdefault``
-        each preset key so a user-provided ``temperature: 0.7`` wins over the
-        preset's default. The preset itself stays on the top-level model so the
-        chosen preset name remains inspectable after parsing.
+        Explicit YAML values take precedence over preset values (each preset key
+        is applied via ``setdefault``). The preset name itself stays on the
+        top-level model so it remains inspectable after parsing.
         """
         if not isinstance(data, dict):
             return data
@@ -405,13 +404,18 @@ class ExperimentConfig(BaseModel):
             return data
         engine = data.get("engine", Engine.TRANSFORMERS)
         engine_key = engine.value if hasattr(engine, "value") else str(engine)
-        engine_section = data.setdefault(engine_key, {}) or {}
-        sampling_section = engine_section.setdefault("sampling", {}) or {}
-        # setdefault per-key preserves any explicit user values
+        # Ensure the engine section and its sampling sub-dict exist as dicts
+        # (an explicit ``engine: null`` in YAML would otherwise leave None here).
+        engine_section = data.get(engine_key)
+        if not isinstance(engine_section, dict):
+            engine_section = {}
+            data[engine_key] = engine_section
+        sampling_section = engine_section.get("sampling")
+        if not isinstance(sampling_section, dict):
+            sampling_section = {}
+            engine_section["sampling"] = sampling_section
         for key, value in SAMPLING_PRESETS[preset_name].items():
             sampling_section.setdefault(key, value)
-        engine_section["sampling"] = sampling_section
-        data[engine_key] = engine_section
         return data
 
     # -------------------------------------------------------------------------

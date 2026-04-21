@@ -167,10 +167,6 @@ DECODING_SUPPORT: dict[Engine, list[str]] = {
     Engine.TENSORRT: ["greedy", "sampling"],  # TRT-LLM supports both
 }
 
-# Sampling parameter support is now derivable via Pydantic introspection of
-# each engine's <Engine>SamplingConfig model (get_engine_params), so the
-# DECODER_PARAM_SUPPORT constant is no longer needed.
-
 # Map from engine name to the Python package that provides it.
 # Used by preflight checks and CLI to verify engine availability.
 ENGINE_PACKAGES: dict[Engine, str] = {

@@ -338,9 +338,9 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     - Top-level: dtype, n, max_input_tokens, max_output_tokens, random_seed
     - Dataset: source, n_prompts, order
 
-    Sampling params (temperature, top_k, top_p, etc.) are no longer shared —
-    they live per-engine on TransformersSamplingConfig / VLLMSamplingConfig /
-    TensorRTSamplingConfig (PR 49.5) and are discovered via ``get_engine_params``.
+    Sampling params (temperature, top_k, top_p, etc.) are not shared — they
+    live per-engine on ``TransformersSamplingConfig`` / ``VLLMSamplingConfig`` /
+    ``TensorRTSamplingConfig`` and are discovered via ``get_engine_params``.
     """
     shared: dict[str, dict[str, Any]] = {}
 
