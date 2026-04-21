@@ -459,7 +459,7 @@ def get_param_test_values(param_path: str) -> list[Any]:
     """Get test values for a specific parameter.
 
     Args:
-        param_path: Full param path, e.g., "transformers.batch_size" or "decoder.temperature".
+        param_path: Full param path, e.g., "transformers.batch_size" or "transformers.sampling.temperature".
 
     Returns:
         List of test values.

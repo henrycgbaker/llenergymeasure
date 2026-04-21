@@ -765,7 +765,7 @@ def _route_key_value(
 
     Routing rules:
     - Engine-prefixed dotted key (``transformers.batch_size``) → merge into engine section.
-    - Other dotted key (``decoder.do_sample``) → unflatten at top level.
+    - Other dotted key (``task.dataset.source``) → unflatten at top level.
     - Simple key → direct assignment.
 
     Returns the (possibly replaced) config_dict reference.
