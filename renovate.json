@@ -1,10 +1,19 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "enabledManagers": ["dockerfile"],
+  "enabledManagers": ["dockerfile", "custom.regex"],
   "dockerfile": {
     "fileMatch": ["docker/Dockerfile\\..*"]
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["docker/Dockerfile\\.transformers$"],
+      "matchStrings": ["ARG TRANSFORMERS_VERSION=(?<currentValue>\\S+)"],
+      "depNameTemplate": "transformers",
+      "datasourceTemplate": "pypi"
+    }
+  ],
   "packageRules": [
     {
       "matchManagers": ["dockerfile"],
@@ -24,6 +33,13 @@
     {
       "matchManagers": ["dockerfile"],
       "matchPackageNames": ["pytorch/pytorch"],
+      "labels": ["renovate", "engine-transformers"],
+      "automerge": false,
+      "stabilityDays": 3
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["transformers"],
       "labels": ["renovate", "engine-transformers"],
       "automerge": false,
       "stabilityDays": 3

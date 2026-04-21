@@ -18,8 +18,9 @@
 #   vllm         -> pristine vllm/vllm-openai:<tag> (vllm pre-installed)
 #   tensorrt     -> pristine nvcr.io/nvidia/tensorrt-llm/release:<tag>
 #                   (works around llenergymeasure:tensorrt's cuKernelGetName bug)
-#   transformers -> llenergymeasure:transformers (base pytorch image has no
-#                   transformers package; our Dockerfile pip-installs it)
+#   transformers -> llenergymeasure:transformers-<ver> (base pytorch image has no
+#                   transformers package; our Dockerfile pip-installs it at the
+#                   version pinned by ARG TRANSFORMERS_VERSION)
 set -euo pipefail
 
 usage() {
@@ -55,7 +56,8 @@ case "$ENGINE" in
         IMAGE="nvcr.io/nvidia/tensorrt-llm/release:${VER}"
         ;;
     transformers)
-        IMAGE="llenergymeasure:transformers"
+        VER="$(_arg_default "$REPO_ROOT/docker/Dockerfile.transformers" TRANSFORMERS_VERSION)"
+        IMAGE="llenergymeasure:transformers-${VER}"
         if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
             echo "[$ENGINE] Image $IMAGE not found; building from docker/Dockerfile.transformers..." >&2
             docker build -f "$REPO_ROOT/docker/Dockerfile.transformers" -t "$IMAGE" "$REPO_ROOT"
