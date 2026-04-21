@@ -392,15 +392,15 @@ class TensorRTEngine:
 
         # Check FP8 quant requirements (SM >= 8.9)
         trt = config.tensorrt
-        if trt is not None and trt.quant is not None:
-            if trt.quant.quant_algo == "FP8" and sm_float < 8.9:
+        if trt is not None and trt.quant_config is not None:
+            if trt.quant_config.quant_algo == "FP8" and sm_float < 8.9:
                 errors.append(
                     f"FP8 quantisation requires SM >= 8.9 (Ada Lovelace or Hopper). "
                     f"This GPU has SM {major}.{minor} "
                     f"(A100=8.0, H100=9.0, RTX4090=8.9). "
                     f"Use W8A16, W4A16_AWQ, or W4A16_GPTQ instead."
                 )
-            if trt.quant.kv_cache_quant_algo == "FP8" and sm_float < 8.9:
+            if trt.quant_config.kv_cache_quant_algo == "FP8" and sm_float < 8.9:
                 errors.append(
                     f"FP8 KV cache quantisation requires SM >= 8.9 (Ada Lovelace or Hopper). "
                     f"This GPU has SM {major}.{minor} "
@@ -476,15 +476,17 @@ class TensorRTEngine:
             kwargs["backend"] = trt.backend
 
         # Quantisation config
-        if trt.quant is not None:
+        if trt.quant_config is not None:
             try:
                 from tensorrt_llm.llmapi import QuantAlgo, QuantConfig
 
                 qc_kwargs: dict[str, Any] = {}
-                if trt.quant.quant_algo is not None:
-                    qc_kwargs["quant_algo"] = QuantAlgo[trt.quant.quant_algo]
-                if trt.quant.kv_cache_quant_algo is not None:
-                    qc_kwargs["kv_cache_quant_algo"] = QuantAlgo[trt.quant.kv_cache_quant_algo]
+                if trt.quant_config.quant_algo is not None:
+                    qc_kwargs["quant_algo"] = QuantAlgo[trt.quant_config.quant_algo]
+                if trt.quant_config.kv_cache_quant_algo is not None:
+                    qc_kwargs["kv_cache_quant_algo"] = QuantAlgo[
+                        trt.quant_config.kv_cache_quant_algo
+                    ]
                 if qc_kwargs:
                     kwargs["quantization"] = QuantConfig(**qc_kwargs)
             except ImportError:
@@ -495,11 +497,11 @@ class TensorRTEngine:
         _apply_default_build_cache(kwargs)
 
         # KV cache config
-        if trt.kv_cache is not None:
+        if trt.kv_cache_config is not None:
             try:
                 from tensorrt_llm.llmapi import KvCacheConfig
 
-                kv = trt.kv_cache
+                kv = trt.kv_cache_config
                 kv_kwargs: dict[str, Any] = {}
                 if kv.enable_block_reuse is not None:
                     kv_kwargs["enable_block_reuse"] = kv.enable_block_reuse
@@ -515,11 +517,11 @@ class TensorRTEngine:
                 logger.debug("tensorrt_llm.llmapi not available; skipping KvCacheConfig")
 
         # Scheduler config
-        if trt.scheduler is not None:
+        if trt.scheduler_config is not None:
             try:
                 from tensorrt_llm.llmapi import CapacitySchedulerPolicy, SchedulerConfig
 
-                sc = trt.scheduler
+                sc = trt.scheduler_config
                 sc_kwargs: dict[str, Any] = {}
                 if sc.capacity_scheduling_policy is not None:
                     sc_kwargs["capacity_scheduling_policy"] = CapacitySchedulerPolicy[

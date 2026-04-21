@@ -252,9 +252,9 @@ initialisation time. All fields default to `null` (use vLLM's own default).
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `speculative` | VLLMSpeculativeConfig | null | Speculative decoding sub-config (see below) |
+| `speculative_config` | VLLMSpeculativeConfig | null | Speculative decoding sub-config (see below) |
 
-`speculative` sub-config fields:
+`speculative_config` sub-config fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -630,11 +630,11 @@ These parameters live in `ExperimentConfig` and are shared across all engines:
 | `tensorrt.dtype` | N/A | N/A | Yes | Model compute dtype (compile-time) |
 | `tensorrt.fast_build` | N/A | N/A | Yes | Fast build mode (compile-time) |
 | `tensorrt.engine_path` | N/A | N/A | Yes | Pre-compiled engine path |
-| `tensorrt.quant.quant_algo` | N/A | N/A | Yes | FP8, INT8, W4A16_AWQ, W4A16_GPTQ, W8A16, etc. |
-| `tensorrt.quant.kv_cache_quant_algo` | N/A | N/A | Yes | KV cache quantization: FP8 or INT8 |
-| `tensorrt.kv_cache.free_gpu_memory_fraction` | N/A | N/A | Yes | KV cache memory fraction |
-| `tensorrt.kv_cache.enable_block_reuse` | N/A | N/A | Yes | KV cache block reuse |
-| `tensorrt.scheduler.capacity_scheduling_policy` | N/A | N/A | Yes | GUARANTEED_NO_EVICT / MAX_UTILIZATION / STATIC_BATCH |
+| `tensorrt.quant_config.quant_algo` | N/A | N/A | Yes | FP8, INT8, W4A16_AWQ, W4A16_GPTQ, W8A16, etc. |
+| `tensorrt.quant_config.kv_cache_quant_algo` | N/A | N/A | Yes | KV cache quantization: FP8 or INT8 |
+| `tensorrt.kv_cache_config.free_gpu_memory_fraction` | N/A | N/A | Yes | KV cache memory fraction |
+| `tensorrt.kv_cache_config.enable_block_reuse` | N/A | N/A | Yes | KV cache block reuse |
+| `tensorrt.scheduler_config.capacity_scheduling_policy` | N/A | N/A | Yes | GUARANTEED_NO_EVICT / MAX_UTILIZATION / STATIC_BATCH |
 | `tensorrt.build_cache.max_cache_storage_gb` | N/A | N/A | Yes | Engine cache size limit |
 | `tensorrt.build_cache.cache_root` | N/A | N/A | Yes | Engine cache directory |
 | `tensorrt.sampling.min_tokens` | N/A | N/A | Yes | Minimum output tokens |

@@ -57,7 +57,7 @@ due to hardware, model, or package requirements.
 | vllm | `vllm.attention.engine=TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use attention.engine='auto' or 'FLASH_ATTN' |
 | vllm | `vllm.quantization_method=awq/gptq` | Requires a pre-quantized model checkpoint | Use a quantized model (e.g., TheBloke/*-AWQ) or omit |
 | vllm | `vllm.load_format=pt` | Model checkpoint must have .bin files (not just safetensors) | Use load_format='auto' or 'safetensors' |
-| tensorrt | `tensorrt.quant.quant_algo=FP8` | FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback | Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100 |
+| tensorrt | `tensorrt.quant_config.quant_algo=FP8` | FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback | Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100 |
 | tensorrt | `tensorrt.quantization.method=int8_sq` | INT8 SmoothQuant requires calibration dataset | Provide tensorrt.quantization.calibration config or use a supported quantization method |
 
 ## Engine Capability Matrix

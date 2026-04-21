@@ -324,9 +324,9 @@ class VLLMEngine:
             _set("max_seq_len_to_capture", engine.max_seq_len_to_capture)
             _set("distributed_executor_backend", engine.distributed_executor_backend)
 
-            # Speculative decoding — build vLLM-native speculative_config dict from sub-config
-            if engine.speculative is not None:
-                spec_dict = engine.speculative.model_dump(exclude_none=True)
+            # Speculative decoding — dump the typed sub-config straight into kwargs.
+            if engine.speculative_config is not None:
+                spec_dict = engine.speculative_config.model_dump(exclude_none=True)
                 if spec_dict:
                     kwargs["speculative_config"] = spec_dict
 

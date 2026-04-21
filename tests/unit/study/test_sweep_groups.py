@@ -111,7 +111,7 @@ class TestExpandGroupEntry:
 
     def test_multiple_list_fields_cartesian(self):
         entry = {
-            "tensorrt.quant.quant_algo": "INT8",
+            "tensorrt.quant_config.quant_algo": "INT8",
             "tensorrt.calib.calib_batches": [256, 512],
             "tensorrt.calib.calib_max_seq_length": [256, 512],
         }

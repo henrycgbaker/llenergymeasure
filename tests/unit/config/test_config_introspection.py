@@ -58,9 +58,9 @@ def test_get_engine_params_tensorrt_returns_params():
     assert isinstance(params, dict)
     assert "tensorrt.max_batch_size" in params
     # Verify expanded nested sub-config params are registered
-    assert "tensorrt.quant.quant_algo" in params
-    assert "tensorrt.kv_cache.free_gpu_memory_fraction" in params
-    assert "tensorrt.scheduler.capacity_scheduling_policy" in params
+    assert "tensorrt.quant_config.quant_algo" in params
+    assert "tensorrt.kv_cache_config.free_gpu_memory_fraction" in params
+    assert "tensorrt.scheduler_config.capacity_scheduling_policy" in params
     # build_cache and calib sub-configs dropped (D1/D3); return_perf_metrics dropped (D1)
     assert "tensorrt.build_cache.max_records" not in params
     assert "tensorrt.sampling.return_perf_metrics" not in params
