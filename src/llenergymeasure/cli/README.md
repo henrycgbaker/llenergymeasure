@@ -39,7 +39,6 @@ Key options:
 | `--engine / -e` | Inference engine (`pytorch`, `vllm`, `tensorrt`) |
 | `--dataset / -d` | Dataset name or JSONL file path |
 | `-n` | Number of prompts |
-| `--batch-size` | Batch size (PyTorch engine) |
 | `--dry-run` | Validate config, print plan, exit |
 | `--skip-preflight` | Skip Docker/CUDA pre-flight checks |
 | `-v / -vv` | Verbosity (INFO / DEBUG) |
