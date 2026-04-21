@@ -872,6 +872,44 @@ def get_validation_rules() -> list[dict[str, str]]:
     ]
 
 
+def get_streaming_constraints() -> list[dict[str, str]]:
+    """Get streaming mode constraints for documentation.
+
+    Returns parameters that are ignored or behave differently when
+    streaming=True, because streaming requires sequential per-request
+    processing to measure TTFT/ITL.
+
+    Returns:
+        List of dicts with keys: engine, parameter, behaviour, impact.
+    """
+    return [
+        {
+            "engine": "all",
+            "parameter": "transformers.batch_size / vllm.max_num_seqs",
+            "behaviour": "Ignored - processes 1 request at a time",
+            "impact": "Reduced throughput but accurate latency",
+        },
+        {
+            "engine": "transformers",
+            "parameter": "transformers.torch_compile",
+            "behaviour": "May cause graph-tracing errors",
+            "impact": "Falls back to non-compiled inference",
+        },
+        {
+            "engine": "transformers",
+            "parameter": "transformers.batching_strategy",
+            "behaviour": "Ignored - always sequential",
+            "impact": "No batching optimisation",
+        },
+        {
+            "engine": "vllm",
+            "parameter": "vllm.enable_chunked_prefill",
+            "behaviour": "May interfere with TTFT measurement",
+            "impact": "Consider disabling for accurate TTFT",
+        },
+    ]
+
+
 def get_runtime_limitations() -> list[dict[str, str]]:
     """Get known runtime limitations for documentation.
 
