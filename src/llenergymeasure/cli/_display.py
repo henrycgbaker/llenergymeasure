@@ -109,7 +109,7 @@ def print_dry_run(
     # Determine non-default fields for annotations
     defaults = {
         "engine": "transformers",
-        "dtype": "bfloat16",
+        "dtype": None,
         "n": 100,
         "dataset": "aienergyscore",
     }
@@ -123,10 +123,14 @@ def print_dry_run(
             return f" ({field} default)" if field not in ("engine", "dtype") else " (default)"
         return ""
 
+    engine_section = getattr(config, config.engine, None)
+    engine_dtype = getattr(engine_section, "dtype", None)
+
     print("Config (resolved)")
     print(f"  Model          {config.task.model}")
     print(f"  Engine         {config.engine}{_annotate('engine', config.engine)}")
-    print(f"  Dtype          {config.dtype}{_annotate('dtype', config.dtype)}")
+    dtype_display = engine_dtype or "-"
+    print(f"  Dtype          {dtype_display}{_annotate('dtype', engine_dtype)}")
 
     # Batch size — from pytorch section if present
     batch_size: int | None = None
@@ -149,7 +153,7 @@ def print_dry_run(
     if vram is None:
         print("  (unavailable)")
     else:
-        weights_line = f"  Weights        {_sig3(vram['weights_gb'])} GB ({config.dtype})"
+        weights_line = f"  Weights        {_sig3(vram['weights_gb'])} GB ({engine_dtype or '-'})"
         print(weights_line)
         print(f"  KV cache       {_sig3(vram['kv_cache_gb'])} GB")
         print(f"  Overhead       {_sig3(vram['overhead_gb'])} GB")
@@ -299,7 +303,9 @@ def print_study_dry_run(
 
     print("VRAM estimate (peak)")
     if peak_vram is not None and peak_config is not None:
-        print(f"  Weights        {_sig3(peak_vram['weights_gb'])} GB ({peak_config.dtype})")
+        peak_section = getattr(peak_config, peak_config.engine, None)
+        peak_dtype = getattr(peak_section, "dtype", None)
+        print(f"  Weights        {_sig3(peak_vram['weights_gb'])} GB ({peak_dtype or '-'})")
         print(f"  KV cache       {_sig3(peak_vram['kv_cache_gb'])} GB")
         print(f"  Overhead       {_sig3(peak_vram['overhead_gb'])} GB")
         total_line = f"  Total          ~{_sig3(peak_vram['total_gb'])} GB"

@@ -104,6 +104,15 @@ class TransformersConfig(BaseModel):
     )
 
     # -------------------------------------------------------------------------
+    # Dtype
+    # -------------------------------------------------------------------------
+
+    dtype: Literal["float32", "float16", "bfloat16"] | None = Field(
+        default=None,
+        description="Model dtype for inference (None -> bfloat16).",
+    )
+
+    # -------------------------------------------------------------------------
     # Attention implementation
     # -------------------------------------------------------------------------
 
@@ -805,6 +814,13 @@ class VLLMConfig(BaseModel):
 
     model_config = {"extra": "allow"}
 
+    dtype: Literal["float16", "bfloat16", "auto"] | None = Field(
+        default=None,
+        description=(
+            "Model dtype for inference (None -> bfloat16). vLLM accepts 'auto' to "
+            "infer from model weights. float32 is not supported."
+        ),
+    )
     engine: VLLMEngineConfig | None = Field(
         default=None,
         description="Engine-level configuration: vllm.LLM() constructor args",

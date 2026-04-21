@@ -73,7 +73,7 @@ def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
         experiments: List of resolved ExperimentConfig objects from a study.
 
     Returns:
-        Set of dotted field paths (e.g. {"dtype", "task.dataset.n_prompts"}).
+        Set of dotted field paths (e.g. {"engine", "task.dataset.n_prompts"}).
     """
     if len(experiments) <= 1:
         return set()
@@ -335,28 +335,15 @@ def get_shared_params() -> dict[str, dict[str, Any]]:
     """Get shared/universal parameters from ExperimentConfig sub-models.
 
     Returns params that are universal across all engines:
-    - Top-level: dtype, n, max_input_tokens, max_output_tokens, random_seed
+    - Top-level: n, max_input_tokens, max_output_tokens, random_seed
     - Dataset: source, n_prompts, order
 
-    Sampling params (temperature, top_k, top_p, etc.) are not shared — they
-    live per-engine on ``TransformersSamplingConfig`` / ``VLLMSamplingConfig`` /
-    ``TensorRTSamplingConfig`` and are discovered via ``get_engine_params``.
+    Note: dtype and sampling params (temperature, top_k, top_p, etc.) are not
+    shared — they live per-engine on each engine's config section and are
+    discovered via :func:`get_engine_params`.
     """
     shared: dict[str, dict[str, Any]] = {}
 
-    # Top-level universal params — defined manually for explicit engine_support
-    shared["dtype"] = {
-        "path": "dtype",
-        "name": "dtype",
-        "type_str": "literal",
-        "default": "bfloat16",
-        "description": "Model dtype for inference",
-        "options": ["float32", "float16", "bfloat16"],
-        "test_values": ["float32", "float16", "bfloat16"],
-        "constraints": {},
-        "optional": False,
-        "engine_support": _ALL_ENGINES_LIST,
-    }
     shared["dataset.source"] = {
         "path": "dataset.source",
         "name": "source",

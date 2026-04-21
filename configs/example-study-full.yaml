@@ -126,8 +126,10 @@ output:
 # within-group variants are unioned (not crossed) while inter-group axes are.
 
 sweep: # TODO: maybe shared_sweep or global_sweep?
-  # --- Universal (applies to all three engines) ---
-  dtype: [float32, float16, bfloat16]
+  # --- dtype per engine (each axis applies only when its engine is active) ---
+  transformers.dtype: [float32, float16, bfloat16]
+  vllm.dtype: [float16, bfloat16]  # vLLM rejects float32
+  tensorrt.dtype: [float16, bfloat16]  # TRT-LLM rejects float32
 
   # --- Transformers parameter space ---
   transformers.batch_size: [1, 4, 8, 16, 32]
@@ -281,10 +283,10 @@ experiments:
   # Requires batch_size=1, overriding the sweep axis - must remain explicit.
   - model: Qwen/Qwen2.5-0.5B
     engine: transformers
-    dtype: bfloat16
     dataset:
       n_prompts: 50
     transformers:
+      dtype: bfloat16
       batch_size: 1
       prompt_lookup_num_tokens: 3
       device_map: auto
@@ -296,10 +298,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: transformers
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   transformers:
+  #     dtype: bfloat16
   #     batch_size: 4
   #     tp_plan: auto
   #     tp_size: 2
@@ -310,10 +312,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: transformers
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   transformers:
+  #     dtype: bfloat16
   #     batch_size: 4
   #     revision: main
   #     max_memory:
@@ -325,13 +327,13 @@ experiments:
   # Transformers LoRA adapter (commented out - requires a real adapter TODO: remove - isn't this above????)
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: transformers
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   lora:
   #     adapter_id: my-org/my-lora-adapter
   #     merge_weights: false
   #   transformers:
+  #     dtype: bfloat16
   #     batch_size: 4
   #     device_map: auto
   #     trust_remote_code: true
@@ -347,10 +349,10 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     engine: vllm
-    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
+      dtype: bfloat16
       engine:
         tensor_parallel_size: 2
         disable_custom_all_reduce: false  # Disable custom all-reduce for multi-GPU
@@ -361,10 +363,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: vllm
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   vllm:
+  #     dtype: bfloat16
   #     attention:
   #       backend: flash_attn
   #       flash_attn_version: 2            # Flash attention version (auto-detected)
@@ -385,10 +387,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: vllm
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   vllm:
+  #     dtype: bfloat16
   #     engine:
   #       speculative_model: my-org/my-draft-model
   #       num_speculative_tokens: 5
@@ -399,10 +401,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: vllm
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   vllm:
+  #     dtype: bfloat16
   #     engine:
   #       pipeline_parallel_size: 2
   #       gpu_memory_utilization: 0.9
@@ -412,10 +414,10 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     engine: vllm
-    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
+      dtype: bfloat16
       engine:
         cpu_offload_gb: 4
         gpu_memory_utilization: 0.9
@@ -425,10 +427,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: vllm
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   vllm:
+  #     dtype: bfloat16
   #     engine:
   #       cpu_offload_gb: 8
   #       offload_group_size: 4          # Groups of layers for CPU offloading
@@ -442,10 +444,10 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     engine: vllm
-    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
+      dtype: bfloat16
       engine:
         swap_space: 8
         gpu_memory_utilization: 0.85
@@ -455,10 +457,10 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     engine: vllm
-    dtype: bfloat16
     dataset:
       n_prompts: 50
     vllm:
+      dtype: bfloat16
       sampling:
         temperature: 0.8
         max_tokens: 256              # Overrides universal max_output_tokens for this experiment
@@ -471,10 +473,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: vllm
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   vllm:
+  #     dtype: bfloat16
   #     engine:
   #       compilation_config:
   #         level: 3
@@ -485,10 +487,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: vllm
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   vllm:
+  #     dtype: bfloat16
   #     engine:
   #       kv_cache_memory_bytes: 4294967296    # 4 GiB
   #       enforce_eager: false
@@ -504,10 +506,10 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     engine: tensorrt
-    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
+      dtype: bfloat16
       max_batch_size: 8
       max_input_len: 1024
       max_seq_len: 2048
@@ -522,10 +524,10 @@ experiments:
   # -----------------------------------------------------------------
   - model: Qwen/Qwen2.5-0.5B
     engine: tensorrt
-    dtype: bfloat16
     dataset:
       n_prompts: 50
     tensorrt:
+      dtype: bfloat16
       max_batch_size: 8
       max_input_len: 1024
       max_seq_len: 2048
@@ -542,10 +544,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: tensorrt
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   tensorrt:
+  #     dtype: bfloat16
   #     max_batch_size: 8
   #     max_input_len: 1024
   #     max_seq_len: 2048
@@ -558,10 +560,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: tensorrt
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   tensorrt:
+  #     dtype: bfloat16
   #     engine_path: /path/to/precompiled/engine
   #     max_batch_size: 8
   #     max_seq_len: 2048
@@ -573,10 +575,10 @@ experiments:
   # -----------------------------------------------------------------
   # - model: Qwen/Qwen2.5-0.5B
   #   engine: tensorrt
-  #   dtype: bfloat16
   #   dataset:
   #     n_prompts: 50
   #   tensorrt:
+  #     dtype: bfloat16
   #     max_batch_size: 8
   #     max_input_len: 1024
   #     max_seq_len: 2048

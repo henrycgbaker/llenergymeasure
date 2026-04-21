@@ -175,8 +175,8 @@ class TestRouteKeyValue:
 
     def test_simple_top_level_key(self):
         config = {"engine": "transformers"}
-        result = _route_key_value(dict(config), "dtype", "float16")
-        assert result["dtype"] == "float16"
+        result = _route_key_value(dict(config), "random_seed", 123)
+        assert result["random_seed"] == 123
 
     def test_deep_nested_key(self):
         """Multi-level dotted engine keys like vllm.engine.block_size."""
@@ -203,8 +203,8 @@ class TestApplyGroupOverlay:
 
     def test_simple_top_level_key(self):
         config = {"engine": "transformers"}
-        result = _apply_group_overlay(dict(config), {"dtype": "float16"})
-        assert result["dtype"] == "float16"
+        result = _apply_group_overlay(dict(config), {"random_seed": 123})
+        assert result["random_seed"] == 123
 
     def test_empty_overlay_no_change(self):
         config = {"engine": "transformers", "transformers": {"batch_size": 4}}
@@ -251,7 +251,7 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"transformers.torch_compile": False},
                     {
@@ -321,7 +321,7 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"transformers.torch_compile": False},
                     {
@@ -365,7 +365,7 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"transformers.torch_compile": False},
                     {
@@ -375,7 +375,11 @@ class TestExpandGridSweepGroups:
                 ],
             },
             "experiments": [
-                {"task": {"model": "gpt2"}, "engine": "transformers", "dtype": "float32"},
+                {
+                    "task": {"model": "gpt2"},
+                    "engine": "transformers",
+                    "transformers": {"dtype": "float32"},
+                },
             ],
         }
         valid, _skipped = expand_grid(raw)
@@ -388,7 +392,8 @@ class TestExpandGridSweepGroups:
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
+                "vllm.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"transformers.torch_compile": False},
                     {
@@ -457,7 +462,8 @@ class TestExpandGridSweepGroupsMultiBackend:
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
+                "vllm.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"transformers.torch_compile": False},
                     {
@@ -494,7 +500,7 @@ class TestCombinatorialWarnings:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "dtype": ["float32", "float16", "bfloat16"],
+                "transformers.dtype": ["float32", "float16", "bfloat16"],
                 "transformers.batch_size": [1, 4, 8, 16, 32],
                 "transformers.attn_implementation": ["sdpa", "flash_attention_2", "eager"],
                 "transformers.compilation": [
@@ -530,7 +536,7 @@ class TestHashStabilityWithGroups:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
                 "transformers.compilation": [
                     {"transformers.torch_compile": False},
                     {

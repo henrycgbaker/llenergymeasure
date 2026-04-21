@@ -36,6 +36,9 @@ LLEM_NATIVE_FIELDS: set[tuple[str, str]] = {
     # -- transformers --
     # Quantization params surfaced at engine level for consistent interface
     ("transformers", "batch_size"),
+    # dtype is HF-native (torch_dtype is a deprecated BC alias). Passed via
+    # from_pretrained **kwargs, so signature-based discovery misses it.
+    ("transformers", "dtype"),
     ("transformers", "batching_strategy"),
     ("transformers", "load_in_4bit"),
     ("transformers", "load_in_8bit"),

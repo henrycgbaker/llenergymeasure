@@ -87,7 +87,9 @@ def estimate_vram(config: ExperimentConfig) -> dict[str, float] | None:
         return None
 
     # Weights memory
-    bytes_per_param = DTYPE_BYTES.get(config.dtype, 2)
+    engine_section = getattr(config, config.engine, None)
+    dtype = getattr(engine_section, "dtype", None)
+    bytes_per_param = DTYPE_BYTES.get(dtype or "bfloat16", 2)
     weights_gb = (param_count * bytes_per_param) / 1e9
 
     # KV cache estimation (sequence length 1 = single inference pass)

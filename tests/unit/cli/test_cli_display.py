@@ -508,17 +508,19 @@ def test_print_study_dry_run_vram_peak(capsys, monkeypatch):
 
 
 def test_print_experiment_header_defaults(capsys):
-    """Header with default config shows model and engine (defaults omitted)."""
+    """Header with default config shows model and engine (per-engine dtype unset, so omitted)."""
     from tests.conftest import make_config
 
-    config = make_config(model="gpt2", engine="transformers", dtype="bfloat16")
+    # No dtype override -> per-engine dtype stays None -> header should omit it
+    config = make_config(model="gpt2", engine="transformers")
     print_experiment_header(config)
     err = capsys.readouterr().err
 
     assert "gpt2" in err
     assert "transformers" in err
-    # Default dtype bfloat16 is omitted from the header
+    # With dtype unset on the engine section, the header omits it entirely
     assert "bfloat16" not in err
+    assert "float" not in err
 
 
 def test_print_experiment_header_non_default_n(capsys):

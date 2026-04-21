@@ -289,15 +289,16 @@ class VLLMEngine:
         """Build kwargs dict for vllm.LLM() constructor."""
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
+        vllm_cfg = config.vllm
         kwargs: dict[str, Any] = {
             "model": config.task.model,
-            "dtype": config.dtype,
             "trust_remote_code": trust_remote_code_enabled(),
             "seed": config.task.random_seed,
         }
+        if vllm_cfg is not None and vllm_cfg.dtype is not None:
+            kwargs["dtype"] = vllm_cfg.dtype
 
         # Apply VLLMEngineConfig fields if provided — only set non-None values
-        vllm_cfg = config.vllm
         if vllm_cfg is not None and vllm_cfg.engine is not None:
             engine = vllm_cfg.engine
 
