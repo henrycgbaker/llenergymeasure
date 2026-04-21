@@ -332,25 +332,17 @@ def get_engine_params(engine: str) -> dict[str, dict[str, Any]]:
 
 
 def get_shared_params() -> dict[str, dict[str, Any]]:
-    """Get shared/universal parameters from ExperimentConfig and DecoderConfig.
+    """Get shared/universal parameters from ExperimentConfig sub-models.
 
     Returns params that are universal across all engines:
     - Top-level: dtype, n, max_input_tokens, max_output_tokens, random_seed
-    - Decoder: temperature, do_sample, top_p, top_k, repetition_penalty, preset
+    - Dataset: source, n_prompts, order
 
-    Each param includes ``engine_support: list[str]`` indicating which engines
-    expose each parameter.
+    Sampling params (temperature, top_k, top_p, etc.) are not shared — they
+    live per-engine on ``TransformersSamplingConfig`` / ``VLLMSamplingConfig`` /
+    ``TensorRTSamplingConfig`` and are discovered via ``get_engine_params``.
     """
-    from llenergymeasure.config.models import DecoderConfig
-
     shared: dict[str, dict[str, Any]] = {}
-
-    # Decoder params (introspected from model)
-    decoder_params = get_params_from_model(DecoderConfig, prefix="decoder")
-    # Add engine_support to decoder params
-    for param in decoder_params.values():
-        param["engine_support"] = _ALL_ENGINES_LIST
-    shared.update(decoder_params)
 
     # Top-level universal params — defined manually for explicit engine_support
     shared["dtype"] = {
@@ -467,7 +459,7 @@ def get_param_test_values(param_path: str) -> list[Any]:
     """Get test values for a specific parameter.
 
     Args:
-        param_path: Full param path, e.g., "transformers.batch_size" or "decoder.temperature".
+        param_path: Full param path, e.g., "transformers.batch_size" or "transformers.sampling.temperature".
 
     Returns:
         List of test values.

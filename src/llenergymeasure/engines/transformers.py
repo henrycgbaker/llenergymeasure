@@ -472,24 +472,19 @@ class TransformersEngine:
         return input_token_count, output_token_count, elapsed
 
     def _build_generate_kwargs(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Build generation kwargs from DecoderConfig and TransformersConfig."""
-        decoder = config.decoder
-        kwargs: dict[str, Any] = {
-            "do_sample": decoder.do_sample,
-            "temperature": decoder.temperature,
-            "top_k": decoder.top_k,
-            "top_p": decoder.top_p,
-            "repetition_penalty": decoder.repetition_penalty,
-        }
+        """Build generation kwargs from TransformersSamplingConfig and TransformersConfig.
 
-        # DecoderConfig new fields
-        if decoder.min_p is not None:
-            kwargs["min_p"] = decoder.min_p
-        if decoder.min_new_tokens is not None:
-            kwargs["min_new_tokens"] = decoder.min_new_tokens
-
-        # TransformersConfig generate() fields
+        None values mean "use HF's default"; only explicit fields are forwarded.
+        Greedy decoding (temperature=0 or do_sample=False) strips sampling params
+        and forces do_sample=False, matching HF's own greedy semantics.
+        """
         pt = config.transformers
+        sampling = pt.sampling if pt is not None else None
+
+        kwargs: dict[str, Any] = (
+            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+        )
+
         if pt is not None:
             if pt.use_cache is not None:
                 kwargs["use_cache"] = pt.use_cache
@@ -506,12 +501,9 @@ class TransformersEngine:
             if pt.prompt_lookup_num_tokens is not None:
                 kwargs["prompt_lookup_num_tokens"] = pt.prompt_lookup_num_tokens
 
-        # Greedy decoding: temperature=0 or do_sample=False — strip sampling params
-        if decoder.temperature == 0.0 or not decoder.do_sample:
+        if kwargs.get("temperature") == 0.0 or kwargs.get("do_sample") is False:
             kwargs["do_sample"] = False
-            kwargs.pop("temperature", None)
-            kwargs.pop("top_k", None)
-            kwargs.pop("top_p", None)
-            kwargs.pop("min_p", None)
+            for key in ("temperature", "top_k", "top_p", "min_p"):
+                kwargs.pop(key, None)
 
         return kwargs

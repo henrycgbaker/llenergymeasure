@@ -38,6 +38,47 @@ from pydantic import BaseModel, Field, model_validator
 # =============================================================================
 
 
+class TransformersSamplingConfig(BaseModel):
+    """HuggingFace Transformers sampling configuration.
+
+    Maps to model.generate() kwargs. Field names mirror HuggingFace native
+    conventions (do_sample, min_new_tokens, top_k=0 for disabled).
+
+    All fields default to None — None means "use HF's own default at execution".
+    Unknown fields are forwarded to generate() via extra="allow" (the engine
+    builder picks up values from this section and merges them into generate_kwargs).
+    """
+
+    model_config = {"extra": "allow"}
+
+    temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0, description="Sampling temperature (0=greedy)"
+    )
+    do_sample: bool | None = Field(
+        default=None,
+        description=(
+            "Enable sampling (None -> HF default; greedy is inferred from temperature=0)."
+        ),
+    )
+    top_k: int | None = Field(
+        default=None,
+        ge=0,
+        description="Top-k sampling (HF convention: 0 = disabled, None -> 50).",
+    )
+    top_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Top-p nucleus sampling (1.0 = disabled)"
+    )
+    repetition_penalty: float | None = Field(
+        default=None, ge=0.1, le=10.0, description="Repetition penalty (1.0 = no penalty)"
+    )
+    min_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Minimum probability filter (None -> disabled)"
+    )
+    min_new_tokens: int | None = Field(
+        default=None, ge=1, description="Minimum output tokens (None -> HF default)."
+    )
+
+
 class TransformersConfig(BaseModel):
     """HuggingFace Transformers engine configuration.
 
@@ -219,6 +260,18 @@ class TransformersConfig(BaseModel):
             "Number of tensor parallel ranks (None -> WORLD_SIZE). Only used when tp_plan is set. "
             "Field name preserved to match HuggingFace accelerate convention "
             "(distinct from TensorRTConfig.tensor_parallel_size which aligns with TrtLlmArgs)."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Sampling (model.generate kwargs)
+    # -------------------------------------------------------------------------
+
+    sampling: TransformersSamplingConfig | None = Field(
+        default=None,
+        description=(
+            "Sampling configuration for model.generate(); fields mirror "
+            "HuggingFace native generate() kwargs."
         ),
     )
 
@@ -628,21 +681,41 @@ class VLLMEngineConfig(BaseModel):
 
 
 class VLLMSamplingConfig(BaseModel):
-    """vLLM sampling-level configuration (vllm.SamplingParams extensions).
+    """vLLM sampling-level configuration (vllm.SamplingParams kwargs).
 
-    Only vLLM-specific sampling parameters are included here.
-    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all engines.
+    Includes universal sampling params (temperature, top_k, top_p,
+    repetition_penalty, min_p) and vLLM-specific ones (presence_penalty,
+    frequency_penalty, ignore_eos, n, min_tokens).
 
     All fields default to None — None means "use vLLM's own default".
     Unknown fields are forwarded to vllm.SamplingParams() via extra="allow".
 
     Note: max_tokens is intentionally absent — it is bridged from
     ExperimentConfig.max_output_tokens in _build_sampling_kwargs().
+    top_k uses vLLM's -1-for-disabled convention (not the HF 0-for-disabled one).
     """
 
     model_config = {"extra": "allow"}
 
+    # Universal sampling params (shared across all engines, values mirror vLLM native)
+    temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0, description="Sampling temperature (0=greedy)"
+    )
+    top_k: int | None = Field(
+        default=None,
+        description="Top-k sampling (vLLM convention: -1 = disabled, None -> -1).",
+    )
+    top_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Top-p nucleus sampling (1.0 = disabled)"
+    )
+    repetition_penalty: float | None = Field(
+        default=None, ge=0.1, le=10.0, description="Repetition penalty (1.0 = no penalty)"
+    )
+    min_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Minimum probability filter (None -> disabled)"
+    )
+
+    # vLLM-specific
     min_tokens: int | None = Field(
         default=None,
         ge=0,
@@ -714,10 +787,7 @@ class VLLMConfig(BaseModel):
 
     Nested structure mirrors vLLM's own two-API separation:
     - engine: vllm.LLM() constructor arguments (engine-level, loaded at model init)
-    - sampling: vllm.SamplingParams arguments (vLLM-specific extensions only)
-
-    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all engines.
+    - sampling: vllm.SamplingParams arguments (both universal and vLLM-specific)
 
     Example YAML:
         engine: vllm
@@ -849,15 +919,36 @@ class TensorRTSchedulerConfig(BaseModel):
 class TensorRTSamplingConfig(BaseModel):
     """TRT-LLM sampling configuration.
 
-    Maps to tensorrt_llm.SamplingParams (TRT-LLM-specific extensions only).
-    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all engines.
+    Maps to tensorrt_llm.SamplingParams. Includes universal sampling params
+    (temperature, top_k, top_p, repetition_penalty, min_p) and TRT-LLM-specific
+    ones (min_tokens, n, ignore_eos).
 
     Note: return_perf_metrics dropped (D1 observability flag).
+    top_k uses TRT-LLM's 0-for-disabled convention (matches HF, not vLLM's -1).
     """
 
     model_config = {"extra": "allow"}
 
+    # Universal sampling params (shared across all engines)
+    temperature: float | None = Field(
+        default=None, ge=0.0, le=2.0, description="Sampling temperature (0=greedy)"
+    )
+    top_k: int | None = Field(
+        default=None,
+        ge=0,
+        description="Top-k sampling (TRT-LLM convention: 0 = disabled, None -> TRT default).",
+    )
+    top_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Top-p nucleus sampling (1.0 = disabled)"
+    )
+    repetition_penalty: float | None = Field(
+        default=None, ge=0.1, le=10.0, description="Repetition penalty (1.0 = no penalty)"
+    )
+    min_p: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Minimum probability filter (None -> disabled)"
+    )
+
+    # TRT-LLM specific
     min_tokens: int | None = Field(
         default=None,
         ge=0,
@@ -885,10 +976,7 @@ class TensorRTConfig(BaseModel):
     - quant: QuantConfig (quantisation algorithm + KV cache quantisation)
     - kv_cache: KvCacheConfig (block reuse, memory fraction)
     - scheduler: SchedulerConfig (capacity policy)
-    - sampling: SamplingParams (TRT-LLM-specific extensions only)
-
-    Universal sampling params (temperature, top_p, top_k, repetition_penalty)
-    live in DecoderConfig and are shared across all engines.
+    - sampling: SamplingParams (both universal and TRT-LLM-specific)
 
     Dropped (falls through extra="allow"):
     - engine_path — D1 deployment path, not a measurement axis

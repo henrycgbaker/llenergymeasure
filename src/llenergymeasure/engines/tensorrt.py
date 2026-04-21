@@ -533,50 +533,22 @@ class TensorRTEngine:
         return kwargs
 
     def _build_sampling_params(self, config: ExperimentConfig) -> Any:
-        """Build tensorrt_llm.SamplingParams from DecoderConfig and TensorRTSamplingConfig.
+        """Build tensorrt_llm.SamplingParams from TensorRTSamplingConfig.
 
-        Args:
-            config: Experiment configuration.
-
-        Returns:
-            tensorrt_llm.SamplingParams instance.
+        All sampling fields live on ``config.tensorrt.sampling``. None values
+        mean "use TRT-LLM's default", so we forward only explicit values.
+        User writes top_k=0 to disable (TRT convention, matches HF).
         """
         from tensorrt_llm import SamplingParams
 
-        decoder = config.decoder
-        kwargs: dict[str, Any] = {
-            "random_seed": config.task.random_seed,
-        }
+        trt = config.tensorrt
+        sampling = trt.sampling if trt is not None else None
+
+        kwargs: dict[str, Any] = (
+            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+        )
+        kwargs["random_seed"] = config.task.random_seed
         if config.task.max_output_tokens is not None:
             kwargs["max_new_tokens"] = config.task.max_output_tokens
-
-        # Universal decoder params
-        if decoder.temperature != 0.0:
-            kwargs["temperature"] = decoder.temperature
-        if decoder.top_p is not None:
-            kwargs["top_p"] = decoder.top_p
-        if decoder.top_k is not None and decoder.top_k != 0:
-            kwargs["top_k"] = decoder.top_k
-        if decoder.repetition_penalty is not None:
-            kwargs["repetition_penalty"] = decoder.repetition_penalty
-        if decoder.min_p is not None:
-            kwargs["min_p"] = decoder.min_p
-        # Map universal decoder.min_new_tokens to TRT-LLM's min_tokens.
-        # Placed before trt.sampling overrides so tensorrt.sampling.min_tokens
-        # can override the universal mapping if both are set.
-        if decoder.min_new_tokens is not None:
-            kwargs["min_tokens"] = decoder.min_new_tokens
-
-        # TRT-LLM-specific sampling overrides
-        trt = config.tensorrt
-        if trt is not None and trt.sampling is not None:
-            sampling = trt.sampling
-            if sampling.min_tokens is not None:
-                kwargs["min_tokens"] = sampling.min_tokens
-            if sampling.n is not None:
-                kwargs["n"] = sampling.n
-            if sampling.ignore_eos is not None:
-                kwargs["ignore_eos"] = sampling.ignore_eos
-            # return_perf_metrics dropped (D1 observability flag); falls through extra="allow"
 
         return SamplingParams(**kwargs)

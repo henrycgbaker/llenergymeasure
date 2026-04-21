@@ -15,7 +15,6 @@ from llenergymeasure.config.loader import (
 from llenergymeasure.config.models import (
     BaselineConfig,
     DatasetConfig,
-    DecoderConfig,
     ExperimentConfig,
     LoRAConfig,
     MeasurementConfig,
@@ -37,7 +36,6 @@ from llenergymeasure.config.user_config import (
 __all__ = [
     "BaselineConfig",
     "DatasetConfig",
-    "DecoderConfig",
     "DiscoveredSchema",
     "DiscoveryLimitation",
     "ExperimentConfig",

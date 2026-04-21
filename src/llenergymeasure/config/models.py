@@ -21,10 +21,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from llenergymeasure.config.ssot import Engine
+from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine
 
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
+
+#: Literal type of supported sampling presets (derived from SAMPLING_PRESETS keys).
+SamplingPreset = Literal["deterministic", "standard", "creative", "factual"]
 
 if TYPE_CHECKING:
     from llenergymeasure.config.engine_configs import (
@@ -32,90 +35,6 @@ if TYPE_CHECKING:
         TransformersConfig,
         VLLMConfig,
     )
-
-
-# Sampling presets aligned with industry best practices (vLLM, OpenAI, MLPerf)
-SAMPLING_PRESETS: dict[str, dict[str, Any]] = {
-    "deterministic": {"temperature": 0.0, "do_sample": False},
-    "standard": {"temperature": 1.0, "do_sample": True, "top_p": 0.95},
-    "creative": {"temperature": 0.8, "do_sample": True, "top_p": 0.9, "repetition_penalty": 1.1},
-    "factual": {"temperature": 0.3, "do_sample": True},
-}
-
-
-# =============================================================================
-# Decoder Configuration
-# =============================================================================
-
-
-class DecoderConfig(BaseModel):
-    """Universal decoder/generation configuration.
-
-    Contains parameters with identical semantics across all engines.
-    Engine-specific decoder params live in engine_configs.py.
-
-    Presets:
-        - deterministic: Greedy decoding (temp=0, do_sample=False)
-        - standard: Balanced sampling (temp=1.0, top_p=0.95)
-        - creative: Higher variance (temp=0.8, top_p=0.9, repetition_penalty=1.1)
-        - factual: Lower variance (temp=0.3)
-    """
-
-    model_config = {"extra": "forbid"}
-
-    temperature: float = Field(
-        default=1.0, ge=0.0, le=2.0, description="Sampling temperature (0=greedy)"
-    )
-    do_sample: bool = Field(default=True, description="Enable sampling (ignored if temp=0)")
-    top_k: int = Field(default=50, ge=0, description="Top-k sampling (0=disabled)")
-    top_p: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Top-p nucleus sampling (1.0=disabled)"
-    )
-    repetition_penalty: float = Field(
-        default=1.0, ge=0.1, le=10.0, description="Repetition penalty (1.0=no penalty)"
-    )
-    min_p: float | None = Field(
-        default=None, ge=0.0, le=1.0, description="Min probability filter (None -> disabled)"
-    )
-    min_new_tokens: int | None = Field(
-        default=None, ge=1, description="Minimum output token count (None -> no minimum)"
-    )
-    preset: Literal["deterministic", "standard", "creative", "factual"] | None = Field(
-        default=None,
-        description="Sampling preset (expands to preset values, overrides apply on top)",
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def apply_preset(cls, data: Any) -> Any:
-        """Expand preset, then apply explicit overrides on top."""
-        if (
-            isinstance(data, dict)
-            and (preset_name := data.get("preset"))
-            and preset_name in SAMPLING_PRESETS
-        ):
-            return {**SAMPLING_PRESETS[preset_name], **data}
-        return data
-
-    @property
-    def is_deterministic(self) -> bool:
-        """True if using greedy decoding (temp=0 or do_sample=False)."""
-        return self.temperature == 0.0 or not self.do_sample
-
-
-def _validate_sampling_presets() -> None:
-    """Validate SAMPLING_PRESETS keys match DecoderConfig fields at import time."""
-    valid_fields = set(DecoderConfig.model_fields.keys())
-    for preset_name, values in SAMPLING_PRESETS.items():
-        invalid_keys = set(values.keys()) - valid_fields
-        if invalid_keys:
-            raise ValueError(
-                f"SAMPLING_PRESETS['{preset_name}'] has invalid keys: {invalid_keys}. "
-                f"Valid keys are: {valid_fields}"
-            )
-
-
-_validate_sampling_presets()
 
 
 # =============================================================================
@@ -431,9 +350,14 @@ class ExperimentConfig(BaseModel):
         json_schema_extra={"display_label": "Dtype"},
     )
 
-    # Sub-configs (to be migrated per-backend in PRs 49.4/49.5)
-    decoder: DecoderConfig = Field(
-        default_factory=DecoderConfig, description="Universal decoder/generation configuration"
+    # Sampling preset — expands into the active engine's sampling section
+    sampling_preset: SamplingPreset | None = Field(
+        default=None,
+        description=(
+            "Sampling preset. When set, preset values are merged into the active "
+            "engine's sampling section at parse time; explicit YAML values take "
+            "precedence over preset values."
+        ),
     )
 
     # Engine sections (None = use engine's own defaults)
@@ -459,6 +383,40 @@ class ExperimentConfig(BaseModel):
         description="Extra kwargs passed through to engine at execution time. "
         "Keys must not collide with ExperimentConfig top-level fields.",
     )
+
+    # -------------------------------------------------------------------------
+    # Pre-validators (run before field parsing)
+    # -------------------------------------------------------------------------
+
+    @model_validator(mode="before")
+    @classmethod
+    def expand_sampling_preset(cls, data: Any) -> Any:
+        """Merge ``sampling_preset`` values into the active engine's sampling section.
+
+        Explicit YAML values take precedence over preset values (each preset key
+        is applied via ``setdefault``). The preset name itself stays on the
+        top-level model so it remains inspectable after parsing.
+        """
+        if not isinstance(data, dict):
+            return data
+        preset_name = data.get("sampling_preset")
+        if not preset_name or preset_name not in SAMPLING_PRESETS:
+            return data
+        engine = data.get("engine", Engine.TRANSFORMERS)
+        engine_key = engine.value if hasattr(engine, "value") else str(engine)
+        # Ensure the engine section and its sampling sub-dict exist as dicts
+        # (an explicit ``engine: null`` in YAML would otherwise leave None here).
+        engine_section = data.get(engine_key)
+        if not isinstance(engine_section, dict):
+            engine_section = {}
+            data[engine_key] = engine_section
+        sampling_section = engine_section.get("sampling")
+        if not isinstance(sampling_section, dict):
+            sampling_section = {}
+            engine_section["sampling"] = sampling_section
+        for key, value in SAMPLING_PRESETS[preset_name].items():
+            sampling_section.setdefault(key, value)
+        return data
 
     # -------------------------------------------------------------------------
     # Cross-validators

@@ -76,18 +76,11 @@ measurement:
     #window_size: 3                # Sliding window for CV calculation. Default: 3
     #min_prompts: 5                # Minimum prompts before checking CV. Default: 5
 
-# --- Decoder / sampling (universal, shared across engines) ---
-decoder:
-  # preset: deterministic          # Presets override individual params below. Available: deterministic | standard | creative | factual
-  temperature: 1.0               # 0.0 (greedy) to 2.0
-  do_sample: true
-  top_k: 50                      # 0 = disabled
-  top_p: 1.0                     # 1.0 = disabled (nucleus sampling)
-  repetition_penalty: 1.0        # 1.0 = no penalty
-  min_p: null                    # Min probability filter (null = disabled)
-  min_new_tokens: null            # Minimum output tokens (null = no minimum)
-  #TODO: validate this works + how incompataible params resolution is handled
-  #TODO: consider moving this to sweep
+# --- Sampling preset (expands into the active engine's sampling section) ---
+# sampling_preset: deterministic   # deterministic | standard | creative | factual
+# Explicit values written under <engine>.sampling override preset values.
+# Sampling params now live per-engine — see `{transformers|vllm|tensorrt}.sampling`
+# in the engine-specific experiments below.
 
 # --- LoRA adapter (optional, applies to all experiments) ---
 # lora:
@@ -173,11 +166,11 @@ sweep: # TODO: maybe shared_sweep or global_sweep?
     - transformers.use_cache: true
       transformers.cache_implementation: [static, offloaded_static, sliding_window]
 
-  # beam search requires decoder.do_sample: false (cross-section dependency)
+  # beam search requires do_sample: false (cross-section dependency)
   transformers.decoding:
-    - {}                                          # baseline: use shared decoder settings
-    - decoder.do_sample: false
-      decoder.temperature: 0.0
+    - {}                                          # baseline: use engine defaults
+    - transformers.sampling.do_sample: false
+      transformers.sampling.temperature: 0.0
       transformers.num_beams: 4
       transformers.early_stopping: true
       transformers.length_penalty: 1.0
@@ -465,11 +458,9 @@ experiments:
     dtype: bfloat16
     dataset:
       n_prompts: 50
-    decoder:
-      temperature: 0.8
-      do_sample: true
     vllm:
       sampling:
+        temperature: 0.8
         max_tokens: 256              # Overrides universal max_output_tokens for this experiment
         min_tokens: 10
         ignore_eos: false

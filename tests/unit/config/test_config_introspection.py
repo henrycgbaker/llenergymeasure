@@ -107,10 +107,11 @@ def test_get_shared_params_contains_n():
     assert "dataset.n_prompts" in params
 
 
-def test_get_shared_params_contains_decoder_temperature():
-    """get_shared_params() contains 'decoder.temperature'."""
+def test_get_shared_params_no_longer_contains_decoder():
+    """Sampling params live per-engine — they're not in get_shared_params()."""
     params = get_shared_params()
-    assert "decoder.temperature" in params
+    assert "decoder.temperature" not in params
+    assert "decoder.top_k" not in params
 
 
 def test_get_shared_params_all_have_engine_support():
@@ -221,7 +222,10 @@ def test_list_all_param_paths_contains_known_paths():
     """list_all_param_paths() contains expected well-known param paths."""
     paths = list_all_param_paths()
     assert "transformers.batch_size" in paths
-    assert "decoder.temperature" in paths
+    # Sampling params live per-engine, not on a universal decoder
+    assert "transformers.sampling.temperature" in paths
+    assert "vllm.sampling.temperature" in paths
+    assert "tensorrt.sampling.temperature" in paths
     assert "dtype" in paths
 
 

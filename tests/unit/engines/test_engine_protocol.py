@@ -529,7 +529,7 @@ def test_resolve_torch_dtype_unknown_raises():
 
 
 def test_build_generate_kwargs_defaults():
-    """Default decoder config produces expected generate kwargs."""
+    """Default config with no sampling section produces empty kwargs (HF defaults apply)."""
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
@@ -537,22 +537,56 @@ def test_build_generate_kwargs_defaults():
     config = ExperimentConfig(task={"model": "gpt2"})
     kwargs = engine._build_generate_kwargs(config)
 
-    assert "do_sample" in kwargs
-    assert "temperature" in kwargs
-    assert "top_k" in kwargs
-    assert "top_p" in kwargs
-    assert "repetition_penalty" in kwargs
+    # Sampling params now live per-engine; with no section set, kwargs stays empty
+    # and model.generate() uses its own defaults.
+    assert "do_sample" not in kwargs
+    assert "temperature" not in kwargs
+    assert "top_k" not in kwargs
+    assert "top_p" not in kwargs
 
 
-def test_build_generate_kwargs_greedy_decoding():
-    """Greedy decoding (temperature=0) removes sampling params."""
-    from llenergymeasure.config.models import DecoderConfig, ExperimentConfig
+def test_build_generate_kwargs_explicit_sampling_forwarded():
+    """Explicit transformers.sampling fields flow through to generate kwargs."""
+    from llenergymeasure.config.engine_configs import (
+        TransformersConfig,
+        TransformersSamplingConfig,
+    )
+    from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.engines.transformers import TransformersEngine
 
     engine = TransformersEngine()
     config = ExperimentConfig(
         task={"model": "gpt2"},
-        decoder=DecoderConfig(temperature=0.0, do_sample=False),
+        transformers=TransformersConfig(
+            sampling=TransformersSamplingConfig(
+                temperature=0.7, top_k=40, top_p=0.9, repetition_penalty=1.1, do_sample=True
+            ),
+        ),
+    )
+    kwargs = engine._build_generate_kwargs(config)
+
+    assert kwargs["temperature"] == 0.7
+    assert kwargs["top_k"] == 40
+    assert kwargs["top_p"] == 0.9
+    assert kwargs["repetition_penalty"] == 1.1
+    assert kwargs["do_sample"] is True
+
+
+def test_build_generate_kwargs_greedy_decoding():
+    """Greedy decoding (temperature=0) removes sampling params and forces do_sample=False."""
+    from llenergymeasure.config.engine_configs import (
+        TransformersConfig,
+        TransformersSamplingConfig,
+    )
+    from llenergymeasure.config.models import ExperimentConfig
+    from llenergymeasure.engines.transformers import TransformersEngine
+
+    engine = TransformersEngine()
+    config = ExperimentConfig(
+        task={"model": "gpt2"},
+        transformers=TransformersConfig(
+            sampling=TransformersSamplingConfig(temperature=0.0, do_sample=False),
+        ),
     )
     kwargs = engine._build_generate_kwargs(config)
 

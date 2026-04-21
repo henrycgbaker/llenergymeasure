@@ -365,52 +365,23 @@ class VLLMEngine:
 
     @staticmethod
     def _build_sampling_params(config: ExperimentConfig, sampling_params_cls: Any) -> Any:
-        """Build vllm.SamplingParams from DecoderConfig."""
+        """Build vllm.SamplingParams from VLLMSamplingConfig.
+
+        All sampling fields live on ``config.vllm.sampling``. None values mean
+        "use vLLM's default", so we forward only explicit values.
+        User writes top_k=-1 directly to disable (vLLM convention). No translation.
+        """
         vllm_cfg = config.vllm
         if vllm_cfg is not None and vllm_cfg.beam_search is not None:
             return VLLMEngine._build_beam_search_params(config, vllm_cfg.beam_search)
 
-        decoder = config.decoder
-        is_greedy = decoder.temperature == 0.0 or not decoder.do_sample
+        sampling = vllm_cfg.sampling if vllm_cfg is not None else None
 
-        if is_greedy:
-            kwargs: dict[str, Any] = {
-                "temperature": 0.0,
-            }
-        else:
-            top_k = decoder.top_k if decoder.top_k != 0 else -1
-            kwargs = {
-                "temperature": decoder.temperature,
-                "top_p": decoder.top_p,
-                "top_k": top_k,
-                "repetition_penalty": decoder.repetition_penalty,
-            }
+        kwargs: dict[str, Any] = (
+            sampling.model_dump(exclude_none=True) if sampling is not None else {}
+        )
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
-        if decoder.min_p is not None:
-            kwargs["min_p"] = decoder.min_p
-
-        # Map universal decoder.min_new_tokens to vLLM's min_tokens.
-        # This is placed before vllm_cfg overrides so that vllm.sampling.min_tokens
-        # can override the universal mapping if both are set.
-        if decoder.min_new_tokens is not None:
-            kwargs["min_tokens"] = decoder.min_new_tokens
-
-        # Apply vLLM-specific sampling overrides
-        if vllm_cfg is not None and vllm_cfg.sampling is not None:
-            sampling = vllm_cfg.sampling
-            if sampling.min_tokens is not None:
-                kwargs["min_tokens"] = sampling.min_tokens
-            if sampling.presence_penalty is not None:
-                kwargs["presence_penalty"] = sampling.presence_penalty
-            if sampling.frequency_penalty is not None:
-                kwargs["frequency_penalty"] = sampling.frequency_penalty
-            if sampling.ignore_eos is not None:
-                kwargs["ignore_eos"] = sampling.ignore_eos
-            if sampling.n is not None:
-                kwargs["n"] = sampling.n
-            if sampling.model_extra:
-                kwargs.update(sampling.model_extra)
 
         return sampling_params_cls(**kwargs)
 
@@ -436,8 +407,6 @@ class VLLMEngine:
             kwargs["early_stopping"] = beam_cfg.early_stopping
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
-        if config.decoder.min_p is not None:
-            kwargs["min_p"] = config.decoder.min_p
         if beam_cfg.model_extra:
             kwargs.update(beam_cfg.model_extra)
         return BeamSearchParams(**kwargs)
