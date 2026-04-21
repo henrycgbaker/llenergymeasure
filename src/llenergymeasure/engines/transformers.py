@@ -275,11 +275,11 @@ class TransformersEngine:
         Returns:
             Dict of kwargs ready for from_pretrained().
         """
-        kwargs: dict[str, Any] = {
-            "torch_dtype": self._resolve_torch_dtype(config.dtype),
-        }
-
         pt = config.transformers
+        dtype = pt.dtype if pt is not None else None
+        kwargs: dict[str, Any] = {
+            "torch_dtype": self._resolve_torch_dtype(dtype or "bfloat16"),
+        }
 
         from llenergymeasure.utils.env_config import default_device_map
         from llenergymeasure.utils.security import trust_remote_code_enabled

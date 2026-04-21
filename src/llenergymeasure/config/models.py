@@ -343,13 +343,6 @@ class ExperimentConfig(BaseModel):
         description="Measurement methodology: warmup, baseline, energy sampling",
     )
 
-    # Hardware
-    dtype: Literal["float32", "float16", "bfloat16"] = Field(
-        default="bfloat16",
-        description="Model dtype for inference",
-        json_schema_extra={"display_label": "Dtype"},
-    )
-
     # Sampling preset — expands into the active engine's sampling section
     sampling_preset: SamplingPreset | None = Field(
         default=None,
@@ -422,7 +415,6 @@ class ExperimentConfig(BaseModel):
     # Cross-validators
     # -------------------------------------------------------------------------
 
-    _FP8_QUANTIZATIONS: ClassVar[set[str]] = {"fp8", "fp8_e5m2", "fp8_e4m3"}
     _FLASH_ATTENTION_IMPLS: ClassVar[set[str]] = {"flash_attention_2", "flash_attention_3"}
 
     @model_validator(mode="after")
@@ -467,37 +459,9 @@ class ExperimentConfig(BaseModel):
                 )
         return self
 
-    @model_validator(mode="after")
-    def validate_vllm_fp8_dtype_compat(self) -> ExperimentConfig:
-        """fp8 quantization requires float16 or bfloat16 dtype (not float32)."""
-        if (
-            self.engine == "vllm"
-            and self.vllm is not None
-            and self.vllm.engine is not None
-            and self.vllm.engine.quantization in self._FP8_QUANTIZATIONS
-            and self.dtype == "float32"
-        ):
-            raise ValueError(
-                "quantization='fp8' is incompatible with dtype='float32'. "
-                "Use dtype='float16' or dtype='bfloat16' for fp8 quantization."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def validate_trt_fp8_dtype_compat(self) -> ExperimentConfig:
-        """FP8 quantization on TensorRT requires float16 or bfloat16 dtype (not float32)."""
-        if (
-            self.engine == "tensorrt"
-            and self.tensorrt is not None
-            and self.tensorrt.quant is not None
-            and self.tensorrt.quant.quant_algo == "FP8"
-            and self.dtype == "float32"
-        ):
-            raise ValueError(
-                "quantization='FP8' is incompatible with dtype='float32'. "
-                "Use dtype='float16' or dtype='bfloat16' for FP8 quantization."
-            )
-        return self
+    # vLLM fp8 + float32 and TRT FP8 + float32 are rejected by the respective
+    # VLLMConfig.dtype / TensorRTConfig.dtype Literal types at field validation
+    # (neither engine accepts float32). No separate cross-validator needed.
 
     @model_validator(mode="after")
     def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:
@@ -506,7 +470,7 @@ class ExperimentConfig(BaseModel):
             self.engine == "transformers"
             and self.transformers is not None
             and self.transformers.attn_implementation in self._FLASH_ATTENTION_IMPLS
-            and self.dtype == "float32"
+            and (self.transformers.dtype or "bfloat16") == "float32"
         ):
             raise ValueError(
                 f"attn_implementation='{self.transformers.attn_implementation}' requires "

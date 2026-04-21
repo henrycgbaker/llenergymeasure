@@ -123,7 +123,10 @@ class TestProtocolCompliance:
 
 class TestBuildLlmKwargs:
     def test_minimal_config_has_required_keys(self):
-        """With no VLLMConfig, kwargs contains model, dtype, trust_remote_code, seed."""
+        """With no VLLMConfig, kwargs contains model, trust_remote_code, seed.
+
+        dtype is omitted when the user hasn't set it — vLLM uses its own default.
+        """
         config = make_config(**_VLLM_DEFAULTS)
         engine = VLLMEngine()
         kwargs = engine._build_llm_kwargs(config)
@@ -132,7 +135,8 @@ class TestBuildLlmKwargs:
         # HF default — env var LLEM_TRUST_REMOTE_CODE not set
         assert kwargs["trust_remote_code"] is False
         assert kwargs["seed"] == 42
-        assert "dtype" in kwargs
+        # dtype is only forwarded when explicitly set in VLLMConfig
+        assert "dtype" not in kwargs
 
     def test_trust_remote_code_env_var_opt_in(self, monkeypatch):
         """LLEM_TRUST_REMOTE_CODE=1 enables trust_remote_code=True."""
@@ -143,9 +147,9 @@ class TestBuildLlmKwargs:
 
         assert kwargs["trust_remote_code"] is True
 
-    def test_minimal_config_dtype_passthrough(self):
-        """Default dtype (bfloat16) passes through in kwargs."""
-        config = make_config(**_VLLM_DEFAULTS)
+    def test_explicit_dtype_passthrough(self):
+        """Explicit VLLMConfig.dtype passes through in kwargs."""
+        config = make_config(**_VLLM_DEFAULTS, vllm=VLLMConfig(dtype="bfloat16"))
         engine = VLLMEngine()
         kwargs = engine._build_llm_kwargs(config)
         assert kwargs["dtype"] == "bfloat16"
@@ -185,18 +189,12 @@ class TestBuildLlmKwargs:
         assert "quantization" not in kwargs
 
     def test_no_vllm_section_produces_no_extra_keys(self):
-        """When config.vllm is None, only the 4 base keys are present."""
+        """When config.vllm is None, only the 3 base keys are present (dtype omitted)."""
         config = make_config(**_VLLM_DEFAULTS)  # vllm=None by default
         engine = VLLMEngine()
         kwargs = engine._build_llm_kwargs(config)
 
-        assert set(kwargs.keys()) == {"model", "dtype", "trust_remote_code", "seed"}
-
-    def test_dtype_float32_in_kwargs(self):
-        """dtype='float32' passes through to vLLM."""
-        config = make_config(**_VLLM_DEFAULTS, dtype="float32")
-        kwargs = VLLMEngine()._build_llm_kwargs(config)
-        assert kwargs["dtype"] == "float32"
+        assert set(kwargs.keys()) == {"model", "trust_remote_code", "seed"}
 
     def test_dtype_float16_in_kwargs(self):
         """dtype='float16' passes through to vLLM."""
@@ -209,6 +207,12 @@ class TestBuildLlmKwargs:
         config = make_config(**_VLLM_DEFAULTS, dtype="bfloat16")
         kwargs = VLLMEngine()._build_llm_kwargs(config)
         assert kwargs["dtype"] == "bfloat16"
+
+    def test_dtype_auto_in_kwargs(self):
+        """dtype='auto' passes through to vLLM (vLLM-specific value)."""
+        config = make_config(**_VLLM_DEFAULTS, vllm=VLLMConfig(dtype="auto"))
+        kwargs = VLLMEngine()._build_llm_kwargs(config)
+        assert kwargs["dtype"] == "auto"
 
     def test_seed_from_config_random_seed(self):
         """kwargs['seed'] matches config.random_seed."""

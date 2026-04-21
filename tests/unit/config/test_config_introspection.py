@@ -82,23 +82,21 @@ def test_get_engine_params_unknown_engine_raises():
 
 
 def test_get_shared_params_returns_model_field():
-    """get_shared_params() contains 'model' — wait, 'model' is not in shared.
+    """get_shared_params() returns dataset and decoder params.
 
-    Actually shared params are dtype, n, max_input_tokens, max_output_tokens
-    plus decoder.* params. 'model' is a top-level required field in ExperimentConfig,
-    not in the shared section of introspection.
+    dtype lives per-engine, not in the shared bucket. Shared now means
+    decoder.* params and dataset.* params.
     """
     params = get_shared_params()
     assert isinstance(params, dict)
-    # Precision is a confirmed shared param
-    assert "dtype" in params
+    # Dataset params are shared
+    assert "dataset.n_prompts" in params
 
 
-def test_get_shared_params_contains_dtype():
-    """get_shared_params() contains 'dtype'."""
+def test_get_shared_params_does_not_contain_dtype():
+    """get_shared_params() does not expose 'dtype' — it's per-engine."""
     params = get_shared_params()
-    assert "dtype" in params
-    assert params["dtype"]["options"] == ["float32", "float16", "bfloat16"]
+    assert "dtype" not in params
 
 
 def test_get_shared_params_contains_n():
@@ -162,8 +160,8 @@ def test_get_param_test_values_pytorch_batch_size_returns_list():
 
 
 def test_get_param_test_values_dtype_returns_all_options():
-    """get_param_test_values('dtype') returns all 3 dtype options."""
-    values = get_param_test_values("dtype")
+    """get_param_test_values('transformers.dtype') returns all 3 dtype options."""
+    values = get_param_test_values("transformers.dtype")
     assert set(values) == {"float32", "float16", "bfloat16"}
 
 
@@ -215,7 +213,7 @@ def test_list_all_param_paths_contains_expected_paths():
     paths = list_all_param_paths()
     assert isinstance(paths, list)
     assert "transformers.batch_size" in paths
-    assert "dtype" in paths
+    assert "transformers.dtype" in paths
 
 
 def test_list_all_param_paths_contains_known_paths():
@@ -226,7 +224,10 @@ def test_list_all_param_paths_contains_known_paths():
     assert "transformers.sampling.temperature" in paths
     assert "vllm.sampling.temperature" in paths
     assert "tensorrt.sampling.temperature" in paths
-    assert "dtype" in paths
+    # dtype also lives per-engine
+    assert "transformers.dtype" in paths
+    assert "vllm.dtype" in paths
+    assert "tensorrt.dtype" in paths
 
 
 def test_list_all_param_paths_filtered_by_engine():
@@ -250,13 +251,13 @@ def test_list_all_param_paths_unknown_engine_raises():
 def test_all_pytorch_dtype_values_produce_valid_config(dt):
     """Schema-driven: each SSOT DTYPE_SUPPORT['transformers'] value creates a valid config."""
     config = make_config(dtype=dt)
-    assert config.dtype == dt
+    assert config.transformers.dtype == dt
 
 
 def test_ssot_dtype_values_match_param_test_values():
-    """DTYPE_SUPPORT['transformers'] values match get_param_test_values('dtype')."""
+    """DTYPE_SUPPORT['transformers'] values match get_param_test_values('transformers.dtype')."""
     from_ssot = set(DTYPE_SUPPORT["transformers"])
-    from_introspection = set(get_param_test_values("dtype"))
+    from_introspection = set(get_param_test_values("transformers.dtype"))
     # The test values from introspection should cover all SSOT dtype values
     assert from_ssot == from_introspection
 
@@ -342,11 +343,15 @@ def test_get_swept_field_paths_single_experiment():
 
 
 def test_get_swept_field_paths_dtype_swept():
-    """Two experiments with different dtypes yield {'dtype'} in swept paths."""
-    exp1 = ExperimentConfig(task={"model": "gpt2"}, dtype="float16")
-    exp2 = ExperimentConfig(task={"model": "gpt2"}, dtype="bfloat16")
+    """Two experiments with different engine dtypes sweep the engine subconfig path."""
+    exp1 = ExperimentConfig(
+        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "float16"}
+    )
+    exp2 = ExperimentConfig(
+        task={"model": "gpt2"}, engine="transformers", transformers={"dtype": "bfloat16"}
+    )
     result = get_swept_field_paths([exp1, exp2])
-    assert "dtype" in result
+    assert "transformers.dtype" in result
 
 
 def test_get_swept_field_paths_nested_field():
@@ -371,14 +376,12 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     exp_pt = ExperimentConfig(
         task={"model": "gpt2"},
         engine="transformers",
-        dtype="float16",
-        transformers=TransformersConfig(batch_size=4),
+        transformers=TransformersConfig(dtype="float16", batch_size=4),
     )
     exp_vllm = ExperimentConfig(
         task={"model": "gpt2"},
         engine="vllm",
-        dtype="float16",
-        vllm=VLLMConfig(),
+        vllm=VLLMConfig(dtype="float16"),
     )
     # Must not raise AttributeError
     result = get_swept_field_paths([exp_pt, exp_vllm])

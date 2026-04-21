@@ -142,19 +142,19 @@ class TestStudyConfig:
 
 class TestExpandGridSweep:
     def test_universal_sweep_cartesian_product(self):
-        """2 dtypes x 2 n values = 4 configs."""
+        """2 dtypes x 2 n values = 4 configs (dtype now engine-scoped)."""
         raw = {
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
                 "task.dataset.n_prompts": [50, 100],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 4
         assert len(skipped) == 0
-        dtypes_set = {c.dtype for c in valid}
+        dtypes_set = {c.transformers.dtype for c in valid}
         ns = {c.task.dataset.n_prompts for c in valid}
         assert dtypes_set == {"float16", "bfloat16"}
         assert ns == {50, 100}
@@ -175,12 +175,13 @@ class TestExpandGridSweep:
         assert batch_sizes == {1, 8}
 
     def test_multi_engine_scoped_sweep(self):
-        """Multi-engine with scoped keys: independent grids per engine."""
+        """Multi-engine with per-engine dtype axes: independent grids per engine."""
         raw = {
             "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
+                "vllm.dtype": ["float16", "bfloat16"],
                 "transformers.batch_size": [1, 8],
                 "vllm.engine.max_num_seqs": [64, 256],
             },
@@ -234,7 +235,7 @@ class TestExpandGridCombined:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
             },
             "experiments": [
                 {"task": {"model": "gpt2-xl"}, "engine": "transformers"},
@@ -246,7 +247,7 @@ class TestExpandGridCombined:
         # Sweep configs first
         sweep_configs = valid[:2]
         explicit_config = valid[2]
-        assert {c.dtype for c in sweep_configs} == {"float16", "bfloat16"}
+        assert {c.transformers.dtype for c in sweep_configs} == {"float16", "bfloat16"}
         assert explicit_config.task.model == "gpt2-xl"
 
 
@@ -267,7 +268,7 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "dtype": ["float16", "bfloat16"],
+                "transformers.dtype": ["float16", "bfloat16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
@@ -283,7 +284,7 @@ class TestExpandGridBase:
             "task": {"model": "gpt2"},
             "engine": "transformers",
             # These should be stripped
-            "sweep": {"dtype": ["float32"]},
+            "sweep": {"transformers.dtype": ["float32"]},
             "experiments": [{"model": "other"}],
             "study_execution": {"n_cycles": 5},
             "base": "another.yaml",
@@ -295,17 +296,20 @@ class TestExpandGridBase:
         raw = {
             "base": "base_experiment.yaml",
             "sweep": {
-                "dtype": ["float16"],
+                "transformers.dtype": ["float16"],
             },
         }
         study_yaml = tmp_path / "study.yaml"
         valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 1
-        assert valid[0].dtype == "float16"
+        assert valid[0].transformers.dtype == "float16"
         assert valid[0].task.model == "gpt2"
 
     def test_missing_base_file_raises(self, tmp_path: Path):
-        raw = {"base": "nonexistent.yaml", "sweep": {"dtype": ["float16"]}}
+        raw = {
+            "base": "nonexistent.yaml",
+            "sweep": {"transformers.dtype": ["float16"]},
+        }
         study_yaml = tmp_path / "study.yaml"
         with pytest.raises(ConfigError, match="base"):
             expand_grid(raw, study_yaml_path=study_yaml)
@@ -321,11 +325,9 @@ class TestExpandGridInvalidHandling:
         """Invalid configs become SkippedConfig, valid ones are returned."""
         raw = {
             "task": {"model": "gpt2"},
+            "engine": "transformers",
             "sweep": {
-                # fp32 with tensorrt engine is valid, but dtype float32 is accepted
-                # Use a truly invalid combo: engine=vllm but transformers section provided via explicit
-                "engine": ["transformers", "vllm"],
-                "dtype": ["float16"],
+                "transformers.dtype": ["float16", "bfloat16"],
             },
             "experiments": [
                 # This will fail: vllm section + engine=transformers
@@ -353,19 +355,19 @@ class TestExpandGridInvalidHandling:
 
     def test_skipped_config_short_label(self):
         sc = SkippedConfig(
-            raw_config={"engine": "transformers", "dtype": "float32"},
+            raw_config={"engine": "transformers", "transformers": {"dtype": "float32"}},
             reason="some validation error",
         )
         assert sc.short_label == "transformers, float32"
 
     def test_skipped_config_to_dict(self):
         sc = SkippedConfig(
-            raw_config={"engine": "vllm", "dtype": "float16"},
+            raw_config={"engine": "vllm", "vllm": {"dtype": "float16"}},
             reason="cross-validation error",
             errors=[{"loc": ["engine"], "msg": "test"}],
         )
         d = sc.to_dict()
-        assert d["raw_config"] == {"engine": "vllm", "dtype": "float16"}
+        assert d["raw_config"] == {"engine": "vllm", "vllm": {"dtype": "float16"}}
         assert d["reason"] == "cross-validation error"
         assert d["short_label"] == "vllm, float16"
         assert len(d["errors"]) == 1
@@ -386,7 +388,8 @@ class TestMultiBackendSectionStripping:
             "task": {"model": "gpt2"},
             "tensorrt": {"max_input_len": 1024},
             "sweep": {
-                "dtype": ["bfloat16"],
+                "transformers.dtype": ["bfloat16"],
+                "tensorrt.dtype": ["bfloat16"],
                 "transformers.batch_size": [1],
                 "tensorrt.max_batch_size": [4],
             },
@@ -484,11 +487,11 @@ class TestComputeStudyDesignHash:
         """Same experiments in same order produce same hash (order matters for reproducibility)."""
         exps_a = [
             ExperimentConfig(task={"model": "gpt2"}),
-            ExperimentConfig(task={"model": "gpt2"}, dtype="float16"),
+            ExperimentConfig(task={"model": "gpt2"}, transformers={"dtype": "float16"}),
         ]
         exps_b = [
             ExperimentConfig(task={"model": "gpt2"}),
-            ExperimentConfig(task={"model": "gpt2"}, dtype="float16"),
+            ExperimentConfig(task={"model": "gpt2"}, transformers={"dtype": "float16"}),
         ]
         assert compute_study_design_hash(exps_a) == compute_study_design_hash(exps_b)
 
@@ -703,7 +706,7 @@ class TestFormatPreflightSummary:
         """When skipped_configs populated, Skipping line with reasons appears."""
         skipped = [
             {
-                "raw_config": {"engine": "transformers", "dtype": "float32"},
+                "raw_config": {"engine": "transformers", "transformers": {"dtype": "float32"}},
                 "reason": "cross-validation failed",
                 "short_label": "pytorch, float32",
                 "errors": [],
@@ -720,13 +723,13 @@ class TestFormatPreflightSummary:
         # 1 valid config, 2 skipped → 67% skip rate
         skipped = [
             {
-                "raw_config": {"engine": "vllm", "dtype": "float16"},
+                "raw_config": {"engine": "vllm", "vllm": {"dtype": "float16"}},
                 "reason": "error A",
                 "short_label": "vllm, float16",
                 "errors": [],
             },
             {
-                "raw_config": {"engine": "vllm", "dtype": "bfloat16"},
+                "raw_config": {"engine": "vllm", "vllm": {"dtype": "bfloat16"}},
                 "reason": "error B",
                 "short_label": "vllm, bfloat16",
                 "errors": [],
@@ -742,7 +745,7 @@ class TestFormatPreflightSummary:
         # 4 valid, 1 skipped → 20% skip rate
         skipped = [
             {
-                "raw_config": {"engine": "transformers", "dtype": "float32"},
+                "raw_config": {"engine": "transformers", "transformers": {"dtype": "float32"}},
                 "reason": "validation error",
                 "short_label": "pytorch, float32",
                 "errors": [],
@@ -756,7 +759,7 @@ class TestFormatPreflightSummary:
     def test_skipped_list_argument_takes_precedence(self):
         """If skipped list of SkippedConfig passed, uses it instead of skipped_configs."""
         skipped_obj = SkippedConfig(
-            raw_config={"engine": "transformers", "dtype": "float16"},
+            raw_config={"engine": "transformers", "transformers": {"dtype": "float16"}},
             reason="via argument",
         )
         # StudyConfig has empty skipped_configs
@@ -806,7 +809,11 @@ def _make_panel_study_config(
     for model in models:
         for engine in engines:
             for dt in dtypes:
-                experiments.append(ExperimentConfig(task={"model": model}, engine=engine, dtype=dt))
+                experiments.append(
+                    ExperimentConfig(
+                        task={"model": model}, engine=engine, **{engine: {"dtype": dt}}
+                    )
+                )
 
     # Replicate for cycles
     all_exps = experiments * n_cycles
@@ -1013,17 +1020,25 @@ class TestCountSweepStructure:
         assert count_sweep_structure({}) == (0, 0)
 
     def test_axes_only(self):
-        sweep = {"engine": ["transformers", "vllm"], "dtype": ["float16", "bfloat16"]}
+        sweep = {
+            "engine": ["transformers", "vllm"],
+            "transformers.dtype": ["float16", "bfloat16"],
+        }
         assert count_sweep_structure(sweep) == (2, 0)
 
     def test_groups_only(self):
-        sweep = {"quant_group": [{"dtype": "float16"}, {"dtype": "bfloat16"}]}
+        sweep = {
+            "quant_group": [
+                {"transformers.dtype": "float16"},
+                {"transformers.dtype": "bfloat16"},
+            ]
+        }
         assert count_sweep_structure(sweep) == (0, 1)
 
     def test_mixed_axes_and_groups(self):
         sweep = {
             "engine": ["transformers", "vllm"],
-            "dtype": ["float16", "bfloat16"],
+            "transformers.dtype": ["float16", "bfloat16"],
             "transformers.compilation": [
                 {"transformers.torch_compile": True},
                 {"transformers.torch_compile": False},

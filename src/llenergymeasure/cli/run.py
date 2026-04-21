@@ -356,20 +356,21 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
         config: ExperimentConfig with model, engine, dtype, dataset fields.
         runner_tag: Runner tag string ("local" or "docker").
     """
-    from llenergymeasure.config.models import DatasetConfig, ExperimentConfig
+    from llenergymeasure.config.models import DatasetConfig
 
-    _fields = ExperimentConfig.model_fields
     _ds_fields = DatasetConfig.model_fields
-    default_dtype = _fields["dtype"].default
     default_n = _ds_fields["n_prompts"].default
     default_source = _ds_fields["source"].default
 
     # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
     model = config.task.model.split("/")[-1] if "/" in config.task.model else config.task.model
     parts = [f"{model} | {config.engine}"]
-    # Deviation fields (only when non-default)
-    if config.dtype != default_dtype:
-        parts.append(config.dtype)
+    # Deviation fields (only when non-default/explicit)
+    # dtype now lives per-engine; only show when set explicitly.
+    engine_section = getattr(config, config.engine, None)
+    engine_dtype = getattr(engine_section, "dtype", None)
+    if engine_dtype is not None:
+        parts.append(engine_dtype)
     if config.task.dataset.n_prompts != default_n:
         parts.append(f"n_prompts={config.task.dataset.n_prompts}")
     if config.task.dataset.source != default_source:

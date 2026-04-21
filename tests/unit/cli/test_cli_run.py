@@ -58,8 +58,7 @@ def _make_mock_config() -> MagicMock:
 
     config = MagicMock(spec=ExperimentConfig)
     config.engine = "transformers"
-    config.dtype = "bfloat16"
-    config.transformers = None
+    config.transformers = None  # no engine section → dtype is None (engine default)
 
     # task sub-model
     config.task = MagicMock()
@@ -109,7 +108,7 @@ def test_build_header_strips_hf_org_prefix():
     config = _make_mock_config()
     config.task.model = "meta-llama/Llama-3.2-1B-Instruct"
     config.engine = "vllm"
-    config.dtype = "bfloat16"
+    config.vllm = None  # no engine section → dtype is None (engine default)
     config.task.dataset.n_prompts = 100  # default — should not appear
 
     header = _build_header(config, runner_tag="docker")
@@ -119,13 +118,13 @@ def test_build_header_strips_hf_org_prefix():
 
 
 def test_build_header_default_dtype_omitted():
-    """_build_header omits dtype when it is the default 'bfloat16'."""
+    """_build_header omits dtype when no explicit per-engine dtype is set."""
     from llenergymeasure.cli.run import _build_header
 
     config = _make_mock_config()
     config.task.model = "gpt2"
     config.engine = "transformers"
-    config.dtype = "bfloat16"  # default — should not appear
+    config.transformers = None  # engine default — should not appear
     config.task.dataset.n_prompts = 100  # default — should not appear
 
     header = _build_header(config, runner_tag="local")
@@ -134,13 +133,15 @@ def test_build_header_default_dtype_omitted():
 
 
 def test_build_header_nondefault_fields_shown():
-    """_build_header includes dtype and n when non-default."""
+    """_build_header includes dtype (when set per-engine) and n_prompts (when non-default)."""
     from llenergymeasure.cli.run import _build_header
 
     config = _make_mock_config()
     config.task.model = "gpt2"
     config.engine = "transformers"
-    config.dtype = "float16"
+    transformers_section = MagicMock()
+    transformers_section.dtype = "float16"
+    config.transformers = transformers_section
     config.task.dataset.n_prompts = 50  # non-default — should appear
 
     header = _build_header(config, runner_tag="local")
@@ -352,7 +353,7 @@ def test_study_detection_with_sweep_key(tmp_path):
 name: test
 model: test/model
 sweep:
-  dtype: [float32, float16]
+  transformers.dtype: [float32, float16]
 """)
     import yaml
 
@@ -452,7 +453,7 @@ def test_run_study_routing_sweep_yaml(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
 
@@ -532,7 +533,7 @@ def test_run_study_cli_defaults_applied(tmp_path):
 
     study_yaml = tmp_path / "study.yaml"
     study_yaml.write_text(
-        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  dtype: [float32, float16]\n"
+        "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
     )
     mock_study_result = make_study_result()
     _capture_load, captured_overrides = _make_capture_load()
@@ -589,7 +590,7 @@ def _make_study_yaml(tmp_path, content: str | None = None) -> Path:
 
     study_yaml = tmp_path / "study.yaml"
     if content is None:
-        content = "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  dtype: [float32, float16]\n"
+        content = "name: test\nmodel: test/model\nengine: transformers\nsweep:\n  transformers.dtype: [float32, float16]\n"
     study_yaml.write_text(content)
     return study_yaml
 

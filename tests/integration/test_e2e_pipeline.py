@@ -169,8 +169,9 @@ class TestPipelineMultiExperimentSweep:
         yaml_content = """\
 task:
   model: gpt2
+engine: transformers
 sweep:
-  dtype: [float16, bfloat16]
+  transformers.dtype: [float16, bfloat16]
 study_execution:
   n_cycles: 1
   experiment_order: sequential
@@ -188,7 +189,7 @@ measurement:
 
         # Sweep over 2 dtypes, n_cycles=1 → 2 experiments total
         assert len(study_config.experiments) == 2
-        dtypes_set = {exp.dtype for exp in study_config.experiments}
+        dtypes_set = {exp.transformers.dtype for exp in study_config.experiments}
         assert dtypes_set == {"float16", "bfloat16"}
 
     def test_study_yaml_model_sweep(self, tmp_path: Path) -> None:
@@ -374,7 +375,8 @@ class TestCLIE2EStudy:
 
         yaml_path = tmp_path / "study.yaml"
         yaml_path.write_text(
-            "task:\n  model: gpt2\nsweep:\n  dtype: [float16, bfloat16]\n"
+            "task:\n  model: gpt2\nengine: transformers\n"
+            "sweep:\n  transformers.dtype: [float16, bfloat16]\n"
             "study_execution:\n  n_cycles: 1\n  experiment_order: sequential\n"
         )
 

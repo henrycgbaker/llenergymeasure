@@ -48,9 +48,13 @@ def make_config(**overrides) -> ExperimentConfig:
 
     Tests override only what they care about. Task-level fields (model, dataset,
     max_input_tokens, max_output_tokens, random_seed) are routed into task={}.
+    A top-level dtype= kwarg is routed into the active engine's config section
+    (dtype now lives per-engine on TransformersConfig/VLLMConfig/TensorRTConfig).
     """
     _TASK_FIELDS = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
     _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler"}
+
+    dtype = overrides.pop("dtype", None)
 
     task_defaults: dict = {"model": TEST_MODEL}
     ec_defaults: dict = {"engine": TEST_ENGINE}
@@ -71,6 +75,18 @@ def make_config(**overrides) -> ExperimentConfig:
     ec = {**ec_defaults, **ec_overrides, "task": task}
     if measurement_overrides:
         ec["measurement"] = measurement_overrides
+
+    if dtype is not None:
+        engine_name = ec.get("engine", TEST_ENGINE)
+        engine_key = engine_name.value if hasattr(engine_name, "value") else str(engine_name)
+        existing = ec.get(engine_key)
+        if hasattr(existing, "model_copy"):
+            ec[engine_key] = existing.model_copy(update={"dtype": dtype})
+        elif isinstance(existing, dict):
+            ec[engine_key] = {**existing, "dtype": dtype}
+        else:
+            ec[engine_key] = {"dtype": dtype}
+
     return ExperimentConfig(**ec)
 
 
