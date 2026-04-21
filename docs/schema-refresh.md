@@ -15,7 +15,7 @@ This pipeline automates that process end-to-end.
 Upstream releases new engine version (e.g. vLLM v0.8.0)
                       |
                       v
-Renovate detects new tag on Docker Hub / NGC
+Renovate detects new tag on Docker Hub / NGC / PyPI
 (checks weekly, waits 3 days for stability)
                       |
                       v
@@ -51,8 +51,10 @@ Maintainer reviews PR:
 
 ### Automated Flow (Renovate PRs)
 
-1. **Renovate** monitors `docker/Dockerfile.*` for upstream image tag bumps
-   (weekly schedule, 3-day stability window before opening a PR).
+1. **Renovate** monitors `docker/Dockerfile.*` for upstream version bumps:
+   Docker Hub image tags (vLLM), NGC image tags (TensorRT-LLM), and PyPI
+   package versions via `customManagers` regex (transformers). Weekly schedule,
+   3-day stability window before opening a PR.
 2. When Renovate opens a PR, **schema-refresh.yml** auto-fires on the
    self-hosted GPU runner.
 3. The workflow determines which engine(s) changed by inspecting the modified
@@ -137,6 +139,12 @@ When schema-refresh labels a PR `schema-breaking`:
 6. If the Dockerfile ARG maps directly to the engine version, add an entry to
    `_ENGINE_SPECS` in `scripts/check_schema_versions.py`
 
+For engines pre-installed in their upstream Docker image (vLLM, TensorRT-LLM),
+the `dockerfile` manager monitors image tag bumps automatically. For engines
+installed via pip on top of a base image (transformers), add a `customManagers`
+regex entry with `datasourceTemplate: "pypi"` to monitor PyPI releases against
+the Dockerfile `ARG` pin.
+
 The schema-refresh workflow and version guard automatically cover new engines
 via path-based triggers (`docker/Dockerfile.*`).
 
@@ -156,6 +164,7 @@ via path-based triggers (`docker/Dockerfile.*`).
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Renovate not detecting bumps | `fileMatch` pattern doesn't cover the Dockerfile | Check Renovate dashboard, verify `docker/Dockerfile\\..*` matches |
+| Renovate not detecting transformers bumps | `customManagers` regex not matching | Verify `ARG TRANSFORMERS_VERSION=X.Y.Z` format in Dockerfile.transformers |
 | schema-refresh fails to import engine | Needs `--gpus all` | Verify GPU runner has NVIDIA drivers + Container Toolkit |
 | Version guard fails on non-version change | Won't happen - guard only compares version ARGs | If it does, check `_parse_arg` regex in `check_schema_versions.py` |
 | NGC registry auth failure | Private image or rate-limited | Add `hostRules` to `renovate.json` |

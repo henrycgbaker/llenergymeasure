@@ -18,6 +18,8 @@ def _setup_repo(
     vllm_schema_version: str = "0.7.3",
     trt_arg: str = "0.21.0",
     trt_schema_version: str = "0.21.0",
+    transformers_arg: str = "5.5.4",
+    transformers_schema_version: str = "5.5.4",
     skip_vllm_schema: bool = False,
 ) -> Path:
     """Create a minimal repo structure for the version check script."""
@@ -29,6 +31,9 @@ def _setup_repo(
     (docker / "Dockerfile.tensorrt").write_text(
         f"FROM ubuntu:22.04\nARG TRTLLM_VERSION={trt_arg}\n"
     )
+    (docker / "Dockerfile.transformers").write_text(
+        f"FROM ubuntu:22.04\nARG TRANSFORMERS_VERSION={transformers_arg}\n"
+    )
 
     schema_dir = repo / "src" / "llenergymeasure" / "config" / "discovered_schemas"
     schema_dir.mkdir(parents=True)
@@ -36,6 +41,9 @@ def _setup_repo(
     if not skip_vllm_schema:
         (schema_dir / "vllm.json").write_text(json.dumps({"engine_version": vllm_schema_version}))
     (schema_dir / "tensorrt.json").write_text(json.dumps({"engine_version": trt_schema_version}))
+    (schema_dir / "transformers.json").write_text(
+        json.dumps({"engine_version": transformers_schema_version})
+    )
 
     return repo
 
@@ -59,6 +67,18 @@ class TestMismatch:
         captured = capsys.readouterr()
         assert "MISMATCH" in captured.err
         assert "update_engine_schema.sh" in captured.err
+
+    def test_transformers_mismatch(self, tmp_path: Path, capsys):
+        repo = _setup_repo(
+            tmp_path,
+            transformers_arg="5.6.0",
+            transformers_schema_version="5.5.4",
+        )
+        code = main(repo_root=repo)
+        assert code == 1
+        captured = capsys.readouterr()
+        assert "MISMATCH" in captured.err
+        assert "transformers" in captured.err
 
 
 class TestErrors:

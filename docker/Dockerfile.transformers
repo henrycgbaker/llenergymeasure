@@ -10,10 +10,12 @@
 #   docker build -f docker/Dockerfile.transformers -t llenergymeasure-transformers .
 #
 # Version pin policy: update PYTORCH_VERSION on each milestone release.
-# Must be compatible with pyproject.toml torch>=2.5 constraint.
+# TRANSFORMERS_VERSION is monitored by Renovate (PyPI datasource).
+# Must be compatible with pyproject.toml torch>=2.5 / transformers>=4.49 constraints.
 # ============================================================
 ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
+ARG TRANSFORMERS_VERSION=5.5.4
 
 # Build stage: compile flash-attn FA2 + FA3 (needs nvcc from devel image)
 # FA2 = standard flash-attn pip package.
@@ -86,11 +88,12 @@ WORKDIR /app
 # Bind mounts: pyproject.toml/uv.lock/README.md are build-only (not needed at runtime).
 # Cache mount: uv reuses cached wheels across rebuilds without bloating the image.
 COPY src/ ./src/
+ARG TRANSFORMERS_VERSION
 RUN --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
     --mount=type=bind,source=uv.lock,target=/app/uv.lock \
     --mount=type=bind,source=README.md,target=/app/README.md \
     --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system ".[transformers]" sentencepiece einops
+    uv pip install --system ".[transformers]" "transformers==${TRANSFORMERS_VERSION}" sentencepiece einops
 
 # HuggingFace cache — writable for non-root users
 ENV HF_HOME=/app/.cache/huggingface

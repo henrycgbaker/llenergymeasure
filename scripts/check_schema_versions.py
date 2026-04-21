@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """Check that Dockerfile engine version ARGs match vendored schema engine_versions.
 
-Covers engines where the Dockerfile ARG directly corresponds to the engine
+Covers all engines where the Dockerfile ARG directly corresponds to the engine
 version tracked in the schema:
   - vllm: ARG VLLM_VERSION in docker/Dockerfile.vllm
   - tensorrt: ARG TRTLLM_VERSION in docker/Dockerfile.tensorrt
-
-Transformers is excluded because its Dockerfile pins PyTorch (the base image),
-while the schema tracks the pip-installed transformers library version.
+  - transformers: ARG TRANSFORMERS_VERSION in docker/Dockerfile.transformers
 
 Exit codes:
     0 = all versions match (or non-version Dockerfile change)
@@ -28,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 _ENGINE_SPECS = [
     ("vllm", "VLLM_VERSION"),
     ("tensorrt", "TRTLLM_VERSION"),
+    ("transformers", "TRANSFORMERS_VERSION"),
 ]
 
 
