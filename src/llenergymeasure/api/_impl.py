@@ -12,7 +12,13 @@ from pathlib import Path
 from typing import Any, overload
 
 from llenergymeasure.config.loader import load_experiment_config
-from llenergymeasure.config.models import DatasetConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import (
+    DatasetConfig,
+    ExperimentConfig,
+    MeasurementConfig,
+    StudyConfig,
+    TaskConfig,
+)
 from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
@@ -22,6 +28,10 @@ from llenergymeasure.utils.exceptions import ConfigError
 # Single source of truth for n_prompts default — derived from DatasetConfig field default
 # so run_experiment() kwargs and DatasetConfig always agree.
 _N_PROMPTS_DEFAULT: int = DatasetConfig.model_fields["n_prompts"].default
+
+# Derived from model fields so routing auto-updates when sub-models gain new fields.
+_TASK_FIELDS: frozenset[str] = frozenset(TaskConfig.model_fields) - {"model", "dataset"}
+_MEASUREMENT_FIELDS: frozenset[str] = frozenset(MeasurementConfig.model_fields)
 
 # ---------------------------------------------------------------------------
 # run_experiment — three overloaded forms
@@ -252,8 +262,6 @@ def _to_study_config(
         if engine is not None:
             ec_kwargs["engine"] = engine
         # Route remaining kwargs into correct sub-model or top-level
-        _TASK_FIELDS = {"max_input_tokens", "max_output_tokens", "random_seed"}
-        _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler"}
         measurement_kwargs: dict[str, Any] = {}
         for key, value in kwargs.items():
             if key in _TASK_FIELDS:

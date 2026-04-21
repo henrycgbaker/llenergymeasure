@@ -11,7 +11,7 @@ from typing import Any
 
 
 def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
-    """Expand dotted keys into nested dicts (recursive). Non-dotted keys pass through.
+    """Expand dotted keys into nested dicts. Non-dotted keys pass through.
 
     Example:
         {"engine.block_size": 16}        -> {"engine": {"block_size": 16}}
@@ -20,15 +20,16 @@ def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
     """
     result: dict[str, Any] = {}
     for key, value in flat.items():
-        if "." in key:
-            prefix, rest = key.split(".", 1)
-            if prefix not in result:
-                result[prefix] = {}
-            if isinstance(result[prefix], dict):
-                nested = _unflatten({rest: value})
-                result[prefix] = deep_merge(result[prefix], nested)
-        else:
+        if "." not in key:
             result[key] = value
+            continue
+        parts = key.split(".")
+        node = result
+        for part in parts[:-1]:
+            if part not in node:
+                node[part] = {}
+            node = node[part]
+        node[parts[-1]] = value
     return result
 
 
