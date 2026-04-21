@@ -37,7 +37,7 @@ from tests.conftest import TEST_CONFIG_HASH
 @pytest.fixture
 def basic_config() -> ExperimentConfig:
     """A minimal ExperimentConfig with n_prompts=100."""
-    return ExperimentConfig(model="test/model", engine="transformers")
+    return ExperimentConfig(task={"model": "test/model"}, engine="transformers")
 
 
 @pytest.fixture
@@ -290,10 +290,18 @@ def _make_ordering_study(
     from llenergymeasure.config.models import DatasetConfig
 
     exp_a = ExperimentConfig(
-        model="model-a", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-a",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     exp_b = ExperimentConfig(
-        model="model-b", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-b",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     ordered = apply_cycles(
         [exp_a, exp_b], n_cycles, ExperimentOrder(experiment_order), "aaaa0000bbbb1111"
@@ -325,7 +333,7 @@ def test_interleaved_ordering() -> None:
         args = kwargs.get("args", ())
         if args:
             config = args[0]
-            call_order.append(config.model)
+            call_order.append(config.task.model)
 
         def fake_start():
             pass
@@ -372,7 +380,7 @@ def test_sequential_ordering() -> None:
         args = kwargs.get("args", ())
         if args:
             config = args[0]
-            call_order.append(config.model)
+            call_order.append(config.task.model)
 
         proc.start.return_value = None
         proc.join.return_value = None
@@ -411,7 +419,11 @@ def _make_sigint_study() -> StudyConfig:
     return StudyConfig(
         experiments=[
             ExperimentConfig(
-                model="test/model", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+                task={
+                    "model": "test/model",
+                    "dataset": DatasetConfig(n_prompts=10),
+                },
+                engine="transformers",
             )
         ],
         study_name="sigint-test",
@@ -464,10 +476,18 @@ def test_sigint_during_gap_exits_immediately() -> None:
     study = StudyConfig(
         experiments=[
             ExperimentConfig(
-                model="model-a", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+                task={
+                    "model": "model-a",
+                    "dataset": DatasetConfig(n_prompts=10),
+                },
+                engine="transformers",
             ),
             ExperimentConfig(
-                model="model-b", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+                task={
+                    "model": "model-b",
+                    "dataset": DatasetConfig(n_prompts=10),
+                },
+                engine="transformers",
             ),
         ],
         study_name="gap-interrupt-test",
@@ -533,7 +553,11 @@ def test_worker_no_longer_stub(monkeypatch) -> None:
     from tests.conftest import make_result
 
     config = ExperimentConfig(
-        model="test/model", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "test/model",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     fake_result = make_result()
 
@@ -561,7 +585,11 @@ def test_worker_calls_get_engine(monkeypatch) -> None:
     from tests.conftest import make_result
 
     config = ExperimentConfig(
-        model="test/model", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "test/model",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
 
     engine_calls: list[str] = []
@@ -610,10 +638,18 @@ def test_multi_cycle_correct_experiment_count() -> None:
     from llenergymeasure.config.models import DatasetConfig
 
     exp_a = ExperimentConfig(
-        model="model-a", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-a",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     exp_b = ExperimentConfig(
-        model="model-b", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-b",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"
@@ -668,10 +704,18 @@ def test_cycle_counter_increments_per_config_hash() -> None:
     from llenergymeasure.domain.experiment import compute_measurement_config_hash
 
     exp_a = ExperimentConfig(
-        model="model-a", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-a",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     exp_b = ExperimentConfig(
-        model="model-b", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-b",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     hash_a = compute_measurement_config_hash(exp_a)
     hash_b = compute_measurement_config_hash(exp_b)
@@ -1141,7 +1185,11 @@ def test_worker_calls_setpgrp(monkeypatch) -> None:
     from tests.conftest import make_result
 
     config = ExperimentConfig(
-        model="test/model", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "test/model",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     fake_result = make_result()
 
@@ -1980,7 +2028,11 @@ def _make_multi_experiment_study(n: int = 3) -> StudyConfig:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+            task={
+                "model": f"test/model-{i}",
+                "dataset": DatasetConfig(n_prompts=10),
+            },
+            engine="transformers",
         )
         for i in range(n)
     ]
@@ -2052,7 +2104,11 @@ def test_circuit_breaker_trips_and_marks_remaining_skipped() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+            task={
+                "model": f"test/model-{i}",
+                "dataset": DatasetConfig(n_prompts=10),
+            },
+            engine="transformers",
         )
         for i in range(4)
     ]
@@ -2090,7 +2146,11 @@ def test_circuit_breaker_probe_success_resets_state() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+            task={
+                "model": f"test/model-{i}",
+                "dataset": DatasetConfig(n_prompts=10),
+            },
+            engine="transformers",
         )
         for i in range(4)
     ]
@@ -2129,7 +2189,11 @@ def test_wall_clock_timeout_marks_remaining_skipped() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+            task={
+                "model": f"test/model-{i}",
+                "dataset": DatasetConfig(n_prompts=10),
+            },
+            engine="transformers",
         )
         for i in range(3)
     ]
@@ -2177,7 +2241,11 @@ def test_fail_fast_aborts_after_first_failure() -> None:
 
     experiments = [
         ExperimentConfig(
-            model=f"test/model-{i}", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+            task={
+                "model": f"test/model-{i}",
+                "dataset": DatasetConfig(n_prompts=10),
+            },
+            engine="transformers",
         )
         for i in range(3)
     ]

@@ -102,8 +102,11 @@ _HEADER_MAX_LEN = 70
 
 # ExperimentConfig defaults for non-default param detection.
 # Keep in sync with config/models.py ExperimentConfig field defaults.
-_EXPERIMENT_DEFAULTS: dict[str, object] = {
+_TOP_LEVEL_DEFAULTS: dict[str, object] = {
     "dtype": "bfloat16",
+}
+
+_TASK_DEFAULTS: dict[str, object] = {
     "max_input_tokens": 256,
     "max_output_tokens": 256,
 }
@@ -141,17 +144,23 @@ def format_experiment_header(config: ExperimentConfig) -> str:
     parameters that differ from ExperimentConfig class defaults. Truncated
     to ~70 chars with ``...`` if too long.
     """
-    model_short = model_short_name(config.model)
+    model_short = model_short_name(config.task.model)
 
     # Collect non-default top-level params
     params: list[str] = []
-    for field_name, default_val in _EXPERIMENT_DEFAULTS.items():
+    for field_name, default_val in _TOP_LEVEL_DEFAULTS.items():
         actual = getattr(config, field_name, None)
         if actual is not None and actual != default_val:
             params.append(f"{field_name}={actual}")
 
+    # Collect non-default task params
+    for field_name, default_val in _TASK_DEFAULTS.items():
+        actual = getattr(config.task, field_name, None)
+        if actual is not None and actual != default_val:
+            params.append(f"{field_name}={actual}")
+
     # Collect non-default dataset params
-    ds = getattr(config, "dataset", None)
+    ds = getattr(config.task, "dataset", None)
     if ds is not None:
         for field_name, default_val in _DATASET_DEFAULTS.items():
             actual = getattr(ds, field_name, None)

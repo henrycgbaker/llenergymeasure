@@ -7,15 +7,17 @@
 name: killpg-test
 
 experiments:
-  - model: facebook/opt-125m
+  - task:
+      model: facebook/opt-125m
+      dataset:
+        n_prompts: 1000
+      max_output_tokens: 128
     engine: vllm
-    dataset:
-      n_prompts: 1000
-    max_output_tokens: 128
-    warmup:
-      enabled: false
-    baseline:
-      enabled: false
+    measurement:
+      warmup:
+        enabled: false
+      baseline:
+        enabled: false
     vllm:
       engine:
         enforce_eager: true

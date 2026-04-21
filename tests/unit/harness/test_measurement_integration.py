@@ -335,7 +335,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
     from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
-    config = ExperimentConfig(model="test/model")
+    config = ExperimentConfig(task={"model": "test/model"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -384,7 +384,7 @@ def test_harness_build_result_uses_energy_measurement_duration_for_baseline() ->
     from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
-    config = ExperimentConfig(model="test/model")
+    config = ExperimentConfig(task={"model": "test/model"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -432,7 +432,7 @@ def test_harness_build_result_zero_energy_when_no_engine() -> None:
     from llenergymeasure.harness import MeasurementHarness
 
     harness = MeasurementHarness()
-    config = ExperimentConfig(model="test/model")
+    config = ExperimentConfig(task={"model": "test/model"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,
@@ -496,7 +496,7 @@ def _make_build_result_args():
     from llenergymeasure.energy.nvml import EnergyMeasurement
     from llenergymeasure.engines.protocol import InferenceOutput
 
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     output = InferenceOutput(
         elapsed_time_sec=10.0,
         input_tokens=50,

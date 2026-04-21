@@ -105,7 +105,7 @@ class TestExecutionConfig:
 
 class TestStudyConfig:
     def test_accepts_all_fields(self):
-        exp = ExperimentConfig(model="gpt2")
+        exp = ExperimentConfig(task={"model": "gpt2"})
         sc = StudyConfig(
             experiments=[exp],
             study_name="my-study",
@@ -123,14 +123,14 @@ class TestStudyConfig:
             StudyConfig(experiments=[])
 
     def test_default_execution(self):
-        exp = ExperimentConfig(model="gpt2")
+        exp = ExperimentConfig(task={"model": "gpt2"})
         sc = StudyConfig(experiments=[exp])
         assert sc.study_execution.n_cycles == 1
         assert sc.study_design_hash is None
         assert sc.skipped_configs == []
 
     def test_extra_fields_forbidden(self):
-        exp = ExperimentConfig(model="gpt2")
+        exp = ExperimentConfig(task={"model": "gpt2"})
         with pytest.raises(ValidationError):
             StudyConfig(experiments=[exp], unknown_field="x")
 
@@ -144,25 +144,25 @@ class TestExpandGridSweep:
     def test_universal_sweep_cartesian_product(self):
         """2 dtypes x 2 n values = 4 configs."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
-                "dataset.n_prompts": [50, 100],
+                "task.dataset.n_prompts": [50, 100],
             },
         }
         valid, skipped = expand_grid(raw)
         assert len(valid) == 4
         assert len(skipped) == 0
         dtypes_set = {c.dtype for c in valid}
-        ns = {c.dataset.n_prompts for c in valid}
+        ns = {c.task.dataset.n_prompts for c in valid}
         assert dtypes_set == {"float16", "bfloat16"}
         assert ns == {50, 100}
 
     def test_engine_scoped_sweep_routes_to_section(self):
         """transformers.batch_size routes to the transformers section, not top-level."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.batch_size": [1, 8],
@@ -177,7 +177,7 @@ class TestExpandGridSweep:
     def test_multi_engine_scoped_sweep(self):
         """Multi-engine with scoped keys: independent grids per engine."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
@@ -212,8 +212,8 @@ class TestExpandGridExplicit:
     def test_explicit_experiments_list(self):
         raw = {
             "experiments": [
-                {"model": "gpt2", "engine": "transformers"},
-                {"model": "gpt2", "engine": "vllm"},
+                {"task": {"model": "gpt2"}, "engine": "transformers"},
+                {"task": {"model": "gpt2"}, "engine": "vllm"},
             ]
         }
         valid, _skipped = expand_grid(raw)
@@ -231,13 +231,13 @@ class TestExpandGridCombined:
     def test_sweep_plus_explicit(self):
         """Sweep configs come first, then explicit entries appended."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
             },
             "experiments": [
-                {"model": "gpt2-xl", "engine": "transformers"},
+                {"task": {"model": "gpt2-xl"}, "engine": "transformers"},
             ],
         }
         valid, _skipped = expand_grid(raw)
@@ -247,7 +247,7 @@ class TestExpandGridCombined:
         sweep_configs = valid[:2]
         explicit_config = valid[2]
         assert {c.dtype for c in sweep_configs} == {"float16", "bfloat16"}
-        assert explicit_config.model == "gpt2-xl"
+        assert explicit_config.task.model == "gpt2-xl"
 
 
 # =============================================================================
@@ -258,9 +258,8 @@ class TestExpandGridCombined:
 class TestExpandGridBase:
     def test_base_loads_relative_to_study_yaml(self, tmp_path: Path):
         base_config = {
-            "model": "gpt2",
+            "task": {"model": "gpt2", "dataset": {"n_prompts": 50}},
             "engine": "transformers",
-            "dataset": {"n_prompts": 50},
         }
         base_file = tmp_path / "base_experiment.yaml"
         base_file.write_text(yaml.dump(base_config))
@@ -275,13 +274,13 @@ class TestExpandGridBase:
         valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 2
         for c in valid:
-            assert c.model == "gpt2"
-            assert c.dataset.n_prompts == 50
+            assert c.task.model == "gpt2"
+            assert c.task.dataset.n_prompts == 50
 
     def test_base_strips_study_only_keys(self, tmp_path: Path):
         """Study-only keys in base file are stripped before merging."""
         base_config = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             # These should be stripped
             "sweep": {"dtype": ["float32"]},
@@ -303,7 +302,7 @@ class TestExpandGridBase:
         valid, _skipped = expand_grid(raw, study_yaml_path=study_yaml)
         assert len(valid) == 1
         assert valid[0].dtype == "float16"
-        assert valid[0].model == "gpt2"
+        assert valid[0].task.model == "gpt2"
 
     def test_missing_base_file_raises(self, tmp_path: Path):
         raw = {"base": "nonexistent.yaml", "sweep": {"dtype": ["float16"]}}
@@ -321,7 +320,7 @@ class TestExpandGridInvalidHandling:
     def test_invalid_configs_collected_as_skipped(self):
         """Invalid configs become SkippedConfig, valid ones are returned."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "sweep": {
                 # fp32 with tensorrt engine is valid, but dtype float32 is accepted
                 # Use a truly invalid combo: engine=vllm but transformers section provided via explicit
@@ -330,7 +329,7 @@ class TestExpandGridInvalidHandling:
             },
             "experiments": [
                 # This will fail: vllm section + engine=transformers
-                {"model": "gpt2", "engine": "transformers", "vllm": {"max_num_seqs": 64}},
+                {"task": {"model": "gpt2"}, "engine": "transformers", "vllm": {"max_num_seqs": 64}},
             ],
         }
         valid, skipped = expand_grid(raw)
@@ -344,9 +343,9 @@ class TestExpandGridInvalidHandling:
         raw = {
             "experiments": [
                 # Invalid: transformers section with vllm engine
-                {"model": "gpt2", "engine": "vllm", "transformers": {"batch_size": 4}},
+                {"task": {"model": "gpt2"}, "engine": "vllm", "transformers": {"batch_size": 4}},
                 # Invalid: vllm section with pytorch engine
-                {"model": "gpt2", "engine": "transformers", "vllm": {"max_num_seqs": 64}},
+                {"task": {"model": "gpt2"}, "engine": "transformers", "vllm": {"max_num_seqs": 64}},
             ]
         }
         with pytest.raises(ConfigError, match=r"nothing to run|all.*invalid|0.*valid"):
@@ -384,7 +383,7 @@ class TestMultiBackendSectionStripping:
     def test_sweep_strips_inherited_engine_sections(self):
         """A top-level tensorrt: section must not leak into pytorch/vllm sweep configs."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "tensorrt": {"max_input_len": 1024},
             "sweep": {
                 "dtype": ["bfloat16"],
@@ -411,10 +410,10 @@ class TestMultiBackendSectionStripping:
             "tensorrt": {"max_input_len": 1024},
             "experiments": [
                 # Inherited tensorrt: should be stripped for this pytorch experiment
-                {"model": "gpt2", "engine": "transformers"},
+                {"task": {"model": "gpt2"}, "engine": "transformers"},
                 # Explicit vllm: section with engine=transformers is a user error — should fail
                 {
-                    "model": "gpt2",
+                    "task": {"model": "gpt2"},
                     "engine": "transformers",
                     "vllm": {"engine": {"max_num_seqs": 64}},
                 },
@@ -430,7 +429,7 @@ class TestMultiBackendSectionStripping:
     def test_sweep_with_all_three_engines(self):
         """Three-engine sweep with a shared tensorrt section produces valid configs for all."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "tensorrt": {"max_input_len": 512},
             "sweep": {
                 "transformers.batch_size": [1],
@@ -451,37 +450,46 @@ class TestMultiBackendSectionStripping:
 
 class TestComputeStudyDesignHash:
     def test_returns_16_char_hex(self):
-        experiments = [ExperimentConfig(model="gpt2")]
+        experiments = [ExperimentConfig(task={"model": "gpt2"})]
         h = compute_study_design_hash(experiments)
         assert len(h) == 16
         int(h, 16)  # must be valid hex
 
     def test_same_experiments_same_hash(self):
         exps1 = [
-            ExperimentConfig(model="gpt2"),
-            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50)),
+            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)}),
         ]
         exps2 = [
-            ExperimentConfig(model="gpt2"),
-            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50)),
+            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)}),
         ]
         assert compute_study_design_hash(exps1) == compute_study_design_hash(exps2)
 
     def test_different_experiments_different_hash(self):
-        exps1 = [ExperimentConfig(model="gpt2")]
-        exps2 = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=25))]
+        exps1 = [ExperimentConfig(task={"model": "gpt2"})]
+        exps2 = [ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=25)})]
         assert compute_study_design_hash(exps1) != compute_study_design_hash(exps2)
 
     def test_stable_across_calls(self):
-        experiments = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2-xl")]
+        experiments = [
+            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2-xl"}),
+        ]
         h1 = compute_study_design_hash(experiments)
         h2 = compute_study_design_hash(experiments)
         assert h1 == h2
 
     def test_hash_excludes_order_sensitivity(self):
         """Same experiments in same order produce same hash (order matters for reproducibility)."""
-        exps_a = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", dtype="float16")]
-        exps_b = [ExperimentConfig(model="gpt2"), ExperimentConfig(model="gpt2", dtype="float16")]
+        exps_a = [
+            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2"}, dtype="float16"),
+        ]
+        exps_b = [
+            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2"}, dtype="float16"),
+        ]
         assert compute_study_design_hash(exps_a) == compute_study_design_hash(exps_b)
 
 
@@ -493,8 +501,8 @@ class TestComputeStudyDesignHash:
 class TestApplyCycles:
     @pytest.fixture
     def two_experiments(self):
-        a = ExperimentConfig(model="gpt2")
-        b = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=25))
+        a = ExperimentConfig(task={"model": "gpt2"})
+        b = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=25)})
         return [a, b]
 
     @pytest.fixture
@@ -506,9 +514,9 @@ class TestApplyCycles:
         result = apply_cycles(two_experiments, 3, ExperimentOrder.SEQUENTIAL, study_hash)
         assert len(result) == 6
         # First 3 should be A (gpt2, n_prompts=100 default)
-        assert all(r.dataset.n_prompts == 100 for r in result[:3])
+        assert all(r.task.dataset.n_prompts == 100 for r in result[:3])
         # Last 3 should be B (gpt2, n_prompts=25)
-        assert all(r.dataset.n_prompts == 25 for r in result[3:])
+        assert all(r.task.dataset.n_prompts == 25 for r in result[3:])
 
     def test_interleaved_ordering(self, two_experiments, study_hash):
         """interleave with 3 cycles and [A, B] -> [A, B, A, B, A, B]."""
@@ -516,9 +524,9 @@ class TestApplyCycles:
         assert len(result) == 6
         # Alternating: A, B, A, B, A, B
         for i in range(0, 6, 2):
-            assert result[i].dataset.n_prompts == 100  # A
+            assert result[i].task.dataset.n_prompts == 100  # A
         for i in range(1, 6, 2):
-            assert result[i].dataset.n_prompts == 25  # B
+            assert result[i].task.dataset.n_prompts == 25  # B
 
     def test_shuffled_with_explicit_seed_deterministic(self, two_experiments, study_hash):
         """Shuffle with explicit seed produces deterministic reproducible order."""
@@ -528,31 +536,38 @@ class TestApplyCycles:
         result2 = apply_cycles(
             two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=42
         )
-        assert [r.dataset.n_prompts for r in result1] == [r.dataset.n_prompts for r in result2]
+        assert [r.task.dataset.n_prompts for r in result1] == [
+            r.task.dataset.n_prompts for r in result2
+        ]
 
     def test_shuffled_with_same_hash_same_order(self, two_experiments, study_hash):
         """Same study_design_hash without explicit seed = same shuffle."""
         result1 = apply_cycles(two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash)
         result2 = apply_cycles(two_experiments, 3, ExperimentOrder.SHUFFLE, study_hash)
-        assert [r.dataset.n_prompts for r in result1] == [r.dataset.n_prompts for r in result2]
+        assert [r.task.dataset.n_prompts for r in result1] == [
+            r.task.dataset.n_prompts for r in result2
+        ]
 
     def test_shuffled_different_seeds_different_orders(self, study_hash):
         """Seeds 1 and 999 produce different orderings (verified deterministic)."""
         exps = [
-            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in range(1, 6)
+            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            for i in range(1, 6)
         ]
         result1 = apply_cycles(exps, 2, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=1)
         result2 = apply_cycles(exps, 2, ExperimentOrder.SHUFFLE, study_hash, shuffle_seed=999)
         # Seeds 1 and 999 confirmed to produce distinct orderings for 5 experiments x 2 cycles
         # (seed 1 → [3,4,5,1,2,1,3,2,5,4], seed 999 → [3,5,2,4,1,2,4,5,1,3])
-        assert [r.dataset.n_prompts for r in result1] != [r.dataset.n_prompts for r in result2]
+        assert [r.task.dataset.n_prompts for r in result1] != [
+            r.task.dataset.n_prompts for r in result2
+        ]
 
     def test_n_cycles_one_unchanged(self, two_experiments, study_hash):
         """n_cycles=1 returns the original list unchanged."""
         result = apply_cycles(two_experiments, 1, ExperimentOrder.SEQUENTIAL, study_hash)
         assert len(result) == 2
-        assert result[0].dataset.n_prompts == two_experiments[0].dataset.n_prompts
-        assert result[1].dataset.n_prompts == two_experiments[1].dataset.n_prompts
+        assert result[0].task.dataset.n_prompts == two_experiments[0].task.dataset.n_prompts
+        assert result[1].task.dataset.n_prompts == two_experiments[1].task.dataset.n_prompts
 
     def test_shuffled_contains_all_experiments_each_cycle(self, two_experiments, study_hash):
         """Each cycle in shuffle mode contains all experiments exactly once."""
@@ -560,7 +575,7 @@ class TestApplyCycles:
         assert len(result) == 6
         # Check that each pair of 2 contains both experiments
         for i in range(0, 6, 2):
-            pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
+            pair_ns = {result[i].task.dataset.n_prompts, result[i + 1].task.dataset.n_prompts}
             assert pair_ns == {100, 25}
 
     # -- reverse mode --
@@ -569,20 +584,20 @@ class TestApplyCycles:
         """reverse with 4 cycles and [A, B] -> [A, B, B, A, A, B, B, A]."""
         result = apply_cycles(two_experiments, 4, ExperimentOrder.REVERSE, study_hash)
         assert len(result) == 8
-        ns = [r.dataset.n_prompts for r in result]
+        ns = [r.task.dataset.n_prompts for r in result]
         assert ns == [100, 25, 25, 100, 100, 25, 25, 100]
 
     def test_reverse_single_cycle(self, two_experiments, study_hash):
         """reverse with 1 cycle = forward order (same as sequential for one cycle)."""
         result = apply_cycles(two_experiments, 1, ExperimentOrder.REVERSE, study_hash)
-        assert [r.dataset.n_prompts for r in result] == [100, 25]
+        assert [r.task.dataset.n_prompts for r in result] == [100, 25]
 
     def test_reverse_contains_all_experiments_each_cycle(self, two_experiments, study_hash):
         """Each cycle in reverse mode contains all experiments exactly once."""
         result = apply_cycles(two_experiments, 3, ExperimentOrder.REVERSE, study_hash)
         assert len(result) == 6
         for i in range(0, 6, 2):
-            pair_ns = {result[i].dataset.n_prompts, result[i + 1].dataset.n_prompts}
+            pair_ns = {result[i].task.dataset.n_prompts, result[i + 1].task.dataset.n_prompts}
             assert pair_ns == {100, 25}
 
     # -- latin_square mode --
@@ -590,42 +605,47 @@ class TestApplyCycles:
     def test_latin_square_ordering(self, study_hash):
         """latin_square with 3 experiments x 3 cycles produces balanced rows."""
         exps = [
-            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2, 3]
+            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            for i in [1, 2, 3]
         ]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert len(result) == 9
         # Each cycle (row) contains all 3 experiments exactly once
         for i in range(0, 9, 3):
-            row_ns = [r.dataset.n_prompts for r in result[i : i + 3]]
+            row_ns = [r.task.dataset.n_prompts for r in result[i : i + 3]]
             assert sorted(row_ns) == [1, 2, 3]
 
     def test_latin_square_each_position_balanced(self, study_hash):
         """Each experiment appears in each position exactly once across k cycles."""
         exps = [
-            ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2, 3]
+            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            for i in [1, 2, 3]
         ]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         # Column j should contain each experiment exactly once
         for col in range(3):
-            col_ns = [result[row * 3 + col].dataset.n_prompts for row in range(3)]
+            col_ns = [result[row * 3 + col].task.dataset.n_prompts for row in range(3)]
             assert sorted(col_ns) == [1, 2, 3]
 
     def test_latin_square_cycles_exceed_k(self, study_hash):
         """When n_cycles > k, rows wrap around the square."""
-        exps = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i)) for i in [1, 2]]
+        exps = [
+            ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i)})
+            for i in [1, 2]
+        ]
         result = apply_cycles(exps, 4, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert len(result) == 8
         # Cycle 3 (idx 2) should equal cycle 1 (idx 0), cycle 4 = cycle 2
-        row0 = [r.dataset.n_prompts for r in result[0:2]]
-        row2 = [r.dataset.n_prompts for r in result[4:6]]
+        row0 = [r.task.dataset.n_prompts for r in result[0:2]]
+        row2 = [r.task.dataset.n_prompts for r in result[4:6]]
         assert row0 == row2
 
     def test_latin_square_single_experiment(self, study_hash):
         """latin_square with 1 experiment x 3 cycles = [A, A, A]."""
-        exps = [ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=1))]
+        exps = [ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=1)})]
         result = apply_cycles(exps, 3, ExperimentOrder.LATIN_SQUARE, study_hash)
         assert len(result) == 3
-        assert all(r.dataset.n_prompts == 1 for r in result)
+        assert all(r.task.dataset.n_prompts == 1 for r in result)
 
     def test_latin_square_empty(self, study_hash):
         """latin_square with 0 experiments returns empty list."""
@@ -647,7 +667,7 @@ def _make_study_config(
 ) -> StudyConfig:
     """Helper: build a StudyConfig with the given parameters."""
     experiments = [
-        ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=i + 1))
+        ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=i + 1)})
         for i in range(n_configs * n_cycles)
     ]
     return StudyConfig(
@@ -786,7 +806,7 @@ def _make_panel_study_config(
     for model in models:
         for engine in engines:
             for dt in dtypes:
-                experiments.append(ExperimentConfig(model=model, engine=engine, dtype=dt))
+                experiments.append(ExperimentConfig(task={"model": model}, engine=engine, dtype=dt))
 
     # Replicate for cycles
     all_exps = experiments * n_cycles
@@ -889,7 +909,7 @@ class TestBuildPreflightPanel:
 
     def test_panel_unnamed_study(self):
         """Panel with no study name shows 'unnamed' in title."""
-        exps = [ExperimentConfig(model="gpt2")]
+        exps = [ExperimentConfig(task={"model": "gpt2"})]
         sc = StudyConfig(
             experiments=exps,
             study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
@@ -900,8 +920,8 @@ class TestBuildPreflightPanel:
     def test_panel_multiple_engines_sorted(self):
         """Multiple engines are sorted alphabetically."""
         exps = [
-            ExperimentConfig(model="gpt2", engine="vllm"),
-            ExperimentConfig(model="gpt2", engine="transformers"),
+            ExperimentConfig(task={"model": "gpt2"}, engine="vllm"),
+            ExperimentConfig(task={"model": "gpt2"}, engine="transformers"),
         ]
         sc = StudyConfig(
             experiments=exps,

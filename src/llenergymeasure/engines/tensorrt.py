@@ -178,7 +178,7 @@ class TensorRTEngine:
         LLM = _trt_mod.LLM
 
         kwargs = self._build_llm_kwargs(config)
-        logger.info("Loading TRT-LLM model %r (kwargs: %s)", config.model, list(kwargs.keys()))
+        logger.info("Loading TRT-LLM model %r (kwargs: %s)", config.task.model, list(kwargs.keys()))
 
         # Collect build metadata before construction (for config_hash)
         config_hash = hashlib.sha256(
@@ -287,7 +287,7 @@ class TensorRTEngine:
         logger.info(
             "Starting TRT-LLM offline batch inference: %d prompts, max_tokens=%s",
             len(prompts),
-            config.max_output_tokens or "unlimited",
+            config.task.max_output_tokens or "unlimited",
         )
 
         try:
@@ -428,7 +428,7 @@ class TensorRTEngine:
         are baked into the engine and must not be re-specified.
         """
         kwargs: dict[str, Any] = {
-            "model": config.model,
+            "model": config.task.model,
         }
 
         trt = config.tensorrt
@@ -545,10 +545,10 @@ class TensorRTEngine:
 
         decoder = config.decoder
         kwargs: dict[str, Any] = {
-            "random_seed": config.random_seed,
+            "random_seed": config.task.random_seed,
         }
-        if config.max_output_tokens is not None:
-            kwargs["max_new_tokens"] = config.max_output_tokens
+        if config.task.max_output_tokens is not None:
+            kwargs["max_new_tokens"] = config.task.max_output_tokens
 
         # Universal decoder params
         if decoder.temperature != 0.0:

@@ -38,7 +38,7 @@ from tests.conftest import TEST_CONFIG_HASH
 def _make_experiment(
     model: str = "meta-llama/Llama-3.1-8B", engine: str = "transformers"
 ) -> ExperimentConfig:
-    return ExperimentConfig(model=model, engine=engine, dtype="bfloat16")
+    return ExperimentConfig(task={"model": model}, engine=engine, dtype="bfloat16")
 
 
 def _make_study(n_experiments: int = 2, n_cycles: int = 2) -> StudyConfig:
@@ -360,7 +360,9 @@ def test_experiment_result_filename_parquet() -> None:
 
 def test_config_summary_from_experiment() -> None:
     config = ExperimentConfig(
-        model="meta-llama/Llama-3.1-8B", engine="transformers", dtype="bfloat16"
+        task={"model": "meta-llama/Llama-3.1-8B"},
+        engine="transformers",
+        dtype="bfloat16",
     )
     summary = build_config_summary(config)
     # Uses format_experiment_header: "Llama-3.1-8B / pytorch"
@@ -412,10 +414,18 @@ def test_build_entries_deduplicates_cycled_experiments(tmp_path: Path) -> None:
     from llenergymeasure.config.models import DatasetConfig
 
     exp_a = ExperimentConfig(
-        model="model-a", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-a",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     exp_b = ExperimentConfig(
-        model="model-b", engine="transformers", dataset=DatasetConfig(n_prompts=10)
+        task={
+            "model": "model-b",
+            "dataset": DatasetConfig(n_prompts=10),
+        },
+        engine="transformers",
     )
     ordered = apply_cycles([exp_a, exp_b], 3, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 6, "sanity: apply_cycles should produce 6 entries"

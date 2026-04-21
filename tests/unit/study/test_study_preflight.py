@@ -16,8 +16,8 @@ def test_single_engine_passes(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="transformers"),
-            ExperimentConfig(model="m2", engine="transformers"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m2"}, engine="transformers"),
         ]
     )
     run_study_preflight(study)  # should not raise
@@ -30,8 +30,8 @@ def test_multi_engine_raises_preflight_error(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="transformers"),
-            ExperimentConfig(model="m2", engine="vllm"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
         ]
     )
     with pytest.raises(PreFlightError, match="Multi-engine"):
@@ -45,8 +45,8 @@ def test_multi_engine_error_mentions_docker(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="transformers"),
-            ExperimentConfig(model="m2", engine="vllm"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
         ]
     )
     with pytest.raises(PreFlightError, match="Docker"):
@@ -60,8 +60,8 @@ def test_multi_engine_error_lists_engines(monkeypatch):
     )
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="transformers"),
-            ExperimentConfig(model="m2", engine="vllm"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
         ]
     )
     with pytest.raises(PreFlightError) as exc_info:
@@ -80,8 +80,8 @@ def test_multi_engine_auto_elevates_local_to_docker(monkeypatch):
 
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="m1", engine="transformers"),
-            ExperimentConfig(model="m2", engine="vllm"),
+            ExperimentConfig(task={"model": "m1"}, engine="transformers"),
+            ExperimentConfig(task={"model": "m2"}, engine="vllm"),
         ]
     )
     specs, overrides = run_study_preflight(
@@ -116,7 +116,7 @@ def test_preflight_forwards_runner_context(monkeypatch):
     )
 
     mock_user_config = MagicMock()
-    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="transformers")])
+    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
 
     run_study_preflight(study, yaml_runners={"transformers": "local"}, user_config=mock_user_config)
 
@@ -143,7 +143,7 @@ def test_preflight_defaults_to_auto_detect_without_context(monkeypatch):
         mock_resolve_study_runners,
     )
 
-    study = StudyConfig(experiments=[ExperimentConfig(model="m1", engine="transformers")])
+    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "m1"}, engine="transformers")])
 
     run_study_preflight(study)
 

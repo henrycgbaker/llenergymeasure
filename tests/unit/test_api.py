@@ -80,7 +80,7 @@ def test_run_experiment_returns_experiment_result(monkeypatch):
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
 
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     result = run_experiment(config)
 
     assert result is not None
@@ -107,13 +107,13 @@ def test_run_experiment_yaml_path_form(tmp_path, monkeypatch):
     monkeypatch.setattr(api_module, "_run", mock_run)
 
     config_path = tmp_path / "test_config.yaml"
-    config_path.write_text("model: gpt2\n")
+    config_path.write_text("task:\n  model: gpt2\n")
 
     result = run_experiment(str(config_path))
 
     assert isinstance(result, ExperimentResult)
     # Confirm the study was built from the YAML
-    assert captured_study["value"].experiments[0].model == "gpt2"
+    assert captured_study["value"].experiments[0].task.model == "gpt2"
 
 
 # =============================================================================
@@ -136,8 +136,8 @@ def test_run_experiment_kwargs_form(monkeypatch):
     result = run_experiment(model="gpt2", n_prompts=50)
 
     assert isinstance(result, ExperimentResult)
-    assert captured_study["value"].experiments[0].model == "gpt2"
-    assert captured_study["value"].experiments[0].dataset.n_prompts == 50
+    assert captured_study["value"].experiments[0].task.model == "gpt2"
+    assert captured_study["value"].experiments[0].task.dataset.n_prompts == 50
 
 
 # =============================================================================
@@ -165,7 +165,7 @@ def test_run_experiment_no_disk_writes(tmp_path, monkeypatch):
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
 
     # Change working directory to tmp_path to catch any accidental writes
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     run_experiment(config)
 
     # tmp_path should be empty — no files written there
@@ -220,7 +220,7 @@ def test_run_experiment_path_object_form(tmp_path, monkeypatch):
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: make_study_result())
 
     config_path = tmp_path / "config.yaml"
-    config_path.write_text("model: gpt2\n")
+    config_path.write_text("task:\n  model: gpt2\n")
 
     result = run_experiment(config_path)  # Path object, not str
     assert isinstance(result, ExperimentResult)
@@ -348,13 +348,13 @@ def test_run_calls_preflight_once_per_config(monkeypatch, tmp_path):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    config1 = ExperimentConfig(model="gpt2")
+    config1 = ExperimentConfig(task={"model": "gpt2"})
     study = StudyConfig(experiments=[config1])
 
     api_module._run(study)
 
     assert len(preflight_calls) == 1, f"Expected 1 preflight call, got {len(preflight_calls)}"
-    assert preflight_calls[0].model == "gpt2"
+    assert preflight_calls[0].task.model == "gpt2"
 
 
 def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
@@ -389,7 +389,7 @@ def test_run_calls_get_engine_with_correct_name(monkeypatch, tmp_path):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    config = ExperimentConfig(model="gpt2", engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     study = StudyConfig(experiments=[config])
 
     api_module._run(study)
@@ -424,7 +424,7 @@ def test_run_returns_study_result(monkeypatch, tmp_path):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     study = StudyConfig(experiments=[config], study_name="my-study")
 
     study_result = api_module._run(study)
@@ -458,7 +458,7 @@ def test_run_propagates_preflight_error(monkeypatch, tmp_path):
         lambda name, output_dir: tmp_path,
     )
 
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     study = StudyConfig(experiments=[config])
 
     with pytest.raises(PreFlightError):
@@ -488,7 +488,7 @@ def test_run_propagates_engine_error(monkeypatch, tmp_path):
         lambda name, output_dir: tmp_path,
     )
 
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     study = StudyConfig(experiments=[config])
 
     with pytest.raises(EngineError, match="GPU out of memory"):
@@ -558,7 +558,7 @@ def test_run_study_accepts_study_config(monkeypatch, tmp_path):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    study = StudyConfig(experiments=[ExperimentConfig(model="gpt2")])
+    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "gpt2"})])
     result = run_study(study)
 
     assert isinstance(result, StudyResult)
@@ -572,7 +572,7 @@ def test_run_study_accepts_path(tmp_path, monkeypatch):
     import llenergymeasure.harness.preflight as pf_module
     import llenergymeasure.study.preflight as study_pf_module
 
-    yaml_content = "experiments:\n  - model: gpt2\n"
+    yaml_content = "experiments:\n  - task:\n      model: gpt2\n"
     yaml_path = tmp_path / "study.yaml"
     yaml_path.write_text(yaml_content)
 
@@ -636,7 +636,7 @@ def test_run_dispatches_single_in_process(monkeypatch, tmp_path):
     monkeypatch.setattr(StudyRunner, "__init__", mock_runner_init)
 
     study = StudyConfig(
-        experiments=[ExperimentConfig(model="gpt2")],
+        experiments=[ExperimentConfig(task={"model": "gpt2"})],
         study_execution={"n_cycles": 1, "experiment_order": "sequential"},
     )
     api_module._run(study)
@@ -723,8 +723,8 @@ def test_run_resolves_runners_and_passes_to_study_runner(monkeypatch, tmp_path):
 
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="gpt2", engine="transformers"),
-            ExperimentConfig(model="gpt2-medium", engine="transformers"),
+            ExperimentConfig(task={"model": "gpt2"}, engine="transformers"),
+            ExperimentConfig(task={"model": "gpt2-medium"}, engine="transformers"),
         ]
     )
 
@@ -771,7 +771,7 @@ def test_run_in_process_calls_gpu_memory_check(monkeypatch, tmp_path):
 
     mock_manifest = MagicMock(spec=ManifestWriter)
 
-    config = ExperimentConfig(model="gpt2", engine="transformers")
+    config = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
     study = StudyConfig(experiments=[config])
 
     api_module._run_in_process(study, mock_manifest, tmp_path, runner_specs=None)
@@ -818,7 +818,7 @@ def test_run_mixed_runner_warning_logged(monkeypatch, tmp_path, caplog):
         lambda result, output_dir, **kw: tmp_path / "result.json",
     )
 
-    study = StudyConfig(experiments=[ExperimentConfig(model="gpt2")])
+    study = StudyConfig(experiments=[ExperimentConfig(task={"model": "gpt2"})])
 
     with caplog.at_level(logging.WARNING, logger="llenergymeasure.api._impl"):
         api_module._run(study)
@@ -876,12 +876,12 @@ def test_study_summary_total_experiments_no_double_multiply(monkeypatch, tmp_pat
     # Simulate what load_study_config returns: experiments already cycle-expanded.
     # 2 unique configs x 3 cycles = 6 entries, n_cycles=3 in execution config.
     expanded_experiments = [
-        ExperimentConfig(model="gpt2"),
-        ExperimentConfig(model="gpt2-medium"),
-        ExperimentConfig(model="gpt2"),
-        ExperimentConfig(model="gpt2-medium"),
-        ExperimentConfig(model="gpt2"),
-        ExperimentConfig(model="gpt2-medium"),
+        ExperimentConfig(task={"model": "gpt2"}),
+        ExperimentConfig(task={"model": "gpt2-medium"}),
+        ExperimentConfig(task={"model": "gpt2"}),
+        ExperimentConfig(task={"model": "gpt2-medium"}),
+        ExperimentConfig(task={"model": "gpt2"}),
+        ExperimentConfig(task={"model": "gpt2-medium"}),
     ]
     study = StudyConfig(
         experiments=expanded_experiments,
@@ -914,7 +914,9 @@ class TestResolveGpuIndices:
         from llenergymeasure.config.engine_configs import TransformersConfig
 
         pytorch_cfg = TransformersConfig(device_map=device_map)
-        return ExperimentConfig(model="gpt2", engine="transformers", transformers=pytorch_cfg)
+        return ExperimentConfig(
+            task={"model": "gpt2"}, engine="transformers", transformers=pytorch_cfg
+        )
 
     def _make_mock_pynvml(self, device_count: int):
         """Build a minimal pynvml mock with nvmlInit, nvmlDeviceGetCount, nvmlShutdown."""
@@ -973,7 +975,7 @@ class TestResolveGpuIndices:
         """Unknown engines return [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = ExperimentConfig.model_construct(model="gpt2", engine="tensorrt")
+        config = ExperimentConfig.model_construct(task={"model": "gpt2"}, engine="tensorrt")
         assert _resolve_gpu_indices(config) == [0]
 
     def test_pytorch_engine_no_pytorch_block_returns_zero(self):
@@ -981,7 +983,7 @@ class TestResolveGpuIndices:
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
         config = ExperimentConfig.model_construct(
-            model="gpt2", engine="transformers", transformers=None
+            task={"model": "gpt2"}, engine="transformers", transformers=None
         )
         assert _resolve_gpu_indices(config) == [0]
 
@@ -996,7 +998,7 @@ class TestResolveGpuIndices:
             pipeline_parallel_size=pp,
         )
         vllm_cfg = VLLMConfig(engine=engine)
-        return ExperimentConfig(model="gpt2", engine="vllm", vllm=vllm_cfg)
+        return ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm=vllm_cfg)
 
     def test_vllm_tp2_returns_two_gpus(self):
         """vLLM with tensor_parallel_size=2 returns [0, 1]."""
@@ -1031,14 +1033,14 @@ class TestResolveGpuIndices:
         from llenergymeasure.api._impl import _resolve_gpu_indices
         from llenergymeasure.config.engine_configs import VLLMConfig
 
-        config = ExperimentConfig(model="gpt2", engine="vllm", vllm=VLLMConfig())
+        config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm", vllm=VLLMConfig())
         assert _resolve_gpu_indices(config) == [0]
 
     def test_vllm_no_vllm_block_returns_single_gpu(self):
         """vLLM engine with vllm=None returns [0]."""
         from llenergymeasure.api._impl import _resolve_gpu_indices
 
-        config = ExperimentConfig(model="gpt2", engine="vllm")
+        config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
         assert _resolve_gpu_indices(config) == [0]
 
 
@@ -1118,7 +1120,7 @@ def test_run_experiment_raises_experiment_error_on_empty_results(monkeypatch):
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
 
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     with pytest.raises(ExperimentError) as exc_info:
         run_experiment(config)
 
@@ -1144,7 +1146,7 @@ def test_run_experiment_raises_experiment_error_no_warnings(monkeypatch):
 
     monkeypatch.setattr(api_module, "_run", lambda study, **kw: empty_study_result)
 
-    config = ExperimentConfig(model="gpt2")
+    config = ExperimentConfig(task={"model": "gpt2"})
     with pytest.raises(ExperimentError, match="Experiment produced no results"):
         run_experiment(config)
 
@@ -1177,8 +1179,8 @@ def test_run_study_partial_failure_returns_partial_results(monkeypatch):
 
     study = StudyConfig(
         experiments=[
-            ExperimentConfig(model="gpt2"),
-            ExperimentConfig(model="gpt2-medium"),
+            ExperimentConfig(task={"model": "gpt2"}),
+            ExperimentConfig(task={"model": "gpt2-medium"}),
         ]
     )
     result = run_study(study)

@@ -6,15 +6,17 @@
 name: sigint-test
 
 experiments:
-  - model: gpt2
+  - task:
+      model: gpt2
+      dataset:
+        n_prompts: 10
+      max_output_tokens: 32
     engine: transformers
-    dataset:
-      n_prompts: 10
-    max_output_tokens: 32
-    warmup:
-      enabled: false
-    baseline:
-      enabled: false
+    measurement:
+      warmup:
+        enabled: false
+      baseline:
+        enabled: false
 
 study_execution:
   n_cycles: 3

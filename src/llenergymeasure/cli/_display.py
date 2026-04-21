@@ -124,7 +124,7 @@ def print_dry_run(
         return ""
 
     print("Config (resolved)")
-    print(f"  Model          {config.model}")
+    print(f"  Model          {config.task.model}")
     print(f"  Engine         {config.engine}{_annotate('engine', config.engine)}")
     print(f"  Dtype          {config.dtype}{_annotate('dtype', config.dtype)}")
 
@@ -136,7 +136,7 @@ def print_dry_run(
         print(f"  Batch size     {batch_size}")
 
     # Dataset display
-    ds = config.dataset
+    ds = config.task.dataset
     dataset_str = f"{ds.source} ({ds.n_prompts} prompts)"
     print(f"  Dataset        {dataset_str}")
 

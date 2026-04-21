@@ -248,7 +248,7 @@ class TestExpandGridSweepGroups:
     def test_single_group_produces_union(self):
         """A group with 3 entries crossed with 2 dtype = 6 experiments."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
@@ -275,7 +275,7 @@ class TestExpandGridSweepGroups:
     def test_empty_dict_baseline_variant(self):
         """An empty dict {} in a group means 'no override' (baseline)."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.quantization": [
@@ -296,7 +296,7 @@ class TestExpandGridSweepGroups:
     def test_two_groups_crossed(self):
         """Two groups are crossed with each other (not unioned)."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.compilation": [
@@ -318,7 +318,7 @@ class TestExpandGridSweepGroups:
     def test_groups_crossed_with_axes(self):
         """Groups are crossed with independent axes."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
@@ -337,7 +337,7 @@ class TestExpandGridSweepGroups:
     def test_cross_section_group_overlay(self):
         """Group entries can override non-engine fields like decoder settings."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.decoding": [
@@ -362,7 +362,7 @@ class TestExpandGridSweepGroups:
     def test_group_plus_explicit_experiments(self):
         """Groups and explicit experiments coexist."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
@@ -375,7 +375,7 @@ class TestExpandGridSweepGroups:
                 ],
             },
             "experiments": [
-                {"model": "gpt2", "engine": "transformers", "dtype": "float32"},
+                {"task": {"model": "gpt2"}, "engine": "transformers", "dtype": "float32"},
             ],
         }
         valid, _skipped = expand_grid(raw)
@@ -385,7 +385,7 @@ class TestExpandGridSweepGroups:
     def test_engine_scoped_group(self):
         """Groups scoped to a engine only apply to that engine's experiments."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
@@ -409,7 +409,7 @@ class TestExpandGridSweepGroups:
     def test_mini_grid_within_group(self):
         """List-valued fields within a group entry expand as mini-grid."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.quantization": [
@@ -434,7 +434,7 @@ class TestExpandGridSweepGroups:
     def test_only_groups_no_axes(self):
         """Study with only groups and no independent axes."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "transformers.compilation": [
@@ -454,7 +454,7 @@ class TestExpandGridSweepGroupsMultiBackend:
     def test_groups_scoped_to_different_engines(self):
         """Backend-scoped groups only apply to their respective engine."""
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": ["transformers", "vllm"],
             "sweep": {
                 "dtype": ["float16", "bfloat16"],
@@ -491,7 +491,7 @@ class TestCombinatorialWarnings:
         # 3 dtype x 5 batch x 3 attn x 3 compile = 135 raw combos, minus 15
         # invalid (flash_attention_2 + float32) = 120 valid experiments
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "dtype": ["float32", "float16", "bfloat16"],
@@ -527,7 +527,7 @@ class TestHashStabilityWithGroups:
         from llenergymeasure.config.grid import compute_study_design_hash
 
         raw = {
-            "model": "gpt2",
+            "task": {"model": "gpt2"},
             "engine": "transformers",
             "sweep": {
                 "dtype": ["float16", "bfloat16"],

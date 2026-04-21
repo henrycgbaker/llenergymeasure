@@ -18,6 +18,8 @@ from llenergymeasure.config.models import (
     DecoderConfig,
     ExperimentConfig,
     LoRAConfig,
+    MeasurementConfig,
+    TaskConfig,
     WarmupConfig,
 )
 from llenergymeasure.config.schema_loader import (
@@ -40,7 +42,9 @@ __all__ = [
     "DiscoveryLimitation",
     "ExperimentConfig",
     "LoRAConfig",
+    "MeasurementConfig",
     "SchemaLoader",
+    "TaskConfig",
     "UnsupportedSchemaVersionError",
     "UserConfig",
     "WarmupConfig",

@@ -411,7 +411,7 @@ def test_check_model_accessible_network_error(monkeypatch: pytest.MonkeyPatch) -
 
 def _make_study(engines: list[str]) -> StudyConfig:
     """Build a minimal StudyConfig with the given engines."""
-    experiments = [ExperimentConfig(model=f"model-{b}", engine=b) for b in engines]
+    experiments = [ExperimentConfig(task={"model": f"model-{b}"}, engine=b) for b in engines]
     return StudyConfig(
         experiments=experiments,
         study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
@@ -505,7 +505,7 @@ def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.Monke
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
-    config = ExperimentConfig(model="test-model", engine="tensorrt")
+    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 
@@ -535,7 +535,7 @@ def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.Mon
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
-    config = ExperimentConfig(model="test-model", engine="transformers")
+    config = ExperimentConfig(task={"model": "test-model"}, engine="transformers")
     # Should not raise
     run_preflight(config)
 
@@ -558,7 +558,7 @@ def test_run_preflight_handles_validate_config_exception(monkeypatch: pytest.Mon
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", raise_error)
 
-    config = ExperimentConfig(model="test-model", engine="tensorrt")
+    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
     # Should not raise — the try/except in preflight catches ImportError from get_engine
     run_preflight(config)
 
@@ -583,7 +583,7 @@ def test_run_preflight_validate_config_errors_counted_correctly(
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
-    config = ExperimentConfig(model="test-model", engine="tensorrt")
+    config = ExperimentConfig(task={"model": "test-model"}, engine="tensorrt")
     with pytest.raises(PreFlightError) as exc_info:
         run_preflight(config)
 

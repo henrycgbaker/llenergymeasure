@@ -215,15 +215,14 @@ def _run_impl(
     # Build CLI overrides dict — only include flags the user explicitly passed
     cli_overrides: dict[str, Any] = {}
     if model is not None:
-        cli_overrides["model"] = model
+        cli_overrides["task.model"] = model
     if engine is not None:
         cli_overrides["engine"] = engine
     if dataset is not None:
-        cli_overrides["dataset.source"] = dataset
+        cli_overrides["task.dataset.source"] = dataset
     if n_prompts is not None:
-        cli_overrides["dataset.n_prompts"] = n_prompts
+        cli_overrides["task.dataset.n_prompts"] = n_prompts
     if batch_size is not None:
-        # Dotted key for _unflatten() in loader — maps to pytorch.batch_size
         cli_overrides["transformers.batch_size"] = batch_size
     if dtype is not None:
         cli_overrides["dtype"] = dtype
@@ -311,7 +310,8 @@ def _run_impl(
         # image_check/pull. host_baseline tracks where STEP_BASELINE sits
         # relative to container_start (see docker_steps() docstring).
         host_baseline = (
-            experiment_config.baseline.enabled and experiment_config.baseline.strategy != "fresh"
+            experiment_config.measurement.baseline.enabled
+            and experiment_config.measurement.baseline.strategy != "fresh"
         )
         display.register_steps(docker_steps(images_prepared=False, host_baseline=host_baseline))
         display.start()
@@ -381,15 +381,15 @@ def _build_header(config: Any, runner_tag: str = RUNNER_LOCAL) -> str:
     default_source = _ds_fields["source"].default
 
     # Strip HuggingFace org prefix (meta-llama/Llama-3.2-1B-Instruct -> Llama-3.2-1B-Instruct)
-    model = config.model.split("/")[-1] if "/" in config.model else config.model
+    model = config.task.model.split("/")[-1] if "/" in config.task.model else config.task.model
     parts = [f"{model} | {config.engine}"]
     # Deviation fields (only when non-default)
     if config.dtype != default_dtype:
         parts.append(config.dtype)
-    if config.dataset.n_prompts != default_n:
-        parts.append(f"n_prompts={config.dataset.n_prompts}")
-    if config.dataset.source != default_source:
-        parts.append(config.dataset.source)
+    if config.task.dataset.n_prompts != default_n:
+        parts.append(f"n_prompts={config.task.dataset.n_prompts}")
+    if config.task.dataset.source != default_source:
+        parts.append(config.task.dataset.source)
     return f"{' | '.join(parts)} [{runner_tag}]"
 
 

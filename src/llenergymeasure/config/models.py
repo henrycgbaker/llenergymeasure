@@ -309,70 +309,30 @@ class LoRAConfig(BaseModel):
 
 
 # =============================================================================
-# Main Experiment Configuration (v2.0)
+# Task Configuration (what to measure)
 # =============================================================================
 
 
-class ExperimentConfig(BaseModel):
-    """v2.0 experiment configuration.
+class TaskConfig(BaseModel):
+    """What to measure: model identity, dataset, and workload shape.
 
-    Central configuration object controlling all aspects of a single LLM inference
-    efficiency measurement. Engine-specific parameters live in nested sections
-    (transformers:, vllm:, tensorrt:).
-
-    Field renames from v1.x:
-        model_name -> model
-        fp_precision -> dtype
-        num_input_prompts -> dataset.n_prompts
-        dataset (str) -> dataset.source
-        dataset_order -> dataset.order
-        extra_metadata -> passthrough_kwargs
-
-    The engine section (transformers:, vllm:, tensorrt:) must match the engine field.
-    Providing a transformers: section when engine=vllm is a configuration error.
+    These fields define the scientific workload — changing any of them means
+    you're measuring a fundamentally different task.
     """
 
     model_config = {"extra": "forbid"}
 
-    # Required
     model: str = Field(
         ...,
         min_length=1,
         description="HuggingFace model ID or local path",
-        json_schema_extra={"display_label": "Model", "role": "workload"},
+        json_schema_extra={"display_label": "Model"},
     )
-
-    # Engine selection
-    engine: Engine = Field(
-        default=Engine.TRANSFORMERS,
-        description="Inference engine",
-        json_schema_extra={"display_label": "Engine", "role": "experimental"},
-    )
-
-    # Dataset
     dataset: DatasetConfig = Field(
         default_factory=DatasetConfig,
         description="Dataset configuration",
-        json_schema_extra={"display_label": "Dataset", "role": "workload"},
+        json_schema_extra={"display_label": "Dataset"},
     )
-
-    # Hardware
-    dtype: Literal["float32", "float16", "bfloat16"] = Field(
-        default="bfloat16",
-        description="Model dtype for inference",
-        json_schema_extra={"display_label": "Dtype", "role": "experimental"},
-    )
-    random_seed: int = Field(
-        default=42,
-        description=(
-            "Per-experiment seed for all stochasticity: inference RNG and dataset ordering."
-        ),
-    )
-
-    # Token limits — control FLOPs isolation between experiments.
-    # Setting these keeps computation workload constant so that only implementation
-    # parameters (engine, dtype, quantisation) vary between experiments.
-    # None = no limit (prompts keep natural length / model generates to EOS).
     max_input_tokens: int | None = Field(
         default=256,
         ge=1,
@@ -380,7 +340,7 @@ class ExperimentConfig(BaseModel):
             "Max input token length for truncation. Keeps computation workload "
             "constant across experiments for fair comparison. None = no truncation."
         ),
-        json_schema_extra={"display_label": "Max Input Tokens", "role": "workload"},
+        json_schema_extra={"display_label": "Max Input Tokens"},
     )
     max_output_tokens: int | None = Field(
         default=256,
@@ -389,13 +349,28 @@ class ExperimentConfig(BaseModel):
             "Max output tokens (max_new_tokens for generation). "
             "None = generate until EOS or model context limit."
         ),
-        json_schema_extra={"display_label": "Max Output Tokens", "role": "workload"},
+        json_schema_extra={"display_label": "Max Output Tokens"},
+    )
+    random_seed: int = Field(
+        default=42,
+        description="Per-experiment seed for all stochasticity: inference RNG and dataset ordering.",
     )
 
-    # Sub-configs
-    decoder: DecoderConfig = Field(
-        default_factory=DecoderConfig, description="Universal decoder/generation configuration"
-    )
+
+# =============================================================================
+# Measurement Configuration (how to measure)
+# =============================================================================
+
+
+class MeasurementConfig(BaseModel):
+    """How to measure: warmup, baseline, and energy sampling strategy.
+
+    These fields control the measurement methodology — changing them affects
+    measurement quality/accuracy but not the workload itself.
+    """
+
+    model_config = {"extra": "forbid"}
+
     warmup: WarmupConfig = Field(
         default_factory=WarmupConfig, description="Warmup phase configuration"
     )
@@ -408,10 +383,60 @@ class ExperimentConfig(BaseModel):
             "Energy measurement backend. "
             "auto=best available (Zeus>NVML>CodeCarbon). null disables energy measurement."
         ),
-        json_schema_extra={"display_label": "Sampler", "role": "workload"},
+        json_schema_extra={"display_label": "Sampler"},
     )
+
+
+# =============================================================================
+# Main Experiment Configuration (v2.0)
+# =============================================================================
+
+
+class ExperimentConfig(BaseModel):
+    """v2.0 experiment configuration.
+
+    Central configuration object controlling all aspects of a single LLM inference
+    efficiency measurement. Organised into semantic groups:
+
+    - task: What to measure (model, dataset, token limits, seed)
+    - measurement: How to measure (warmup, baseline, energy sampler)
+    - Engine sections (transformers:, vllm:, tensorrt:): How to execute
+
+    The engine section must match the engine field. Providing a transformers:
+    section when engine=vllm is a configuration error.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    # Task — what to measure
+    task: TaskConfig = Field(..., description="Task configuration: model, dataset, workload shape")
+
+    # Engine selection
+    engine: Engine = Field(
+        default=Engine.TRANSFORMERS,
+        description="Inference engine",
+        json_schema_extra={"display_label": "Engine"},
+    )
+
+    # Measurement — how to measure
+    measurement: MeasurementConfig = Field(
+        default_factory=MeasurementConfig,
+        description="Measurement methodology: warmup, baseline, energy sampling",
+    )
+
+    # Hardware
+    dtype: Literal["float32", "float16", "bfloat16"] = Field(
+        default="bfloat16",
+        description="Model dtype for inference",
+        json_schema_extra={"display_label": "Dtype"},
+    )
+
+    # Sub-configs (to be migrated per-backend in PRs 49.4/49.5)
+    decoder: DecoderConfig = Field(
+        default_factory=DecoderConfig, description="Universal decoder/generation configuration"
+    )
+
     # Engine sections (None = use engine's own defaults)
-    # All current engines (transformers, vllm, tensorrt) are GPU-only; cpu engine is future scope.
     transformers: TransformersConfig | None = Field(
         default=None,
         description="HuggingFace Transformers engine configuration (only used when engine=transformers)",

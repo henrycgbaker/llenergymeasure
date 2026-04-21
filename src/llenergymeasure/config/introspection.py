@@ -26,6 +26,7 @@ Usage:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 
 from pydantic import BaseModel
@@ -65,43 +66,41 @@ def get_swept_field_paths(experiments: list[ExperimentConfig]) -> set[str]:
     """Return dotted field paths that vary across experiments in a study.
 
     Inspects the experiment list and identifies fields where values differ,
-    indicating they are sweep dimensions (independent variables).
+    indicating they are sweep dimensions (independent variables). Recurses
+    into nested BaseModel sub-configs (e.g. task.dataset.n_prompts).
 
     Args:
         experiments: List of resolved ExperimentConfig objects from a study.
 
     Returns:
-        Set of dotted field paths (e.g. {"dtype", "dataset.n_prompts"}).
+        Set of dotted field paths (e.g. {"dtype", "task.dataset.n_prompts"}).
     """
     if len(experiments) <= 1:
         return set()
 
-    first = experiments[0]
     swept: set[str] = set()
 
-    for field_name in type(first).model_fields:
-        values = [getattr(exp, field_name) for exp in experiments]
+    def _compare_fields(objects: Sequence[BaseModel], prefix: str, *, max_depth: int = 3) -> None:
+        if max_depth <= 0:
+            return
+        first_obj = objects[0]
+        for field_name in type(first_obj).model_fields:
+            path = f"{prefix}.{field_name}" if prefix else field_name
+            values = [getattr(obj, field_name) for obj in objects]
 
-        # Find first non-None value to determine type (handles multi-engine
-        # studies where optional sub-configs like transformers/vllm are None on
-        # experiments belonging to a different engine).
-        first_non_none = next((v for v in values if v is not None), None)
+            first_non_none = next((v for v in values if v is not None), None)
 
-        # Sub-config: compare nested fields via getattr
-        if first_non_none is not None and isinstance(first_non_none, BaseModel):
-            non_none = [v for v in values if v is not None]
-            # None vs non-None means the field itself varies across experiments
-            if len(non_none) < len(values):
-                swept.add(field_name)
-            # Compare sub-fields among non-None configs
-            if len(non_none) >= 2:
-                for sub_field in type(first_non_none).model_fields:
-                    sub_values = [str(getattr(v, sub_field)) for v in non_none]
-                    if len(set(sub_values)) > 1:
-                        swept.add(f"{field_name}.{sub_field}")
-        else:
-            if len({str(v) for v in values}) > 1:
-                swept.add(field_name)
+            if first_non_none is not None and isinstance(first_non_none, BaseModel):
+                non_none_objs = [v for v in values if v is not None]
+                if len(non_none_objs) < len(values):
+                    swept.add(path)
+                if len(non_none_objs) >= 2:
+                    _compare_fields(non_none_objs, path, max_depth=max_depth - 1)
+            else:
+                if len({str(v) for v in values}) > 1:
+                    swept.add(path)
+
+    _compare_fields(experiments, "")
 
     return swept
 

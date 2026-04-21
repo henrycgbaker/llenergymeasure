@@ -82,7 +82,7 @@ class VLLMEngine:
 
         kwargs = self._build_llm_kwargs(config)
         logger.info(
-            "Loading model %r with vllm.LLM (kwargs: %s)", config.model, list(kwargs.keys())
+            "Loading model %r with vllm.LLM (kwargs: %s)", config.task.model, list(kwargs.keys())
         )
 
         try:
@@ -166,7 +166,7 @@ class VLLMEngine:
         logger.info(
             "Starting vLLM offline batch inference: %d prompts, max_tokens=%s",
             len(prompts),
-            config.max_output_tokens or "unlimited",
+            config.task.max_output_tokens or "unlimited",
         )
 
         try:
@@ -290,10 +290,10 @@ class VLLMEngine:
         from llenergymeasure.utils.security import trust_remote_code_enabled
 
         kwargs: dict[str, Any] = {
-            "model": config.model,
+            "model": config.task.model,
             "dtype": config.dtype,
             "trust_remote_code": trust_remote_code_enabled(),
-            "seed": config.random_seed,
+            "seed": config.task.random_seed,
         }
 
         # Apply VLLMEngineConfig fields if provided — only set non-None values
@@ -385,8 +385,8 @@ class VLLMEngine:
                 "top_k": top_k,
                 "repetition_penalty": decoder.repetition_penalty,
             }
-        if config.max_output_tokens is not None:
-            kwargs["max_tokens"] = config.max_output_tokens
+        if config.task.max_output_tokens is not None:
+            kwargs["max_tokens"] = config.task.max_output_tokens
         if decoder.min_p is not None:
             kwargs["min_p"] = decoder.min_p
 
@@ -434,8 +434,8 @@ class VLLMEngine:
             kwargs["length_penalty"] = beam_cfg.length_penalty
         if beam_cfg.early_stopping is not None:
             kwargs["early_stopping"] = beam_cfg.early_stopping
-        if config.max_output_tokens is not None:
-            kwargs["max_tokens"] = config.max_output_tokens
+        if config.task.max_output_tokens is not None:
+            kwargs["max_tokens"] = config.task.max_output_tokens
         if config.decoder.min_p is not None:
             kwargs["min_p"] = config.decoder.min_p
         if beam_cfg.model_extra:

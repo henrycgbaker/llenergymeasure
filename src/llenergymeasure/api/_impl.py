@@ -12,7 +12,13 @@ from pathlib import Path
 from typing import Any, overload
 
 from llenergymeasure.config.loader import load_experiment_config
-from llenergymeasure.config.models import DatasetConfig, ExperimentConfig, StudyConfig
+from llenergymeasure.config.models import (
+    DatasetConfig,
+    ExperimentConfig,
+    MeasurementConfig,
+    StudyConfig,
+    TaskConfig,
+)
 from llenergymeasure.config.ssot import RUNNER_DOCKER, TEMP_PREFIX_TIMESERIES
 from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 from llenergymeasure.domain.experiment import ExperimentResult, StudyResult, StudySummary
@@ -22,6 +28,10 @@ from llenergymeasure.utils.exceptions import ConfigError
 # Single source of truth for n_prompts default — derived from DatasetConfig field default
 # so run_experiment() kwargs and DatasetConfig always agree.
 _N_PROMPTS_DEFAULT: int = DatasetConfig.model_fields["n_prompts"].default
+
+# Derived from model fields so routing auto-updates when sub-models gain new fields.
+_TASK_FIELDS: frozenset[str] = frozenset(TaskConfig.model_fields) - {"model", "dataset"}
+_MEASUREMENT_FIELDS: frozenset[str] = frozenset(MeasurementConfig.model_fields)
 
 # ---------------------------------------------------------------------------
 # run_experiment — three overloaded forms
@@ -243,15 +253,25 @@ def _to_study_config(
                 "run_experiment() requires either a config argument or model= keyword.\n"
                 "Example: run_experiment(model='meta-llama/Llama-3.1-8B')"
             )
-        # Build kwargs dict for ExperimentConfig — only include non-default values
-        # to let Pydantic defaults apply for omitted fields.
-        ec_kwargs: dict[str, Any] = {
+        # Build kwargs dict for ExperimentConfig — route fields into sub-models.
+        task_kwargs: dict[str, Any] = {
             "model": model,
             "dataset": DatasetConfig(source=dataset, n_prompts=n_prompts),
         }
+        ec_kwargs: dict[str, Any] = {"task": task_kwargs}
         if engine is not None:
             ec_kwargs["engine"] = engine
-        ec_kwargs.update(kwargs)
+        # Route remaining kwargs into correct sub-model or top-level
+        measurement_kwargs: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if key in _TASK_FIELDS:
+                task_kwargs[key] = value
+            elif key in _MEASUREMENT_FIELDS:
+                measurement_kwargs[key] = value
+            else:
+                ec_kwargs[key] = value
+        if measurement_kwargs:
+            ec_kwargs["measurement"] = measurement_kwargs
         experiment = ExperimentConfig(**ec_kwargs)
     else:
         raise ConfigError(
@@ -464,7 +484,10 @@ def _run(
             spec = runner_specs.get(config.engine) if runner_specs else None
             is_docker = spec and spec.mode == RUNNER_DOCKER
             if is_docker:
-                host_baseline = config.baseline.enabled and config.baseline.strategy != "fresh"
+                host_baseline = (
+                    config.measurement.baseline.enabled
+                    and config.measurement.baseline.strategy != "fresh"
+                )
                 steps = docker_steps(images_prepared=False, host_baseline=host_baseline)
             else:
                 steps = list(STEPS_LOCAL)

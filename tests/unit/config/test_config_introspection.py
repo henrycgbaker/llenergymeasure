@@ -135,10 +135,10 @@ def test_get_experiment_config_schema_is_valid_json_schema():
 
 
 def test_get_experiment_config_schema_contains_model_field():
-    """Schema contains 'model' property definition."""
+    """Schema contains 'task' property with 'model' nested inside."""
     schema = get_experiment_config_schema()
     properties = schema.get("properties", {})
-    assert "model" in properties
+    assert "task" in properties
 
 
 def test_get_experiment_config_schema_contains_engine_field():
@@ -293,35 +293,35 @@ def test_get_validation_rules_contains_engine_section_mismatch_rule():
 
 
 def test_get_display_label_from_metadata():
-    """get_display_label() returns 'Model' for ExperimentConfig.model field."""
-    fi = ExperimentConfig.model_fields["model"]
+    """get_display_label() returns 'Model' for TaskConfig.model field."""
+    from llenergymeasure.config.models import TaskConfig
+
+    fi = TaskConfig.model_fields["model"]
     label = get_display_label(fi, "model")
     assert label == "Model"
 
 
 def test_get_display_label_fallback():
     """get_display_label() falls back to title-cased name for fields without metadata."""
-    fi = ExperimentConfig.model_fields["random_seed"]
+    from llenergymeasure.config.models import TaskConfig
+
+    fi = TaskConfig.model_fields["random_seed"]
     # random_seed has no json_schema_extra; expect title-cased fallback
     label = get_display_label(fi, "random_seed")
     assert label == "Random Seed"
 
 
 def test_get_field_role_workload():
-    """get_field_role() returns 'workload' for model field."""
-    fi = ExperimentConfig.model_fields["model"]
+    """get_field_role() returns 'workload' for DatasetConfig.source field."""
+    from llenergymeasure.config.models import DatasetConfig
+
+    fi = DatasetConfig.model_fields["source"]
     assert get_field_role(fi) == "workload"
-
-
-def test_get_field_role_experimental():
-    """get_field_role() returns 'experimental' for dtype field."""
-    fi = ExperimentConfig.model_fields["dtype"]
-    assert get_field_role(fi) == "experimental"
 
 
 def test_get_field_role_none_for_unannotated():
     """get_field_role() returns None for fields without role metadata."""
-    fi = ExperimentConfig.model_fields["random_seed"]
+    fi = ExperimentConfig.model_fields["engine"]
     assert get_field_role(fi) is None
 
 
@@ -332,27 +332,27 @@ def test_get_field_role_none_for_unannotated():
 
 def test_get_swept_field_paths_single_experiment():
     """Single experiment yields an empty swept set."""
-    exp = ExperimentConfig(model="gpt2")
+    exp = ExperimentConfig(task={"model": "gpt2"})
     result = get_swept_field_paths([exp])
     assert result == set()
 
 
 def test_get_swept_field_paths_dtype_swept():
     """Two experiments with different dtypes yield {'dtype'} in swept paths."""
-    exp1 = ExperimentConfig(model="gpt2", dtype="float16")
-    exp2 = ExperimentConfig(model="gpt2", dtype="bfloat16")
+    exp1 = ExperimentConfig(task={"model": "gpt2"}, dtype="float16")
+    exp2 = ExperimentConfig(task={"model": "gpt2"}, dtype="bfloat16")
     result = get_swept_field_paths([exp1, exp2])
     assert "dtype" in result
 
 
 def test_get_swept_field_paths_nested_field():
-    """Two experiments with different n_prompts yield dataset.n_prompts in swept."""
+    """Two experiments with different n_prompts yield task.dataset.n_prompts in swept."""
     from llenergymeasure.config.models import DatasetConfig
 
-    exp1 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=10))
-    exp2 = ExperimentConfig(model="gpt2", dataset=DatasetConfig(n_prompts=50))
+    exp1 = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=10)})
+    exp2 = ExperimentConfig(task={"model": "gpt2", "dataset": DatasetConfig(n_prompts=50)})
     result = get_swept_field_paths([exp1, exp2])
-    assert "dataset.n_prompts" in result
+    assert "task.dataset.n_prompts" in result
 
 
 def test_get_swept_field_paths_multi_engine_none_subconfigs():
@@ -365,13 +365,13 @@ def test_get_swept_field_paths_multi_engine_none_subconfigs():
     from llenergymeasure.config.engine_configs import TransformersConfig, VLLMConfig
 
     exp_pt = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="transformers",
         dtype="float16",
         transformers=TransformersConfig(batch_size=4),
     )
     exp_vllm = ExperimentConfig(
-        model="gpt2",
+        task={"model": "gpt2"},
         engine="vllm",
         dtype="float16",
         vllm=VLLMConfig(),

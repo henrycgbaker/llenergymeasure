@@ -46,14 +46,32 @@ _EPOCH_END = datetime(2026, 1, 1, 0, 0, 5, tzinfo=timezone.utc)
 def make_config(**overrides) -> ExperimentConfig:
     """Return a valid ExperimentConfig with sensible defaults.
 
-    Tests override only what they care about.
+    Tests override only what they care about. Task-level fields (model, dataset,
+    max_input_tokens, max_output_tokens, random_seed) are routed into task={}.
     """
-    defaults: dict = {
-        "model": TEST_MODEL,
-        "engine": TEST_ENGINE,
-    }
-    defaults.update(overrides)
-    return ExperimentConfig(**defaults)
+    _TASK_FIELDS = {"model", "dataset", "max_input_tokens", "max_output_tokens", "random_seed"}
+    _MEASUREMENT_FIELDS = {"warmup", "baseline", "energy_sampler"}
+
+    task_defaults: dict = {"model": TEST_MODEL}
+    ec_defaults: dict = {"engine": TEST_ENGINE}
+
+    task_overrides: dict = {}
+    measurement_overrides: dict = {}
+    ec_overrides: dict = {}
+
+    for key, value in overrides.items():
+        if key in _TASK_FIELDS:
+            task_overrides[key] = value
+        elif key in _MEASUREMENT_FIELDS:
+            measurement_overrides[key] = value
+        else:
+            ec_overrides[key] = value
+
+    task = {**task_defaults, **task_overrides}
+    ec = {**ec_defaults, **ec_overrides, "task": task}
+    if measurement_overrides:
+        ec["measurement"] = measurement_overrides
+    return ExperimentConfig(**ec)
 
 
 def make_result(**overrides) -> ExperimentResult:

@@ -789,7 +789,7 @@ class TestWiring:
         """Build a minimal StudyConfig with the given engines."""
         from llenergymeasure.config.models import ExecutionConfig, ExperimentConfig, StudyConfig
 
-        experiments = [ExperimentConfig(model=f"model-{b}", engine=b) for b in engines]
+        experiments = [ExperimentConfig(task={"model": f"model-{b}"}, engine=b) for b in engines]
         return StudyConfig(
             experiments=experiments,
             study_execution=ExecutionConfig(n_cycles=1, experiment_order="sequential"),
@@ -889,7 +889,7 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(model="test-model", engine="transformers")],
+            experiments=[ExperimentConfig(task={"model": "test-model"}, engine="transformers")],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=True),
         )
 
@@ -923,7 +923,7 @@ class TestWiring:
         from llenergymeasure.study.preflight import run_study_preflight
 
         study = StudyConfig(
-            experiments=[ExperimentConfig(model="test-model", engine="transformers")],
+            experiments=[ExperimentConfig(task={"model": "test-model"}, engine="transformers")],
             study_execution=ExecutionConfig(n_cycles=1, skip_preflight=False),
         )
 

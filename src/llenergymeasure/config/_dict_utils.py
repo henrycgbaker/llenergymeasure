@@ -14,19 +14,22 @@ def _unflatten(flat: dict[str, Any]) -> dict[str, Any]:
     """Expand dotted keys into nested dicts. Non-dotted keys pass through.
 
     Example:
-        {"engine.block_size": 16} -> {"engine": {"block_size": 16}}
-        {"batch_size": 4}         -> {"batch_size": 4}
+        {"engine.block_size": 16}        -> {"engine": {"block_size": 16}}
+        {"task.dataset.n_prompts": 50}   -> {"task": {"dataset": {"n_prompts": 50}}}
+        {"batch_size": 4}                -> {"batch_size": 4}
     """
     result: dict[str, Any] = {}
     for key, value in flat.items():
-        if "." in key:
-            parts = key.split(".", 1)
-            if parts[0] not in result:
-                result[parts[0]] = {}
-            if isinstance(result[parts[0]], dict):
-                result[parts[0]][parts[1]] = value
-        else:
+        if "." not in key:
             result[key] = value
+            continue
+        parts = key.split(".")
+        node = result
+        for part in parts[:-1]:
+            if part not in node:
+                node[part] = {}
+            node = node[part]
+        node[parts[-1]] = value
     return result
 
 
