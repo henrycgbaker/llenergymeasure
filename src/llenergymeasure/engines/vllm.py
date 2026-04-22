@@ -348,7 +348,21 @@ class VLLMEngine:
                 sp_cls = None
             if sp_cls is not None:
                 try:
-                    sp_cls(**effective_sampling)
+                    sp_obj = sp_cls(**effective_sampling)
+                    # --- T1.5: diff declared vs constructed to catch
+                    # library-internal normalisations (e.g. vLLM's __post_init__
+                    # forcing top_p=1.0 under near-zero temperature).
+                    try:
+                        from llenergymeasure.engines._helpers import tier_1_5_diff
+
+                        norm_dormant = tier_1_5_diff(
+                            effective_sampling, sp_obj, prefix="vllm.sampling."
+                        )
+                        for k, v in norm_dormant.items():
+                            if k not in dormant:
+                                dormant[k] = v
+                    except Exception as e:
+                        warnings.append(f"T1.5 diff: {type(e).__name__}: {e}")
                 except Exception as e:
                     errors.append(f"T1 SamplingParams: {type(e).__name__}: {e}")
 

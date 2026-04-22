@@ -218,6 +218,162 @@ def test_tensorrt_no_dormancy_in_new_data_model():
 
 
 # =============================================================================
+# B'. T1.5 — input-vs-output diff on constructed native objects
+# =============================================================================
+
+
+def test_t1_5_vllm_near_zero_temp_catches_normalisation():
+    """vLLM clamps top_p=1.0 and top_k=0 when temperature is near zero."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm=VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.0, top_p=0.95, top_k=50)),
+    )
+    engine = VLLMEngine()
+    probe = engine.probe_config(cfg)
+
+    # T1.5 should have populated dormant_fields with the normalisation
+    dormant_keys = set(probe.dormant_fields.keys())
+    # At minimum one of top_p/top_k should be flagged
+    assert any("top_p" in k or "top_k" in k for k in dormant_keys), (
+        f"Expected top_p/top_k normalisation dormancy; got {dormant_keys}"
+    )
+    # The reason should be "library normalisation"
+    norm_entries = [
+        df for df in probe.dormant_fields.values() if df.reason == "library normalisation"
+    ]
+    assert norm_entries, f"No library-normalisation dormancy found: {probe.dormant_fields}"
+
+
+def test_t1_5_vllm_temp_epsilon_catches_clamp():
+    """vLLM clamps temperature=0.001 to 0.01 with a warning."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="vllm",
+        vllm=VLLMConfig(sampling=VLLMSamplingConfig(temperature=0.001, top_p=0.9, top_k=50)),
+    )
+    engine = VLLMEngine()
+    probe = engine.probe_config(cfg)
+
+    dormant_keys = set(probe.dormant_fields.keys())
+    assert any("temperature" in k for k in dormant_keys), (
+        f"Expected temperature clamp dormancy; got {dormant_keys}"
+    )
+
+
+def test_t1_5_transformers_no_diff_on_valid_config():
+    """T1.5 should produce no diffs when user config is already canonical."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        transformers=TransformersConfig(
+            sampling=TransformersSamplingConfig(
+                do_sample=True, temperature=0.7, top_p=0.9, top_k=40
+            )
+        ),
+    )
+    engine = TransformersEngine()
+    # Disable T2 AutoConfig to keep test local
+    import os
+
+    os.environ["LLEM_PROBE_META_DEVICE_ENABLED"] = "0"
+
+    # Mock AutoConfig to avoid network
+    import transformers as _tf
+
+    real_ac = _tf.AutoConfig
+
+    class _MockAutoConfig:
+        @staticmethod
+        def from_pretrained(*a, **kw):
+            raise OSError("mocked — skip T2")
+
+    _tf.AutoConfig = _MockAutoConfig  # type: ignore[assignment]
+    try:
+        probe = engine.probe_config(cfg)
+    finally:
+        _tf.AutoConfig = real_ac
+
+    # No library-normalisation diffs expected
+    norm_entries = [
+        df for df in probe.dormant_fields.values() if df.reason == "library normalisation"
+    ]
+    assert not norm_entries, f"Unexpected T1.5 diffs: {norm_entries}"
+
+
+# =============================================================================
+# B''. Passthrough-engine mismatch — Pydantic validator rejects
+# =============================================================================
+
+
+def test_passthrough_on_vllm_rejected_at_config_load():
+    """passthrough_kwargs on engine=vllm should be rejected at Pydantic validation."""
+    with pytest.raises(
+        Exception, match="passthrough_kwargs is only supported for engine=transformers"
+    ):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="vllm",
+            passthrough_kwargs={"made_up_arg": 1},
+        )
+
+
+def test_passthrough_on_tensorrt_rejected_at_config_load():
+    """passthrough_kwargs on engine=tensorrt should be rejected at Pydantic validation."""
+    with pytest.raises(
+        Exception, match="passthrough_kwargs is only supported for engine=transformers"
+    ):
+        ExperimentConfig(
+            task={"model": "gpt2"},
+            engine="tensorrt",
+            passthrough_kwargs={"made_up_arg": 1},
+        )
+
+
+def test_passthrough_on_transformers_accepted():
+    """passthrough_kwargs on engine=transformers should succeed."""
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="transformers",
+        passthrough_kwargs={"revision": "main"},
+    )
+    assert cfg.passthrough_kwargs == {"revision": "main"}
+
+
+# =============================================================================
+# B'''. T5 short-circuit fix — T5 runs even when T0 engine kwargs fail
+# =============================================================================
+
+
+def test_tensorrt_t5_runs_even_when_t0_engine_kwargs_fails(monkeypatch):
+    """If _build_llm_kwargs raises, T5 should still run (independent of T0)."""
+    from llenergymeasure.config.engine_configs import (
+        TensorRTConfig,
+        TensorRTQuantConfig,
+    )
+
+    cfg = ExperimentConfig(
+        task={"model": "gpt2"},
+        engine="tensorrt",
+        tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
+    )
+    engine = TensorRTEngine()
+
+    # Force _build_llm_kwargs to raise
+    monkeypatch.setattr(
+        engine, "_build_llm_kwargs", lambda c: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
+    # Simulate A100 (SM 8.0 — FP8 not supported)
+    monkeypatch.setattr("llenergymeasure.device.gpu_info.get_compute_capability", lambda: (8, 0))
+
+    probe = engine.probe_config(cfg)
+
+    # Should have captured BOTH the T0 failure AND the T5 hardware error
+    assert any("T0 engine kwargs" in err for err in probe.errors)
+    assert any("FP8 quantisation requires" in err for err in probe.errors)
+
+
+# =============================================================================
 # C. Exception non-propagation — probe never raises
 # =============================================================================
 

@@ -363,7 +363,17 @@ class TransformersEngine:
 
             allowed = set(GenerationConfig().__dict__.keys())
             filtered = {k: v for k, v in full_generate_kwargs.items() if k in allowed}
-            GenerationConfig(**filtered)
+            gc_obj = GenerationConfig(**filtered)
+            # --- T1.5: diff declared vs constructed (library normalisation) ---
+            try:
+                from llenergymeasure.engines._helpers import tier_1_5_diff
+
+                norm_dormant = tier_1_5_diff(filtered, gc_obj, prefix="transformers.sampling.")
+                for k, v in norm_dormant.items():
+                    if k not in dormant:
+                        dormant[k] = v
+            except Exception as e:
+                warnings.append(f"T1.5 diff: {type(e).__name__}: {e}")
         except Exception as e:
             errors.append(f"T1 GenerationConfig: {type(e).__name__}: {e}")
 

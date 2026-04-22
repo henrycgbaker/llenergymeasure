@@ -20,6 +20,88 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Native-object introspection (used by T1.5 across all engines)
+# ---------------------------------------------------------------------------
+
+
+def extract_native_object_fields(obj: Any) -> dict[str, Any]:
+    """Return primitive attribute values from a native config object.
+
+    Handles:
+      - Pydantic v2 models (model_dump)
+      - msgspec.Struct / __slots__-based classes (iterate __slots__ + getattr)
+      - Plain dataclass / attribute-dict objects (__dict__)
+
+    Used by T1.5 (input-vs-output diff) to read the constructed object's
+    post-normalisation state. Returns only fields whose values are primitive
+    (int/float/bool/str/None/list/tuple); nested config objects are excluded
+    so T1.5 stays focused on value-level diffs, not shape changes.
+    """
+    result: dict[str, Any] = {}
+
+    if hasattr(obj, "model_dump"):
+        try:
+            dumped = obj.model_dump(exclude_none=False)
+            if dumped:
+                return dumped
+        except Exception:
+            pass
+
+    slot_names: set[str] = set()
+    for cls in type(obj).__mro__:
+        for name in getattr(cls, "__slots__", ()):
+            if not name.startswith("_"):
+                slot_names.add(name)
+    for name in slot_names:
+        try:
+            v = getattr(obj, name)
+            if isinstance(v, (int, float, bool, str, type(None), list, tuple)):
+                result[name] = v
+        except AttributeError:
+            continue
+
+    if hasattr(obj, "__dict__"):
+        for k, v in obj.__dict__.items():
+            if k.startswith("_"):
+                continue
+            if isinstance(v, (int, float, bool, str, type(None), list, tuple)):
+                result[k] = v
+
+    return result
+
+
+def tier_1_5_diff(
+    kwargs: dict[str, Any],
+    constructed_obj: Any,
+    prefix: str,
+) -> dict[str, DormantField]:
+    """T1.5: diff declared kwargs against the constructed native-type object.
+
+    After T1 successfully constructs ``cls(**kwargs)``, this returns fields
+    whose declared value differs from what the constructed object actually
+    stores. Catches library-internal normalisations (e.g. vLLM's
+    ``SamplingParams.__post_init__`` forcing ``top_p=1.0`` under near-zero
+    temperature).
+
+    Returns a dict keyed on ``{prefix}{field_name}`` with reason
+    ``"library normalisation"``.
+    """
+    obj_fields = extract_native_object_fields(constructed_obj)
+    dormant: dict[str, DormantField] = {}
+    for k, declared in kwargs.items():
+        if k not in obj_fields:
+            continue
+        effective = obj_fields[k]
+        if effective != declared:
+            dormant[f"{prefix}{k}"] = DormantField(
+                declared_value=declared,
+                effective_value=effective,
+                reason="library normalisation",
+            )
+    return dormant
+
+
+# ---------------------------------------------------------------------------
 # Dormancy diff (used by probe_config across all engines)
 # ---------------------------------------------------------------------------
 

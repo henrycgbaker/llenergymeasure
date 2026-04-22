@@ -627,11 +627,16 @@ class TensorRTEngine:
         dormant: dict[str, DormantField] = {}
 
         # --- T0: Build effective kwargs ---
+        # If T0 engine-kwargs fails we record the error but do NOT bail out.
+        # T5 hardware-compat check is independent of engine kwargs — it should
+        # still run so partial-install hosts (where _build_llm_kwargs raises
+        # on a QuantConfig import) still get hardware-capability feedback.
+        t0_engine_ok = True
         try:
             effective_engine = self._build_llm_kwargs(config)
         except Exception as e:
             errors.append(f"T0 engine kwargs: {type(e).__name__}: {e}")
-            return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
+            t0_engine_ok = False
 
         try:
             effective_sampling = self._build_sampling_kwargs(config)
@@ -653,27 +658,41 @@ class TensorRTEngine:
             errors.append(f"T0 dormancy diff: {type(e).__name__}: {e}")
 
         # --- T1+T2: LlmArgs construction (Pydantic cross-resolution) ---
+        # Skip entirely if T0 engine kwargs failed — LlmArgs needs those.
         llmargs_ran = False
-        llmargs_cls: Any = None
-        try:
-            from tensorrt_llm.llmapi import LlmArgs as _LlmArgs
-
-            llmargs_cls = _LlmArgs
-        except Exception:
-            # tensorrt_llm not importable in the probe execution environment
-            # (not installed, or partial install — e.g. missing libpython).
-            # By design, the probe usually runs inside a per-backend probe
-            # container where the library is available; this branch is the
-            # degenerate fallback. Skip T1+T2 entirely; T5 below covers
-            # hardware compat from NVML alone.
-            llmargs_cls = None
-
-        if llmargs_cls is not None:
+        if t0_engine_ok:
+            llmargs_cls: Any = None
             try:
-                llmargs_cls(**effective_engine)
-                llmargs_ran = True
-            except Exception as e:
-                errors.append(f"T1+T2 LlmArgs: {type(e).__name__}: {e}")
+                from tensorrt_llm.llmapi import LlmArgs as _LlmArgs
+
+                llmargs_cls = _LlmArgs
+            except Exception:
+                # tensorrt_llm not importable in the probe execution environment
+                # (not installed, or partial install — e.g. missing libpython).
+                # By design, the probe usually runs inside a per-backend probe
+                # container where the library is available; this branch is the
+                # degenerate fallback. Skip T1+T2 entirely; T5 below covers
+                # hardware compat from NVML alone.
+                llmargs_cls = None
+
+            if llmargs_cls is not None:
+                try:
+                    llmargs_obj = llmargs_cls(**effective_engine)
+                    llmargs_ran = True
+                    # --- T1.5: diff declared vs constructed (library normalisation) ---
+                    try:
+                        from llenergymeasure.engines._helpers import tier_1_5_diff
+
+                        norm_dormant = tier_1_5_diff(
+                            effective_engine, llmargs_obj, prefix="tensorrt.engine."
+                        )
+                        for k, v in norm_dormant.items():
+                            if k not in dormant:
+                                dormant[k] = v
+                    except Exception as e:
+                        warnings.append(f"T1.5 diff: {type(e).__name__}: {e}")
+                except Exception as e:
+                    errors.append(f"T1+T2 LlmArgs: {type(e).__name__}: {e}")
 
         # --- T5: Static hardware compat (fallback when no GPU or LlmArgs unavailable) ---
         # When LlmArgs ran it already calls NVML internally (OQ-4); re-running

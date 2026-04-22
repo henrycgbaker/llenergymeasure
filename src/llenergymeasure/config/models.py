@@ -459,6 +459,31 @@ class ExperimentConfig(BaseModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def validate_passthrough_kwargs_engine_support(self) -> ExperimentConfig:
+        """passthrough_kwargs only consumed by engines whose wrapper merges them.
+
+        Only ``TransformersEngine._model_load_kwargs`` currently merges
+        ``config.passthrough_kwargs`` into engine kwargs. vLLM and TRT-LLM
+        wrappers do not, so setting passthrough_kwargs on those engines is
+        a silent no-op — a dormancy bug. Reject at config load instead of
+        silently ignoring.
+
+        Users who need extra kwargs on vLLM/TRT should set them via the
+        engine-specific ``model_extra`` (extra="allow") slots under
+        ``vllm.engine`` / ``vllm.sampling`` / ``tensorrt`` where they are
+        properly forwarded.
+        """
+        if self.passthrough_kwargs and self.engine.value != "transformers":
+            raise ValueError(
+                f"passthrough_kwargs is only supported for engine=transformers. "
+                f"You have engine={self.engine.value!r} with {len(self.passthrough_kwargs)} "
+                f"passthrough kwargs set; these would be silently ignored. "
+                f"Use the engine-specific model_extra slots "
+                f"(e.g. vllm.engine.<field>, tensorrt.<field>) instead."
+            )
+        return self
+
     # vLLM fp8 + float32 and TRT FP8 + float32 are rejected by the respective
     # VLLMConfig.dtype / TensorRTConfig.dtype Literal types at field validation
     # (neither engine accepts float32). No separate cross-validator needed.
