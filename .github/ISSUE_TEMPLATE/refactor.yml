@@ -1,0 +1,19 @@
+name: Refactor
+description: Internal cleanup with no external behaviour change
+labels: ["refactor"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs changing
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+      description: What pain does this remove? What will it unblock?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Files in scope

@@ -1,0 +1,22 @@
+name: Enhancement
+description: A concrete feature or improvement (not open-ended)
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should change, and roughly where in the codebase
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Files likely affected, risk level, anything to watch out for
