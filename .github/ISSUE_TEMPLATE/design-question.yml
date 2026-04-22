@@ -1,0 +1,33 @@
+name: Design question
+description: Open-ended design discussion needing resolution before implementation
+labels: ["design-question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: What decision needs making?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What surfaces or motivates this question? What's currently in place?
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options under consideration
+      description: "List possible directions with trade-offs (one per bullet). Leave blank if still exploring."
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Hard requirements, things already ruled out, stakeholder input needed
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: "e.g. decision doc in .product/decisions/, design doc in .product/designs/, or just an issue-thread resolution"
