@@ -4,8 +4,8 @@
   "engine_version": "4.51.0",
   "image_ref": "llenergymeasure:transformers",
   "base_image_ref": "llenergymeasure:transformers",
-  "vendored_at": "2026-04-23T16:16:57.449319+00:00",
-  "vendor_commit": "1ef73828e4aac6ef6ddda17498b438e851eecb0f",
+  "vendored_at": "2026-04-23T18:20:15+02:00",
+  "vendor_commit": "9ce3aed1d083a3f080ad1e51218a75e3cc5af2d4",
   "cases": [
     {
       "id": "transformers_bnb_bnb_4bit_compute_dtype_type",
@@ -14,8 +14,7 @@
       "observed_messages": [],
       "observed_silent_normalisations": {},
       "positive_confirmed": false,
-      "negative_confirmed": true,
-      "duration_ms": 12
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_bnb_4bit_quant_type_type",
@@ -28,8 +27,7 @@
         "message": "bnb_4bit_quant_type must be a string"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_bnb_4bit_use_double_quant_type",
@@ -42,8 +40,7 @@
         "message": "bnb_4bit_use_double_quant must be a boolean"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_llm_int8_enable_fp32_cpu_offload_type",
@@ -56,8 +53,7 @@
         "message": "llm_int8_enable_fp32_cpu_offload must be a boolean"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_llm_int8_has_fp16_weight_type",
@@ -70,8 +66,7 @@
         "message": "llm_int8_has_fp16_weight must be a boolean"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_llm_int8_skip_modules_type",
@@ -84,8 +79,7 @@
         "message": "llm_int8_skip_modules must be a list of strings"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_llm_int8_threshold_type",
@@ -98,8 +92,7 @@
         "message": "llm_int8_threshold must be a float"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_load_in_4bit_type",
@@ -112,8 +105,7 @@
         "message": "load_in_4bit must be a boolean"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_bnb_load_in_8bit_type",
@@ -126,8 +118,7 @@
         "message": "load_in_8bit must be a boolean"
       },
       "positive_confirmed": true,
-      "negative_confirmed": true,
-      "duration_ms": 0
+      "negative_confirmed": true
     },
     {
       "id": "transformers_compile_config_type",
@@ -151,8 +142,7 @@
         "message": "You provided `compile_config` as an instance of <class 'dict'>, but it must be an instance of `CompileConfig`."
       },
       "positive_confirmed": true,
-      "negative_confirmed": false,
-      "duration_ms": 204
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_rejects_num_return_sequences",
@@ -165,8 +155,7 @@
         "message": "Greedy methods without beam search do not support `num_return_sequences` different than 1 (got 3)."
       },
       "positive_confirmed": true,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_strips_epsilon_cutoff",
@@ -181,8 +170,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_strips_eta_cutoff",
@@ -197,8 +185,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_strips_min_p",
@@ -213,8 +200,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_strips_temperature",
@@ -229,8 +215,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_strips_top_k",
@@ -245,8 +230,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_strips_top_p",
@@ -261,8 +245,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_greedy_strips_typical_p",
@@ -277,8 +260,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_invalid_cache_implementation",
@@ -291,8 +273,7 @@
         "message": "Invalid `cache_implementation` (nonsense). Choose one of: ['static', 'offloaded_static', 'sliding_window', 'hybrid', 'hybrid_chunked', 'mamba', 'quantized', 'static', 'offloaded', 'dynamic']"
       },
       "positive_confirmed": true,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_invalid_early_stopping",
@@ -305,8 +286,7 @@
         "message": "`early_stopping` must be a boolean or 'never', but is sometimes."
       },
       "positive_confirmed": true,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_negative_max_new_tokens",
@@ -319,8 +299,7 @@
         "message": "`max_new_tokens` must be greater than 0, but is -1."
       },
       "positive_confirmed": true,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_negative_pad_token_id",
@@ -335,8 +314,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_num_return_sequences_exceeds_num_beams",
@@ -349,8 +327,7 @@
         "message": "`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2)."
       },
       "positive_confirmed": true,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_single_beam_strips_constraints",
@@ -365,8 +342,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_single_beam_strips_diversity_penalty",
@@ -381,8 +357,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_single_beam_strips_early_stopping",
@@ -397,8 +372,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_single_beam_strips_length_penalty",
@@ -413,8 +387,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     },
     {
       "id": "transformers_single_beam_strips_num_beam_groups",
@@ -429,8 +402,7 @@
         "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
       },
       "positive_confirmed": false,
-      "negative_confirmed": false,
-      "duration_ms": 0
+      "negative_confirmed": false
     }
   ],
   "divergences": [
