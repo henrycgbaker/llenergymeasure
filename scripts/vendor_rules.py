@@ -336,6 +336,10 @@ def _case_to_dict(case: CaseResult) -> dict[str, Any]:
     for optional_key in ("observed_exception", "skipped_reason"):
         if d.get(optional_key) is None:
             d.pop(optional_key, None)
+    # duration_ms is wall-clock noise (±1 ms run-to-run); excluding it from
+    # the envelope keeps successive vendor runs on unchanged source byte-
+    # identical, which breaks the commit-back re-trigger loop.
+    d.pop("duration_ms", None)
     return d
 
 

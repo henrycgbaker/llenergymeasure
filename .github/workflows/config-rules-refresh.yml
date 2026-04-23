@@ -101,15 +101,42 @@ jobs:
           print('fixpoint test passed')
           "
 
+      - name: Compute stable vendor anchor
+        id: anchor
+        # Pin the vendor envelope to the SHA + author date of the most
+        # recent commit that touched any INPUT path. Stable across the
+        # workflow's own commit-back (which only touches the output JSON),
+        # so re-runs produce byte-identical envelopes on unchanged source.
+        # Without this, every re-run emits fresh `vendor_commit` +
+        # `vendored_at` fields, git diff picks them up, commit-back fires,
+        # and the synchronize loops.
+        run: |
+          PATHS=(
+            "docker/Dockerfile.transformers"
+            "configs/validation_rules/transformers.yaml"
+            "scripts/vendor_rules.py"
+            "scripts/_vendor_common.py"
+            "scripts/walkers/transformers.py"
+            "scripts/walkers/_fixpoint_test.py"
+            "scripts/walkers/_base.py"
+            "scripts/update_engine_rules.sh"
+          )
+          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
       - name: Re-vendor transformers rules
         id: vendor
+        env:
+          LLENERGY_VENDOR_FROZEN_AT: ${{ steps.anchor.outputs.date }}
         run: |
           set +e
           uv run python scripts/vendor_rules.py \
             --engine transformers \
             --corpus "${CORPUS_DIR}/transformers.yaml" \
             --out "${VENDORED_DIR}/transformers.json" \
-            --vendor-commit "${GITHUB_SHA}" \
+            --vendor-commit "${{ steps.anchor.outputs.sha }}" \
             --fail-on-divergence
           echo "vendor_exit=$?" >> "$GITHUB_OUTPUT"
           set -e
