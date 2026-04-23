@@ -146,7 +146,12 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore(config): refresh transformers vendored rules"
+          # [skip ci] on the commit-back prevents a re-trigger loop: the
+          # regenerated JSON contains a fresh `vendored_at` timestamp on
+          # every run, so without the skip the auto-triggered synchronize
+          # would fire another vendor run that produces another commit,
+          # ad infinitum.
+          git commit -m "chore(config): refresh transformers vendored rules [skip ci]"
           # --force-with-lease guards against clobbering a concurrent push
           # from the PR author. On stale-ref failure the workflow exits
           # non-zero and a rerun will pick up the latest state.
