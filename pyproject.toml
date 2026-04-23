@@ -173,6 +173,16 @@ layers = [
     "llenergymeasure.config | llenergymeasure.domain",
     "llenergymeasure.utils",
 ]
+ignore_imports = [
+    # Phase 50.2c: config.models consumes vendored validation rules + the
+    # shared DormantField dataclass for the generic @model_validator. The
+    # rules loader and DormantField live under engines/ by design (see
+    # runtime-config-validation.md §4.4) but are foundation-level data, not
+    # engine runtime. These two edges are deliberate and have no runtime
+    # cycle risk (imports are local-inside-function in config.models).
+    "llenergymeasure.config.models -> llenergymeasure.engines.vendored_rules.loader",
+    "llenergymeasure.config.models -> llenergymeasure.engines.protocol",
+]
 
 [[tool.importlinter.contracts]]
 id = "cli-boundary"
@@ -219,4 +229,10 @@ forbidden_modules = [
     "llenergymeasure.results",
     "llenergymeasure.datasets",
 ]
-# No ignore_imports needed - all violations from Phase 38 have been resolved in Phase 39.
+ignore_imports = [
+    # Phase 50.2c: config.models consumes vendored validation rules + the
+    # shared DormantField dataclass. See the matching ignore_imports on the
+    # main-layers contract above for the architectural rationale.
+    "llenergymeasure.config.models -> llenergymeasure.engines.vendored_rules.loader",
+    "llenergymeasure.config.models -> llenergymeasure.engines.protocol",
+]

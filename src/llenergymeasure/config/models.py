@@ -17,11 +17,16 @@ v2.0 removals:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+import logging
+import warnings
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine
+from llenergymeasure.config.warnings import ConfigValidationWarning
+
+logger = logging.getLogger(__name__)
 
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
@@ -35,6 +40,39 @@ if TYPE_CHECKING:
         TransformersConfig,
         VLLMConfig,
     )
+    from llenergymeasure.engines.protocol import DormantField
+    from llenergymeasure.engines.vendored_rules.loader import VendoredRulesLoader
+
+
+#: Module-level per-process cache. Populated lazily on first
+#: :meth:`ExperimentConfig._apply_vendored_rules` call so that module import
+#: never runs the loader (which lives under ``llenergymeasure.engines`` and
+#: would trigger a circular import with :mod:`engines.protocol`).
+#:
+#: Tests that need a fresh loader (e.g. to pick up monkeypatched rules on
+#: disk) can reassign this binding directly or call
+#: :func:`_reset_rules_loader_cache`.
+_RULES_LOADER: VendoredRulesLoader | None = None
+
+
+def _get_rules_loader() -> VendoredRulesLoader:
+    """Return the shared loader, constructing it on first call."""
+    global _RULES_LOADER
+    if _RULES_LOADER is None:
+        # Import via the submodule (not ``engines.__init__``) to avoid the
+        # engines-package import cycle; the package root pulls in
+        # :mod:`engines.protocol`, which imports :class:`ExperimentConfig`
+        # from *this* module.
+        from llenergymeasure.engines.vendored_rules.loader import VendoredRulesLoader
+
+        _RULES_LOADER = VendoredRulesLoader()
+    return _RULES_LOADER
+
+
+def _reset_rules_loader_cache() -> None:
+    """Reset the module-level loader; primarily used by tests."""
+    global _RULES_LOADER
+    _RULES_LOADER = None
 
 
 # =============================================================================
@@ -415,8 +453,6 @@ class ExperimentConfig(BaseModel):
     # Cross-validators
     # -------------------------------------------------------------------------
 
-    _FLASH_ATTENTION_IMPLS: ClassVar[set[str]] = {"flash_attention_2", "flash_attention_3"}
-
     @model_validator(mode="after")
     def validate_engine_section_match(self) -> ExperimentConfig:
         """Engine section must match the engine field.
@@ -463,20 +499,74 @@ class ExperimentConfig(BaseModel):
     # VLLMConfig.dtype / TensorRTConfig.dtype Literal types at field validation
     # (neither engine accepts float32). No separate cross-validator needed.
 
+    # Framework-rule validators (e.g. FlashAttention + float32 rejection) now
+    # live in ``configs/validation_rules/{engine}.yaml`` and are applied by
+    # ``_apply_vendored_rules`` below — never hand-written here.
+
     @model_validator(mode="after")
-    def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:
-        """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32)."""
-        if (
-            self.engine == "transformers"
-            and self.transformers is not None
-            and self.transformers.attn_implementation in self._FLASH_ATTENTION_IMPLS
-            and (self.transformers.dtype or "bfloat16") == "float32"
-        ):
-            raise ValueError(
-                f"attn_implementation='{self.transformers.attn_implementation}' requires "
-                "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
-                "float32 computation."
+    def _apply_vendored_rules(self) -> ExperimentConfig:
+        """Apply the vendored validation-rules corpus for ``self.engine``.
+
+        Each matching rule dispatches by severity:
+
+        - ``error`` → raise ``ValueError`` with ``[rule_id] <message>``
+          (Pydantic wraps this into a ``ValidationError``).
+        - ``warn`` → emit ``ConfigValidationWarning`` via ``warnings.warn``.
+        - ``dormant`` / ``dormant_silent`` → append a ``DormantField`` entry
+          to ``_dormant_observations`` for downstream preflight display and
+          the sidecar audit trail.
+
+        The observation list is attached via ``object.__setattr__`` because
+        Pydantic's ``extra='forbid'`` rejects unknown attributes through the
+        normal assignment path. Consumers read via ``getattr`` with a default
+        of ``[]`` so the attribute's absence is a non-error.
+
+        Missing corpus for an engine is not fatal — the rules layer is
+        additive. A ``FileNotFoundError`` from the loader (e.g. running
+        against an engine without a seeded corpus) is logged at debug level
+        and skipped.
+        """
+        from llenergymeasure.engines.protocol import DormantField
+
+        engine_name = self.engine.value if hasattr(self.engine, "value") else str(self.engine)
+
+        try:
+            rules = _get_rules_loader().load_rules(engine_name).rules
+        except FileNotFoundError:
+            logger.debug("No vendored rules corpus for engine %r; skipping.", engine_name)
+            object.__setattr__(self, "_dormant_observations", [])
+            return self
+
+        dormant_observations: list[DormantField] = []
+        for rule in rules:
+            match = rule.try_match(self)
+            if match is None:
+                continue
+            message = rule.render_message(match)
+            annotated = f"[{rule.id}] {message}"
+            if rule.severity == "error":
+                raise ValueError(annotated)
+            if rule.severity == "warn":
+                warnings.warn(annotated, ConfigValidationWarning, stacklevel=2)
+                continue
+            if rule.severity in ("dormant", "dormant_silent"):
+                dormant_observations.append(
+                    DormantField(
+                        declared_value=match.declared_value,
+                        effective_value=match.effective_value,
+                        reason=annotated,
+                    )
+                )
+                continue
+            # Unknown severity — treat as warning so a typo in the corpus
+            # surfaces at runtime rather than failing silently.
+            warnings.warn(
+                f"[{rule.id}] unknown severity {rule.severity!r}: {message}",
+                ConfigValidationWarning,
+                stacklevel=2,
             )
+
+        object.__setattr__(self, "_dormant_observations", dormant_observations)
         return self
 
 
