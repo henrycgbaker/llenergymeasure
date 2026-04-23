@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Large-scale phase or milestone planning
+    url: https://github.com/henrycgbaker/llenergymeasure/tree/main/.planning
+    about: "Milestone and phase-level planning lives in .planning/ (PROJECT.md, ROADMAP.md, phase docs). Use issues for individual items; use .planning/ for roadmap-level work."
