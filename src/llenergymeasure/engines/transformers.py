@@ -269,6 +269,18 @@ class TransformersEngine:
         """No hardware validation required for Transformers engine."""
         return []
 
+    @staticmethod
+    def check_hardware(config: ExperimentConfig) -> list[str]:
+        """No host-hardware checks required for Transformers at preflight.
+
+        BitsAndBytes checks the visible hardware itself at model load time and
+        surfaces failures through BitsAndBytesConfig's own validation path.
+        FlashAttention's dtype requirement surfaces via a hand-written
+        Pydantic validator today and will move to the vendored corpus once the
+        PreTrainedModel walker ships (pipeline replan, 2026-04-23).
+        """
+        return []
+
     # -------------------------------------------------------------------------
     # EnginePlugin: probe_config
     # -------------------------------------------------------------------------

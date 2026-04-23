@@ -103,6 +103,29 @@ class EnginePlugin(Protocol):
         """Validate config against hardware capabilities. Returns error strings (empty = valid)."""
         ...
 
+    def check_hardware(self, config: ExperimentConfig) -> list[str]:
+        """Return host-hardware compatibility errors (empty list when compatible).
+
+        Runs at preflight — queries NVML (or similar) and compares the visible
+        GPU's capability against the config's quant / dtype / attention
+        requirements. Parallel to the generic vendored-rules validator on
+        :class:`ExperimentConfig`; the split is load-bearing because hardware
+        rules depend on the user's GPU and therefore cannot be vendored at CI
+        time (the vendor container has no GPU).
+
+        Contract:
+          - Never raises; errors propagate via the returned list.
+          - Returns ``[]`` when no GPU is visible (cannot block at config time
+            inside a container without a visible device).
+          - Pure — must not load weights, allocate GPU memory, or construct
+            engine contexts.
+
+        Framework-rule checks (config x library semantics) live in the
+        vendored rules corpus and are applied by the generic
+        ``_apply_vendored_rules`` model validator, not here.
+        """
+        ...
+
     def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
         """Probe *config* for dormancy, framework errors, and effective params.
 

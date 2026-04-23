@@ -365,20 +365,26 @@ class TensorRTEngine:
     def validate_config(self, config: ExperimentConfig) -> list[str]:
         """Validate TensorRT-LLM hardware and quantisation compatibility.
 
-        Thin wrapper around :meth:`_check_hardware_compat`. Retained on the
-        plugin protocol during the PR 50.1 → 50.3 transition; callers will be
-        migrated to :meth:`probe_config` in a later PR.
+        Thin wrapper around :meth:`check_hardware`. Retained on the plugin
+        protocol while the harness still calls ``validate_config`` directly;
+        the follow-up probe-adapter PR migrates preflight to
+        ``build_config_probe`` and retires this method.
         """
-        return self._check_hardware_compat(config)
+        return self.check_hardware(config)
 
     @staticmethod
-    def _check_hardware_compat(config: ExperimentConfig) -> list[str]:
+    def check_hardware(config: ExperimentConfig) -> list[str]:
         """Check SM capability + FP8 requirements against the visible GPU.
 
-        Shared between :meth:`validate_config` and :meth:`probe_config` (T5
-        fallback). Checks:
+        Independent of engine-kwargs construction: the hardware check runs on
+        its own data path, so a T0 kwargs-build failure can no longer
+        short-circuit it (pre-check_hardware, ``probe_config`` returned early
+        on T0 failure and skipped the T5 hardware step).
+
+        Checks:
           - SM >= 7.5 (Turing minimum for TRT-LLM)
           - FP8 requires SM >= 8.9 (Ada Lovelace / Hopper); A100 is SM 8.0
+          - FP8 KV cache requires SM >= 8.9
 
         Returns empty list when no GPU is visible (cannot block at config
         time inside a container without a visible device).
@@ -682,7 +688,7 @@ class TensorRTEngine:
         # When LlmArgs ran it already calls NVML internally (OQ-4); re-running
         # the static check would duplicate errors. Skip T5 in that case.
         if not llmargs_ran or not self._probe_has_gpu_access():
-            for err in self._check_hardware_compat(config):
+            for err in self.check_hardware(config):
                 if err not in errors:
                     errors.append(err)
 

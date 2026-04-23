@@ -75,6 +75,7 @@ def test_engine_plugin_protocol_methods():
         "run_inference",
         "cleanup",
         "validate_config",
+        "check_hardware",
     ]
     for method in expected_methods:
         assert method in dir(EnginePlugin), f"EnginePlugin missing: {method}"
