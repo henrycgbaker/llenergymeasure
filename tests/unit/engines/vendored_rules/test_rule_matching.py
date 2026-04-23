@@ -129,6 +129,32 @@ def test_comparison_operators_are_none_safe() -> None:
     assert evaluate_predicate(None, {">": 0}) is False
 
 
+def test_neq_and_not_equal_agree_on_none_safety() -> None:
+    # Regression guard: `!=` and `not_equal` MUST produce the same verdict on
+    # None actual. Corpus authors swap between the two spellings freely; a
+    # None-safety divergence would mean two-rules-with-identical-predicate
+    # behave differently based on spelling. Both should NOT fire on a missing
+    # field.
+    assert evaluate_predicate(None, {"!=": 1}) is False
+    assert evaluate_predicate(None, {"not_equal": 1}) is False
+    # Non-None still fires symmetrically.
+    assert evaluate_predicate(2, {"!=": 1}) is True
+    assert evaluate_predicate(2, {"not_equal": 1}) is True
+
+
+def test_in_and_not_in_reject_string_spec() -> None:
+    # Naked string spec for `in` would silently do substring matching
+    # ("a" in "abc" → True), which is not what corpus authors mean.
+    with pytest.raises(TypeError, match="requires list/tuple/set"):
+        evaluate_predicate("a", {"in": "abc"})
+    with pytest.raises(TypeError, match="requires list/tuple/set"):
+        evaluate_predicate("x", {"not_in": "xyz"})
+    # List / tuple / set / frozenset all accepted.
+    assert evaluate_predicate("a", {"in": ["a", "b"]}) is True
+    assert evaluate_predicate("a", {"in": ("a", "b")}) is True
+    assert evaluate_predicate("a", {"in": {"a", "b"}}) is True
+
+
 # ---------------------------------------------------------------------------
 # Type predicates (type_is / type_is_not)
 # ---------------------------------------------------------------------------
@@ -207,6 +233,52 @@ def test_resolve_field_path_mixed_dict_and_attr() -> None:
     config = _Config(transformers=_Transformers(sampling=_Sampling(temperature=0.5)))
     # Works even when the entry point is an attribute chain into a nested dataclass.
     assert resolve_field_path(config, "transformers.sampling.temperature") == 0.5
+
+
+def test_resolve_field_path_skips_bound_methods() -> None:
+    # Regression guard: a plain object with a method named like a would-be
+    # field ("items", "copy", "json", etc.) must NOT return the bound method.
+    # The predicate engine would otherwise match on `method_is_not_None` and
+    # a corpus rule targeting the field would silently always-fire.
+
+    class HasItemsMethod:
+        def items(self) -> list[str]:  # resembles a Pydantic-style name
+            return ["a", "b"]
+
+    obj = HasItemsMethod()
+    assert resolve_field_path(obj, "items") is None
+
+
+def test_resolve_field_path_pydantic_field_wins_over_method_name() -> None:
+    # Pydantic models carry a .model_fields mapping that is the authoritative
+    # field set. If a corpus rule targets a field whose name collides with a
+    # method on the model, the field lookup wins.
+    pydantic = pytest.importorskip("pydantic")
+
+    class M(pydantic.BaseModel):
+        items: list[str] = pydantic.Field(default_factory=list)
+        copy_count: int = 0
+
+    m = M(items=["x"], copy_count=3)
+    assert resolve_field_path(m, "items") == ["x"]
+    assert resolve_field_path(m, "copy_count") == 3
+
+
+def test_resolve_field_path_dataclass_field_wins_over_method_name() -> None:
+    # Dataclasses expose __dataclass_fields__ — same treatment.
+    from dataclasses import dataclass as _dc
+
+    @_dc
+    class HasItemsField:
+        items: list[str]
+
+        def copy(self) -> HasItemsField:
+            return HasItemsField(items=list(self.items))
+
+    obj = HasItemsField(items=["y"])
+    assert resolve_field_path(obj, "items") == ["y"]
+    # `copy` is a method; not a field → None.
+    assert resolve_field_path(obj, "copy") is None
 
 
 # ---------------------------------------------------------------------------

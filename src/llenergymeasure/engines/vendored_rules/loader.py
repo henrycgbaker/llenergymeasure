@@ -29,6 +29,59 @@ refuses partial reads to avoid silently accepting a future schema shape.
 """
 
 
+Severity = Literal["dormant", "warn", "error"]
+"""Severity tier a rule match produces at validation time.
+
+- ``dormant`` — the config still runs, but a field is silently ignored or
+  coerced by the engine. Observable-but-user-invisible; the rule surfaces
+  this.
+- ``warn`` — the engine announces a suboptimal setting at construct or
+  runtime but still proceeds.
+- ``error`` — the engine raises and the config cannot run.
+"""
+
+Outcome = Literal[
+    "dormant_silent",
+    "dormant_announced",
+    "warn",
+    "error",
+    "pass",
+]
+"""What the engine does when the rule's predicate holds.
+
+- ``dormant_silent`` — the engine silently normalises or ignores
+  (observable only via ``extract_effective_params`` post-construction).
+- ``dormant_announced`` — the engine writes to a ``minor_issues`` dict /
+  logger, but the config still runs.
+- ``warn`` — the engine calls ``warnings.warn(...)`` or equivalent.
+- ``error`` — the engine raises at construct / validate time.
+- ``pass`` — the predicate matched but the engine handles it cleanly;
+  used for positive-reference rules.
+"""
+
+EmissionChannel = Literal[
+    "warnings_warn",
+    "logger_warning",
+    "logger_warning_once",
+    "minor_issues_dict",
+    "none",
+    "runtime_exception",
+]
+"""How the engine user-visibly signals the issue.
+
+- ``warnings_warn`` — Python ``warnings.warn(...)``.
+- ``logger_warning`` / ``logger_warning_once`` — stdlib logger.
+- ``minor_issues_dict`` — an internal dict (e.g. HF's ``minor_issues``)
+  whose presence is user-observable via strict-mode raise OR log.
+- ``none`` — no user-visible emission (silent coercion or raise).
+- ``runtime_exception`` — exception raised at engine construct / runtime.
+
+Canonical rule: ``minor_issues_dict`` alone is an internal signal; if HF
+composes the dict then emits via ``logger.warning_once``, the
+user-visible channel is ``logger_warning_once``. Corpus authors should
+record what users see, not the internal staging buffer.
+"""
+
 AddedBy = Literal[
     "ast_walker",
     "introspection",
@@ -54,6 +107,9 @@ Five discovery paths with distinct trust/verifiability profiles:
   canonicaliser-gap detection (needs human generalisation before landing).
 """
 
+VALID_SEVERITY: frozenset[str] = frozenset(get_args(Severity))
+VALID_OUTCOME: frozenset[str] = frozenset(get_args(Outcome))
+VALID_EMISSION_CHANNEL: frozenset[str] = frozenset(get_args(EmissionChannel))
 VALID_ADDED_BY: frozenset[str] = frozenset(get_args(AddedBy))
 
 
@@ -61,8 +117,29 @@ class UnsupportedSchemaVersionError(ValueError):
     """Vendored rules corpus has a schema_version major the loader can't parse."""
 
 
-class UnknownAddedByError(ValueError):
-    """Rule entry has an ``added_by`` value outside the :data:`AddedBy` enum."""
+class UnknownEnumValueError(ValueError):
+    """Rule entry has a closed-enum field value outside the permitted set.
+
+    Covers ``added_by``, ``severity``, ``expected_outcome.outcome``, and
+    ``expected_outcome.emission_channel``. Subclassed per field for callers
+    that want to distinguish.
+    """
+
+
+class UnknownAddedByError(UnknownEnumValueError):
+    """Rule entry has an ``added_by`` value outside :data:`AddedBy`."""
+
+
+class UnknownSeverityError(UnknownEnumValueError):
+    """Rule entry has a ``severity`` value outside :data:`Severity`."""
+
+
+class UnknownOutcomeError(UnknownEnumValueError):
+    """Rule entry has an ``expected_outcome.outcome`` value outside :data:`Outcome`."""
+
+
+class UnknownEmissionChannelError(UnknownEnumValueError):
+    """Rule entry has an ``expected_outcome.emission_channel`` value outside :data:`EmissionChannel`."""
 
 
 # ---------------------------------------------------------------------------
@@ -170,30 +247,49 @@ class VendoredRules:
 
 
 _OPERATOR_HANDLERS: dict[str, Any] = {
+    # Comparison operators: all None-safe on the *asymmetric* ones (a missing
+    # field doesn't trip ``!=`` / ``not_equal`` / ``<`` / etc). ``==`` and
+    # ``equals`` stay as-is — `None == x` evaluates to `False` for any
+    # non-None `x`, so they naturally don't fire on None.
+    # ``equals`` / ``not_equal`` are word-form aliases of ``==`` / ``!=``
+    # and MUST match their symbol forms exactly — corpus authors swap them.
     "==": lambda a, b: a == b,
-    "!=": lambda a, b: a != b,
+    "!=": lambda a, b: a is not None and a != b,
     "<": lambda a, b: a is not None and a < b,
     "<=": lambda a, b: a is not None and a <= b,
     ">": lambda a, b: a is not None and a > b,
     ">=": lambda a, b: a is not None and a >= b,
-    "in": lambda a, b: a in b,
-    "not_in": lambda a, b: a not in b,
-    "present": lambda a, _: a is not None,
-    "absent": lambda a, _: a is None,
     "equals": lambda a, b: a == b,
     "not_equal": lambda a, b: a is not None and a != b,
-    # Type predicates match by the concrete type's __name__. They are
-    # None-safe: a missing field is treated as not-firing rather than
-    # tripping ``type_is_not``. Spec takes a bare string ("bool", "int",
-    # "dict", "dtype") or a list of strings (any-of); predicate holds if
-    # the field's concrete type name matches (resp. does not match) any.
+    # Membership operators: reject non-iterable specs (a string spec would
+    # otherwise fall through to substring match — "ab" in "abc" is True,
+    # which surprises corpus authors writing {"in": "abc"} thinking "exactly
+    # one of these three chars").
+    "in": lambda a, b: _require_iterable(b, "in") and a in b,
+    "not_in": lambda a, b: _require_iterable(b, "not_in") and a not in b,
+    # Presence operators: no None-guard needed (they're the test for None).
+    "present": lambda a, _: a is not None,
+    "absent": lambda a, _: a is None,
+    # Type predicates match by the concrete type's __name__. None-safe (a
+    # missing field doesn't trip ``type_is_not``). Spec takes a bare string
+    # or a list of strings (any-of); predicate holds if the field's concrete
+    # type name matches (resp. does not match) any. See :func:`_type_name`
+    # for the type-name format and its known ambiguities.
     "type_is": lambda a, b: a is not None and _type_name(a) in _as_name_set(b),
     "type_is_not": lambda a, b: a is not None and _type_name(a) not in _as_name_set(b),
 }
 
 
 def _type_name(value: Any) -> str:
-    """Return the concrete class name of ``value`` (not ``type(value)`` repr)."""
+    """Return the concrete class name of ``value`` — ``type(value).__name__``.
+
+    **Collision limitation:** this is the bare class name without the module
+    qualifier, so unrelated libraries that happen to use the same class name
+    (e.g. ``torch.dtype`` and ``numpy.dtype``) can't be distinguished with
+    ``type_is: "dtype"`` alone. Disambiguate with a companion predicate
+    (``present`` + path specificity) or use a bare-Python type (``bool``,
+    ``int``, ``str``, ``list``, ``dict``) where collisions don't arise.
+    """
     return type(value).__name__
 
 
@@ -202,6 +298,20 @@ def _as_name_set(spec: Any) -> frozenset[str]:
     if isinstance(spec, str):
         return frozenset({spec})
     return frozenset(str(x) for x in spec)
+
+
+def _require_iterable(b: Any, op_name: str) -> bool:
+    """Reject non-iterable specs for ``in`` / ``not_in`` at evaluation time.
+
+    Naked string specs would silently do substring matching, which is not
+    what corpus authors mean when they write ``{"in": "abc"}``. Force a
+    list/tuple/set by raising on anything else.
+    """
+    if isinstance(b, (list, tuple, set, frozenset)):
+        return True
+    raise TypeError(
+        f"Operator {op_name!r} requires list/tuple/set spec; got {type(b).__name__}: {b!r}"
+    )
 
 
 def evaluate_predicate(actual: Any, spec: Any) -> bool:
@@ -240,12 +350,37 @@ def resolve_field_path(config: Any, path: str) -> Any:
     Missing attributes return ``None`` rather than raising — the predicate
     engine treats ``None`` as an absent field. Supports nested Pydantic models,
     dataclasses, and plain dicts mixed in any combination.
+
+    **Method collision guard:** ``getattr(pydantic_model, "items")`` returns
+    the bound ``.items()`` method, not a field named ``items``. Pydantic ships
+    several attribute names (``copy``, ``dict``, ``json``, ``model_copy``,
+    ``model_dump``, ``model_fields``, ``items``, ``keys``, ``values``) that
+    would collide with field lookups. We check `__dict__` / `model_fields`
+    first and only fall back to `getattr` when the key isn't a known field,
+    ensuring that a corpus predicate on a real field wins over an accidental
+    method match.
     """
     current: Any = config
     for part in path.split("."):
         if current is None:
             return None
-        current = current.get(part) if isinstance(current, dict) else getattr(current, part, None)
+        if isinstance(current, dict):
+            current = current.get(part)
+            continue
+        # Pydantic models — use model_fields for the authoritative field set.
+        model_fields = getattr(type(current), "model_fields", None)
+        if isinstance(model_fields, dict) and part in model_fields:
+            current = getattr(current, part, None)
+            continue
+        # Dataclasses — use __dataclass_fields__ for the authoritative field set.
+        dc_fields = getattr(type(current), "__dataclass_fields__", None)
+        if isinstance(dc_fields, dict) and part in dc_fields:
+            current = getattr(current, part, None)
+            continue
+        # Fallback: plain objects. Reject callables — they're methods or
+        # descriptors, never config field values.
+        candidate = getattr(current, part, None)
+        current = None if callable(candidate) else candidate
     return current
 
 
@@ -280,24 +415,42 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
     match = raw["match"]
     if not isinstance(match, dict) or "fields" not in match:
         raise ValueError(f"Rule {raw['id']} has malformed match (missing `fields`): {match!r}")
+    rule_id = raw["id"]
+    severity = str(raw["severity"])
+    if severity not in VALID_SEVERITY:
+        raise UnknownSeverityError(
+            f"Rule {rule_id!r} has severity={severity!r}; must be one of: {sorted(VALID_SEVERITY)}"
+        )
+    expected_outcome = dict(raw["expected_outcome"])
+    outcome = str(expected_outcome.get("outcome", ""))
+    if outcome not in VALID_OUTCOME:
+        raise UnknownOutcomeError(
+            f"Rule {rule_id!r} has expected_outcome.outcome={outcome!r}; "
+            f"must be one of: {sorted(VALID_OUTCOME)}"
+        )
+    emission_channel = str(expected_outcome.get("emission_channel", ""))
+    if emission_channel not in VALID_EMISSION_CHANNEL:
+        raise UnknownEmissionChannelError(
+            f"Rule {rule_id!r} has expected_outcome.emission_channel={emission_channel!r}; "
+            f"must be one of: {sorted(VALID_EMISSION_CHANNEL)}"
+        )
     added_by = str(raw.get("added_by", "manual_seed"))
     if added_by not in VALID_ADDED_BY:
         raise UnknownAddedByError(
-            f"Rule {raw['id']!r} has added_by={added_by!r}; "
-            f"must be one of: {sorted(VALID_ADDED_BY)}"
+            f"Rule {rule_id!r} has added_by={added_by!r}; must be one of: {sorted(VALID_ADDED_BY)}"
         )
     return Rule(
-        id=str(raw["id"]),
+        id=str(rule_id),
         engine=str(raw["engine"]),
         library=str(raw.get("library", raw["engine"])),
         rule_under_test=str(raw.get("rule_under_test", "")),
-        severity=str(raw["severity"]),
+        severity=severity,
         native_type=str(raw["native_type"]),
         match_engine=str(match.get("engine", raw["engine"])),
         match_fields=dict(match["fields"]),
         kwargs_positive=dict(raw["kwargs_positive"]),
         kwargs_negative=dict(raw["kwargs_negative"]),
-        expected_outcome=dict(raw["expected_outcome"]),
+        expected_outcome=expected_outcome,
         message_template=raw.get("message_template"),
         walker_source=dict(raw.get("walker_source") or {}),
         references=tuple(raw.get("references") or ()),

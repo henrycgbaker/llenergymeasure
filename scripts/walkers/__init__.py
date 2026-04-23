@@ -1,12 +1,20 @@
-"""AST walkers that extract validation rules from engine library source.
+"""Walkers that extract validation rules from engine library source.
 
-Each ``scripts/walkers/{engine}.py`` walker is version-pinned to a specific
-library release via :data:`_base.TESTED_AGAINST_VERSIONS` and emits a
-corpus-compatible YAML document of rule candidates.
+Each ``scripts/walkers/{engine}.py`` walker (added per-engine in follow-up
+PRs) is version-pinned to a specific library release via the walker module's
+``TESTED_AGAINST_VERSIONS`` and emits a corpus-compatible YAML document of
+rule candidates.
 
-The transformers walker is an introspection wrapper around
-``GenerationConfig.validate()`` rather than a full AST walker — see
-:mod:`scripts.walkers.transformers` for the rationale. vLLM and TensorRT-LLM
-walkers (added in later phases) use the AST-extraction primitives in
-:mod:`scripts.walkers._base`.
+Two extraction mechanisms are in scope:
+
+- **Library-API introspection** — when the library exposes a structured
+  validation method (e.g. HF transformers'
+  ``GenerationConfig.validate(strict=True)``), the walker simply wraps the
+  call and formats the results.
+- **AST source parsing** — when no such API exists (vLLM, TRT-LLM), the
+  walker parses the library source AST using the primitives in
+  :mod:`scripts.walkers._base`.
+
+No concrete walker ships in this module today; they land as independent PRs
+per engine.
 """

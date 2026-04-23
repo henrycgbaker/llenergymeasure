@@ -1,8 +1,8 @@
 """Tests for :mod:`scripts.walkers._base`.
 
-Covers AST primitives, pattern detectors, filters, confidence scoring, the
-helper tracer, and structured error types — all on synthetic AST fixtures so
-the tests never depend on a specific library version.
+Covers AST primitives, pattern detectors, filters, confidence scoring,
+class/method finders, and structured error types — all on synthetic AST
+fixtures so the tests never depend on a specific library version.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.walkers._base import (  # noqa: E402
-    ALL_DETECTORS,
     ConditionalLoggerWarningDetector,
     ConditionalRaiseDetector,
     ConditionalSelfAssignDetector,
@@ -31,6 +30,7 @@ from scripts.walkers._base import (  # noqa: E402
     WalkerVersionMismatchError,
     call_func_path,
     check_installed_version,
+    default_detectors,
     extract_assign_target,
     extract_condition_fields,
     extract_loop_literal_iterable,
@@ -224,6 +224,22 @@ def test_conditional_logger_warning_detector_rejects_other_methods() -> None:
     assert detector.detect(node.body[0]) is None
 
 
+def test_conditional_logger_warning_detector_rejects_nested_logger_paths() -> None:
+    # Regression guard: `logger.sub.warning(...)` and `self.logger.warning(...)`
+    # MUST NOT match. The detector is deliberately strict (exactly two-element
+    # path rooted at `logger`) to avoid false-positive attribution from helper
+    # loggers. A library that genuinely uses a nested logger needs a
+    # library-specific detector.
+    detector = ConditionalLoggerWarningDetector()
+    for source in (
+        'if cond:\n    logger.sub.warning("msg")',
+        'if cond:\n    self.logger.warning("msg")',
+        'if cond:\n    module.logger.warning_once("msg")',
+    ):
+        node = _parse_if(source)
+        assert detector.detect(node.body[0]) is None, f"should reject: {source!r}"
+
+
 def test_minor_issues_dict_assign_detector() -> None:
     detector = MinorIssuesDictAssignDetector()
     node = _parse_if('if self.x:\n    minor_issues["temperature"] = msg.format(x=self.x)')
@@ -233,10 +249,13 @@ def test_minor_issues_dict_assign_detector() -> None:
     assert pattern.affected_field == "temperature"
 
 
-def test_all_detectors_registered_and_ordered() -> None:
-    # The detector tuple is a fixed public sequence. The ordering matters:
-    # raise before self-assign, minor_issues before generic self-assign.
-    names = [type(d).__name__ for d in ALL_DETECTORS]
+def test_default_detectors_registered_and_ordered() -> None:
+    # The default bundle ordering matters — walkers that use
+    # default_detectors() get the most-specific detector first on each
+    # statement. Raise before self-assign (so raise+rollback chains are
+    # attributed to the raise); minor_issues before generic self-assign
+    # (so HF's dict-assign wins over the fallback).
+    names = [type(d).__name__ for d in default_detectors()]
     assert names.index("ConditionalRaiseDetector") < names.index("ConditionalSelfAssignDetector")
     assert names.index("MinorIssuesDictAssignDetector") > names.index(
         "ConditionalSelfAssignDetector"
