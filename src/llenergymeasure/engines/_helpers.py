@@ -59,6 +59,22 @@ def extract_effective_params(
     return {k: v for k, v in raw.items() if not k.startswith("_") or k in allow}
 
 
+def library_version(module_name: str) -> str:
+    """Return ``__version__`` of an imported library or ``"unknown"`` on failure.
+
+    Shared helper for the H3 capture path — all three engines publish the
+    library version alongside their effective-params dump so researchers can
+    disambiguate identical H3 hashes across library versions.
+    """
+    try:
+        import importlib
+
+        mod = importlib.import_module(module_name)
+        return str(getattr(mod, "__version__", "unknown"))
+    except Exception:
+        return "unknown"
+
+
 def _dump_raw(native_obj: Any) -> dict[str, Any]:
     """Return a ``dict`` of every attribute observable on ``native_obj``.
 

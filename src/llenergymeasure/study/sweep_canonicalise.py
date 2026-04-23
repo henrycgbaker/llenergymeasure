@@ -140,7 +140,7 @@ def _rule_normalisations(rule: Rule) -> dict[str, Any]:
             # The "canonical" state is the not_equal sentinel — applying the
             # rule drives the field back to the library-observed default.
             out[path] = spec["not_equal"]
-        elif spec.get("present") and "not_equal" not in spec and "in" not in spec:
+        elif spec.get("present") and "in" not in spec:
             # Subject field marked only as "present" — strip to None (the
             # library either ignores it, or the effective value is captured
             # later via H3).
@@ -251,21 +251,16 @@ def dedup_sweep(
         return DedupResult(canonical_configs=[])
 
     resolved_loader = loader or VendoredRulesLoader()
-    rule_cache: dict[str, tuple[Rule, ...]] = {}
+    explicit_rules = tuple(rules) if rules is not None else None
 
     def _rules_for(cfg: ExperimentConfig) -> tuple[Rule, ...]:
-        if rules is not None:
-            return tuple(rules)
+        if explicit_rules is not None:
+            return explicit_rules
         engine = cfg.engine.value if hasattr(cfg.engine, "value") else str(cfg.engine)
-        cached = rule_cache.get(engine)
-        if cached is not None:
-            return cached
         try:
-            loaded = resolved_loader.load_rules(engine).rules
+            return resolved_loader.load_rules(engine).rules
         except FileNotFoundError:
-            loaded = ()
-        rule_cache[engine] = loaded
-        return loaded
+            return ()
 
     canonicalised: list[ExperimentConfig] = []
     hashes: list[str] = []
