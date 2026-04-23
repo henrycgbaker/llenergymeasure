@@ -181,7 +181,7 @@ def evaluate_predicate(actual: Any, spec: Any) -> bool:
             if not handler(actual, value):
                 return False
         return True
-    return actual == spec
+    return bool(actual == spec)
 
 
 # ---------------------------------------------------------------------------
