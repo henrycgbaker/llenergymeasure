@@ -56,16 +56,6 @@ __all__ = [
 ]
 
 
-class DedupModeError(ValueError):
-    """Raised when ``--source h3-collisions`` runs against a ``dedup_mode=off`` study.
-
-    Per sweep-dedup.md §4.4, the post-H1-dedup invariant only holds when dedup
-    was ON for the run. With dedup off, ``report-gaps`` falls back to
-    candidate-only mode — :func:`scan_h3_collisions` still emits entries but
-    flags them as ``UNVERIFIED`` and refuses ``--open-pr``.
-    """
-
-
 # ---------------------------------------------------------------------------
 # Candidate / report types
 # ---------------------------------------------------------------------------
