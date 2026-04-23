@@ -29,7 +29,6 @@ and loaders share the same shape. Sibling by design, per §5 of the design doc.
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import os
 import sys
@@ -152,14 +151,11 @@ def _run_transformers(
 
 
 def _construct_and_validate_generation_config(kwargs: dict[str, Any], *, strict: bool) -> Any:
+    # Corpus kwargs pass through verbatim — the raw YAML shape IS the rule
+    # under test (e.g. compile_config receives a raw dict on purpose).
     from transformers import GenerationConfig  # type: ignore
 
-    # Some kwargs (e.g. "constraints") take Python objects; YAML serialisation
-    # leaves them as raw dicts/strs. The ``_prepare_transformers_kwargs``
-    # helper intentionally does not transform — the raw shape is the rule
-    # under test.
-    prepared = _prepare_transformers_kwargs(kwargs)
-    gc = GenerationConfig(**prepared)
+    gc = GenerationConfig(**kwargs)
     gc.validate(strict=strict)
     return gc
 
@@ -175,16 +171,6 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
     module = __import__(module_path, fromlist=[class_name])
     cls = getattr(module, class_name)
     return cls(**kwargs)
-
-
-def _prepare_transformers_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Coerce YAML-deserialised kwargs into transformers-digestible shapes."""
-    prepared = copy.deepcopy(kwargs)
-    # ``compile_config`` / ``watermarking_config`` in the corpus intentionally
-    # pass raw dicts / None — that's the rule under test. No transformation.
-    # ``bnb_4bit_compute_dtype`` passes string dtype names; bnb accepts those
-    # for the rule under test.
-    return prepared
 
 
 _ENGINE_RUNNERS = {
@@ -258,13 +244,11 @@ def vendor_rule(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResu
     emission = classify_emission_channel(pos)
 
     expected = dict(rule.get("expected_outcome") or {})
-    positive_confirmed = _positive_confirms(expected, outcome, emission, silent_normalisations)
-    negative_confirmed = _negative_confirms(
-        neg,
-        silent_normalisations_on_negative=(
-            diff_input_vs_state(kwargs_negative, neg.observed_state) if neg.observed_state else {}
-        ),
+    positive_confirmed = _positive_confirms(expected, outcome)
+    neg_silent = (
+        diff_input_vs_state(kwargs_negative, neg.observed_state) if neg.observed_state else {}
     )
+    negative_confirmed = _negative_confirms(neg, neg_silent)
 
     observed_messages = list(pos.warnings_captured) + list(pos.logger_messages)
     observed_exception: dict[str, str] | None = None
@@ -287,35 +271,35 @@ def vendor_rule(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResu
     )
 
 
-def _positive_confirms(
-    expected: dict[str, Any],
-    observed_outcome: str,
-    observed_emission: str,
-    silent_normalisations: dict[str, Any],
-) -> bool:
-    """True iff the rule fired on the positive kwargs as declared."""
+_FIRING_OUTCOMES = frozenset({"error", "warn", "dormant_announced", "dormant_silent"})
+
+
+def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
+    """True iff the rule fired on the positive kwargs as declared.
+
+    When the corpus declares a specific outcome, positive_confirmed requires
+    an exact match. When the corpus leaves ``outcome`` unset, we accept any
+    non-``no_op`` observation as confirmation.
+    """
     expected_outcome = expected.get("outcome")
-    if expected_outcome in {"error", "warn", "dormant_announced", "dormant_silent"}:
+    if expected_outcome in _FIRING_OUTCOMES:
         return observed_outcome == expected_outcome
     return observed_outcome != "no_op"
 
 
-def _negative_confirms(
-    neg: CaptureBuffers, *, silent_normalisations_on_negative: dict[str, Any]
-) -> bool:
+def _negative_confirms(neg: CaptureBuffers, silent_normalisations: dict[str, Any]) -> bool:
     """True iff the rule did NOT fire on the negative kwargs.
 
-    "Did not fire" = no exception, no warning, no logged message, no silent
-    normalisation. This is a strict definition on purpose; it catches dead
-    walker entries where ``kwargs_negative`` still happens to trip the rule.
+    Strict definition — any of exception / warn / logger / silent
+    normalisation counts as firing. Catches dead walker entries where
+    ``kwargs_negative`` still happens to trip the rule.
     """
-    if neg.exception_type is not None:
-        return False
-    if neg.warnings_captured:
-        return False
-    if neg.logger_messages:
-        return False
-    return not silent_normalisations_on_negative
+    return (
+        neg.exception_type is None
+        and not neg.warnings_captured
+        and not neg.logger_messages
+        and not silent_normalisations
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -350,15 +334,10 @@ def assemble_envelope(
 
 def _case_to_dict(case: CaseResult) -> dict[str, Any]:
     d = asdict(case)
-    # Prune nulls/empties for a quieter envelope.
-    if d.get("observed_exception") is None:
-        d.pop("observed_exception", None)
-    if not d.get("observed_messages"):
-        d["observed_messages"] = []
-    if not d.get("observed_silent_normalisations"):
-        d["observed_silent_normalisations"] = {}
-    if d.get("skipped_reason") is None:
-        d.pop("skipped_reason", None)
+    # Drop nullable optional fields when unset for a quieter envelope.
+    for optional_key in ("observed_exception", "skipped_reason"):
+        if d.get(optional_key) is None:
+            d.pop(optional_key, None)
     return d
 
 
@@ -390,9 +369,12 @@ def vendor_engine(
     divergences: list[Divergence] = []
 
     for rule in corpus.get("rules", []):
+        # VendorError (and subclasses) propagate — they indicate misconfig, not
+        # a library behaviour finding. Any other Exception gets recorded as a
+        # per-rule error so one bad rule doesn't abort the full vendor run.
         try:
             case = vendor_rule(engine, rule, gpu_mode=gpu_mode)
-        except (VendorEngineNotImportable, VendorError):
+        except VendorError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
             case = CaseResult(

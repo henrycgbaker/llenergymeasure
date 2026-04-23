@@ -24,7 +24,7 @@ Corpus vs vendored JSON:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -375,42 +375,24 @@ def _overlay_vendored_observations(
     consumers (the generic validator in 50.2c) can act on CI-validated truth.
     """
     cases = {c["id"]: c for c in vendored.get("cases", []) if isinstance(c, dict) and "id" in c}
-    overlaid: list[Rule] = []
-    for rule in parsed.rules:
-        observed = cases.get(rule.id)
-        if observed is None:
-            overlaid.append(rule)
-            continue
-        merged_expected = dict(rule.expected_outcome)
-        if "outcome" in observed:
-            merged_expected.setdefault("observed_outcome", observed["outcome"])
-        if "emission_channel" in observed:
-            merged_expected.setdefault("observed_emission_channel", observed["emission_channel"])
-        if observed.get("observed_messages"):
-            merged_expected.setdefault("observed_messages", list(observed["observed_messages"]))
-        overlaid.append(
-            Rule(
-                id=rule.id,
-                engine=rule.engine,
-                library=rule.library,
-                rule_under_test=rule.rule_under_test,
-                severity=rule.severity,
-                native_type=rule.native_type,
-                match_engine=rule.match_engine,
-                match_fields=dict(rule.match_fields),
-                kwargs_positive=dict(rule.kwargs_positive),
-                kwargs_negative=dict(rule.kwargs_negative),
-                expected_outcome=merged_expected,
-                message_template=rule.message_template,
-                walker_source=dict(rule.walker_source),
-                references=rule.references,
-                added_by=rule.added_by,
-                added_at=rule.added_at,
-            )
-        )
-    return VendoredRules(
-        engine=parsed.engine,
-        schema_version=parsed.schema_version,
-        engine_version=parsed.engine_version,
-        rules=tuple(overlaid),
-    )
+    overlaid = tuple(_overlay_rule(rule, cases.get(rule.id)) for rule in parsed.rules)
+    return replace(parsed, rules=overlaid)
+
+
+_OBSERVED_KEY_MAP = {
+    "outcome": "observed_outcome",
+    "emission_channel": "observed_emission_channel",
+    "observed_messages": "observed_messages",
+}
+
+
+def _overlay_rule(rule: Rule, observed: dict[str, Any] | None) -> Rule:
+    """Merge observed-* fields from a vendor case into a rule's expected_outcome."""
+    if observed is None:
+        return rule
+    merged = dict(rule.expected_outcome)
+    for vendored_key, expected_key in _OBSERVED_KEY_MAP.items():
+        value = observed.get(vendored_key)
+        if value not in (None, [], {}):
+            merged.setdefault(expected_key, list(value) if isinstance(value, list) else value)
+    return replace(rule, expected_outcome=merged)
