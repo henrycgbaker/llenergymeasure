@@ -510,11 +510,11 @@ class ExperimentConfig(BaseModel):
     @model_validator(mode="after")
     def _apply_vendored_rules(self) -> ExperimentConfig:
         # ``object.__setattr__`` bypasses Pydantic's ``extra='forbid'``;
-        # consumers read via ``cfg._dormant_observations``. Missing corpus
-        # is non-fatal — the rules layer is additive.
+        # consumers read via ``cfg._dormant_observations`` (dict keyed by
+        # rule.id). Missing corpus is non-fatal — the rules layer is additive.
         from llenergymeasure.config.probe import DormantField
 
-        dormant_observations: list[DormantField] = []
+        dormant_observations: dict[str, DormantField] = {}
         try:
             rules = _get_rules_loader().load_rules(self.engine.value).rules
         except FileNotFoundError:
@@ -532,12 +532,10 @@ class ExperimentConfig(BaseModel):
                 warnings.warn(annotated, ConfigValidationWarning, stacklevel=2)
                 continue
             if rule.severity == "dormant":
-                dormant_observations.append(
-                    DormantField(
-                        declared_value=match.declared_value,
-                        effective_value=match.effective_value,
-                        reason=annotated,
-                    )
+                dormant_observations[rule.id] = DormantField(
+                    declared_value=match.declared_value,
+                    effective_value=match.effective_value,
+                    reason=annotated,
                 )
                 continue
             # Typo in the corpus: loader validation would normally reject this,

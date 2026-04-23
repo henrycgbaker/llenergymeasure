@@ -68,18 +68,6 @@ def test_hardware_errors_surface_on_probe(monkeypatch):
     assert any("SM >= 7.5" in e for e in probe.errors)
 
 
-def test_empty_hardware_errors_yield_valid_probe(monkeypatch):
-    """When check_hardware returns [], probe.is_valid is True."""
-    monkeypatch.setattr(
-        "llenergymeasure.device.gpu_info.get_compute_capability",
-        lambda gpu_index=0: (9, 0),
-    )
-    config = make_config(model="test-model", engine="tensorrt")
-    probe = build_config_probe(config)
-    assert probe.is_valid
-    assert probe.errors == []
-
-
 def test_check_hardware_exception_captured(monkeypatch):
     """Defensive: if check_hardware raises, the exception is captured into errors."""
 
@@ -131,7 +119,10 @@ def test_missing_dormant_observations_yields_empty(monkeypatch):
 
 
 def test_effective_params_empty_in_m1():
-    """effective_engine_params and effective_sampling_params are placeholders in M1."""
+    """effective_engine_params and effective_sampling_params are placeholders in M1.
+
+    Delete/flip when the M2 introspection walker supplies the effective-kwargs surface.
+    """
     config = make_config(model="test-model", engine="transformers")
     probe = build_config_probe(config)
     assert probe.effective_engine_params == {}

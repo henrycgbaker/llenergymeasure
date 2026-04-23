@@ -62,7 +62,7 @@ result = run_experiment(model="gpt2", skip_preflight=True)
 1. CUDA available (`torch.cuda.is_available()`)
 2. Engine package installed (`transformers`, `vllm`, or `tensorrt_llm`)
 3. Model accessible (local path exists, or HuggingFace Hub reachable)
-4. Backend `validate_config()` — hardware-specific checks (e.g., FP8 on non-Ada GPUs)
+4. `build_config_probe(config).errors` — host-GPU compatibility via `EnginePlugin.check_hardware` (e.g., FP8 on non-Ada GPUs)
 
 All failures are collected and raised together as a single `PreFlightError` so the user sees all problems at once.
 

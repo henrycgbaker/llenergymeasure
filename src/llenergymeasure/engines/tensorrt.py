@@ -543,16 +543,6 @@ class TensorRTEngine:
             kwargs["max_new_tokens"] = config.task.max_output_tokens
         return kwargs
 
-    @staticmethod
-    def _dormancy_reason(key: str, declared_val: Any, effective_val: Any | None) -> str | None:
-        """Explain why a declared TRT-LLM sampling field went dormant.
-
-        In the current data model TRT-LLM doesn't strip sampling fields. Any
-        dormancy observed here would indicate an unexpected engine-side filter
-        — worth surfacing without prejudging the reason.
-        """
-        return None
-
     def _build_sampling_params(self, config: ExperimentConfig) -> Any:
         """Build tensorrt_llm.SamplingParams from TensorRTSamplingConfig.
 

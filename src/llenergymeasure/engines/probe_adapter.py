@@ -1,15 +1,4 @@
-"""Compose a :class:`ConfigProbe` from the vendored-rules validator and per-engine hardware checks.
-
-The probe has two inputs with disjoint scopes:
-
-- Dormancy (from :meth:`ExperimentConfig._apply_vendored_rules` via the
-  ``_dormant_observations`` attribute on the resolved config).
-- Hardware errors (from :meth:`EnginePlugin.check_hardware`).
-
-M1 returns empty ``effective_engine_params`` / ``effective_sampling_params``;
-those fields light up when the M2 introspection walker supplies the effective
-kwargs surface.
-"""
+"""Adapter composing hardware errors and dormancy observations into a ``ConfigProbe``."""
 
 from __future__ import annotations
 
@@ -19,6 +8,11 @@ from llenergymeasure.config.probe import ConfigProbe, DormantField
 
 def build_config_probe(config: ExperimentConfig) -> ConfigProbe:
     """Assemble a :class:`ConfigProbe` for *config*.
+
+    Composes two disjoint inputs:
+      - hardware errors from :meth:`EnginePlugin.check_hardware`
+      - dormancy observations from :meth:`ExperimentConfig._apply_vendored_rules`
+        (via the ``_dormant_observations`` attribute, a ``dict[rule_id, DormantField]``)
 
     Never raises: hardware-check exceptions are trapped into ``errors``.
     """

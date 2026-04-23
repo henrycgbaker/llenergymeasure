@@ -5,16 +5,7 @@ from llenergymeasure.config.ssot import Engine
 from llenergymeasure.engines.protocol import EnginePlugin
 from llenergymeasure.utils.exceptions import EngineError
 
-__all__ = ["EnginePlugin", "build_config_probe", "detect_default_engine", "get_engine"]
-
-
-def __getattr__(name: str):  # type: ignore[no-untyped-def]
-    """Lazy re-export of ``build_config_probe`` to avoid package-init ordering."""
-    if name == "build_config_probe":
-        from llenergymeasure.engines.probe_adapter import build_config_probe
-
-        return build_config_probe
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = ["EnginePlugin", "detect_default_engine", "get_engine"]
 
 
 def detect_default_engine() -> Engine:

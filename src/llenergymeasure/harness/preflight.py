@@ -149,7 +149,7 @@ def run_preflight(config: ExperimentConfig) -> None:
     # Check 4: Hardware compatibility (vendored-rules validator runs at
     # config-load; this catches host-GPU-dependent issues via check_hardware).
     try:
-        from llenergymeasure.engines import build_config_probe
+        from llenergymeasure.engines.probe_adapter import build_config_probe
 
         engine_errors = build_config_probe(config).errors
         failures.extend(engine_errors)
