@@ -4,8 +4,8 @@
   "engine_version": "4.51.0",
   "image_ref": "llenergymeasure:transformers",
   "base_image_ref": "llenergymeasure:transformers",
-  "vendored_at": "2026-04-23T14:43:16.789679+00:00",
-  "vendor_commit": "c1dc40befe8e413f231debe2933d527b31ff0c64",
+  "vendored_at": "2026-04-23T14:52:40.257355+00:00",
+  "vendor_commit": "9e611c6f8b67422b03ae2eee820d3be6cfd31657",
   "cases": [
     {
       "id": "transformers_bnb_bnb_4bit_compute_dtype_type",
@@ -152,7 +152,7 @@
       },
       "positive_confirmed": true,
       "negative_confirmed": false,
-      "duration_ms": 107
+      "duration_ms": 157
     },
     {
       "id": "transformers_greedy_rejects_num_return_sequences",
@@ -172,7 +172,9 @@
       "id": "transformers_greedy_strips_epsilon_cutoff",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`do_sample` is set to `False`. However, `epsilon_cutoff` is set to `0.05` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `epsilon_cutoff`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -186,7 +188,9 @@
       "id": "transformers_greedy_strips_eta_cutoff",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`do_sample` is set to `False`. However, `eta_cutoff` is set to `0.05` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `eta_cutoff`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -200,7 +204,9 @@
       "id": "transformers_greedy_strips_min_p",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`do_sample` is set to `False`. However, `min_p` is set to `0.1` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -214,7 +220,9 @@
       "id": "transformers_greedy_strips_temperature",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`do_sample` is set to `False`. However, `temperature` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -228,7 +236,9 @@
       "id": "transformers_greedy_strips_top_k",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`do_sample` is set to `False`. However, `top_k` is set to `40` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -242,7 +252,9 @@
       "id": "transformers_greedy_strips_top_p",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`do_sample` is set to `False`. However, `top_p` is set to `0.95` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -256,7 +268,9 @@
       "id": "transformers_greedy_strips_typical_p",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`do_sample` is set to `False`. However, `typical_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `typical_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -312,7 +326,9 @@
       "id": "transformers_negative_pad_token_id",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`pad_token_id` should be positive but got -1. This will cause errors when batch generating, if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -340,7 +356,9 @@
       "id": "transformers_single_beam_strips_constraints",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`num_beams` is set to 1. However, `constraints` is set to `['...']` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `constraints`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -354,7 +372,9 @@
       "id": "transformers_single_beam_strips_diversity_penalty",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`num_beams` is set to 1. However, `diversity_penalty` is set to `0.5` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `diversity_penalty`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -368,7 +388,9 @@
       "id": "transformers_single_beam_strips_early_stopping",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`num_beams` is set to 1. However, `early_stopping` is set to `True` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -382,7 +404,9 @@
       "id": "transformers_single_beam_strips_length_penalty",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`num_beams` is set to 1. However, `length_penalty` is set to `2.0` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
@@ -396,7 +420,9 @@
       "id": "transformers_single_beam_strips_num_beam_groups",
       "outcome": "error",
       "emission_channel": "none",
-      "observed_messages": [],
+      "observed_messages": [
+        "`num_beams` is set to 1. However, `num_beam_groups` is set to `2` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `num_beam_groups`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+      ],
       "observed_silent_normalisations": {},
       "observed_exception": {
         "type": "TypeError",
