@@ -44,7 +44,6 @@ import inspect
 import os
 import sys
 from dataclasses import asdict
-from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -155,15 +154,6 @@ def _check_landmarks() -> tuple[str, str]:
 
     source_path = inspect.getsourcefile(GenerationConfig) or "<unknown>"
     return transformers.__version__, source_path
-
-
-@cache
-def _read_source_lines(source_file: str) -> tuple[str, ...]:
-    """Cache parsed source-file lines. BNB path-line lookups hit this cache."""
-    try:
-        return tuple(Path(source_file).read_text().splitlines())
-    except OSError:
-        return ()
 
 
 def _relative_source_path(abs_path: str) -> str:

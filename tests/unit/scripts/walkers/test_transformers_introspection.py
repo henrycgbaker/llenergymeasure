@@ -35,11 +35,32 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from scripts.walkers import transformers as tf_walker  # noqa: E402
 from scripts.walkers import transformers_introspection as intro  # noqa: E402
 
 # Every test in this module needs transformers importable — the walker
 # observes the real library. Skip the whole module if it's not installed.
 pytest.importorskip("transformers")
+
+# Pin-check: these tests compare the committed corpus (generated against
+# the walker's version envelope) to live-library output. If the test env's
+# transformers is outside ``TESTED_AGAINST_VERSIONS``, live-library output
+# drifts from the corpus and every Tier B / D / E test fails noisily for a
+# reason that has nothing to do with the PR. Skip the module up-front so
+# the signal stays clean.
+import transformers as _tf  # noqa: E402
+from packaging import version as _pkg_version  # noqa: E402
+
+if not tf_walker.TESTED_AGAINST_VERSIONS.contains(
+    _pkg_version.Version(_tf.__version__), prereleases=True
+):
+    pytest.skip(
+        f"transformers=={_tf.__version__} is outside walker pin "
+        f"{tf_walker.TESTED_AGAINST_VERSIONS!s} — introspection tests "
+        f"would compare drifted library output against corpus generated "
+        f"on a different version. Install a pinned transformers to run.",
+        allow_module_level=True,
+    )
 
 
 _CORPUS_PATH = _PROJECT_ROOT / "configs" / "validation_rules" / "transformers.yaml"
@@ -59,6 +80,12 @@ def walker_candidates() -> list:
         rel_source_path="transformers/generation/configuration_utils.py",
         today="2026-04-24",
     )
+
+
+@pytest.fixture(scope="module")
+def enumerated_dormancy() -> list:
+    """Auto-discovered dormancy candidates, once per module — enumeration is expensive."""
+    return intro._enumerate_dormancy_candidates()
 
 
 # ---------------------------------------------------------------------------
@@ -100,19 +127,61 @@ def test_walker_emits_expected_severity_partition(walker_candidates) -> None:
     assert by_sev == {"dormant": 16, "error": 6}
 
 
+def test_mode_gated_dormancy_templates_carry_placeholder(walker_candidates) -> None:
+    """Each mode-gated dormancy rule's template must have a ``{declared_value}`` slot.
+
+    Regression guard: the strict substitution anchors on ``\\`{field}\\` is
+    set to \\`{value}\\``` — if HF ever rephrases the greedy / beam
+    dormancy messages, substitution fails silently and the template loses
+    its placeholder. This test fires immediately when that happens.
+    """
+    mode_prefixes = {
+        intro._GREEDY_TRIGGER.id_prefix,
+        intro._BEAM_TRIGGER.id_prefix,
+    }
+    for rule in walker_candidates:
+        if not any(rule.id.startswith(p) for p in mode_prefixes):
+            continue
+        assert "{declared_value}" in (rule.message_template or ""), (
+            f"Dormancy rule {rule.id!r} lost its {{declared_value}} slot — "
+            f"HF phrasing may have drifted. Template: {rule.message_template!r}"
+        )
+
+
+def test_dormancy_rule_match_fields_align_with_id_prefix(walker_candidates) -> None:
+    """Every dormancy rule's match_fields reflect the trigger its ID prefix advertises.
+
+    Catches the "greedy/beam prefix swap" regression: if someone renames
+    a trigger's ``id_prefix`` to another trigger's, the rules would
+    silently land in the wrong bucket. This test asserts each rule's
+    predicate actually includes the ``trigger_field = trigger_positive``
+    pair its prefix claims.
+    """
+    for rule in walker_candidates:
+        for trigger in intro.TRIGGERS:
+            if rule.id.startswith(trigger.id_prefix):
+                expected_key = f"transformers.sampling.{trigger.trigger_field}"
+                assert rule.match_fields.get(expected_key) == trigger.trigger_positive, (
+                    f"Rule {rule.id!r} is tagged with {trigger.id_prefix!r} but "
+                    f"its match predicate for {expected_key!r} is "
+                    f"{rule.match_fields.get(expected_key)!r}, not "
+                    f"{trigger.trigger_positive!r}"
+                )
+                break
+
+
 # ---------------------------------------------------------------------------
 # Tier B — Library-observational property tests
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("trigger", intro._TRIGGERS, ids=lambda t: t.id_prefix)
-def test_positive_trigger_probe_fires_minor_issue(trigger) -> None:
+@pytest.mark.parametrize("trigger", intro.TRIGGERS, ids=lambda t: t.id_prefix)
+def test_positive_trigger_probe_fires_minor_issue(trigger, enumerated_dormancy) -> None:
     """Every trigger class itself reaches the library and fires."""
     from transformers import GenerationConfig
 
     # Pick any field discovered under this trigger; doesn't matter which.
-    discovered = intro._enumerate_dormancy_candidates()
-    fields_for_trigger = [f for (t, f, *_) in discovered if t is trigger]
+    fields_for_trigger = [f for (t, f, *_) in enumerated_dormancy if t is trigger]
     assert fields_for_trigger, (
         f"Trigger {trigger.id_prefix!r} discovered no dormancy rules — "
         f"library behaviour may have drifted."
@@ -131,8 +200,8 @@ def test_positive_trigger_probe_fires_minor_issue(trigger) -> None:
     assert sample_field in issues
 
 
-@pytest.mark.parametrize("trigger", intro._TRIGGERS, ids=lambda t: t.id_prefix)
-def test_negative_trigger_probe_does_not_fire(trigger) -> None:
+@pytest.mark.parametrize("trigger", intro.TRIGGERS, ids=lambda t: t.id_prefix)
+def test_negative_trigger_probe_does_not_fire(trigger, enumerated_dormancy) -> None:
     """Inverting the trigger kwarg silences the field's dormancy rule.
 
     Every field discovered under ``trigger`` is checked. Three legitimate
@@ -151,8 +220,7 @@ def test_negative_trigger_probe_does_not_fire(trigger) -> None:
     """
     from transformers import GenerationConfig
 
-    discovered = intro._enumerate_dormancy_candidates()
-    fields_for_trigger = [f for (t, f, *_) in discovered if t is trigger]
+    fields_for_trigger = [f for (t, f, *_) in enumerated_dormancy if t is trigger]
     assert fields_for_trigger, f"Trigger {trigger.id_prefix!r} has no discovered fields."
 
     for sample_field in fields_for_trigger:
@@ -177,7 +245,7 @@ def test_negative_trigger_probe_does_not_fire(trigger) -> None:
             )
 
 
-@pytest.mark.parametrize("probe", intro._ERROR_PROBES, ids=lambda p: p.id)
+@pytest.mark.parametrize("probe", intro.ERROR_PROBES, ids=lambda p: p.id)
 def test_error_probe_raises_at_construction(probe) -> None:
     """Every error-class probe must still trigger a ValueError on the live library."""
     from transformers import GenerationConfig
@@ -186,7 +254,7 @@ def test_error_probe_raises_at_construction(probe) -> None:
         GenerationConfig(**probe.kwargs_positive)
 
 
-@pytest.mark.parametrize("probe", intro._ERROR_PROBES, ids=lambda p: p.id)
+@pytest.mark.parametrize("probe", intro.ERROR_PROBES, ids=lambda p: p.id)
 def test_error_probe_negative_kwargs_construct_cleanly(probe) -> None:
     """``kwargs_negative`` must NOT raise — the "same values valid" invariant."""
     from transformers import GenerationConfig
@@ -291,11 +359,6 @@ def test_walker_dormancy_template_is_substring_of_live_library_message(
     for rule in walker_candidates:
         if rule.severity != "dormant":
             continue
-        # Reconstruct the kwargs the walker used to derive the template.
-        # For mode-gated dormancy, kwargs_positive has {trigger_field, probed_field}.
-        # We need the isolation kwargs that the walker used internally,
-        # which aren't in the emitted rule — so we rebuild them from the
-        # trigger prefix in the rule id.
         isolation = _isolation_for_rule(rule)
         kwargs = {**isolation, **rule.kwargs_positive}
         probed_field = _probed_field(rule)
@@ -313,9 +376,35 @@ def test_walker_dormancy_template_is_substring_of_live_library_message(
         )
 
 
+def test_dormancy_template_substitution_uses_declared_value_not_frozen(
+    walker_candidates,
+) -> None:
+    """Rendering a mode-gated dormancy template with a NON-probe value must
+    appear in the rendered output — and the probe value must NOT.
+
+    This is the T5 regression guard. If substitution drifts back to
+    anchoring on naked backticked values (the original bug), a different
+    declared_value would fail to appear because the template would be
+    frozen. This test proves substitution is live and correctly slotted.
+    """
+    mode_prefixes = {
+        intro._GREEDY_TRIGGER.id_prefix,
+        intro._BEAM_TRIGGER.id_prefix,
+    }
+    sentinel = "__USER_VALUE_MARKER__"
+    for rule in walker_candidates:
+        if not any(rule.id.startswith(p) for p in mode_prefixes):
+            continue
+        rendered = (rule.message_template or "").format(declared_value=sentinel)
+        assert sentinel in rendered, (
+            f"Rule {rule.id!r} template did not render {sentinel!r}; "
+            f"substitution is broken. Template: {rule.message_template!r}"
+        )
+
+
 def _isolation_for_rule(rule) -> dict[str, Any]:
     """Return isolation kwargs appropriate for the trigger class in ``rule.id``."""
-    for trigger in intro._TRIGGERS:
+    for trigger in intro.TRIGGERS:
         if rule.id.startswith(trigger.id_prefix):
             return trigger.isolation_kwargs
     return {}  # self-triggered dormancy (pad_token_id) needs no isolation
@@ -323,7 +412,7 @@ def _isolation_for_rule(rule) -> dict[str, Any]:
 
 def _probed_field(rule) -> str:
     """Return the probed field name — last segment of the non-trigger match key."""
-    for trigger in intro._TRIGGERS:
+    for trigger in intro.TRIGGERS:
         if rule.id.startswith(trigger.id_prefix):
             return rule.id.removeprefix(trigger.id_prefix)
     # self-triggered: single match key
@@ -347,9 +436,9 @@ def test_autodiscovered_dormancy_fields_match_committed_corpus(
     fails and a maintainer reviews.
     """
     discovered = intro.discover_dormancy_fields()
-    corpus_partition: dict[str, set[str]] = {t.id_prefix: set() for t in intro._TRIGGERS}
+    corpus_partition: dict[str, set[str]] = {t.id_prefix: set() for t in intro.TRIGGERS}
     for rule in committed_corpus["rules"]:
-        for trigger in intro._TRIGGERS:
+        for trigger in intro.TRIGGERS:
             if rule["id"].startswith(trigger.id_prefix):
                 corpus_partition[trigger.id_prefix].add(rule["id"].removeprefix(trigger.id_prefix))
                 break

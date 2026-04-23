@@ -26,9 +26,26 @@ are out of scope — BNB import touches CUDA, so those stay as ``manual_seed``
 entries in :mod:`scripts.walkers.transformers`.
 
 Field defaults, rule message templates, and the per-trigger field list are
-all library-observed at walk time. The only encoded knowledge is: (a) two
-trigger classes exist (greedy, single-beam), (b) the per-rule violation
-shape for error-class probes.
+all library-observed at walk time. The only encoded knowledge is: (a) the
+three trigger classes exist (greedy, single-beam, scalar-output), and
+(b) the per-rule violation shape for error-class probes.
+
+Known limitations (documented, not bugs):
+
+- **Frozen probe values in error-class templates.** HF's error messages don't
+  consistently wrap user values in backticks (e.g. ``must be greater than
+  0, but is -1`` / ``(4) has to be smaller or equal to (2)``). Template
+  substitution only fires on the ``\\`{field}\\` is set to \\`{value}\\```
+  phrasing (consistent for dormancy rules); for error rules that don't
+  match, the library message goes out verbatim with the walker's probe
+  value baked in. Users tripping these rules see an HF-style example
+  value, not their own. Not a semantic bug — the field name and constraint
+  are still accurate.
+- **Multi-value error messages.** One rule
+  (``num_return_sequences_exceeds_num_beams``) mentions two user values;
+  the ``{declared_value}`` slot only expresses one. Both stay frozen at
+  probe values. Fix requires consumer-side multi-slot templating; out of
+  scope here.
 """
 
 from __future__ import annotations
@@ -36,6 +53,7 @@ from __future__ import annotations
 import re
 import sys
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -113,11 +131,12 @@ _RETURN_DICT_TRIGGER = _DormancyTrigger(
 )
 
 
-_TRIGGERS: tuple[_DormancyTrigger, ...] = (
+TRIGGERS: tuple[_DormancyTrigger, ...] = (
     _GREEDY_TRIGGER,
     _BEAM_TRIGGER,
     _RETURN_DICT_TRIGGER,
 )
+"""Public: the full trigger-class partition. Tests parametrise over this."""
 
 
 # Fields the auto-enumerator explicitly skips. Categories:
@@ -200,22 +219,31 @@ def _parse_strict_raise(composed_message: str) -> dict[str, str]:
     return issues
 
 
-def _substitute_declared_value(message: str, probe_value: Any) -> str:
-    """Replace the backtick-wrapped probe value in ``message`` with ``{declared_value}``.
+def _substitute_declared_value(message: str, probed_field: str | None, probe_value: Any) -> str:
+    """Replace HF's ``\\`{field}\\` is set to \\`{value}\\``` with a ``{declared_value}`` slot.
 
-    HF quotes every value it interpolates with backticks (``\\`0.9\\```,
-    ``\\`True\\```, ``\\`['probe']\\```). We swap that wrapped form for
-    ``\\`{declared_value}\\``` so the consumer's ``.format(declared_value=...)``
-    interpolates the user's actual value at render time.
+    Anchored on the probed field's name to avoid false substitution — raw
+    backtick-wrapped values can collide with trigger-state literals in the
+    same message. E.g. HF's ``return_dict_in_generate`` dormancy says
+    ``\\`return_dict_in_generate\\` is NOT set to \\`True\\`, but \\`output_scores\\` is.``
+    — the naive ``\\`True\\``` match substitutes the *trigger* value, not
+    the probed field's value, and the rendered template mis-states the
+    rule. The anchored pattern fails to match this case (``output_scores``
+    isn't followed by ``is set to``), so the template goes out verbatim and
+    the consumer's ``.format`` is a no-op.
 
-    If the probe value doesn't appear wrapped (e.g. ``compile_config`` error
-    talks about the Python class, not the value), the message comes back
-    unchanged — the consumer treats a placeholder-less template as a literal.
+    Error-class rules rarely use the ``is set to`` phrasing (HF favours
+    ``must be greater than 0, but is -1`` / ``(4) has to be smaller or equal
+    to (2)``). For those, no substitution happens and the probe values are
+    frozen into the template. This is a known limitation, documented in the
+    module docstring — users tripping these rules see HF's default-example
+    value rather than their own.
     """
-    wrapped = f"`{probe_value}`"
-    placeholder = "`{declared_value}`"
-    if wrapped in message:
-        return message.replace(wrapped, placeholder)
+    if probed_field is None:
+        return message
+    pattern = f"`{probed_field}` is set to `{probe_value}`"
+    if pattern in message:
+        return message.replace(pattern, f"`{probed_field}` is set to `{{declared_value}}`")
     return message
 
 
@@ -249,7 +277,7 @@ def _enumerate_dormancy_candidates() -> list[tuple[_DormancyTrigger, str, Any, A
         if probe is None:
             continue
 
-        for trigger in _TRIGGERS:
+        for trigger in TRIGGERS:
             # Isolation kwargs deactivate the other two trigger classes, so
             # a firing minor_issue for ``field_name`` is unambiguously
             # attributed to ``trigger``.
@@ -295,7 +323,7 @@ class _ErrorProbe:
     probed_field: str | None
 
 
-_ERROR_PROBES: tuple[_ErrorProbe, ...] = (
+ERROR_PROBES: tuple[_ErrorProbe, ...] = (
     _ErrorProbe(
         id="transformers_negative_max_new_tokens",
         rule_under_test="GenerationConfig(max_new_tokens) rejects non-positive values",
@@ -415,13 +443,18 @@ def _default_predicate(default: Any) -> dict[str, Any]:
     return {"present": True, "not_equal": default}
 
 
+@cache
+def _read_source_lines(source_file: str) -> tuple[str, ...]:
+    """Cached source-file read. Each walk looks up ~20 fields in the same file."""
+    try:
+        return tuple(Path(source_file).read_text().splitlines())
+    except OSError:
+        return ()
+
+
 def _find_line(source_file: str, needle: str) -> int:
     """Best-effort ``self.<needle>`` line lookup. ``0`` if not found."""
-    try:
-        text = Path(source_file).read_text()
-    except OSError:
-        return 0
-    for i, line in enumerate(text.splitlines(), start=1):
+    for i, line in enumerate(_read_source_lines(source_file), start=1):
         if needle in line:
             return i
     return 0
@@ -438,7 +471,7 @@ def _make_dormancy_candidate(
     today: str,
 ) -> RuleCandidate:
     """Compose a dormancy ``RuleCandidate`` from one library-observed trigger firing."""
-    template = _substitute_declared_value(library_message, probe)
+    template = _substitute_declared_value(library_message, field, probe)
     line = _find_line(abs_source_path, f"self.{field}")
     return RuleCandidate(
         id=f"{trigger.id_prefix}{field}",
@@ -471,17 +504,45 @@ def _make_dormancy_candidate(
     )
 
 
-def _make_error_candidate(
-    probe: _ErrorProbe,
+_OUTCOME_BY_SEVERITY: dict[str, dict[str, Any]] = {
+    "error": {
+        "outcome": "error",
+        "emission_channel": "none",
+        "normalised_fields": [],
+    },
+    "dormant": {
+        "outcome": "dormant_announced",
+        "emission_channel": "logger_warning_once",
+        "normalised_fields": [],
+    },
+}
+
+
+_REFERENCE_BY_SEVERITY: dict[str, str] = {
+    "error": "transformers.GenerationConfig — observed via construction-time ValueError",
+    "dormant": "transformers.GenerationConfig.validate() — observed via validate(strict=True)",
+}
+
+
+def _make_hardcoded_probe_candidate(
+    probe: _ErrorProbe | _DormantProbe,
+    severity: str,
     library_message: str,
     abs_source_path: str,
     rel_source_path: str,
     today: str,
 ) -> RuleCandidate:
-    """Compose an error-class ``RuleCandidate`` from a construction raise."""
+    """Compose a ``RuleCandidate`` from a hardcoded probe (error or validate-time dormant).
+
+    Unifies the two hardcoded-probe paths. The only differences between
+    error-class and validate-time-dormant rules — after both yield a
+    library-authored message — are severity, expected_outcome, and the
+    reference string. Those come from the ``severity`` parameter; the rest
+    of the RuleCandidate shape is identical.
+    """
     if probe.probed_field is not None:
         template = _substitute_declared_value(
-            library_message, probe.kwargs_positive[probe.probed_field]
+            library_message, probe.probed_field, probe.kwargs_positive[probe.probed_field]
         )
     else:
         template = library_message
@@ -492,7 +553,7 @@ def _make_error_candidate(
         engine="transformers",
         library="transformers",
         rule_under_test=probe.rule_under_test,
-        severity="error",
+        severity=severity,
         native_type="transformers.GenerationConfig",
         walker_source=WalkerSource(
             path=rel_source_path,
@@ -503,55 +564,9 @@ def _make_error_candidate(
         match_fields=probe.match_fields,
         kwargs_positive=probe.kwargs_positive,
         kwargs_negative=probe.kwargs_negative,
-        expected_outcome={
-            "outcome": "error",
-            "emission_channel": "none",
-            "normalised_fields": [],
-        },
+        expected_outcome=_OUTCOME_BY_SEVERITY[severity],
         message_template=template,
-        references=["transformers.GenerationConfig — observed via construction-time ValueError"],
-        added_by="introspection",
-        added_at=today,
-    )
-
-
-def _make_validate_dormant_candidate(
-    probe: _DormantProbe,
-    library_message: str,
-    abs_source_path: str,
-    rel_source_path: str,
-    today: str,
-) -> RuleCandidate:
-    """Compose a validate-time self-triggered dormant ``RuleCandidate``."""
-    template = _substitute_declared_value(
-        library_message, probe.kwargs_positive[probe.probed_field]
-    )
-    line = _find_line(abs_source_path, f"self.{probe.probed_field}")
-    return RuleCandidate(
-        id=probe.id,
-        engine="transformers",
-        library="transformers",
-        rule_under_test=probe.rule_under_test,
-        severity="dormant",
-        native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
-            path=rel_source_path,
-            method="validate",
-            line_at_scan=line,
-            walker_confidence="high",
-        ),
-        match_fields=probe.match_fields,
-        kwargs_positive=probe.kwargs_positive,
-        kwargs_negative=probe.kwargs_negative,
-        expected_outcome={
-            "outcome": "dormant_announced",
-            "emission_channel": "logger_warning_once",
-            "normalised_fields": [],
-        },
-        message_template=template,
-        references=[
-            "transformers.GenerationConfig.validate() — observed via validate(strict=True)"
-        ],
+        references=[_REFERENCE_BY_SEVERITY[severity]],
         added_by="introspection",
         added_at=today,
     )
@@ -608,7 +623,7 @@ def walk_generation_config_rules(
             )
         )
 
-    for eprobe in _ERROR_PROBES:
+    for eprobe in ERROR_PROBES:
         try:
             GenerationConfig(**eprobe.kwargs_positive)
         except ValueError as exc:
@@ -619,7 +634,9 @@ def walk_generation_config_rules(
                 f"have relaxed or removed the constraint."
             )
         candidates.append(
-            _make_error_candidate(eprobe, library_message, abs_source_path, rel_source_path, today)
+            _make_hardcoded_probe_candidate(
+                eprobe, "error", library_message, abs_source_path, rel_source_path, today
+            )
         )
 
     for dprobe in _VALIDATE_DORMANT_PROBES:
@@ -639,8 +656,9 @@ def walk_generation_config_rules(
                 f"minor_issues output."
             )
         candidates.append(
-            _make_validate_dormant_candidate(
+            _make_hardcoded_probe_candidate(
                 dprobe,
+                "dormant",
                 issues[dprobe.probed_field],
                 abs_source_path,
                 rel_source_path,
@@ -655,17 +673,18 @@ def discover_dormancy_fields() -> dict[str, set[str]]:
     """Return ``{trigger.id_prefix: {field, ...}}`` — auto-discovered dormancy fields.
 
     Exposed for the test tier that asserts the hardcoded partition of the
-    corpus is a subset of what the live library exposes. Runs the same
-    enumeration the walker uses, returns just the field names.
+    corpus matches the live library surface.
     """
-    result: dict[str, set[str]] = {t.id_prefix: set() for t in _TRIGGERS}
+    result: dict[str, set[str]] = {t.id_prefix: set() for t in TRIGGERS}
     for trigger, field, _default, _probe, _msg in _enumerate_dormancy_candidates():
         result[trigger.id_prefix].add(field)
     return result
 
 
-# Re-export helpers used by callers (``scripts.walkers.transformers``).
+# Re-export helpers used by callers (``scripts.walkers.transformers``) and tests.
 __all__ = [
+    "ERROR_PROBES",
+    "TRIGGERS",
     "IntrospectionProbeDisappeared",
     "discover_dormancy_fields",
     "walk_generation_config_rules",

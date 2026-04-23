@@ -306,7 +306,7 @@ rules:
       mode: reduce-overhead
   kwargs_negative:
     compile_config: null
-  expected_outcome:
+  expected_outcome: &id001
     outcome: error
     emission_channel: none
     normalised_fields: []
@@ -342,10 +342,7 @@ rules:
     do_sample: false
     num_beams: 1
     num_return_sequences: 1
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
+  expected_outcome: *id001
   message_template: Greedy methods without beam search do not support `num_return_sequences` different
     than 1 (got 3).
   references:
@@ -620,10 +617,7 @@ rules:
     cache_implementation: nonsense
   kwargs_negative:
     cache_implementation: static
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
+  expected_outcome: *id001
   message_template: 'Invalid `cache_implementation` (nonsense). Choose one of: (''static'', ''offloaded_static'',
     ''sliding_window'', ''hybrid'', ''hybrid_chunked'', ''offloaded_hybrid'', ''offloaded_hybrid_chunked'',
     ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'')'
@@ -655,10 +649,7 @@ rules:
     early_stopping: sometimes
   kwargs_negative:
     early_stopping: true
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
+  expected_outcome: *id001
   message_template: '`early_stopping` must be a boolean or ''never'', but is sometimes.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
@@ -684,10 +675,7 @@ rules:
     max_new_tokens: -1
   kwargs_negative:
     max_new_tokens: 16
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
+  expected_outcome: *id001
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
@@ -753,8 +741,8 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`return_dict_in_generate` is NOT set to `{declared_value}`, but `output_attentions`
-    is. When `return_dict_in_generate` is not `{declared_value}`, `output_attentions` is ignored.'
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_attentions` is. When
+    `return_dict_in_generate` is not `True`, `output_attentions` is ignored.'
   references:
   - transformers.GenerationConfig.validate() (line ~409)
   added_by: introspection
@@ -788,8 +776,8 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`return_dict_in_generate` is NOT set to `{declared_value}`, but `output_hidden_states`
-    is. When `return_dict_in_generate` is not `{declared_value}`, `output_hidden_states` is ignored.'
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states` is. When
+    `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored.'
   references:
   - transformers.GenerationConfig.validate() (line ~410)
   added_by: introspection
@@ -823,8 +811,8 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`return_dict_in_generate` is NOT set to `{declared_value}`, but `output_scores` is.
-    When `return_dict_in_generate` is not `{declared_value}`, `output_scores` is ignored.'
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_scores` is. When `return_dict_in_generate`
+    is not `True`, `output_scores` is ignored.'
   references:
   - transformers.GenerationConfig.validate() (line ~411)
   added_by: introspection
@@ -853,10 +841,7 @@ rules:
   kwargs_negative:
     num_return_sequences: 2
     num_beams: 4
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
+  expected_outcome: *id001
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
