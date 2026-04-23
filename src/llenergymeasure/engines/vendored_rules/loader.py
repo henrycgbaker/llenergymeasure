@@ -101,16 +101,30 @@ class Rule:
         corpus convention puts the precondition fields first and the
         *subject* field last (the field the rule is actually about). Users
         see the subject value substituted into message templates.
+
+        ``effective_value`` is populated for ``dormant``/``dormant_silent``
+        rules with a ``not_equal`` subject predicate (the canonicaliser's
+        normalisation target — see :func:`study.sweep_canonicalise._rule_normalisations`).
+        Consumers render "declared X, effective Y" messages without
+        re-deriving the target from the rule spec.
         """
         matched: dict[str, Any] = {}
         last_value: Any = None
+        last_spec: Any = None
         for path, spec in self.match_fields.items():
             actual = resolve_field_path(config, path)
             if not evaluate_predicate(actual, spec):
                 return None
             matched[path] = actual
             last_value = actual
-        return RuleMatch(rule=self, declared_value=last_value, matched_fields=matched)
+            last_spec = spec
+        effective = _derive_effective_value(self, last_spec)
+        return RuleMatch(
+            rule=self,
+            declared_value=last_value,
+            effective_value=effective,
+            matched_fields=matched,
+        )
 
     def render_message(self, match: RuleMatch) -> str:
         """Substitute ``{declared_value}`` / ``{effective_value}`` / ``{rule_id}`` in the template.
@@ -186,6 +200,31 @@ def evaluate_predicate(actual: Any, spec: Any) -> bool:
                 return False
         return True
     return bool(actual == spec)
+
+
+# ---------------------------------------------------------------------------
+# Effective-value derivation (for RuleMatch.effective_value)
+# ---------------------------------------------------------------------------
+
+
+def _derive_effective_value(rule: Rule, last_spec: Any) -> Any | None:
+    """Return the canonical / effective value the library drives the subject to.
+
+    For dormant rules, the canonicaliser's target is the ``not_equal`` sentinel
+    in the subject predicate (see ``study.sweep_canonicalise._rule_normalisations``).
+    Rules with an explicit ``normalised_fields`` list in
+    ``expected_outcome`` strip to ``None`` by convention — mirror that here.
+    Non-dormant rules return ``None``.
+    """
+    if rule.severity not in ("dormant", "dormant_silent"):
+        return None
+    normalised = rule.expected_outcome.get("normalised_fields")
+    if isinstance(normalised, list) and normalised:
+        # Convention: fields listed in normalised_fields strip to None.
+        return None
+    if isinstance(last_spec, dict) and "not_equal" in last_spec:
+        return last_spec["not_equal"]
+    return None
 
 
 # ---------------------------------------------------------------------------
