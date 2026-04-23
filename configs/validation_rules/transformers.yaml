@@ -312,8 +312,8 @@ rules:
     normalised_fields: []
   message_template: '`compile_config` must be a CompileConfig instance, got {declared_value}.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 library-API introspection"
-  added_by: introspection
+  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_rejects_num_return_sequences
   engine: transformers
@@ -348,8 +348,8 @@ rules:
   message_template: Greedy methods without beam search do not support `num_return_sequences` != 1 (got
     {declared_value}).
   references:
-  - "transformers.GenerationConfig.validate() \u2014 library-API introspection"
-  added_by: introspection
+  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
@@ -384,7 +384,7 @@ rules:
     it or set do_sample=True.'
   references:
   - transformers.GenerationConfig.validate() (line ~378)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_strips_eta_cutoff
   engine: transformers
@@ -419,7 +419,7 @@ rules:
     it or set do_sample=True.'
   references:
   - transformers.GenerationConfig.validate() (line ~379)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_strips_min_p
   engine: transformers
@@ -453,7 +453,7 @@ rules:
     or set do_sample=True.'
   references:
   - transformers.GenerationConfig.validate() (line ~376)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_strips_temperature
   engine: transformers
@@ -488,7 +488,7 @@ rules:
     it or set do_sample=True.'
   references:
   - transformers.GenerationConfig.validate() (line ~373)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_strips_top_k
   engine: transformers
@@ -523,7 +523,7 @@ rules:
     or set do_sample=True.'
   references:
   - transformers.GenerationConfig.validate() (line ~374)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_strips_top_p
   engine: transformers
@@ -558,7 +558,7 @@ rules:
     or set do_sample=True.'
   references:
   - transformers.GenerationConfig.validate() (line ~375)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_greedy_strips_typical_p
   engine: transformers
@@ -593,7 +593,7 @@ rules:
     it or set do_sample=True.'
   references:
   - transformers.GenerationConfig.validate() (line ~377)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_invalid_cache_implementation
   engine: transformers
@@ -621,8 +621,8 @@ rules:
     normalised_fields: []
   message_template: Invalid `cache_implementation` ({declared_value}). Choose one from the supported set.
   references:
-  - "transformers.GenerationConfig.validate() \u2014 library-API introspection"
-  added_by: introspection
+  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_invalid_early_stopping
   engine: transformers
@@ -654,8 +654,8 @@ rules:
     normalised_fields: []
   message_template: '`early_stopping` must be a boolean or ''never'', but is {declared_value}.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 library-API introspection"
-  added_by: introspection
+  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_negative_max_new_tokens
   engine: transformers
@@ -683,8 +683,8 @@ rules:
     normalised_fields: []
   message_template: '`max_new_tokens` must be greater than 0, but is {declared_value}.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 library-API introspection"
-  added_by: introspection
+  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_negative_pad_token_id
   engine: transformers
@@ -713,8 +713,8 @@ rules:
   message_template: '`pad_token_id` ({declared_value}) should be non-negative. This will cause errors
     when batch generating, if there is padding.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 library-API introspection"
-  added_by: introspection
+  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_num_return_sequences_exceeds_num_beams
   engine: transformers
@@ -746,8 +746,8 @@ rules:
     normalised_fields: []
   message_template: '`num_return_sequences` ({declared_value}) must be <= `num_beams`.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 library-API introspection"
-  added_by: introspection
+  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_single_beam_strips_constraints
   engine: transformers
@@ -782,7 +782,7 @@ rules:
     or remove constraints.'
   references:
   - transformers.GenerationConfig.validate() (line ~388)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_single_beam_strips_diversity_penalty
   engine: transformers
@@ -817,7 +817,7 @@ rules:
     or remove diversity_penalty.'
   references:
   - transformers.GenerationConfig.validate() (line ~380)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_single_beam_strips_early_stopping
   engine: transformers
@@ -852,7 +852,7 @@ rules:
     or remove early_stopping.'
   references:
   - transformers.GenerationConfig.validate() (line ~355)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
@@ -887,7 +887,7 @@ rules:
     or remove length_penalty.'
   references:
   - transformers.GenerationConfig.validate() (line ~383)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'
 - id: transformers_single_beam_strips_num_beam_groups
   engine: transformers
@@ -922,5 +922,5 @@ rules:
     or remove num_beam_groups.'
   references:
   - transformers.GenerationConfig.validate() (line ~362)
-  added_by: introspection
+  added_by: manual_seed
   added_at: '2026-04-23'

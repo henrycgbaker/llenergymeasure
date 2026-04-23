@@ -1,39 +1,50 @@
-"""Transformers rules extractor — library-API introspection wrapper.
+"""Transformers rules seeder — landmark-verified manual-seed module.
 
-Per the 2026-04-23 plan amendment and runtime-config-validation.md §4.4,
-transformers specifically is extracted via library-API introspection rather
-than an AST walker: HF's :meth:`GenerationConfig.validate` populates a
-``minor_issues`` dict and (in ``strict=True`` mode) raises a composed
-``ValueError`` listing every issue. This exposes the rule surface
-programmatically without AST maintenance burden. vLLM and TensorRT-LLM will
-use full AST walkers (landing in later per-engine phases).
+**Provenance honesty:** this module is NOT an empirical introspection
+walker. The rule tuples below (``_GREEDY_RULES``, ``_BEAM_RULES``,
+``_GENERATION_VALIDATE_RULES``, ``_BNB_TYPE_RULES``) are hand-curated
+from reading HF transformers source; rule content (predicates, message
+templates, kwargs_positive, kwargs_negative) is editorial, not derived
+programmatically. All emitted rules therefore carry
+``added_by: "manual_seed"``.
 
-PoC-J (2026-04-23) confirmed 11/11 greedy+beam dormancy fields and all
-error-class rules visible through this API. This module packages that
-introspection into a reproducible extractor that emits a corpus-compatible
-YAML document.
+What IS empirical:
 
-Usage
------
+- Library landmarks: imports ``transformers`` + checks that
+  ``GenerationConfig``, ``BitsAndBytesConfig``, ``validate``, ``post_init``
+  exist in the installed version. Missing landmark → fail-loud
+  :class:`WalkerLandmarkMissingError`.
+- Version envelope: :data:`TESTED_AGAINST_VERSIONS` pins to
+  ``>=4.56,<4.57``; a mismatch raises
+  :class:`WalkerVersionMismatchError` at CI time, prompting a refresh.
+- Source paths + line numbers: derived via :func:`inspect.getsourcefile`
+  and a ``self.<field>`` text grep. Informational only (not used for
+  rule matching).
 
-::
+When the true empirical walker lands (a follow-up PR will drive HF's
+``validate(strict=True)`` programmatically and derive predicates from
+the observed ``minor_issues`` keys + message templates), its output will
+carry ``added_by: "introspection"`` and the vendor CI (also a
+follow-up) will be the promotion path for these hand-seeds —
+re-deriving each rule empirically and flagging any divergence.
+
+Usage::
 
     python -m scripts.walkers.transformers --out configs/validation_rules/transformers.yaml
 
-The output is intended for human review before merging into the tracked
-corpus. The seeded ``configs/validation_rules/transformers.yaml`` in-repo was
-produced by this command against the pinned transformers version.
+The committed ``configs/validation_rules/transformers.yaml`` is this
+command's output against the pinned transformers version, with
+``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
 
 Scope
 -----
 
-- :class:`transformers.GenerationConfig` — sampling / greedy / beam rules
-  surfaced via ``validate(strict=True)`` and the ``minor_issues`` dict.
-- :class:`transformers.BitsAndBytesConfig` — type-check rules extracted via
-  targeted probe configs (covers the 10 ``TypeError`` raises from
-  ``post_init``).
+- :class:`transformers.GenerationConfig` — sampling / greedy / beam /
+  validate() rules observed in HF 4.56 source.
+- :class:`transformers.BitsAndBytesConfig` — type-check rules hand-audited
+  from the ``post_init`` TypeError raises.
 
-peft / LoraConfig are explicitly out of scope for P1 (deferred).
+peft / LoraConfig are explicitly out of scope (no near-term consumer).
 """
 
 from __future__ import annotations
@@ -400,7 +411,7 @@ def _make_greedy_dormancy_rule(
             f"has no effect. Remove it or set do_sample=True."
         ),
         references=[f"transformers.GenerationConfig.validate() (line ~{line})"],
-        added_by="introspection",
+        added_by="manual_seed",
         added_at=today,
     )
 
@@ -449,7 +460,7 @@ def _make_beam_dormancy_rule(
             f"Set num_beams>1 or remove {field}."
         ),
         references=[f"transformers.GenerationConfig.validate() (line ~{line})"],
-        added_by="introspection",
+        added_by="manual_seed",
         added_at=today,
     )
 
@@ -493,9 +504,9 @@ def _make_validate_rule(
         },
         message_template=spec["message_template"],
         references=[
-            "transformers.GenerationConfig.validate() — library-API introspection",
+            "transformers.GenerationConfig.validate() — manual seed from HF 4.56 source",
         ],
-        added_by="introspection",
+        added_by="manual_seed",
         added_at=today,
     )
 
