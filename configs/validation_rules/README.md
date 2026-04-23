@@ -71,7 +71,11 @@ Every entry under `rules:` must populate the following fields.
     temperature: 0.9
   expected_outcome:
     outcome: dormant_announced           # pass | warn | error | dormant_silent | dormant_announced
-    emission_channel: minor_issues_dict  # warnings_warn | logger_warning | logger_warning_once | minor_issues_dict | runtime_exception | none
+    emission_channel: logger_warning_once  # warnings_warn | logger_warning | logger_warning_once | minor_issues_dict | runtime_exception | none
+    #   ^ what users actually see. Reserve `minor_issues_dict` for cases
+    #     where a caller receives a dict; HF's internal minor_issues dict
+    #     is emitted via logger.warning_once, so the log channel is the
+    #     user-observable one.
     normalised_fields: []                # populated for dormant_silent outcomes
   message_template: |
     `do_sample=False` is set, so `temperature` ({declared_value}) has no effect.

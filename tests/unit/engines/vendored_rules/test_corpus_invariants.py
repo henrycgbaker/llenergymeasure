@@ -61,11 +61,8 @@ def test_corpus_has_expected_rule_ids(transformers_corpus) -> None:
         "transformers_invalid_cache_implementation",
         "transformers_invalid_early_stopping",
         "transformers_num_return_sequences_exceeds_num_beams",
-        "transformers_num_beams_not_divisible_by_groups",
         "transformers_greedy_rejects_num_return_sequences",
-        "transformers_diversity_penalty_requires_diverse_beams",
         "transformers_negative_pad_token_id",
-        "transformers_watermarking_config_type",
         "transformers_compile_config_type",
         # BitsAndBytesConfig.post_init() type-check errors
         "transformers_bnb_load_in_4bit_type",

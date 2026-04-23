@@ -115,12 +115,12 @@ def test_walker_landmark_check_passes_on_installed_transformers() -> None:
 def test_walk_extracts_exactly_expected_rules() -> None:
     pytest.importorskip("transformers")
     candidates, envelope = tf_walker.walk()
-    # 7 greedy + 5 beam + 10 validate (error + dormant) + 9 bnb = 31.
+    # 7 greedy + 5 beam + 7 validate (error + dormant) + 9 bnb = 28.
     # Exact count catches accidental removal OR accidental addition — a
     # new rule should land in a corpus-update PR that also updates this
     # test (and the test_corpus_has_expected_rule_ids set in the sibling
     # invariants file).
-    assert len(candidates) == 31
+    assert len(candidates) == 28
     assert envelope["engine"] == "transformers"
     assert envelope["schema_version"] == "1.0.0"
 
@@ -150,6 +150,7 @@ def test_walk_extracts_beam_dormancy_rules() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
     beam_ids = {c.id for c in candidates if "single_beam_strips" in c.id}
+    # Exact set — adding a new single-beam rule must update this list.
     expected = {
         f"transformers_single_beam_strips_{f}"
         for f in (
@@ -157,9 +158,10 @@ def test_walk_extracts_beam_dormancy_rules() -> None:
             "num_beam_groups",
             "diversity_penalty",
             "length_penalty",
+            "constraints",
         )
     }
-    assert expected <= beam_ids
+    assert expected == beam_ids
 
 
 def test_walk_extracts_bnb_type_rules() -> None:

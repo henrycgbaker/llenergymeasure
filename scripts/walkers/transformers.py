@@ -63,13 +63,20 @@ from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
     check_installed_version,
 )
 
-TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.50,<5.0")
+TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.56,<4.57")
 """Range of transformers versions this walker was authored against.
 
+Pinned narrowly to 4.56.x because HF 4.57 restructured
+``GenerationConfig.validate()`` (dropped several minor_issues branches
+and the watermarking auto-coercion); the shipped corpus reflects 4.56
+rule shapes. When the project moves forward to 4.57+ support, a
+maintainer reconciles the rule tuples against the new source and bumps
+this pin.
+
 On mismatch, :func:`check_installed_version` raises
-:class:`WalkerVersionMismatchError` and CI fails. When HF 4.x → 5.x ships,
-a maintainer re-runs this walker against the new version, reconciles any
-landmark / rule-shape changes, and bumps this range.
+:class:`WalkerVersionMismatchError` and CI fails. Intentionally narrow:
+minor-version drift in HF's validate() has proven to shift rule shapes,
+so loud failure prompts a deliberate refresh.
 """
 
 
@@ -102,6 +109,11 @@ _GREEDY_RULES: tuple[tuple[str, Any, Any], ...] = (
 )
 
 # --- Single-beam dormancy (fires when num_beams=1 and the field is set) ---
+#
+# HF 4.56 handles these five fields in the `num_beams == 1` block
+# (configuration_utils.py:79-103). HF 4.57 dropped `num_beam_groups`,
+# `diversity_penalty`, `constraints` from this block. When the walker pin
+# moves forward to 4.57+, those three must be removed here to match.
 
 _BEAM_RULES: tuple[tuple[str, Any, Any], ...] = (
     ("early_stopping", False, True),
@@ -116,6 +128,20 @@ _BEAM_RULES: tuple[tuple[str, Any, Any], ...] = (
 # HF's `minor_issues` dict, emitted via logger.warning_once). Dormant rules
 # set `severity` / `outcome` / `emission_channel` explicitly; errors use
 # factory defaults.
+#
+# Deliberately NOT captured here (follow-up PR once the predicate grammar
+# gains the needed expressiveness):
+# - watermarking_config validation: HF 4.56 accepts both WatermarkingConfig
+#   AND SynthIDTextWatermarkingConfig and silently auto-coerces dicts —
+#   writes to minor_issues. Needs `type_is_any` predicate to express the
+#   two-class allowlist; current `type_is_not: <single>` is insufficient.
+# - num_beams % num_beam_groups divisibility (line 132-133 of 4.56.0
+#   validate): real error-class rule, but the kwargs_negative in the
+#   naive encoding also trips downstream raises. Needs a modulo predicate
+#   operator AND a kwargs_negative that supplies compensating fields.
+# - diversity_penalty > 0 required when in group-beam mode (line 134-137
+#   of 4.56.0 validate): semantic is conditional on an earlier branch
+#   entry; simple single-rule predicate doesn't express it cleanly.
 _GENERATION_VALIDATE_RULES: tuple[dict[str, Any], ...] = (
     {
         "id": "transformers_negative_max_new_tokens",
@@ -174,20 +200,6 @@ _GENERATION_VALIDATE_RULES: tuple[dict[str, Any], ...] = (
         "source_method": "validate",
     },
     {
-        "id": "transformers_num_beams_not_divisible_by_groups",
-        "rule_under_test": ("Diverse beam search requires num_beams divisible by num_beam_groups"),
-        "match_fields": {
-            "transformers.sampling.num_beam_groups": {">": 1},
-            "transformers.sampling.num_beams": {"present": True},
-        },
-        "kwargs_positive": {"num_beams": 5, "num_beam_groups": 2},
-        "kwargs_negative": {"num_beams": 4, "num_beam_groups": 2},
-        "message_template": (
-            "`num_beams` ({declared_value}) must be divisible by `num_beam_groups`."
-        ),
-        "source_method": "validate",
-    },
-    {
         "id": "transformers_greedy_rejects_num_return_sequences",
         "rule_under_test": (
             "Greedy decoding (do_sample=False, num_beams=1) requires num_return_sequences=1"
@@ -202,22 +214,6 @@ _GENERATION_VALIDATE_RULES: tuple[dict[str, Any], ...] = (
         "message_template": (
             "Greedy methods without beam search do not support "
             "`num_return_sequences` != 1 (got {declared_value})."
-        ),
-        "source_method": "validate",
-    },
-    {
-        "id": "transformers_diversity_penalty_requires_diverse_beams",
-        "rule_under_test": (
-            "diversity_penalty is only valid with diverse beam search (num_beam_groups>1)"
-        ),
-        "match_fields": {
-            "transformers.sampling.diversity_penalty": {"present": True, ">": 0.0},
-            "transformers.sampling.num_beam_groups": 1,
-        },
-        "kwargs_positive": {"diversity_penalty": 0.5, "num_beam_groups": 1, "num_beams": 4},
-        "kwargs_negative": {"diversity_penalty": 0.5, "num_beam_groups": 2, "num_beams": 4},
-        "message_template": (
-            "`diversity_penalty` > 0 requires `num_beam_groups` > 1 for diverse beam search."
         ),
         "source_method": "validate",
     },
@@ -238,29 +234,6 @@ _GENERATION_VALIDATE_RULES: tuple[dict[str, Any], ...] = (
         "message_template": (
             "`pad_token_id` ({declared_value}) should be non-negative. This will cause "
             "errors when batch generating, if there is padding."
-        ),
-        "source_method": "validate",
-    },
-    {
-        # HF calls `self.watermarking_config.validate()` directly — a raw
-        # dict raises AttributeError (not a coded ValueError). We catch it
-        # earlier at our config layer with a type predicate, converting an
-        # opaque AttributeError into a user-friendly validation error.
-        "id": "transformers_watermarking_config_type",
-        "rule_under_test": (
-            "GenerationConfig.watermarking_config must be a WatermarkingConfig instance"
-        ),
-        "match_fields": {
-            "transformers.sampling.watermarking_config": {
-                "present": True,
-                "type_is_not": "WatermarkingConfig",
-            },
-        },
-        "kwargs_positive": {"watermarking_config": {"greenlist_ratio": 0.25}},
-        "kwargs_negative": {"watermarking_config": None},
-        "message_template": (
-            "`watermarking_config` must be a WatermarkingConfig instance; "
-            "got {declared_value}. Construct a WatermarkingConfig or pass None."
         ),
         "source_method": "validate",
     },
