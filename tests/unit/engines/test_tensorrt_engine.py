@@ -10,7 +10,7 @@ Coverage:
   - Protocol compliance (BACK-01)
   - _build_llm_kwargs: field mapping + None omission
   - _build_sampling_params: defaults, greedy, TRT-specific overrides
-  - validate_config: SM >= 7.5 check (PRE-01), FP8 SM >= 8.9 check (PRE-02)
+  - check_hardware: SM >= 7.5 check (PRE-01), FP8 SM >= 8.9 check (PRE-02)
   - Build metadata keys (BACK-03)
 """
 
@@ -149,7 +149,7 @@ class TestProtocolCompliance:
         assert hasattr(engine, "run_warmup_prompt")
         assert hasattr(engine, "run_inference")
         assert hasattr(engine, "cleanup")
-        assert hasattr(engine, "validate_config")
+        assert hasattr(engine, "check_hardware")
 
 
 # =============================================================================
@@ -486,12 +486,12 @@ class TestBuildSamplingParams:
 
 
 # =============================================================================
-# Test Group 4: validate_config — SM checks (PRE-01)
+# Test Group 4: check_hardware — SM checks (PRE-01)
 # =============================================================================
 
 
-class TestValidateConfigSMChecks:
-    def test_validate_config_sm_above_7_5_passes(self, monkeypatch):
+class TestCheckHardwareSMChecks:
+    def test_check_hardware_sm_above_7_5_passes(self, monkeypatch):
         """SM 8.0 (A100) passes the SM >= 7.5 check."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -499,10 +499,10 @@ class TestValidateConfigSMChecks:
         )
         config = make_config(**_TRT_DEFAULTS)
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
         assert errors == []
 
-    def test_validate_config_sm_below_7_5_fails(self, monkeypatch):
+    def test_check_hardware_sm_below_7_5_fails(self, monkeypatch):
         """SM 7.0 (V100) fails with an error containing 'SM >= 7.5'."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -510,13 +510,13 @@ class TestValidateConfigSMChecks:
         )
         config = make_config(**_TRT_DEFAULTS)
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
 
         assert len(errors) == 1
         assert "SM >= 7.5" in errors[0]
         assert "7.0" in errors[0]
 
-    def test_validate_config_sm_exactly_7_5_passes(self, monkeypatch):
+    def test_check_hardware_sm_exactly_7_5_passes(self, monkeypatch):
         """SM 7.5 (Turing T4) is exactly the minimum — should pass."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -524,10 +524,10 @@ class TestValidateConfigSMChecks:
         )
         config = make_config(**_TRT_DEFAULTS)
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
         assert errors == []
 
-    def test_validate_config_sm_none_skips(self, monkeypatch):
+    def test_check_hardware_sm_none_skips(self, monkeypatch):
         """When SM detection returns None, no errors are returned (don't block containers)."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -535,17 +535,17 @@ class TestValidateConfigSMChecks:
         )
         config = make_config(**_TRT_DEFAULTS)
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
         assert errors == []
 
 
 # =============================================================================
-# Test Group 5: validate_config — FP8 checks (PRE-02)
+# Test Group 5: check_hardware — FP8 checks (PRE-02)
 # =============================================================================
 
 
-class TestValidateConfigFP8Checks:
-    def test_validate_config_fp8_on_sm_80_fails(self, monkeypatch):
+class TestCheckHardwareFP8Checks:
+    def test_check_hardware_fp8_on_sm_80_fails(self, monkeypatch):
         """FP8 quant on SM 8.0 (A100) raises an error mentioning FP8 and SM >= 8.9."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -555,13 +555,13 @@ class TestValidateConfigFP8Checks:
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
         )
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
 
         assert len(errors) == 1
         assert "FP8" in errors[0]
         assert "SM >= 8.9" in errors[0]
 
-    def test_validate_config_fp8_on_sm_89_passes(self, monkeypatch):
+    def test_check_hardware_fp8_on_sm_89_passes(self, monkeypatch):
         """FP8 quant on SM 8.9 (L40, RTX 4090) passes."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -571,10 +571,10 @@ class TestValidateConfigFP8Checks:
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
         )
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
         assert errors == []
 
-    def test_validate_config_fp8_on_sm_90_passes(self, monkeypatch):
+    def test_check_hardware_fp8_on_sm_90_passes(self, monkeypatch):
         """FP8 quant on SM 9.0 (H100) passes."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -584,10 +584,10 @@ class TestValidateConfigFP8Checks:
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
         )
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
         assert errors == []
 
-    def test_validate_config_fp8_kv_cache_on_sm_80_fails(self, monkeypatch):
+    def test_check_hardware_fp8_kv_cache_on_sm_80_fails(self, monkeypatch):
         """FP8 KV cache quant on SM 8.0 (A100) raises an error."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -598,13 +598,13 @@ class TestValidateConfigFP8Checks:
             tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(kv_cache_quant_algo="FP8")),
         )
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
 
         assert len(errors) == 1
         assert "FP8" in errors[0]
         assert "KV cache" in errors[0]
 
-    def test_validate_config_non_fp8_quant_on_sm_80_passes(self, monkeypatch):
+    def test_check_hardware_non_fp8_quant_on_sm_80_passes(self, monkeypatch):
         """INT8 quant on SM 8.0 (A100) passes — only FP8 is blocked."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -614,10 +614,10 @@ class TestValidateConfigFP8Checks:
             **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8"))
         )
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
         assert errors == []
 
-    def test_validate_config_both_fp8_errors_collected(self, monkeypatch):
+    def test_check_hardware_both_fp8_errors_collected(self, monkeypatch):
         """FP8 weight quant AND FP8 KV cache on SM 8.0 produces 2 errors."""
         monkeypatch.setattr(
             "llenergymeasure.device.gpu_info.get_compute_capability",
@@ -630,7 +630,7 @@ class TestValidateConfigFP8Checks:
             ),
         )
         engine = TensorRTEngine()
-        errors = engine.validate_config(config)
+        errors = engine.check_hardware(config)
 
         assert len(errors) == 2
 
