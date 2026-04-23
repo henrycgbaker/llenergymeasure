@@ -182,6 +182,12 @@ ignore_imports = [
     # cycle risk (imports are local-inside-function in config.models).
     "llenergymeasure.config.models -> llenergymeasure.engines.vendored_rules.loader",
     "llenergymeasure.config.models -> llenergymeasure.engines.protocol",
+    # Phase 50.3a: config.loader.load_study_config invokes dedup_sweep as
+    # part of the grid-expansion pipeline (between expand_grid and
+    # apply_cycles). The canonicaliser lives under study/ — reviewer may
+    # decide to invert this by moving dedup into api/cli callers; for now
+    # the import is local-inside-function so there is no cycle risk.
+    "llenergymeasure.config.loader -> llenergymeasure.study.sweep_canonicalise",
 ]
 
 [[tool.importlinter.contracts]]
@@ -235,4 +241,6 @@ ignore_imports = [
     # main-layers contract above for the architectural rationale.
     "llenergymeasure.config.models -> llenergymeasure.engines.vendored_rules.loader",
     "llenergymeasure.config.models -> llenergymeasure.engines.protocol",
+    # Phase 50.3a: see matching ignore on main-layers contract above.
+    "llenergymeasure.config.loader -> llenergymeasure.study.sweep_canonicalise",
 ]
