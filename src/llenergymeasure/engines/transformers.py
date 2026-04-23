@@ -269,6 +269,11 @@ class TransformersEngine:
         """No hardware validation required for Transformers engine."""
         return []
 
+    @staticmethod
+    def check_hardware(config: ExperimentConfig) -> list[str]:
+        """No preflight hardware rules; BitsAndBytes/FlashAttention self-check at load time."""
+        return []
+
     # -------------------------------------------------------------------------
     # EnginePlugin: probe_config
     # -------------------------------------------------------------------------

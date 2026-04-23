@@ -103,6 +103,16 @@ class EnginePlugin(Protocol):
         """Validate config against hardware capabilities. Returns error strings (empty = valid)."""
         ...
 
+    def check_hardware(self, config: ExperimentConfig) -> list[str]:
+        """Return host-GPU compatibility errors (empty list when compatible).
+
+        - Never raises; errors propagate via the returned list.
+        - Returns ``[]`` when no GPU is visible (containers without a visible
+          device must not block at config time).
+        - Pure: no weight loading, no GPU allocation, no engine construction.
+        """
+        ...
+
     def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
         """Probe *config* for dormancy, framework errors, and effective params.
 

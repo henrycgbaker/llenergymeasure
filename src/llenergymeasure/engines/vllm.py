@@ -282,6 +282,11 @@ class VLLMEngine:
         """No hardware validation required for vLLM engine."""
         return []
 
+    @staticmethod
+    def check_hardware(config: ExperimentConfig) -> list[str]:
+        """No preflight hardware rules; vLLM resolves SM x dtype x quant inside EngineArgs."""
+        return []
+
     # -------------------------------------------------------------------------
     # EnginePlugin: probe_config
     # -------------------------------------------------------------------------
