@@ -307,18 +307,25 @@ def _run_experiment_worker(
         engine = get_engine(config.engine)
         harness = MeasurementHarness()
         from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+        from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
         gpu_indices = _resolve_gpu_indices(config)
-        result = harness.run(
-            engine,
-            config,
-            snapshot=snapshot,
-            gpu_indices=gpu_indices,
-            progress=progress_cb,
-            output_dir=output_dir,
-            save_timeseries=save_timeseries,
-            baseline=baseline,
-        )
+        # Wrap inference in the runtime-observation capture context. The
+        # wrapper is a discovery mechanism (runtime-config-validation.md §4.7)
+        # — it appends a JSONL record to ~/.cache/llenergymeasure/ and never
+        # affects the result. Cache-write errors are swallowed inside the
+        # wrapper, so this is safe on read-only filesystems.
+        with capture_runtime_observations(config):
+            result = harness.run(
+                engine,
+                config,
+                snapshot=snapshot,
+                gpu_indices=gpu_indices,
+                progress=progress_cb,
+                output_dir=output_dir,
+                save_timeseries=save_timeseries,
+                baseline=baseline,
+            )
 
         # Send result back to parent via Pipe
         conn.send(result)
@@ -554,6 +561,47 @@ class StudyRunner:
         self._experiments_since_validation: dict[str, int] = {}
         # Study-level image preparation: True after _prepare_images() succeeds
         self._images_prepared: bool = False
+        # Write the equivalence_groups.json sidecar at construction time so
+        # pre-run groups are persisted even if the study is interrupted before
+        # any experiment completes. post_run_h3_groups are populated on
+        # mark_study_completed() — see _write_post_run_h3_groups().
+        self._write_pre_run_equivalence_groups()
+
+    def _write_pre_run_equivalence_groups(self) -> None:
+        """Serialise ``study.pre_run_equivalence_groups`` to ``equivalence_groups.json``.
+
+        Best-effort — a write failure logs at WARNING and is swallowed, because
+        the sidecar is a post-hoc analysis aid, not required for the study to
+        complete.
+        """
+        try:
+            from llenergymeasure.study.equivalence_groups import (
+                EquivalenceGroups,
+                PreRunGroup,
+                write_equivalence_groups,
+            )
+
+            pre_groups: list[PreRunGroup] = []
+            for g in self.study.pre_run_equivalence_groups:
+                pre_groups.append(
+                    PreRunGroup(
+                        h1_hash=str(g.get("h1_hash", "")),
+                        canonical_config_excerpt=dict(g.get("canonical_config_excerpt") or {}),
+                        member_experiment_ids=tuple(),
+                        member_count=int(g.get("member_count", 0)),
+                        representative_experiment_id="",
+                        would_dedup=bool(g.get("would_dedup", False)),
+                        deduplicated=bool(g.get("deduplicated", False)),
+                    )
+                )
+            groups = EquivalenceGroups(
+                study_id=self.study.study_design_hash or "unknown",
+                dedup_mode=self.study.dedup_mode,
+                groups=pre_groups,
+            )
+            write_equivalence_groups(groups, self.study_dir / "equivalence_groups.json")
+        except Exception as exc:
+            logger.warning("Could not write equivalence_groups.json: %s", exc)
 
     def run(self) -> list[Any]:
         """Run all experiments in order; return list of results or failure dicts.
