@@ -504,7 +504,7 @@ def _parse_envelope(engine: str, raw_text: str) -> VendoredRules:
 
 
 _DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[4] / "configs" / "validation_rules"
-_VENDORED_JSON_PACKAGE = "llenergymeasure.engines.vendored_rules"
+_VENDORED_JSON_PACKAGE = "llenergymeasure.config.vendored_rules"
 
 
 class VendoredRulesLoader:

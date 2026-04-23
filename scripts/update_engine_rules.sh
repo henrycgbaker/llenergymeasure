@@ -9,14 +9,14 @@
 # artifact. Run this locally to re-vendor against the pinned image before
 # opening a PR; CI will re-run inside the same image on the PR branch.
 #
-# Output: src/llenergymeasure/engines/vendored_rules/<engine>.json
+# Output: src/llenergymeasure/config/vendored_rules/<engine>.json
 # The JSON IS the canonical SSOT — authority comes from `git commit`, not
 # from who ran vendoring.
 #
 # Legitimate refresh (e.g. you bumped a Dockerfile FROM tag):
 #   review the diff, `git add`, and open a PR.
 # Exploring a fork or stale image:
-#   `git checkout src/llenergymeasure/engines/vendored_rules/<engine>.json`
+#   `git checkout src/llenergymeasure/config/vendored_rules/<engine>.json`
 set -euo pipefail
 
 usage() {
@@ -67,7 +67,7 @@ case "$ENGINE" in
 esac
 
 CORPUS_REL="configs/validation_rules/${ENGINE}.yaml"
-OUTPUT_REL="src/llenergymeasure/engines/vendored_rules/${ENGINE}.json"
+OUTPUT_REL="src/llenergymeasure/config/vendored_rules/${ENGINE}.json"
 
 if [[ ! -f "$REPO_ROOT/$CORPUS_REL" ]]; then
     echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the walker first:" >&2

@@ -20,7 +20,8 @@ from collections.abc import Callable
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.engines.protocol import ConfigProbe, DormantField, InferenceOutput
+from llenergymeasure.config.probe import ConfigProbe, DormantField
+from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)

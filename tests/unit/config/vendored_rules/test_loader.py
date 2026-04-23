@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.engines.vendored_rules import (
+from llenergymeasure.config.vendored_rules import (
     VALID_ADDED_BY,
     VALID_EMISSION_CHANNEL,
     VALID_OUTCOME,
@@ -270,7 +270,7 @@ def test_enum_value_errors_share_common_base_class() -> None:
 def test_overlay_applied_when_vendored_json_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+    from llenergymeasure.config.vendored_rules import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
 
@@ -302,7 +302,7 @@ def test_overlay_applied_when_vendored_json_present(
 def test_no_overlay_when_vendored_json_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+    from llenergymeasure.config.vendored_rules import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
     monkeypatch.setattr(loader_mod, "_try_load_vendored_json", lambda _e: None)
@@ -318,7 +318,7 @@ def test_no_overlay_when_vendored_json_absent(
 def test_overlay_skips_rules_without_matching_vendor_case(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+    from llenergymeasure.config.vendored_rules import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
     monkeypatch.setattr(
@@ -338,7 +338,7 @@ def test_try_load_vendored_json_rejects_non_numeric_schema_version(
     # (e.g. "dev"). The loader must return None rather than propagating
     # UnsupportedSchemaVersionError from _major() — the vendor CI job
     # resurfaces the issue separately.
-    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+    from llenergymeasure.config.vendored_rules import loader as loader_mod
 
     _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
 

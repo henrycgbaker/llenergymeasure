@@ -13,7 +13,7 @@ Usage (inside the engine's Docker container)::
     python scripts/vendor_rules.py \\
         --engine transformers \\
         --corpus configs/validation_rules/transformers.yaml \\
-        --out src/llenergymeasure/engines/vendored_rules/transformers.json
+        --out src/llenergymeasure/config/vendored_rules/transformers.json
 
 Exit codes:
 

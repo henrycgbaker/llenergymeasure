@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from llenergymeasure.engines.vendored_rules import (
+from llenergymeasure.config.vendored_rules import (
     VALID_ADDED_BY,
     VALID_EMISSION_CHANNEL,
     VALID_OUTCOME,
