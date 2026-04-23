@@ -22,6 +22,30 @@ if str(_PROJECT_ROOT) not in sys.path:
 from scripts.walkers import transformers as tf_walker  # noqa: E402
 from scripts.walkers._base import RuleCandidate, WalkerSource  # noqa: E402
 
+# Pin guard: tests that actually invoke ``tf_walker.walk()`` depend on
+# transformers being inside ``TESTED_AGAINST_VERSIONS``. CI environments that
+# resolve an older version (e.g. 4.51 via ``uv.lock``) lack
+# ``GenerationConfig.validate(strict=True)``. Mark those tests skipped rather
+# than let them fail with a TypeError unrelated to the change under test.
+try:
+    import transformers as _tf  # type: ignore
+    from packaging import version as _pkg_version
+
+    _TRANSFORMERS_IN_PIN = tf_walker.TESTED_AGAINST_VERSIONS.contains(
+        _pkg_version.Version(_tf.__version__), prereleases=True
+    )
+    _TRANSFORMERS_PIN_REASON = (
+        f"transformers=={_tf.__version__} is outside walker pin "
+        f"{tf_walker.TESTED_AGAINST_VERSIONS!s}"
+    )
+except ImportError:
+    _TRANSFORMERS_IN_PIN = False
+    _TRANSFORMERS_PIN_REASON = "transformers not importable"
+
+requires_pinned_transformers = pytest.mark.skipif(
+    not _TRANSFORMERS_IN_PIN, reason=_TRANSFORMERS_PIN_REASON
+)
+
 
 def _sample_candidate() -> RuleCandidate:
     return RuleCandidate(
@@ -112,6 +136,7 @@ def test_walker_landmark_check_passes_on_installed_transformers() -> None:
     assert source_path.endswith("configuration_utils.py")
 
 
+@requires_pinned_transformers
 def test_walk_extracts_exactly_expected_rules() -> None:
     pytest.importorskip("transformers")
     candidates, envelope = tf_walker.walk()
@@ -125,6 +150,7 @@ def test_walk_extracts_exactly_expected_rules() -> None:
     assert envelope["schema_version"] == "1.0.0"
 
 
+@requires_pinned_transformers
 def test_walk_extracts_greedy_dormancy_rules() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
@@ -146,6 +172,7 @@ def test_walk_extracts_greedy_dormancy_rules() -> None:
     assert expected <= greedy_ids
 
 
+@requires_pinned_transformers
 def test_walk_extracts_beam_dormancy_rules() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
@@ -164,6 +191,7 @@ def test_walk_extracts_beam_dormancy_rules() -> None:
     assert expected == beam_ids
 
 
+@requires_pinned_transformers
 def test_walk_extracts_bnb_type_rules() -> None:
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
@@ -178,6 +206,7 @@ def test_walk_extracts_bnb_type_rules() -> None:
         assert f"transformers_bnb_{field}_type" in bnb_ids
 
 
+@requires_pinned_transformers
 def test_walk_deterministic_with_frozen_timestamp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -193,6 +222,7 @@ def test_walk_deterministic_with_frozen_timestamp(
     assert tf_walker.emit_yaml(c1, e1) == tf_walker.emit_yaml(c2, e2)
 
 
+@requires_pinned_transformers
 def test_walk_confidence_distribution() -> None:
     """At least 60% of candidates should be ``high`` confidence.
 

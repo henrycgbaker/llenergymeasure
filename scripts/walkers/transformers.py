@@ -66,20 +66,28 @@ from scripts.walkers.transformers_introspection import (  # noqa: E402
     walk_generation_config_rules,
 )
 
-TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.49,<4.57")
+TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.56,<4.57")
 """Range of transformers versions this walker has been validated against.
 
-Lower bound tracks the project's own ``transformers>=4.49`` pin in
-``pyproject.toml`` so CI's pinned version stays in range. Upper bound
-excludes 4.57 because HF 4.57 restructured ``GenerationConfig.validate()`` —
-dropped several ``minor_issues`` branches (``num_beam_groups``,
-``diversity_penalty``, ``constraints`` single-beam dormancies) and the
-watermarking auto-coercion. The introspection path inherits this pin:
-on 4.57+, the auto-enumerator would surface a different rule set, and the
-diff-rules CI comment would flag the drift for maintainer reconciliation.
+Narrowed to 4.56.x because the introspection walker relies on
+``GenerationConfig.validate(strict=True)`` — that kwarg was introduced in
+4.56 and the 4.56 composed-issue message shape is what the corpus was
+built against. Earlier versions either lack ``strict=`` entirely
+(``TypeError: got an unexpected keyword argument 'strict'``) or expose a
+differently-shaped ``minor_issues`` output. 4.57 restructured
+``validate()`` again — dropped several ``minor_issues`` branches
+(``num_beam_groups``, ``diversity_penalty``, ``constraints`` single-beam
+dormancies) and the watermarking auto-coercion.
 
 On mismatch, :func:`check_installed_version` raises
 :class:`WalkerVersionMismatchError` and CI fails.
+
+Note: the project's own ``transformers`` extra in ``pyproject.toml``
+still floors at ``>=4.49`` for user runtime compatibility. The walker is
+a CI-time maintainer tool, not a runtime dependency, so the narrower pin
+doesn't affect end users. Follow-up: align CI's resolved transformers
+version with this pin (currently ``uv.lock`` resolves to 4.51.0) so the
+vendor-rules-refresh workflow can regenerate the corpus in-band.
 """
 
 
