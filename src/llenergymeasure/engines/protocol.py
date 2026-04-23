@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.probe import ConfigProbe
 
 
 @dataclass
@@ -99,10 +98,6 @@ class EnginePlugin(Protocol):
         """Release model from memory and clear CUDA cache."""
         ...
 
-    def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """Validate config against hardware capabilities. Returns error strings (empty = valid)."""
-        ...
-
     def check_hardware(self, config: ExperimentConfig) -> list[str]:
         """Return host-GPU compatibility errors (empty list when compatible).
 
@@ -110,19 +105,5 @@ class EnginePlugin(Protocol):
         - Returns ``[]`` when no GPU is visible (containers without a visible
           device must not block at config time).
         - Pure: no weight loading, no GPU allocation, no engine construction.
-        """
-        ...
-
-    def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
-        """Probe *config* for dormancy, framework errors, and effective params.
-
-        Observes what the engine would do with the configuration without side
-        effects: never loads model weights, allocates GPU memory, initialises
-        engine contexts, or runs inference. Implementations MAY import engine
-        libraries, download small metadata files (e.g. HF ``config.json``),
-        construct meta-device models, and query NVML.
-
-        Contract: this method never raises. All exceptions are caught and
-        appended to :attr:`ConfigProbe.errors`.
         """
         ...

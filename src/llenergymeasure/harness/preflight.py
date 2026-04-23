@@ -146,12 +146,12 @@ def run_preflight(config: ExperimentConfig) -> None:
     if model_error is not None:
         failures.append(model_error)
 
-    # Check 4: Engine config validation (hardware x config cross-checks)
+    # Check 4: Hardware compatibility (vendored-rules validator runs at
+    # config-load; this catches host-GPU-dependent issues via check_hardware).
     try:
-        from llenergymeasure.engines import get_engine
+        from llenergymeasure.engines.probe_adapter import build_config_probe
 
-        engine_plugin = get_engine(config.engine)
-        engine_errors = engine_plugin.validate_config(config)
+        engine_errors = build_config_probe(config).errors
         failures.extend(engine_errors)
     except Exception:
         pass  # get_engine may fail if engine not installed — already caught by Check 2

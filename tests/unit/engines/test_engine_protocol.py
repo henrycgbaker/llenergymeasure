@@ -602,7 +602,7 @@ def test_build_generate_kwargs_greedy_decoding():
 
 
 def test_engine_plugin_protocol_has_required_methods():
-    """EnginePlugin Protocol defines all required methods plus name/version properties and validate_config."""
+    """EnginePlugin Protocol defines all required methods plus name/version properties and check_hardware."""
     from llenergymeasure.engines.transformers import TransformersEngine
 
     obj = TransformersEngine()
@@ -612,7 +612,7 @@ def test_engine_plugin_protocol_has_required_methods():
     assert hasattr(obj, "run_warmup_prompt")
     assert hasattr(obj, "run_inference")
     assert hasattr(obj, "cleanup")
-    assert hasattr(obj, "validate_config")
+    assert hasattr(obj, "check_hardware")
 
 
 def test_engine_plugin_protocol_is_runtime_checkable():
@@ -632,29 +632,6 @@ def test_non_conforming_object_fails_plugin_protocol_check():
         pass
 
     assert not isinstance(NotAnEngine(), EnginePlugin)
-
-
-# =============================================================================
-# validate_config stubs — PyTorch and vLLM return []
-# =============================================================================
-
-
-def test_pytorch_validate_config_returns_empty():
-    """TransformersEngine.validate_config returns empty list."""
-    from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.transformers import TransformersEngine
-
-    config = ExperimentConfig(task={"model": "gpt2"})
-    assert TransformersEngine().validate_config(config) == []
-
-
-def test_vllm_validate_config_returns_empty():
-    """VLLMEngine.validate_config returns empty list."""
-    from llenergymeasure.config.models import ExperimentConfig
-    from llenergymeasure.engines.vllm import VLLMEngine
-
-    config = ExperimentConfig(task={"model": "gpt2"}, engine="vllm")
-    assert VLLMEngine().validate_config(config) == []
 
 
 # =============================================================================

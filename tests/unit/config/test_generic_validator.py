@@ -122,7 +122,7 @@ def test_error_severity_no_raise_when_match_misses(monkeypatch: pytest.MonkeyPat
         engine="transformers",
         transformers=TransformersConfig(attn_implementation="sdpa"),
     )
-    assert cfg._dormant_observations == []
+    assert cfg._dormant_observations == {}
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ def test_dormant_severity_populates_observations(monkeypatch: pytest.MonkeyPatch
 
     observations = cfg._dormant_observations
     assert len(observations) == 1
-    obs = observations[0]
+    obs = observations["test_dormant_rule"]
     assert isinstance(obs, DormantField)
     assert obs.declared_value == 0.9
     assert "test_dormant_rule" in (obs.reason or "")
@@ -214,13 +214,13 @@ def test_missing_corpus_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(models_mod, "_get_rules_loader", lambda: _NoCorpusLoader())
 
     cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
-    assert cfg._dormant_observations == []
+    assert cfg._dormant_observations == {}
 
 
 def test_empty_rule_set_populates_empty_observations(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_test_rules(monkeypatch, [])
     cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
-    assert cfg._dormant_observations == []
+    assert cfg._dormant_observations == {}
 
 
 # ---------------------------------------------------------------------------
@@ -303,4 +303,4 @@ def test_real_corpus_loads_and_default_config_passes() -> None:
     false-positive fixed in #375).
     """
     cfg = ExperimentConfig(task={"model": "gpt2"}, engine="transformers")
-    assert cfg._dormant_observations == []
+    assert cfg._dormant_observations == {}
