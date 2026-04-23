@@ -41,12 +41,14 @@ class TestSourceFlag:
     def test_invalid_source_rejected(self, runner: CliRunner, tmp_path: Path):
         result = runner.invoke(app, ["report-gaps", "--source", "nope"])
         assert result.exit_code != 0
-        assert "--source must be one of" in result.output
+        assert "must be one of" in result.output
+        assert "'nope'" in result.output
 
     def test_invalid_engine_rejected(self, runner: CliRunner):
         result = runner.invoke(app, ["report-gaps", "--engine", "custom"])
         assert result.exit_code != 0
-        assert "--engine must be one of" in result.output
+        assert "must be one of" in result.output
+        assert "'custom'" in result.output
 
     def test_h3_source_on_empty_dir(self, runner: CliRunner, tmp_path: Path):
         result = runner.invoke(
