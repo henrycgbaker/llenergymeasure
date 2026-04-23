@@ -586,11 +586,14 @@ def _try_load_vendored_json(engine: str) -> dict[str, Any] | None:
         parsed: dict[str, Any] = json.loads(raw)
     except json.JSONDecodeError:
         return None
-    # Reject unsupported envelope majors — mirror the YAML schema guard so a
-    # future-schema JSON can't silently overlay unfamiliar keys.
     envelope_version = str(parsed.get("schema_version", ""))
-    if envelope_version and _major(envelope_version) != SUPPORTED_MAJOR_VERSION:
-        return None
+    if envelope_version:
+        try:
+            major = _major(envelope_version)
+        except UnsupportedSchemaVersionError:
+            return None
+        if major != SUPPORTED_MAJOR_VERSION:
+            return None
     return parsed
 
 

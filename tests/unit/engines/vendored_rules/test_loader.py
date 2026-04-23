@@ -329,3 +329,36 @@ def test_overlay_skips_rules_without_matching_vendor_case(
     result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
     # No matching case -> rule is returned unchanged.
     assert "observed_outcome" not in result.rules[0].expected_outcome
+
+
+def test_try_load_vendored_json_rejects_non_numeric_schema_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A corrupt commit-back could write a non-numeric schema_version
+    # (e.g. "dev"). The loader must return None rather than propagating
+    # UnsupportedSchemaVersionError from _major() — the vendor CI job
+    # resurfaces the issue separately.
+    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+
+    def fake_read(_self: object, _name: str) -> str:
+        import json as _json
+
+        return _json.dumps({"schema_version": "dev", "cases": []})
+
+    class _FakeFiles:
+        def __truediv__(self, name: str) -> _FakeEntry:
+            return _FakeEntry()
+
+    class _FakeEntry:
+        def read_text(self) -> str:
+            import json as _json
+
+            return _json.dumps({"schema_version": "dev", "cases": []})
+
+    monkeypatch.setattr(loader_mod.resources, "files", lambda _pkg: _FakeFiles())
+
+    # Should not raise; should fall back to YAML-only (no observed_* keys).
+    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+    assert "observed_outcome" not in result.rules[0].expected_outcome

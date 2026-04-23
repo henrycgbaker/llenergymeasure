@@ -25,13 +25,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Private-field allowlist (PoC-C finding)
+# Private-field allowlist
 # ---------------------------------------------------------------------------
-# Per PLAN §"Consistency pass applied 2026-04-23", the vendor state-diff must
-# exclude engine-specific bookkeeping fields that would pollute the diff with
-# non-deterministic state (commit hashes, cached derived flags, …). Each
-# engine's runner declares its own allowlist; a module-level default covers
-# fields common across engines.
+# The vendor state-diff excludes engine-specific bookkeeping fields that would
+# pollute the diff with non-deterministic state (commit hashes, cached derived
+# flags, per-run tensors). Each engine declares its own allowlist; the default
+# covers fields common across engines.
 
 _DEFAULT_PRIVATE_FIELD_ALLOWLIST: frozenset[str] = frozenset(
     {
@@ -122,7 +121,6 @@ def extract_state(
     """
     allowlist = frozenset(private_allowlist)
 
-    # Pydantic v2
     model_dump = getattr(obj, "model_dump", None)
     if callable(model_dump):
         try:
@@ -132,7 +130,6 @@ def extract_state(
         except Exception:
             pass
 
-    # dataclasses
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return {
             f.name: getattr(obj, f.name)
@@ -140,7 +137,6 @@ def extract_state(
             if not f.name.startswith("_") or f.name in allowlist
         }
 
-    # __slots__ and __dict__ classes
     collected: dict[str, Any] = {}
     slots = getattr(type(obj), "__slots__", None)
     if slots:
@@ -180,16 +176,10 @@ def diff_input_vs_state(
 
 
 _WARNING_ONCE_SENTINEL = "\x00LLEM_WARNING_ONCE\x00"
-"""Prefix tagging messages that came through HF's ``logger.warning_once``.
-
-HuggingFace installs a ``warning_once`` method on :class:`logging.Logger` that
-``@lru_cache``-wraps ``self.warning(...)`` — so at the stdlib record level the
-two channels are indistinguishable. The corpus declares ``logger_warning`` vs
-``logger_warning_once`` as distinct emission channels (13 dormant rules use
-the dedup-wrapped form), so the vendor runner must tell them apart. We
-monkey-patch ``warning_once`` to prepend this sentinel; the classifier
-strips it from observed-message output.
-"""
+"""Prefix injected by :func:`_patch_warning_once` to distinguish
+``logger.warning_once`` records from plain ``logger.warning`` at the
+stdlib-record level (HF's ``warning_once`` is ``@lru_cache``-wrapped
+``self.warning``, identical in the record stream otherwise)."""
 
 
 def _attach_loggers(
@@ -308,17 +298,6 @@ def _split_log_buffer(raw: str) -> tuple[str, ...]:
 # ---------------------------------------------------------------------------
 # Outcome classification
 # ---------------------------------------------------------------------------
-
-_VALID_OUTCOMES = frozenset(
-    {
-        "error",
-        "warn",
-        "dormant_announced",
-        "dormant_silent",
-        "no_op",
-        "skipped_hardware_dependent",
-    }
-)
 
 
 def classify_outcome(capture: CaptureBuffers, silent_normalisations: dict[str, Any]) -> str:

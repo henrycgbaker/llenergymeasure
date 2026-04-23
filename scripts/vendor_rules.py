@@ -293,16 +293,11 @@ def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
 def _negative_confirms(neg: CaptureBuffers, silent_normalisations: dict[str, Any]) -> bool:
     """True iff the rule did NOT fire on the negative kwargs.
 
-    Strict definition — any of exception / warn / logger / silent
-    normalisation counts as firing. Catches dead walker entries where
-    ``kwargs_negative`` still happens to trip the rule.
+    Delegates to :func:`classify_outcome` so the definition of "fired"
+    lives in one place: anything other than ``no_op`` counts as firing,
+    which would be a dead walker entry.
     """
-    return (
-        neg.exception_type is None
-        and not neg.warnings_captured
-        and not neg.logger_messages
-        and not silent_normalisations
-    )
+    return classify_outcome(neg, silent_normalisations) == "no_op"
 
 
 # ---------------------------------------------------------------------------

@@ -1,21 +1,17 @@
-"""Shuffle-application fixpoint test for the dormant-rule canonicaliser.
+"""Shuffle-application fixpoint contract test for the dormant-rule corpus.
 
-The canonicaliser itself lands in Wave 2 (phase 50.3a). This module ships
-the CI-time *contract test* that corpora it consumes must satisfy:
+Enforces three invariants the dormant canonicaliser will depend on:
 
 1. **Idempotent** — applying the same rule twice leaves the state unchanged.
 2. **Order-independent at fixpoint** — multiple random application orderings
    converge to the same canonical form.
 3. **Cycle-free** — no rule pair alternates values indefinitely.
 
-The test operates on a declarative projection of each rule: a dormant rule
-declares ``normalised_fields`` in ``expected_outcome``, and the "fix" is
-setting each normalised field to its declared default (from the predicate's
-``not_equal`` operand, falling back to ``None``). This is sufficient to catch
-the structural failure modes the canonicaliser would trip on — we don't need
-the canonicaliser itself to prove shuffle-stability of the *rules*.
-
-Imported by ``scripts/vendor_rules.py`` and by ``tests/unit/scripts/walkers/test_fixpoint.py``.
+The test operates on a declarative projection: a dormant rule declares
+``normalised_fields`` in ``expected_outcome``, and the "fix" is setting each
+normalised field to its declared default (from the predicate's ``not_equal``
+operand, falling back to ``None``). This is sufficient to catch the structural
+failure modes a canonicaliser would trip on.
 """
 
 from __future__ import annotations
@@ -41,11 +37,9 @@ order-dependence without false-positive cycle detection.
 """
 
 _DEFAULT_SHUFFLE_COUNT = 5
-"""Number of random orderings to try per input state.
-
-Proposal in PLAN §"Open questions at P2 implementation time" — 5 is fast and
-catches cycles empirically. Bumped via ``shuffle_count`` if needed.
-"""
+"""Number of random orderings to try per input state — empirically enough to
+catch cycles without meaningfully slowing CI. Raise via ``shuffle_count`` if
+a future corpus exhibits rare order-dependent modes."""
 
 
 class FixpointError(Exception):
