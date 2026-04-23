@@ -363,31 +363,19 @@ class TensorRTEngine:
     # -------------------------------------------------------------------------
 
     def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """Validate TensorRT-LLM hardware and quantisation compatibility.
-
-        Thin wrapper around :meth:`check_hardware`. Retained on the plugin
-        protocol while the harness still calls ``validate_config`` directly;
-        the follow-up probe-adapter PR migrates preflight to
-        ``build_config_probe`` and retires this method.
-        """
+        """Retained until preflight migrates to ``build_config_probe``."""
         return self.check_hardware(config)
 
     @staticmethod
     def check_hardware(config: ExperimentConfig) -> list[str]:
         """Check SM capability + FP8 requirements against the visible GPU.
 
-        Independent of engine-kwargs construction: the hardware check runs on
-        its own data path, so a T0 kwargs-build failure can no longer
-        short-circuit it (pre-check_hardware, ``probe_config`` returned early
-        on T0 failure and skipped the T5 hardware step).
-
-        Checks:
+        Gates:
           - SM >= 7.5 (Turing minimum for TRT-LLM)
-          - FP8 requires SM >= 8.9 (Ada Lovelace / Hopper); A100 is SM 8.0
-          - FP8 KV cache requires SM >= 8.9
+          - FP8 weight quant requires SM >= 8.9 (Ada Lovelace / Hopper)
+          - FP8 KV-cache quant requires SM >= 8.9
 
-        Returns empty list when no GPU is visible (cannot block at config
-        time inside a container without a visible device).
+        Returns ``[]`` when no GPU is visible.
         """
         from llenergymeasure.device.gpu_info import get_compute_capability
 
@@ -684,9 +672,8 @@ class TensorRTEngine:
             except Exception as e:
                 errors.append(f"T1+T2 LlmArgs: {type(e).__name__}: {e}")
 
-        # --- T5: Static hardware compat (fallback when no GPU or LlmArgs unavailable) ---
-        # When LlmArgs ran it already calls NVML internally (OQ-4); re-running
-        # the static check would duplicate errors. Skip T5 in that case.
+        # Hardware compat. Skip when LlmArgs already ran on a visible GPU
+        # (it calls NVML internally, OQ-4) to avoid duplicate errors.
         if not llmargs_ran or not self._probe_has_gpu_access():
             for err in self.check_hardware(config):
                 if err not in errors:

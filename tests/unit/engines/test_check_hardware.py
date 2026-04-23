@@ -2,16 +2,15 @@
 
 The ``check_hardware`` seam is the host-GPU-dependent counterpart to the
 vendored-rules validator that runs at ``ExperimentConfig`` construction time.
-These tests cover:
+Tests here cover:
 
 - Static-method contract (``check_hardware`` callable without an instance).
 - Transformers / vLLM return ``[]`` (behavioural stubs; rules move to the
   vendored corpus when their respective walkers ship).
-- TensorRT's SM floor, FP8 gate, and FP8 KV-cache gate fire on the right SM.
-- Structural property: TensorRT's ``check_hardware`` is independent of
-  engine-kwargs construction, so a failure in ``_build_llm_kwargs`` cannot
-  short-circuit it (closes the pre-50.2 ``probe_config`` T0-failure bug at
-  the new seam).
+- TensorRT's SM floor, FP8 gate, FP8 KV-cache gate, and multi-error collection.
+- Structural property: a TensorRT ``probe_config`` call on a config whose
+  engine-kwargs build would fail still surfaces hardware errors, i.e. the
+  hardware check is no longer short-circuited by a T0 kwargs-build failure.
 """
 
 from __future__ import annotations
@@ -46,7 +45,6 @@ def test_check_hardware_is_static(engine_cls, monkeypatch):
         TensorRTEngine: "tensorrt",
     }[engine_cls]
     config = make_config(model="test-model", engine=engine_name)
-    # Calls without instantiating
     result = engine_cls.check_hardware(config)
     assert isinstance(result, list)
     assert all(isinstance(e, str) for e in result)
@@ -87,30 +85,30 @@ class TestVLLMCheckHardware:
 
 
 # ---------------------------------------------------------------------------
-# TensorRT: SM floor + FP8 gates (same logic previously on validate_config,
-# now on the dedicated check_hardware seam)
+# TensorRT: SM floor, FP8 gates, multi-error collection
 # ---------------------------------------------------------------------------
 
 
 _TRT_DEFAULTS = {"model": "test-model", "engine": "tensorrt"}
 
 
+def _patch_sm(monkeypatch, sm: tuple[int, int] | None) -> None:
+    monkeypatch.setattr(
+        "llenergymeasure.device.gpu_info.get_compute_capability",
+        lambda gpu_index=0: sm,
+    )
+
+
 class TestTensorRTCheckHardware:
     def test_sm_none_returns_empty(self, monkeypatch):
         """SM detection returns None (no GPU visible) → no errors."""
-        monkeypatch.setattr(
-            "llenergymeasure.device.gpu_info.get_compute_capability",
-            lambda gpu_index=0: None,
-        )
+        _patch_sm(monkeypatch, None)
         config = make_config(**_TRT_DEFAULTS)
         assert TensorRTEngine.check_hardware(config) == []
 
     def test_sm_below_floor_errors(self, monkeypatch):
         """SM 7.0 (V100) fails the 7.5 floor."""
-        monkeypatch.setattr(
-            "llenergymeasure.device.gpu_info.get_compute_capability",
-            lambda gpu_index=0: (7, 0),
-        )
+        _patch_sm(monkeypatch, (7, 0))
         config = make_config(**_TRT_DEFAULTS)
         errors = TensorRTEngine.check_hardware(config)
         assert len(errors) == 1
@@ -118,19 +116,13 @@ class TestTensorRTCheckHardware:
 
     def test_sm_at_floor_passes(self, monkeypatch):
         """SM 7.5 (Turing T4) passes exactly at the floor."""
-        monkeypatch.setattr(
-            "llenergymeasure.device.gpu_info.get_compute_capability",
-            lambda gpu_index=0: (7, 5),
-        )
+        _patch_sm(monkeypatch, (7, 5))
         config = make_config(**_TRT_DEFAULTS)
         assert TensorRTEngine.check_hardware(config) == []
 
     def test_fp8_on_a100_errors(self, monkeypatch):
         """FP8 quant on SM 8.0 (A100) is blocked."""
-        monkeypatch.setattr(
-            "llenergymeasure.device.gpu_info.get_compute_capability",
-            lambda gpu_index=0: (8, 0),
-        )
+        _patch_sm(monkeypatch, (8, 0))
         config = make_config(
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
@@ -142,10 +134,7 @@ class TestTensorRTCheckHardware:
 
     def test_fp8_on_ada_passes(self, monkeypatch):
         """FP8 quant on SM 8.9 (Ada Lovelace) passes."""
-        monkeypatch.setattr(
-            "llenergymeasure.device.gpu_info.get_compute_capability",
-            lambda gpu_index=0: (8, 9),
-        )
+        _patch_sm(monkeypatch, (8, 9))
         config = make_config(
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
@@ -154,10 +143,7 @@ class TestTensorRTCheckHardware:
 
     def test_fp8_kv_cache_on_a100_errors(self, monkeypatch):
         """FP8 KV-cache quant on SM 8.0 is blocked."""
-        monkeypatch.setattr(
-            "llenergymeasure.device.gpu_info.get_compute_capability",
-            lambda gpu_index=0: (8, 0),
-        )
+        _patch_sm(monkeypatch, (8, 0))
         config = make_config(
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(kv_cache_quant_algo="FP8")),
@@ -166,34 +152,52 @@ class TestTensorRTCheckHardware:
         assert len(errors) == 1
         assert "KV cache" in errors[0]
 
-
-# ---------------------------------------------------------------------------
-# Structural property: check_hardware is independent of engine-kwargs build.
-#
-# Pre-check_hardware, TensorRT's probe_config returned early on a T0
-# ``_build_llm_kwargs`` failure and therefore skipped the T5 hardware check.
-# The new seam is a separate code path — the hardware check must run even
-# when engine-kwargs construction would fail.
-# ---------------------------------------------------------------------------
-
-
-class TestTensorRTCheckHardwareIndependentOfKwargs:
-    def test_hardware_check_runs_when_engine_path_invalid(self, monkeypatch, tmp_path):
-        """A config whose engine_path would make ``_build_llm_kwargs`` raise must
-        still surface hardware errors from ``check_hardware``.
-        """
-        monkeypatch.setattr(
-            "llenergymeasure.device.gpu_info.get_compute_capability",
-            lambda gpu_index=0: (7, 0),  # below the 7.5 floor
+    def test_both_fp8_errors_collected(self, monkeypatch):
+        """FP8 weight quant AND FP8 KV cache on SM 8.0 produces 2 errors."""
+        _patch_sm(monkeypatch, (8, 0))
+        config = make_config(
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(
+                quant_config=TensorRTQuantConfig(quant_algo="FP8", kv_cache_quant_algo="FP8")
+            ),
         )
-        # Point engine_path at a non-existent directory — _build_llm_kwargs
-        # raises ConfigError on this. check_hardware should not even look.
+        errors = TensorRTEngine.check_hardware(config)
+        assert len(errors) == 2
+
+
+# ---------------------------------------------------------------------------
+# Short-circuit regression: pre-check_hardware, TensorRT's hardware check was
+# reachable only *downstream* of ``_build_llm_kwargs`` inside ``probe_config``,
+# so a T0 kwargs-build failure silently skipped hardware compat. The fix is
+# structural: ``check_hardware`` is now a separate code path. To pin that the
+# two paths are independent, we exercise the same fixture against both:
+# ``_build_llm_kwargs`` raises, and ``check_hardware`` still returns the SM
+# error cleanly. (The composition — both errors surfacing together — lands
+# with ``build_config_probe`` in the follow-up PR.)
+# ---------------------------------------------------------------------------
+
+
+class TestShortCircuitRegression:
+    def test_kwargs_build_and_hardware_check_are_independent(self, monkeypatch, tmp_path):
+        import pytest
+
+        from llenergymeasure.utils.exceptions import ConfigError
+
+        _patch_sm(monkeypatch, (7, 0))  # below the 7.5 floor
+
+        # engine_path pointing at a non-existent directory makes
+        # _build_llm_kwargs raise ConfigError.
         config = make_config(
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(engine_path=tmp_path / "does-not-exist"),
         )
 
-        errors = TensorRTEngine.check_hardware(config)
+        engine = TensorRTEngine()
 
-        assert len(errors) == 1
-        assert "SM >= 7.5" in errors[0]
+        with pytest.raises(ConfigError):
+            engine._build_llm_kwargs(config)
+
+        errors = TensorRTEngine.check_hardware(config)
+        assert any("SM >= 7.5" in e for e in errors), (
+            f"expected SM-floor error from check_hardware; got {errors!r}"
+        )

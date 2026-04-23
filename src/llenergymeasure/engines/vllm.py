@@ -284,15 +284,7 @@ class VLLMEngine:
 
     @staticmethod
     def check_hardware(config: ExperimentConfig) -> list[str]:
-        """No host-hardware checks required for vLLM at preflight.
-
-        vLLM's SM x dtype x quant resolution happens inside
-        ``vllm.EngineArgs.create_engine_config()`` at engine construction time
-        and surfaces as framework errors rather than preflight errors. When
-        the vLLM AST walker and vendored rules corpus land, the
-        SM-capability-dependent rules move into the vendored corpus (applied
-        by the generic model validator); until then this returns ``[]``.
-        """
+        """No preflight hardware rules; vLLM resolves SM x dtype x quant inside EngineArgs."""
         return []
 
     # -------------------------------------------------------------------------
