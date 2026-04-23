@@ -331,6 +331,14 @@ class TensorRTEngine:
         if self._build_metadata is not None:
             extras["build_metadata"] = self._build_metadata
 
+        # Library-observed effective params for H3 (sweep-dedup.md §3).
+        # TRT-LLM runs in NGC container only; allowlist verification is
+        # deferred to a container run per the PoC-C notes.
+        effective_params = self._capture_effective_params(config, llm, sampling_params)
+        extras["effective_engine_params"] = effective_params["engine"]
+        extras["effective_sampling_params"] = effective_params["sampling"]
+        extras["library_version"] = effective_params["library_version"]
+
         return InferenceOutput(
             elapsed_time_sec=elapsed,
             input_tokens=input_token_count,
@@ -340,6 +348,51 @@ class TensorRTEngine:
             batch_times=[elapsed],
             extras=extras,
         )
+
+    # -------------------------------------------------------------------------
+    # Private: effective-params capture (H3)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _capture_effective_params(
+        config: ExperimentConfig,
+        llm: Any,
+        sampling_params: Any,
+    ) -> dict[str, Any]:
+        """Extract post-construction state from the TRT-LLM native types.
+
+        TRT-LLM's ``LlmArgs`` + nested ``BuildConfig`` are Pydantic; accessible
+        on ``llm.args`` in current releases. Private fields (if any surface in
+        a given TRT-LLM version) are stripped by the default
+        ``_``-prefix allowlist behaviour in
+        :func:`extract_effective_params`.
+        """
+        import contextlib as _cl
+
+        from llenergymeasure.engines._helpers import extract_effective_params
+
+        sampling: dict[str, Any] = {}
+        with _cl.suppress(Exception):
+            sampling = extract_effective_params(sampling_params)
+
+        engine_params: dict[str, Any] = {}
+        with _cl.suppress(Exception):
+            llm_args = getattr(llm, "args", None)
+            if llm_args is not None:
+                engine_params = extract_effective_params(llm_args)
+
+        try:
+            import tensorrt_llm as _trt
+
+            library_version = str(_trt.__version__)
+        except Exception:
+            library_version = "unknown"
+
+        return {
+            "engine": engine_params,
+            "sampling": sampling,
+            "library_version": library_version,
+        }
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

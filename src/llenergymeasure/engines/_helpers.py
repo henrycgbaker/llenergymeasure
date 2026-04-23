@@ -6,6 +6,7 @@ to reduce duplication while keeping engines thin.
 
 from __future__ import annotations
 
+import dataclasses
 import gc
 import logging
 from collections.abc import Callable
@@ -17,6 +18,76 @@ from llenergymeasure.engines.protocol import DormantField
 from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Effective-params extraction (H3 source)
+# ---------------------------------------------------------------------------
+
+
+def extract_effective_params(
+    native_obj: Any,
+    *,
+    private_field_allowlist: set[str] | None = None,
+) -> dict[str, Any]:
+    """Dump a constructed native type's post-``__post_init__`` state.
+
+    Used by the H3 hashing pipeline (sweep-dedup.md §3.2) — after each
+    backend constructs its native type (``GenerationConfig``,
+    ``SamplingParams``, ``LlmArgs``), the harness calls this to extract
+    the authoritative effective parameters the library settled on.
+
+    PoC-C finding (sweep-dedup.md §3.2 and §10 decision log): live
+    libraries leak private state that poisons H3 if passed through
+    unfiltered. Specific leaks observed:
+
+    - ``transformers.GenerationConfig``: ``_commit_hash``,
+      ``_from_model_config``
+    - ``vllm.SamplingParams``: ``_all_stop_token_ids``,
+      ``_bad_words_token_ids``, ``_eos_token_id``
+
+    Default behaviour is to strip all ``_``-prefixed fields. Engines pass
+    ``private_field_allowlist`` only when a specific private field is
+    genuinely measurement-relevant (rare).
+
+    Dispatch covers the three observed native-type shapes — Pydantic
+    (``model_dump``), dataclass (``dataclasses.asdict``), and
+    ``__slots__``-based (vLLM msgspec-adjacent). Fallback is ``__dict__``.
+    """
+    allow = private_field_allowlist or set()
+    raw = _dump_raw(native_obj)
+    return {k: v for k, v in raw.items() if not k.startswith("_") or k in allow}
+
+
+def _dump_raw(native_obj: Any) -> dict[str, Any]:
+    """Return a ``dict`` of every attribute observable on ``native_obj``.
+
+    Order of attempts mirrors the three shapes :func:`extract_effective_params`
+    commits to supporting; each is an explicit ``hasattr`` rather than
+    ``try/except`` because the libraries raise non-``AttributeError`` for
+    ``model_dump`` failures (e.g. transformers raises ``RuntimeError``).
+    """
+    if hasattr(native_obj, "model_dump"):
+        # Pydantic (transformers GenerationConfig inherits from PushToHubMixin;
+        # its model_dump accepts mode="python").
+        try:
+            dumped = native_obj.model_dump(mode="python")
+        except TypeError:
+            dumped = native_obj.model_dump()
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    if dataclasses.is_dataclass(native_obj) and not isinstance(native_obj, type):
+        return dataclasses.asdict(native_obj)
+    if hasattr(native_obj, "__slots__"):
+        out: dict[str, Any] = {}
+        for slot in native_obj.__slots__:
+            if hasattr(native_obj, slot):
+                out[slot] = getattr(native_obj, slot)
+        if out:
+            return out
+    if hasattr(native_obj, "__dict__"):
+        return dict(native_obj.__dict__)
+    return {}
 
 
 # ---------------------------------------------------------------------------
