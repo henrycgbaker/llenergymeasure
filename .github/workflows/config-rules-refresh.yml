@@ -129,7 +129,12 @@ jobs:
           echo "is_breaking=$([[ $DIFF_EXIT -eq 1 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Commit regenerated JSON
-        if: github.event_name == 'pull_request'
+        # Commit-back runs even when vendor detected divergence — the diff
+        # comment is more actionable when paired with the exact regenerated
+        # JSON on the PR branch. Intentionally not gated on vendor_exit.
+        # Skipped for forks (no write token on a fork PR) — the diff
+        # comment on the PR is still informative in that case.
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -142,7 +147,10 @@ jobs:
           fi
 
           git commit -m "chore(config): refresh transformers vendored rules"
-          git push
+          # --force-with-lease guards against clobbering a concurrent push
+          # from the PR author. On stale-ref failure the workflow exits
+          # non-zero and a rerun will pick up the latest state.
+          git push --force-with-lease
 
       - name: Post diff comment
         if: github.event_name == 'pull_request' || inputs.pr_number != ''

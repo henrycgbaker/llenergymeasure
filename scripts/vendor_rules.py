@@ -52,6 +52,7 @@ from scripts._vendor_common import (  # noqa: E402  (late import after sys.path)
     compare_expected_vs_observed,
     diff_input_vs_state,
     run_case,
+    strip_warning_once_sentinel,
 )
 
 SCHEMA_VERSION = "1.0.0"
@@ -250,7 +251,9 @@ def vendor_rule(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResu
     )
     negative_confirmed = _negative_confirms(neg, neg_silent)
 
-    observed_messages = list(pos.warnings_captured) + list(pos.logger_messages)
+    observed_messages = list(pos.warnings_captured) + list(
+        strip_warning_once_sentinel(pos.logger_messages)
+    )
     observed_exception: dict[str, str] | None = None
     if pos.exception_type is not None:
         observed_exception = {

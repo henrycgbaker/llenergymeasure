@@ -171,6 +171,21 @@ class TestRunCase:
         buf = run_case(emitter, logger_names=(logger_name,))
         assert any("observed emission" in m for m in buf.logger_messages)
 
+    def test_preserves_warnings_when_call_raises(self) -> None:
+        # Dormant-then-raise paths (e.g. deprecation warning followed by a
+        # strict-mode ValueError) must preserve the warning alongside the
+        # exception — both are the rule's fingerprint.
+        import warnings
+
+        def warn_then_raise() -> None:
+            warnings.warn("about to fail", UserWarning, stacklevel=2)
+            raise ValueError("strict mode")
+
+        buf = run_case(warn_then_raise)
+        assert buf.exception_type == "ValueError"
+        assert buf.exception_message == "strict mode"
+        assert any("about to fail" in str(w) for w in buf.warnings_captured)
+
 
 # ---------------------------------------------------------------------------
 # classify_outcome / classify_emission_channel
@@ -213,6 +228,28 @@ class TestClassify:
         )
         assert classify_outcome(buf, {}) == "dormant_announced"
         assert classify_emission_channel(buf) == "logger_warning"
+
+    def test_logger_warning_once_classified_when_sentinel_present(self) -> None:
+        # Any sentinel-tagged line upgrades the classification from
+        # logger_warning to logger_warning_once — the dedup-wrapped form is
+        # the stricter claim on user visibility.
+        sentinel = _vendor_common._WARNING_ONCE_SENTINEL
+        buf = _vendor_common.CaptureBuffers(
+            exception_type=None,
+            exception_message=None,
+            warnings_captured=(),
+            logger_messages=(f"{sentinel}one-shot warning from HF", "regular warning"),
+            observed_state={"a": 1},
+            duration_ms=1,
+        )
+        assert classify_emission_channel(buf) == "logger_warning_once"
+
+    def test_strip_warning_once_sentinel_cleans_messages(self) -> None:
+        sentinel = _vendor_common._WARNING_ONCE_SENTINEL
+        messages = (f"{sentinel}deprecated kwarg", "plain log")
+        cleaned = _vendor_common.strip_warning_once_sentinel(messages)
+        assert cleaned == ("deprecated kwarg", "plain log")
+        assert all(sentinel not in m for m in cleaned)
 
     def test_dormant_silent_on_state_change_only(self) -> None:
         buf = _vendor_common.CaptureBuffers(

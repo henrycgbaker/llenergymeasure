@@ -179,6 +179,19 @@ def diff_input_vs_state(
 # ---------------------------------------------------------------------------
 
 
+_WARNING_ONCE_SENTINEL = "\x00LLEM_WARNING_ONCE\x00"
+"""Prefix tagging messages that came through HF's ``logger.warning_once``.
+
+HuggingFace installs a ``warning_once`` method on :class:`logging.Logger` that
+``@lru_cache``-wraps ``self.warning(...)`` — so at the stdlib record level the
+two channels are indistinguishable. The corpus declares ``logger_warning`` vs
+``logger_warning_once`` as distinct emission channels (13 dormant rules use
+the dedup-wrapped form), so the vendor runner must tell them apart. We
+monkey-patch ``warning_once`` to prepend this sentinel; the classifier
+strips it from observed-message output.
+"""
+
+
 def _attach_loggers(
     loggers: Iterable[str],
 ) -> tuple[logging.Handler, io.StringIO, list[tuple[logging.Logger, int]]]:
@@ -207,6 +220,30 @@ def _detach_loggers(handler: logging.Handler, restore: list[tuple[logging.Logger
         logger.setLevel(prev)
 
 
+def _patch_warning_once() -> Callable[[], None]:
+    """Install a sentinel-tagging spy over ``Logger.warning_once``.
+
+    Returns a restore callable the caller must run in ``finally``. No-op when
+    HF isn't importable (the attribute is attached at ``transformers.utils.logging``
+    import time; outside the HF container the method is absent and there is
+    nothing to patch).
+    """
+    original = getattr(logging.Logger, "warning_once", None)
+    if original is None:
+        return lambda: None
+
+    def spy(self: logging.Logger, msg: Any, *args: Any, **kwargs: Any) -> Any:
+        tagged = f"{_WARNING_ONCE_SENTINEL}{msg}" if isinstance(msg, str) else msg
+        return original(self, tagged, *args, **kwargs)
+
+    logging.Logger.warning_once = spy  # type: ignore[attr-defined]
+
+    def restore() -> None:
+        logging.Logger.warning_once = original  # type: ignore[attr-defined]
+
+    return restore
+
+
 def run_case(
     callable_fn: Callable[[], Any],
     *,
@@ -220,26 +257,30 @@ def run_case(
     :class:`CaptureBuffers` regardless of whether the call raised.
     """
     handler, buf, restore = _attach_loggers(logger_names)
+    restore_warning_once = _patch_warning_once()
     start = time.perf_counter()
     exc_type: str | None = None
     exc_msg: str | None = None
     obj: Any = None
+    captured_warnings: list[warnings.WarningMessage] = []
 
     try:
-        with warnings.catch_warnings(record=True) as captured_warnings:
+        with warnings.catch_warnings(record=True) as recorded:
             warnings.simplefilter("always")
             try:
                 obj = callable_fn()
             except Exception as exc:
                 exc_type = type(exc).__name__
                 exc_msg = str(exc)
+            # Snapshot inside the catch_warnings scope so warnings captured
+            # alongside an exception are preserved (dormant-then-raise paths).
+            captured_warnings = list(recorded or [])
     finally:
+        restore_warning_once()
         _detach_loggers(handler, restore)
         duration_ms = int((time.perf_counter() - start) * 1000)
 
-    warnings_tuple: tuple[str, ...] = ()
-    if exc_type is None:
-        warnings_tuple = tuple(str(w.message) for w in (captured_warnings or []))
+    warnings_tuple = tuple(str(w.message) for w in captured_warnings)
 
     log_messages = _split_log_buffer(buf.getvalue())
     observed_state = (
@@ -303,14 +344,32 @@ def classify_outcome(capture: CaptureBuffers, silent_normalisations: dict[str, A
 
 
 def classify_emission_channel(capture: CaptureBuffers) -> str:
-    """Return the corpus-compatible ``emission_channel`` tag."""
+    """Return the corpus-compatible ``emission_channel`` tag.
+
+    ``logger_warning_once`` is distinguished from plain ``logger_warning``
+    via the sentinel prepended by :func:`_patch_warning_once`. Mixed
+    batches (same rule emitting both forms) classify as
+    ``logger_warning_once`` — the dedup-wrapped form is the stricter claim
+    on user visibility.
+    """
     if capture.exception_type is not None:
         return "none"
     if capture.warnings_captured:
         return "warnings_warn"
     if capture.logger_messages:
+        if any(_WARNING_ONCE_SENTINEL in m for m in capture.logger_messages):
+            return "logger_warning_once"
         return "logger_warning"
     return "none"
+
+
+def strip_warning_once_sentinel(messages: Iterable[str]) -> tuple[str, ...]:
+    """Remove the ``warning_once`` sentinel from captured messages for envelope output.
+
+    Classification (``classify_emission_channel``) needs the sentinel; downstream
+    consumers do not. Call this right before serialising observed messages.
+    """
+    return tuple(m.replace(_WARNING_ONCE_SENTINEL, "") for m in messages)
 
 
 # ---------------------------------------------------------------------------

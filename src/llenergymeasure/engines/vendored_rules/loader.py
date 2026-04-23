@@ -574,8 +574,9 @@ def _try_load_vendored_json(engine: str) -> dict[str, Any] | None:
 
     Accessed via :mod:`importlib.resources` so the JSON is picked up
     regardless of install layout (editable checkout vs installed wheel).
-    Swallows ``JSONDecodeError`` to avoid breaking startup on a corrupt
-    commit-back — the vendor CI job will resurface the issue.
+    Swallows ``JSONDecodeError`` and rejects unsupported envelope versions
+    to avoid breaking startup on a corrupt or future-schema commit-back —
+    the vendor CI job will resurface the issue.
     """
     try:
         raw = (resources.files(_VENDORED_JSON_PACKAGE) / f"{engine}.json").read_text()
@@ -584,6 +585,11 @@ def _try_load_vendored_json(engine: str) -> dict[str, Any] | None:
     try:
         parsed: dict[str, Any] = json.loads(raw)
     except json.JSONDecodeError:
+        return None
+    # Reject unsupported envelope majors — mirror the YAML schema guard so a
+    # future-schema JSON can't silently overlay unfamiliar keys.
+    envelope_version = str(parsed.get("schema_version", ""))
+    if envelope_version and _major(envelope_version) != SUPPORTED_MAJOR_VERSION:
         return None
     return parsed
 
@@ -614,12 +620,18 @@ def _overlay_vendored_observations(
 
 
 def _overlay_rule(rule: Rule, observed: dict[str, Any] | None) -> Rule:
-    """Merge observed-* fields from a vendor case into a rule's expected_outcome."""
+    """Merge observed-* fields from a vendor case into a rule's expected_outcome.
+
+    Observed keys are written directly (not via ``setdefault``) so a
+    re-applied overlay with updated CI observations replaces a prior
+    overlay's values. The corpus declares no ``observed_*`` keys itself,
+    so this never clobbers corpus-authored data.
+    """
     if observed is None:
         return rule
     merged = dict(rule.expected_outcome)
     for vendored_key, expected_key in _OBSERVED_KEY_MAP.items():
         value = observed.get(vendored_key)
         if value not in (None, [], {}):
-            merged.setdefault(expected_key, list(value) if isinstance(value, list) else value)
+            merged[expected_key] = list(value) if isinstance(value, list) else value
     return replace(rule, expected_outcome=merged)
