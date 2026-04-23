@@ -123,6 +123,16 @@ def run(
         bool,
         typer.Option("--no-lock", help="Disable GPU lock files (advanced)"),
     ] = False,
+    no_dedup: Annotated[
+        bool,
+        typer.Option(
+            "--no-dedup",
+            help=(
+                "Disable canonicaliser-driven H1 sweep dedup. Every declared "
+                "config runs regardless of measurement equivalence (study mode)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run an LLM efficiency experiment."""
 
@@ -158,6 +168,7 @@ def run(
             no_circuit_breaker=no_circuit_breaker,
             timeout=timeout,
             no_lock=no_lock,
+            no_dedup=no_dedup,
         )
     except ConfigError as e:
         print(format_error(e, verbose=verbose > 0), file=sys.stderr)
@@ -198,6 +209,7 @@ def _run_impl(
     no_circuit_breaker: bool = False,
     timeout: float | None = None,
     no_lock: bool = False,
+    no_dedup: bool = False,
 ) -> None:
     """Core implementation — separated for clean error handling in run()."""
     # Build CLI overrides dict — only include flags the user explicitly passed
@@ -252,6 +264,7 @@ def _run_impl(
             no_circuit_breaker=no_circuit_breaker,
             timeout=timeout,
             no_lock=no_lock,
+            no_dedup=no_dedup,
         )
         return
 
@@ -400,6 +413,7 @@ def _run_study_impl(
     no_circuit_breaker: bool = False,
     timeout: float | None = None,
     no_lock: bool = False,
+    no_dedup: bool = False,
 ) -> None:
     """Study execution path — separated for clean error handling."""
     import yaml
@@ -473,6 +487,10 @@ def _run_study_impl(
         exec_overrides["max_consecutive_failures"] = 0
     if timeout is not None:
         exec_overrides["wall_clock_timeout_hours"] = timeout
+
+    # --no-dedup disables sweep canonicalisation (runs every declared config)
+    if no_dedup:
+        exec_overrides["deduplicate_equivalent"] = False
 
     # Build full CLI overrides dict
     study_cli_overrides: dict[str, Any] = {}
