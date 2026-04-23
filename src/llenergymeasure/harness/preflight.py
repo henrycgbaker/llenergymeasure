@@ -146,15 +146,19 @@ def run_preflight(config: ExperimentConfig) -> None:
     if model_error is not None:
         failures.append(model_error)
 
-    # Check 4: Engine config validation (hardware x config cross-checks)
+    # Check 4: Engine hardware compat + vendored-rules probe output.
+    # Framework-rule errors surfaced at config-load time via Pydantic's
+    # @model_validator; anything reaching here is hardware-state dependent
+    # (SM capability, FP8 support, etc.) and thus has to run at preflight
+    # where NVML is available.
     try:
-        from llenergymeasure.engines import get_engine
+        from llenergymeasure.engines.probe_adapter import build_config_probe
 
-        engine_plugin = get_engine(config.engine)
-        engine_errors = engine_plugin.validate_config(config)
-        failures.extend(engine_errors)
+        probe = build_config_probe(config)
+        failures.extend(probe.errors)
     except Exception:
-        pass  # get_engine may fail if engine not installed — already caught by Check 2
+        pass  # probe_adapter may fail if engine package not installed —
+        # already surfaced by Check 2.
 
     if failures:
         n = len(failures)

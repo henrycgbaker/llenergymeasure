@@ -145,20 +145,24 @@ class EnginePlugin(Protocol):
         """Release model from memory and clear CUDA cache."""
         ...
 
-    def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """Validate config against hardware capabilities. Returns error strings (empty = valid)."""
-        ...
+    def check_hardware(self, config: ExperimentConfig) -> list[str]:
+        """Return host-hardware compatibility errors (empty when compatible).
 
-    def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
-        """Probe *config* for dormancy, framework errors, and effective params.
+        Replaces :meth:`validate_config`/``probe_config``'s T5 hardware check.
+        Runs at preflight — queries NVML (or similar) and compares the visible
+        GPU's capability against the config's quant / dtype / attention
+        requirements.
 
-        Observes what the engine would do with the configuration without side
-        effects: never loads model weights, allocates GPU memory, initialises
-        engine contexts, or runs inference. Implementations MAY import engine
-        libraries, download small metadata files (e.g. HF ``config.json``),
-        construct meta-device models, and query NVML.
+        Contract:
+          - Never raises; errors propagate via the returned list.
+          - Returns ``[]`` when no GPU is visible (cannot block at config time
+            inside a container without a visible device).
+          - Pure — must not load weights, allocate GPU memory, or construct
+            engine contexts.
 
-        Contract: this method never raises. All exceptions are caught and
-        appended to :attr:`ConfigProbe.errors`.
+        Framework-rule checks (config x library semantics) live in the
+        vendored rules corpus and are applied by the generic
+        :meth:`ExperimentConfig._apply_vendored_rules` model validator, not
+        here.
         """
         ...

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Dormancy diff (used by probe_config across all engines)
+# Dormancy diff (available for probe-adapter / canonicaliser use across engines)
 # ---------------------------------------------------------------------------
 
 

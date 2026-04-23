@@ -15,15 +15,9 @@ from collections.abc import Callable
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.engines.protocol import ConfigProbe, DormantField, InferenceOutput
+from llenergymeasure.engines.protocol import InferenceOutput
 
 logger = logging.getLogger(__name__)
-
-# Whether to attempt meta-device model construction during T2 probe.
-# Enabled by default (cheap: no weight downloads, no GPU memory), but some
-# exotic architectures may not support it — the env var escape hatch lets
-# operators disable without editing code.
-_TIER2_META_DEVICE_ENABLED = True
 
 
 class TransformersEngine:
@@ -264,149 +258,22 @@ class TransformersEngine:
         cleanup_model(hf_model, use_gc=False)
         logger.debug("Model cleanup complete")
 
-    def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """No hardware validation required for Transformers engine."""
-        return []
-
     # -------------------------------------------------------------------------
-    # EnginePlugin: probe_config
+    # EnginePlugin: check_hardware
     # -------------------------------------------------------------------------
-
-    def _declared_sampling_params(self, config: ExperimentConfig) -> dict[str, Any]:
-        """Return user-declared sampling kwargs before greedy stripping.
-
-        Reads directly from ``config.transformers.sampling`` — the single source
-        of truth in the post-restructure data model — and dumps all non-None
-        fields. Used by :meth:`probe_config` to diff against effective kwargs
-        and surface dormant sampling fields (e.g. ``temperature=0.9`` that the
-        engine will silently strip under ``do_sample=False``).
-        """
-        pt = config.transformers
-        sampling = pt.sampling if pt is not None else None
-        if sampling is None:
-            return {}
-        return sampling.model_dump(exclude_none=True)
 
     @staticmethod
-    def _dormancy_reason(key: str, declared_val: Any, effective_val: Any | None) -> str | None:
-        """Explain why a declared sampling field went dormant (for probe output)."""
-        if key in {"temperature", "top_k", "top_p", "min_p"} and effective_val is None:
-            return "greedy decoding (do_sample=false or temperature=0)"
-        if key == "do_sample" and declared_val is True and effective_val is False:
-            return "greedy decoding forced do_sample=False"
-        return None
+    def check_hardware(config: ExperimentConfig) -> list[str]:
+        """No host-hardware checks required for Transformers at preflight.
 
-    def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
-        """Observe what Transformers would do with *config* without loading weights.
-
-        Tier breakdown:
-          - T0: build effective from_pretrained + generate kwargs and diff
-                the sampling subset against the user-declared sampling params.
-          - T1: construct ``GenerationConfig`` from effective kwargs (filtered
-                to known fields) to catch invalid sampling combinations early.
-          - T2: download the model's ``config.json`` via ``AutoConfig`` and —
-                when ``_TIER2_META_DEVICE_ENABLED`` is on — build an empty
-                model on the meta device to validate dtype x attn x arch.
-
-        Never raises: every exception is captured into :attr:`ConfigProbe.errors`.
+        BitsAndBytes quantisation checks the visible hardware itself at model
+        load time and surfaces failures via vendored ``BitsAndBytesConfig``
+        rules applied by :class:`ExperimentConfig._apply_vendored_rules`.
+        FlashAttention's dtype requirement is also a vendored rule, not a
+        hardware gate. This returns ``[]`` unchanged as a stable shape for
+        :func:`llenergymeasure.engines.probe_adapter.build_config_probe`.
         """
-        errors: list[str] = []
-        warnings: list[str] = []
-        effective_engine: dict[str, Any] = {}
-        effective_sampling: dict[str, Any] = {}
-        dormant: dict[str, DormantField] = {}
-
-        # --- T0: Build effective kwargs ---
-        try:
-            effective_engine = self._model_load_kwargs(config)
-        except Exception as e:
-            errors.append(f"T0 engine kwargs: {type(e).__name__}: {e}")
-            return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
-
-        try:
-            full_generate_kwargs = self._build_generate_kwargs(config)
-        except Exception as e:
-            errors.append(f"T0 sampling kwargs: {type(e).__name__}: {e}")
-            return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
-
-        # Scope effective_sampling to the sampling-related subset so it diffs
-        # cleanly against declared (non-sampling transformers.* generate fields
-        # — use_cache, num_beams etc — are out of the dormancy scope).
-        _SAMPLING_KEYS = {
-            "temperature",
-            "do_sample",
-            "top_k",
-            "top_p",
-            "min_p",
-            "repetition_penalty",
-            "min_new_tokens",
-        }
-        effective_sampling = {k: v for k, v in full_generate_kwargs.items() if k in _SAMPLING_KEYS}
-
-        # --- T0: Dormancy diff ---
-        try:
-            from llenergymeasure.engines._helpers import compute_dormant_fields
-
-            declared = self._declared_sampling_params(config)
-            dormant = compute_dormant_fields(
-                declared,
-                effective_sampling,
-                prefix="transformers.sampling.",
-                reason_fn=self._dormancy_reason,
-            )
-        except Exception as e:
-            errors.append(f"T0 dormancy diff: {type(e).__name__}: {e}")
-
-        # --- T1: GenerationConfig construction (filtered to known fields) ---
-        try:
-            from transformers import GenerationConfig
-
-            allowed = set(GenerationConfig().__dict__.keys())
-            filtered = {k: v for k, v in full_generate_kwargs.items() if k in allowed}
-            GenerationConfig(**filtered)
-        except Exception as e:
-            errors.append(f"T1 GenerationConfig: {type(e).__name__}: {e}")
-
-        # --- T2: AutoConfig (model metadata) + optional meta-device build ---
-        try:
-            from transformers import AutoConfig
-
-            trust_remote_code = bool(effective_engine.get("trust_remote_code", False))
-            hf_config = AutoConfig.from_pretrained(
-                config.task.model, trust_remote_code=trust_remote_code
-            )
-        except Exception as e:
-            errors.append(f"T2 AutoConfig: {type(e).__name__}: {e}")
-            return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
-
-        import os
-
-        env_flag = os.environ.get("LLEM_PROBE_META_DEVICE_ENABLED")
-        if env_flag is None:
-            meta_enabled = _TIER2_META_DEVICE_ENABLED
-        else:
-            meta_enabled = env_flag.lower() in {"1", "true", "yes", "on"}
-
-        if meta_enabled:
-            try:
-                from accelerate import init_empty_weights
-                from transformers import AutoModelForCausalLM
-
-                meta_kwargs: dict[str, Any] = {}
-                if "torch_dtype" in effective_engine:
-                    meta_kwargs["torch_dtype"] = effective_engine["torch_dtype"]
-                if "attn_implementation" in effective_engine:
-                    meta_kwargs["attn_implementation"] = effective_engine["attn_implementation"]
-                meta_kwargs["trust_remote_code"] = bool(
-                    effective_engine.get("trust_remote_code", True)
-                )
-
-                with init_empty_weights():
-                    AutoModelForCausalLM.from_config(hf_config, **meta_kwargs)
-            except Exception as e:
-                errors.append(f"T2 meta-device: {type(e).__name__}: {e}")
-
-        return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
+        return []
 
     # -------------------------------------------------------------------------
     # Private: model loading helpers
