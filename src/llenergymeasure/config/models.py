@@ -17,11 +17,17 @@ v2.0 removals:
 
 from __future__ import annotations
 
+import logging
+import warnings
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from llenergymeasure.config.ssot import SAMPLING_PRESETS, Engine
+from llenergymeasure.config.warnings import ConfigValidationWarning
+
+logger = logging.getLogger(__name__)
 
 #: Valid energy sampler names for ``energy_sampler`` fields.
 EnergySamplerName = Literal["auto", "nvml", "zeus", "codecarbon"]
@@ -35,6 +41,21 @@ if TYPE_CHECKING:
         TransformersConfig,
         VLLMConfig,
     )
+    from llenergymeasure.config.vendored_rules.loader import VendoredRulesLoader
+
+
+@lru_cache(maxsize=1)
+def _get_rules_loader() -> VendoredRulesLoader:
+    # Lazy import so module load doesn't read YAML off disk. Tests substitute
+    # via ``monkeypatch.setattr(models, "_get_rules_loader", ...)``.
+    from llenergymeasure.config.vendored_rules.loader import VendoredRulesLoader
+
+    return VendoredRulesLoader()
+
+
+def _reset_rules_loader_cache() -> None:
+    """Clear the memoised loader; used by tests that mutate the on-disk corpus."""
+    _get_rules_loader.cache_clear()
 
 
 # =============================================================================
@@ -465,7 +486,14 @@ class ExperimentConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_transformers_flash_attn_dtype(self) -> ExperimentConfig:
-        """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32)."""
+        """FlashAttention (FA2/FA3) requires float16 or bfloat16 dtype (not float32).
+
+        Retained as a hand-written validator until a ``PreTrainedModel``
+        introspection walker can derive this rule programmatically (the check
+        lives in ``_autoset_attn_implementation``, not in
+        ``GenerationConfig.validate``). See memory note
+        ``project_phase_50_pipeline_replan.md``.
+        """
         if (
             self.engine == "transformers"
             and self.transformers is not None
@@ -477,6 +505,50 @@ class ExperimentConfig(BaseModel):
                 "dtype='float16' or dtype='bfloat16'. FlashAttention does not support "
                 "float32 computation."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _apply_vendored_rules(self) -> ExperimentConfig:
+        # ``object.__setattr__`` bypasses Pydantic's ``extra='forbid'``;
+        # consumers read via ``cfg._dormant_observations``. Missing corpus
+        # is non-fatal — the rules layer is additive.
+        from llenergymeasure.config.probe import DormantField
+
+        dormant_observations: list[DormantField] = []
+        try:
+            rules = _get_rules_loader().load_rules(self.engine.value).rules
+        except FileNotFoundError:
+            logger.debug("No vendored rules corpus for engine %r; skipping.", self.engine.value)
+            rules = ()
+
+        for rule in rules:
+            match = rule.try_match(self)
+            if match is None:
+                continue
+            annotated = f"[{rule.id}] {rule.render_message(match)}"
+            if rule.severity == "error":
+                raise ValueError(annotated)
+            if rule.severity == "warn":
+                warnings.warn(annotated, ConfigValidationWarning, stacklevel=2)
+                continue
+            if rule.severity == "dormant":
+                dormant_observations.append(
+                    DormantField(
+                        declared_value=match.declared_value,
+                        effective_value=match.effective_value,
+                        reason=annotated,
+                    )
+                )
+                continue
+            # Typo in the corpus: loader validation would normally reject this,
+            # but surface it visibly if anything slips past.
+            warnings.warn(
+                f"[{rule.id}] unknown severity {rule.severity!r}",
+                ConfigValidationWarning,
+                stacklevel=2,
+            )
+
+        object.__setattr__(self, "_dormant_observations", dormant_observations)
         return self
 
 
