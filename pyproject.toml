@@ -173,6 +173,14 @@ layers = [
     "llenergymeasure.config | llenergymeasure.domain",
     "llenergymeasure.utils",
 ]
+ignore_imports = [
+    # Phase 50 M4: config.loader.load_study_config invokes resolve_library_effective
+    # as part of the grid-expansion pipeline (between expand_grid and
+    # apply_cycles). The library-resolution mechanism lives under study/ — reviewer
+    # may decide to invert this by moving dedup into api/cli callers; for now
+    # the import is local-inside-function so there is no cycle risk.
+    "llenergymeasure.config.loader -> llenergymeasure.study.library_resolution",
+]
 
 [[tool.importlinter.contracts]]
 id = "cli-boundary"
@@ -219,4 +227,7 @@ forbidden_modules = [
     "llenergymeasure.results",
     "llenergymeasure.datasets",
 ]
-# No ignore_imports needed - all violations from Phase 38 have been resolved in Phase 39.
+ignore_imports = [
+    # Phase 50 M4: see matching ignore on main-layers contract above.
+    "llenergymeasure.config.loader -> llenergymeasure.study.library_resolution",
+]
