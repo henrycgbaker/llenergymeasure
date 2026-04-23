@@ -53,7 +53,7 @@ concurrency:
 
 env:
   CORPUS_DIR: configs/validation_rules
-  VENDORED_DIR: src/llenergymeasure/engines/vendored_rules
+  VENDORED_DIR: src/llenergymeasure/config/vendored_rules
 
 jobs:
   vendor-transformers:

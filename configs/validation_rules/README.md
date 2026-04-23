@@ -31,7 +31,7 @@ rules:
 
 - `schema_version` — semver. Loader supports major 1; mismatches raise
   `UnsupportedSchemaVersionError` (see
-  `src/llenergymeasure/engines/vendored_rules/loader.py`).
+  `src/llenergymeasure/config/vendored_rules/loader.py`).
 - `engine_version` — the library version the corpus was seeded against.
   Informational; the vendor CI pipeline (50.2b) will revalidate against each
   Dockerfile-pinned version.
@@ -118,7 +118,7 @@ encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 
 ### Corpus invariants
 
-These are enforced today via `tests/unit/engines/vendored_rules/test_corpus_invariants.py`.
+These are enforced today via `tests/unit/config/vendored_rules/test_corpus_invariants.py`.
 Phase 50.2b's vendor CI gate extends them.
 
 1. Every rule has a unique `id` within the engine.
@@ -164,7 +164,7 @@ Both open draft PRs with `added_by` set accordingly.
 
 When reviewing a corpus PR:
 
-- [ ] Invariants pass (`pytest tests/unit/engines/vendored_rules/test_corpus_invariants.py`).
+- [ ] Invariants pass (`pytest tests/unit/config/vendored_rules/test_corpus_invariants.py`).
 - [ ] Each new rule's `message_template` reads correctly when substituted.
 - [ ] `kwargs_positive` genuinely triggers the rule in the target library.
 - [ ] `kwargs_negative` genuinely does NOT trigger it.

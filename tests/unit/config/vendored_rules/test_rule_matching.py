@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from llenergymeasure.engines.vendored_rules import (
+from llenergymeasure.config.vendored_rules import (
     Rule,
     evaluate_predicate,
     resolve_field_path,

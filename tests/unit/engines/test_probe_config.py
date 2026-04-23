@@ -34,8 +34,8 @@ from llenergymeasure.config.engine_configs import (
     VLLMSamplingConfig,
 )
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.probe import ConfigProbe, DormantField
 from llenergymeasure.engines._helpers import compute_dormant_fields
-from llenergymeasure.engines.protocol import ConfigProbe, DormantField
 from llenergymeasure.engines.tensorrt import TensorRTEngine
 from llenergymeasure.engines.transformers import TransformersEngine
 from llenergymeasure.engines.vllm import VLLMEngine

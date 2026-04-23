@@ -7,7 +7,7 @@ library source. No concrete walker ships today; they land as independent
 PRs per engine.
 
 - :class:`RuleCandidate` — the walker output type, serialised to the YAML
-  corpus entry shape in :mod:`llenergymeasure.engines.vendored_rules.loader`.
+  corpus entry shape in :mod:`llenergymeasure.config.vendored_rules.loader`.
 - :class:`WalkerVersionMismatchError`, :class:`WalkerLandmarkMissingError` —
   fail-loud exceptions CI treats as fatal.
 - :func:`check_installed_version` — version-envelope guard for each walker.

@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from llenergymeasure.engines.protocol import DormantField
+from llenergymeasure.config.probe import DormantField
 from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
