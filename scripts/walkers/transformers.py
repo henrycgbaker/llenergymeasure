@@ -1,50 +1,33 @@
 """Transformers rules seeder — landmark-verified manual-seed module.
 
-**Provenance honesty:** this module is NOT an empirical introspection
-walker. The rule tuples below (``_GREEDY_RULES``, ``_BEAM_RULES``,
-``_GENERATION_VALIDATE_RULES``, ``_BNB_TYPE_RULES``) are hand-curated
-from reading HF transformers source; rule content (predicates, message
-templates, kwargs_positive, kwargs_negative) is editorial, not derived
-programmatically. All emitted rules therefore carry
+Rule tuples (``_GREEDY_RULES``, ``_BEAM_RULES``, ``_GENERATION_VALIDATE_RULES``,
+``_BNB_TYPE_RULES``) are hand-curated from reading HF transformers source.
+Rule content (predicates, message templates, kwargs_positive/negative)
+is editorial, not derived programmatically — all emitted rules carry
 ``added_by: "manual_seed"``.
 
-What IS empirical:
+What is empirical:
 
-- Library landmarks: imports ``transformers`` + checks that
+- Library landmarks: imports ``transformers`` and checks that
   ``GenerationConfig``, ``BitsAndBytesConfig``, ``validate``, ``post_init``
-  exist in the installed version. Missing landmark → fail-loud
-  :class:`WalkerLandmarkMissingError`.
-- Version envelope: :data:`TESTED_AGAINST_VERSIONS` pins to
-  ``>=4.56,<4.57``; a mismatch raises
-  :class:`WalkerVersionMismatchError` at CI time, prompting a refresh.
+  exist. Missing landmark → :class:`WalkerLandmarkMissingError`.
+- Version envelope: :data:`TESTED_AGAINST_VERSIONS` pins the walker to a
+  known range; a mismatch raises :class:`WalkerVersionMismatchError` at
+  CI time, prompting a refresh.
 - Source paths + line numbers: derived via :func:`inspect.getsourcefile`
   and a ``self.<field>`` text grep. Informational only (not used for
   rule matching).
 
-When the true empirical walker lands (a follow-up PR will drive HF's
-``validate(strict=True)`` programmatically and derive predicates from
-the observed ``minor_issues`` keys + message templates), its output will
-carry ``added_by: "introspection"`` and the vendor CI (also a
-follow-up) will be the promotion path for these hand-seeds —
-re-deriving each rule empirically and flagging any divergence.
+Covers ``GenerationConfig`` (sampling / greedy / beam / validate rules)
+and ``BitsAndBytesConfig`` (type-check rules from the ``post_init``
+TypeError raises). peft / LoraConfig out of scope — no near-term
+consumer.
 
 Usage::
 
     python -m scripts.walkers.transformers --out configs/validation_rules/transformers.yaml
 
-The committed ``configs/validation_rules/transformers.yaml`` is this
-command's output against the pinned transformers version, with
-``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
-
-Scope
------
-
-- :class:`transformers.GenerationConfig` — sampling / greedy / beam /
-  validate() rules observed in HF 4.56 source.
-- :class:`transformers.BitsAndBytesConfig` — type-check rules hand-audited
-  from the ``post_init`` TypeError raises.
-
-peft / LoraConfig are explicitly out of scope (no near-term consumer).
+With ``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
 """
 
 from __future__ import annotations
@@ -54,7 +37,8 @@ import datetime as dt
 import inspect
 import os
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -334,17 +318,22 @@ def _check_landmarks() -> tuple[str, str]:
     return transformers.__version__, source_path
 
 
+@cache
+def _read_source_lines(source_file: str) -> tuple[str, ...]:
+    """Cache parsed source-file lines. Walker runs 20+ line lookups per walk."""
+    try:
+        return tuple(Path(source_file).read_text().splitlines())
+    except OSError:
+        return ()
+
+
 def _line_for_field(source_file: str, needle: str) -> int:
     """Best-effort line lookup for ``self.<needle>`` inside ``source_file``.
 
     The corpus entry's ``line_at_scan`` is informational only — not used for
     matching — so approximate lookup is acceptable. Returns 0 if not found.
     """
-    try:
-        text = Path(source_file).read_text()
-    except OSError:
-        return 0
-    for i, line in enumerate(text.splitlines(), start=1):
+    for i, line in enumerate(_read_source_lines(source_file), start=1):
         if needle in line:
             return i
     return 0
@@ -367,7 +356,59 @@ def _today() -> str:
     return dt.date.today().isoformat()
 
 
-def _make_greedy_dormancy_rule(
+def _predicate_from_default(default: Any) -> dict[str, Any]:
+    """Predicate that fires when a field is set to a non-default value."""
+    if default is None:
+        return {"present": True}
+    return {"present": True, "not_equal": default}
+
+
+@dataclass(frozen=True)
+class _DormancyKind:
+    """Parameters that differ between greedy-mode vs single-beam dormancy factories."""
+
+    id_prefix: str  # e.g. "transformers_greedy_strips_"
+    trigger_field: str  # e.g. "do_sample"
+    trigger_positive: Any  # value that triggers dormancy (False for do_sample, 1 for num_beams)
+    trigger_negative: Any  # value that doesn't trigger (True for do_sample, 4 for num_beams)
+    rule_under_test_template: str  # f-string taking {field}
+    message_template_template: str  # f-string taking {field}
+
+
+_GREEDY_KIND = _DormancyKind(
+    id_prefix="transformers_greedy_strips_",
+    trigger_field="do_sample",
+    trigger_positive=False,
+    trigger_negative=True,
+    rule_under_test_template=(
+        "GenerationConfig.validate() records dormant `{field}` when "
+        "do_sample=False and `{field}` is set to a non-default value"
+    ),
+    message_template_template=(
+        "`do_sample=False` is set, so `{field}` ({{declared_value}}) "
+        "has no effect. Remove it or set do_sample=True."
+    ),
+)
+
+
+_BEAM_KIND = _DormancyKind(
+    id_prefix="transformers_single_beam_strips_",
+    trigger_field="num_beams",
+    trigger_positive=1,
+    trigger_negative=4,
+    rule_under_test_template=(
+        "GenerationConfig.validate() records dormant `{field}` when "
+        "num_beams=1 and `{field}` is set"
+    ),
+    message_template_template=(
+        "`num_beams=1` is set, so `{field}` ({{declared_value}}) is ignored. "
+        "Set num_beams>1 or remove {field}."
+    ),
+)
+
+
+def _make_dormancy_rule(
+    kind: _DormancyKind,
     field: str,
     default: Any,
     positive: Any,
@@ -375,18 +416,13 @@ def _make_greedy_dormancy_rule(
     rel_source_path: str,
     today: str,
 ) -> RuleCandidate:
-    predicate: dict[str, Any] = (
-        {"present": True} if default is None else {"present": True, "not_equal": default}
-    )
+    """Build a dormancy RuleCandidate. See :class:`_DormancyKind`."""
     line = _line_for_field(abs_source_path, f"self.{field}")
     return RuleCandidate(
-        id=f"transformers_greedy_strips_{field}",
+        id=f"{kind.id_prefix}{field}",
         engine="transformers",
         library="transformers",
-        rule_under_test=(
-            f"GenerationConfig.validate() records dormant `{field}` when "
-            f"do_sample=False and `{field}` is set to a non-default value"
-        ),
+        rule_under_test=kind.rule_under_test_template.format(field=field),
         severity="dormant",
         native_type="transformers.GenerationConfig",
         walker_source=WalkerSource(
@@ -396,69 +432,17 @@ def _make_greedy_dormancy_rule(
             walker_confidence="high",
         ),
         match_fields={
-            "transformers.sampling.do_sample": False,
-            f"transformers.sampling.{field}": predicate,
+            f"transformers.sampling.{kind.trigger_field}": kind.trigger_positive,
+            f"transformers.sampling.{field}": _predicate_from_default(default),
         },
-        kwargs_positive={"do_sample": False, field: positive},
-        kwargs_negative={"do_sample": True, field: positive},
+        kwargs_positive={kind.trigger_field: kind.trigger_positive, field: positive},
+        kwargs_negative={kind.trigger_field: kind.trigger_negative, field: positive},
         expected_outcome={
             "outcome": "dormant_announced",
             "emission_channel": "logger_warning_once",
             "normalised_fields": [],
         },
-        message_template=(
-            f"`do_sample=False` is set, so `{field}` ({{declared_value}}) "
-            f"has no effect. Remove it or set do_sample=True."
-        ),
-        references=[f"transformers.GenerationConfig.validate() (line ~{line})"],
-        added_by="manual_seed",
-        added_at=today,
-    )
-
-
-def _make_beam_dormancy_rule(
-    field: str,
-    default: Any,
-    positive: Any,
-    abs_source_path: str,
-    rel_source_path: str,
-    today: str,
-) -> RuleCandidate:
-    predicate: dict[str, Any] = (
-        {"present": True} if default is None else {"present": True, "not_equal": default}
-    )
-    line = _line_for_field(abs_source_path, f"self.{field}")
-    return RuleCandidate(
-        id=f"transformers_single_beam_strips_{field}",
-        engine="transformers",
-        library="transformers",
-        rule_under_test=(
-            f"GenerationConfig.validate() records dormant `{field}` when "
-            f"num_beams=1 and `{field}` is set"
-        ),
-        severity="dormant",
-        native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
-            path=rel_source_path,
-            method="validate",
-            line_at_scan=line,
-            walker_confidence="high",
-        ),
-        match_fields={
-            "transformers.sampling.num_beams": 1,
-            f"transformers.sampling.{field}": predicate,
-        },
-        kwargs_positive={"num_beams": 1, field: positive},
-        kwargs_negative={"num_beams": 4, field: positive},
-        expected_outcome={
-            "outcome": "dormant_announced",
-            "emission_channel": "logger_warning_once",
-            "normalised_fields": [],
-        },
-        message_template=(
-            f"`num_beams=1` is set, so `{field}` ({{declared_value}}) is ignored. "
-            f"Set num_beams>1 or remove {field}."
-        ),
+        message_template=kind.message_template_template.format(field=field),
         references=[f"transformers.GenerationConfig.validate() (line ~{line})"],
         added_by="manual_seed",
         added_at=today,
@@ -603,21 +587,10 @@ def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
     }
 
 
-def walk(
-    *, source_path_override: str | None = None, installed_version_override: str | None = None
-) -> tuple[list[RuleCandidate], dict[str, Any]]:
-    """Return ``(candidates, envelope_metadata)``.
-
-    ``source_path_override`` and ``installed_version_override`` exist for
-    tests: injecting known values lets the extractor unit tests skip the
-    transformers import (which is heavy).
-    """
-    if installed_version_override is None:
-        installed_version, abs_source_path = _check_landmarks()
-        check_installed_version("transformers", installed_version, TESTED_AGAINST_VERSIONS)
-    else:
-        installed_version = installed_version_override
-        abs_source_path = source_path_override or "<synthetic>"
+def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
+    """Return ``(candidates, envelope_metadata)``."""
+    installed_version, abs_source_path = _check_landmarks()
+    check_installed_version("transformers", installed_version, TESTED_AGAINST_VERSIONS)
 
     # Corpus paths are relative to site-packages so the committed YAML is
     # reproducible across checkouts with different ``~/.local`` roots.
@@ -626,14 +599,11 @@ def walk(
     today = _today()
     candidates: list[RuleCandidate] = []
 
-    for field, default, pos in _GREEDY_RULES:
-        candidates.append(
-            _make_greedy_dormancy_rule(field, default, pos, abs_source_path, source_path, today)
-        )
-    for field, default, pos in _BEAM_RULES:
-        candidates.append(
-            _make_beam_dormancy_rule(field, default, pos, abs_source_path, source_path, today)
-        )
+    for kind, rules in ((_GREEDY_KIND, _GREEDY_RULES), (_BEAM_KIND, _BEAM_RULES)):
+        for field, default, pos in rules:
+            candidates.append(
+                _make_dormancy_rule(kind, field, default, pos, abs_source_path, source_path, today)
+            )
     for spec in _GENERATION_VALIDATE_RULES:
         candidates.append(_make_validate_rule(spec, abs_source_path, source_path, today))
 
@@ -642,18 +612,22 @@ def walk(
     bnb_source_path = source_path
     try:
         import transformers.utils.quantization_config as _qcfg  # type: ignore
-
+    except ImportError:  # pragma: no cover — landmark missing, handled upstream
+        pass
+    else:
         abs_bnb = inspect.getsourcefile(_qcfg)
         if abs_bnb:
             bnb_source_path = _relative_source_path(abs_bnb)
-    except Exception:  # pragma: no cover — import failures are landmark errors
-        pass
     for field, type_label, pos, neg in _BNB_TYPE_RULES:
         candidates.append(_make_bnb_type_rule(field, type_label, pos, neg, bnb_source_path, today))
 
     # Allow tests / reproducibility checks to pin the timestamp.
     frozen = os.environ.get("LLENERGY_WALKER_FROZEN_AT")
-    walked_at = frozen if frozen else dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    walked_at = (
+        frozen
+        if frozen
+        else (dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"))
+    )
     envelope = {
         "schema_version": "1.0.0",
         "engine": "transformers",

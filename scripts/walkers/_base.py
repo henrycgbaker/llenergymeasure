@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from packaging import version as pkg_version
 from packaging.specifiers import SpecifierSet
@@ -45,6 +45,10 @@ EmissionChannel = Literal[
     "none",
 ]
 Confidence = Literal["high", "medium", "low"]
+
+VALID_CONFIDENCE: frozenset[str] = frozenset(get_args(Confidence))
+"""Closed enum for :attr:`WalkerSource.walker_confidence` — tests defer
+to this constant rather than duplicating the literal set."""
 
 
 @dataclass

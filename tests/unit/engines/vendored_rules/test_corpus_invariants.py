@@ -25,10 +25,9 @@ from llenergymeasure.engines.vendored_rules import (
     VendoredRulesLoader,
 )
 
-_VALID_SEVERITIES = VALID_SEVERITY
-_VALID_OUTCOMES = VALID_OUTCOME
-_VALID_EMISSION_CHANNELS = VALID_EMISSION_CHANNEL
-_VALID_CONFIDENCE = {"high", "medium", "low"}
+_VALID_CONFIDENCE = frozenset({"high", "medium", "low"})
+# SSOT: scripts/walkers/_base.py::Confidence / VALID_CONFIDENCE. Duplicated
+# here to avoid a cross-layer (engines → scripts) test import.
 
 
 @pytest.fixture(scope="module")
@@ -104,19 +103,19 @@ def test_corpus_kwargs_positive_and_negative_populated(transformers_corpus) -> N
 
 def test_corpus_severity_values_are_valid(transformers_corpus) -> None:
     for rule in transformers_corpus.rules:
-        assert rule.severity in _VALID_SEVERITIES, rule.id
+        assert rule.severity in VALID_SEVERITY, rule.id
 
 
 def test_corpus_outcome_values_are_valid(transformers_corpus) -> None:
     for rule in transformers_corpus.rules:
         outcome = rule.expected_outcome.get("outcome")
-        assert outcome in _VALID_OUTCOMES, f"{rule.id}: bad outcome {outcome!r}"
+        assert outcome in VALID_OUTCOME, f"{rule.id}: bad outcome {outcome!r}"
 
 
 def test_corpus_emission_channels_valid(transformers_corpus) -> None:
     for rule in transformers_corpus.rules:
         channel = rule.expected_outcome.get("emission_channel")
-        assert channel in _VALID_EMISSION_CHANNELS, f"{rule.id}: {channel!r}"
+        assert channel in VALID_EMISSION_CHANNEL, f"{rule.id}: {channel!r}"
 
 
 def test_corpus_severity_outcome_consistency(transformers_corpus) -> None:
