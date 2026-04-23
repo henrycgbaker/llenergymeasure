@@ -41,13 +41,6 @@ EmissionChannel = Literal[
     "runtime_exception",
     "none",
 ]
-Outcome = Literal[
-    "pass",
-    "warn",
-    "error",
-    "dormant_silent",
-    "dormant_announced",
-]
 Confidence = Literal["high", "medium", "low"]
 
 

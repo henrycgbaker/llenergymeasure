@@ -404,13 +404,9 @@ def _make_beam_dormancy_rule(
     rel_source_path: str,
     today: str,
 ) -> RuleCandidate:
-    predicate: dict[str, Any]
-    if isinstance(default, bool):
-        predicate = {"present": True, "not_equal": default}
-    elif default is None:
-        predicate = {"present": True}
-    else:
-        predicate = {"present": True, "not_equal": default}
+    predicate: dict[str, Any] = (
+        {"present": True} if default is None else {"present": True, "not_equal": default}
+    )
     line = _line_for_field(abs_source_path, f"self.{field}")
     return RuleCandidate(
         id=f"transformers_single_beam_strips_{field}",
