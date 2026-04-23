@@ -4,8 +4,8 @@
   "engine_version": "4.51.0",
   "image_ref": "llenergymeasure:transformers",
   "base_image_ref": "llenergymeasure:transformers",
-  "vendored_at": "2026-04-23T15:21:22.628139+00:00",
-  "vendor_commit": "bc212ade5fda1c8d398496caf11a88a3edc5f6d4",
+  "vendored_at": "2026-04-23T16:16:57.449319+00:00",
+  "vendor_commit": "1ef73828e4aac6ef6ddda17498b438e851eecb0f",
   "cases": [
     {
       "id": "transformers_bnb_bnb_4bit_compute_dtype_type",
@@ -15,7 +15,7 @@
       "observed_silent_normalisations": {},
       "positive_confirmed": false,
       "negative_confirmed": true,
-      "duration_ms": 13
+      "duration_ms": 12
     },
     {
       "id": "transformers_bnb_bnb_4bit_quant_type_type",
@@ -152,7 +152,7 @@
       },
       "positive_confirmed": true,
       "negative_confirmed": false,
-      "duration_ms": 110
+      "duration_ms": 204
     },
     {
       "id": "transformers_greedy_rejects_num_return_sequences",
