@@ -8,66 +8,13 @@ from __future__ import annotations
 
 import gc
 import logging
-from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 
-from llenergymeasure.config.probe import DormantField
 from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Dormancy diff (used by probe_config across all engines)
-# ---------------------------------------------------------------------------
-
-
-def compute_dormant_fields(
-    declared: dict[str, Any],
-    effective: dict[str, Any],
-    prefix: str = "",
-    reason_fn: Callable[[str, Any, Any | None], str | None] | None = None,
-) -> dict[str, DormantField]:
-    """Return the set of declared keys that are stripped or overridden.
-
-    A key is *stripped* when it appears in ``declared`` but not in
-    ``effective`` (e.g. ``temperature`` removed under greedy decoding).
-    A key is *overridden* when both dicts contain it but the values differ
-    (e.g. ``top_k=0`` remapped to ``top_k=-1`` for vLLM).
-
-    Args:
-        declared: Kwargs the user declared before engine-side stripping.
-        effective: Kwargs the engine will actually construct with.
-        prefix: Dotted path prefix for result keys (e.g. ``"vllm.sampling."``).
-        reason_fn: Optional ``(key, declared_val, effective_val) -> str | None``
-            callback that attaches a human-readable reason to each entry.
-
-    Returns:
-        Mapping from prefixed key to :class:`DormantField`. Empty when
-        effective matches declared for every declared key.
-    """
-    dormant: dict[str, DormantField] = {}
-    for key, declared_val in declared.items():
-        if key not in effective:
-            effective_val: Any | None = None
-            reason = reason_fn(key, declared_val, None) if reason_fn is not None else None
-            dormant[f"{prefix}{key}"] = DormantField(
-                declared_value=declared_val,
-                effective_value=effective_val,
-                reason=reason,
-            )
-            continue
-        effective_val = effective[key]
-        if effective_val != declared_val:
-            reason = reason_fn(key, declared_val, effective_val) if reason_fn is not None else None
-            dormant[f"{prefix}{key}"] = DormantField(
-                declared_value=declared_val,
-                effective_value=effective_val,
-                reason=reason,
-            )
-    return dormant
 
 
 # ---------------------------------------------------------------------------

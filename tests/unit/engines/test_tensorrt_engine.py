@@ -144,14 +144,14 @@ class TestProtocolCompliance:
         assert TensorRTEngine().name == "tensorrt"
 
     def test_tensorrt_engine_has_all_protocol_methods(self):
-        """TensorRTEngine implements all 6 EnginePlugin methods."""
+        """TensorRTEngine implements all EnginePlugin methods."""
         engine = TensorRTEngine()
         assert hasattr(engine, "name")
         assert hasattr(engine, "load_model")
         assert hasattr(engine, "run_warmup_prompt")
         assert hasattr(engine, "run_inference")
         assert hasattr(engine, "cleanup")
-        assert hasattr(engine, "validate_config")
+        assert hasattr(engine, "check_hardware")
 
 
 # =============================================================================

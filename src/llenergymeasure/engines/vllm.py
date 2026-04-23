@@ -20,7 +20,6 @@ from collections.abc import Callable
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.config.probe import ConfigProbe, DormantField
 from llenergymeasure.engines.protocol import InferenceOutput
 from llenergymeasure.utils.exceptions import EngineError
 
@@ -278,102 +277,10 @@ class VLLMEngine:
         cleanup_model(llm)
         logger.debug("vLLM model cleanup complete")
 
-    def validate_config(self, config: ExperimentConfig) -> list[str]:
-        """No hardware validation required for vLLM engine."""
-        return []
-
     @staticmethod
     def check_hardware(config: ExperimentConfig) -> list[str]:
         """No preflight hardware rules; vLLM resolves SM x dtype x quant inside EngineArgs."""
         return []
-
-    # -------------------------------------------------------------------------
-    # EnginePlugin: probe_config
-    # -------------------------------------------------------------------------
-
-    def probe_config(self, config: ExperimentConfig) -> ConfigProbe:
-        """Observe what vLLM would do with *config* without allocating GPU memory.
-
-        Tier breakdown:
-          - T0: build effective LLM + SamplingParams kwargs; diff the declared
-                sampling surface against effective. In the current data model
-                vLLM doesn't strip sampling fields, so T0 dormancy is largely
-                empty for vLLM — the probe's value here is T1/T2.
-          - T1: construct ``vllm.SamplingParams`` from the effective dict
-                (catches cross-field validation).
-          - T2: construct ``EngineArgs`` then call ``create_engine_config()``
-                for full cross-resolution (dtype x quant x attention x cache
-                layout).
-
-        Never raises: every exception is captured into :attr:`ConfigProbe.errors`.
-        """
-        errors: list[str] = []
-        warnings: list[str] = []
-        effective_engine: dict[str, Any] = {}
-        effective_sampling: dict[str, Any] = {}
-        dormant: dict[str, DormantField] = {}
-
-        # --- T0: Build effective kwargs ---
-        try:
-            effective_engine = self._build_llm_kwargs(config)
-        except Exception as e:
-            errors.append(f"T0 engine kwargs: {type(e).__name__}: {e}")
-            return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
-
-        try:
-            effective_sampling = self._build_sampling_kwargs(config)
-        except Exception as e:
-            errors.append(f"T0 sampling kwargs: {type(e).__name__}: {e}")
-
-        # --- T0: Dormancy diff ---
-        try:
-            from llenergymeasure.engines._helpers import compute_dormant_fields
-
-            declared = self._declared_sampling_params(config)
-            dormant = compute_dormant_fields(
-                declared,
-                effective_sampling,
-                prefix="vllm.sampling.",
-                reason_fn=self._dormancy_reason,
-            )
-        except Exception as e:
-            errors.append(f"T0 dormancy diff: {type(e).__name__}: {e}")
-
-        # --- T1: SamplingParams construction ---
-        if effective_sampling:
-            sp_cls: Any = None
-            try:
-                from vllm import SamplingParams as _SamplingParams
-
-                sp_cls = _SamplingParams
-            except Exception:
-                # vllm not importable in the probe execution environment — skip T1.
-                # By design, the probe usually runs inside a per-backend probe
-                # container where the library is available; this branch is the
-                # degenerate fallback for host-local probing without the library.
-                sp_cls = None
-            if sp_cls is not None:
-                try:
-                    sp_cls(**effective_sampling)
-                except Exception as e:
-                    errors.append(f"T1 SamplingParams: {type(e).__name__}: {e}")
-
-        # --- T2: EngineArgs + create_engine_config() ---
-        engine_args_cls: Any = None
-        try:
-            from vllm.engine.arg_utils import EngineArgs as _EngineArgs
-
-            engine_args_cls = _EngineArgs
-        except Exception:
-            engine_args_cls = None
-
-        if engine_args_cls is not None:
-            try:
-                engine_args_cls(**effective_engine).create_engine_config()
-            except Exception as e:
-                errors.append(f"T2 EngineArgs: {type(e).__name__}: {e}")
-
-        return ConfigProbe(effective_engine, effective_sampling, dormant, errors, warnings)
 
     # -------------------------------------------------------------------------
     # Private: model loading helpers
@@ -462,10 +369,6 @@ class VLLMEngine:
     def _build_sampling_kwargs(config: ExperimentConfig) -> dict[str, Any]:
         """Build the effective SamplingParams kwargs dict (no constructor call).
 
-        Pure extraction of the kwargs-assembly portion of
-        :meth:`_build_sampling_params`. Separated so :meth:`probe_config` can
-        observe the effective kwargs without instantiating vLLM classes.
-
         Returns ``{}`` when beam search is active (sampling path preempted);
         the caller dispatches to :meth:`_build_beam_search_params` in that case.
         """
@@ -480,36 +383,6 @@ class VLLMEngine:
         if config.task.max_output_tokens is not None:
             kwargs["max_tokens"] = config.task.max_output_tokens
         return kwargs
-
-    @staticmethod
-    def _declared_sampling_params(config: ExperimentConfig) -> dict[str, Any]:
-        """Return the user-declared vLLM sampling kwargs irrespective of mode.
-
-        Unlike :meth:`_build_sampling_kwargs`, this always returns the full
-        declared sampling surface — even when beam search is active — so
-        :meth:`probe_config` can flag sampling fields as dormant when beam
-        search preempts the sampling path.
-        """
-        vllm_cfg = config.vllm
-        sampling = vllm_cfg.sampling if vllm_cfg is not None else None
-        kwargs: dict[str, Any] = (
-            sampling.model_dump(exclude_none=True) if sampling is not None else {}
-        )
-        if config.task.max_output_tokens is not None:
-            kwargs["max_tokens"] = config.task.max_output_tokens
-        return kwargs
-
-    @staticmethod
-    def _dormancy_reason(key: str, declared_val: Any, effective_val: Any | None) -> str | None:
-        """Explain why a declared vLLM sampling field went dormant.
-
-        In the current data model vLLM doesn't strip sampling fields (greedy is
-        expressed by explicit temperature=0, and ``beam_search`` + ``sampling``
-        coexistence is structurally forbidden by a Pydantic validator on
-        :class:`VLLMConfig`). Any dormancy observed here would indicate an
-        unexpected engine-side filter — returned without a specific reason.
-        """
-        return None
 
     @staticmethod
     def _build_sampling_params(config: ExperimentConfig, sampling_params_cls: Any) -> Any:

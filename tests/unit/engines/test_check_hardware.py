@@ -167,13 +167,11 @@ class TestTensorRTCheckHardware:
 
 # ---------------------------------------------------------------------------
 # Short-circuit regression: pre-check_hardware, TensorRT's hardware check was
-# reachable only *downstream* of ``_build_llm_kwargs`` inside ``probe_config``,
-# so a T0 kwargs-build failure silently skipped hardware compat. The fix is
-# structural: ``check_hardware`` is now a separate code path. To pin that the
-# two paths are independent, we exercise the same fixture against both:
-# ``_build_llm_kwargs`` raises, and ``check_hardware`` still returns the SM
-# error cleanly. (The composition — both errors surfacing together — lands
-# with ``build_config_probe`` in the follow-up PR.)
+# only reachable downstream of ``_build_llm_kwargs``, so a kwargs-build failure
+# silently skipped hardware compat. The fix is structural: ``check_hardware``
+# is now a separate code path. This test exercises the same fixture against
+# both: ``_build_llm_kwargs`` raises, yet ``check_hardware`` still returns the
+# SM error.
 # ---------------------------------------------------------------------------
 
 

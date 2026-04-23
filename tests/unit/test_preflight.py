@@ -483,12 +483,12 @@ def test_run_study_preflight_error_message_contains_engines(
 
 
 # ---------------------------------------------------------------------------
-# validate_config integration (Check 4 in run_preflight)
+# Hardware-compat integration (Check 4 in run_preflight, via build_config_probe)
 # ---------------------------------------------------------------------------
 
 
-def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    """run_preflight collects validate_config errors into PreFlightError."""
+def test_run_preflight_collects_hardware_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_preflight collects check_hardware errors into PreFlightError."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
@@ -500,7 +500,7 @@ def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.Monke
     class _FakeBackend:
         name = "tensorrt"
 
-        def validate_config(self, config):
+        def check_hardware(self, config):
             return ["SM too low for TRT-LLM", "FP8 not supported on this GPU"]
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
@@ -514,8 +514,8 @@ def test_run_preflight_collects_validate_config_errors(monkeypatch: pytest.Monke
     assert "FP8 not supported" in msg
 
 
-def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    """run_preflight succeeds when validate_config returns no errors."""
+def test_run_preflight_passes_when_hardware_check_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_preflight succeeds when check_hardware returns no errors."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
@@ -530,18 +530,17 @@ def test_run_preflight_passes_when_validate_config_empty(monkeypatch: pytest.Mon
     class _FakeBackend:
         name = "transformers"
 
-        def validate_config(self, config):
+        def check_hardware(self, config):
             return []
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
 
     config = ExperimentConfig(task={"model": "test-model"}, engine="transformers")
-    # Should not raise
     run_preflight(config)
 
 
-def test_run_preflight_handles_validate_config_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    """run_preflight does not crash if get_engine raises during validate_config."""
+def test_run_preflight_handles_engine_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_preflight does not crash if get_engine raises during check_hardware."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
@@ -563,10 +562,10 @@ def test_run_preflight_handles_validate_config_exception(monkeypatch: pytest.Mon
     run_preflight(config)
 
 
-def test_run_preflight_validate_config_errors_counted_correctly(
+def test_run_preflight_hardware_errors_counted_correctly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """validate_config errors contribute to the total issue count in PreFlightError."""
+    """check_hardware errors contribute to the total issue count in PreFlightError."""
     monkeypatch.setattr(llenergymeasure.harness.preflight, "_check_cuda_available", lambda: True)
     monkeypatch.setattr(
         llenergymeasure.harness.preflight, "_check_engine_installed", lambda engine: True
@@ -578,7 +577,7 @@ def test_run_preflight_validate_config_errors_counted_correctly(
     class _FakeBackend:
         name = "tensorrt"
 
-        def validate_config(self, config):
+        def check_hardware(self, config):
             return ["FP8 requires SM >= 8.9 but this GPU has SM 8.0"]
 
     monkeypatch.setattr("llenergymeasure.engines.get_engine", lambda name: _FakeBackend())
