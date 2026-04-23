@@ -39,7 +39,6 @@ LLEM_NATIVE_FIELDS: set[tuple[str, str]] = {
     # dtype is HF-native (torch_dtype is a deprecated BC alias). Passed via
     # from_pretrained **kwargs, so signature-based discovery misses it.
     ("transformers", "dtype"),
-    ("transformers", "batching_strategy"),
     ("transformers", "load_in_4bit"),
     ("transformers", "load_in_8bit"),
     ("transformers", "bnb_4bit_compute_dtype"),
@@ -61,9 +60,6 @@ LLEM_NATIVE_FIELDS: set[tuple[str, str]] = {
     ("transformers", "tp_plan"),
     ("transformers", "tp_size"),
     # -- vLLM --
-    # Curated fields that map to engine params under different discovery paths
-    ("vllm", "quantization_method"),
-    ("vllm", "load_format"),
     # Speculative decoding sub-config
     ("vllm", "method"),
     ("vllm", "offload_group_size"),
@@ -95,23 +91,14 @@ LLEM_NATIVE_FIELDS: set[tuple[str, str]] = {
     ("tensorrt", "free_gpu_memory_fraction"),
     ("tensorrt", "quant_algo"),
     ("tensorrt", "kv_cache_quant_algo"),
-    ("tensorrt", "calib_dataset"),
-    ("tensorrt", "calib_num_samples"),
-    ("tensorrt", "kv_cache_free_gpu_mem_fraction"),
     ("tensorrt", "enable_block_reuse"),
-    ("tensorrt", "max_tokens_in_paged_kv_cache"),
     ("tensorrt", "host_cache_size"),
+    ("tensorrt", "capacity_scheduling_policy"),
+    # Sampling params (TRT-LLM SamplingConfig; sub-config differs from flat engine API)
     ("tensorrt", "top_k"),
     ("tensorrt", "top_p"),
     ("tensorrt", "temperature"),
     ("tensorrt", "repetition_penalty"),
-    ("tensorrt", "length_penalty"),
-    ("tensorrt", "max_new_tokens"),
-    ("tensorrt", "end_id"),
-    ("tensorrt", "pad_id"),
-    ("tensorrt", "decoding_mode"),
-    ("tensorrt", "capacity_scheduling_policy"),
-    ("tensorrt", "context_chunking_policy"),
 }
 
 

@@ -432,7 +432,7 @@ def test_tensorrt_t5_fp8_on_a100_captured(monkeypatch):
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8")),
+        tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
     )
     engine = TensorRTEngine()
 

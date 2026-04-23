@@ -265,7 +265,8 @@ class TestBuildLlmKwargs:
         monkeypatch.setitem(sys.modules, "tensorrt_llm.llmapi", mock_trt.llmapi)
 
         config = make_config(
-            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8"))
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="INT8")),
         )
         engine = TensorRTEngine()
         kwargs = engine._build_llm_kwargs(config)
@@ -355,7 +356,7 @@ class TestBuildLlmKwargs:
         config = make_config(
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
-                kv_cache=TensorRTKvCacheConfig(
+                kv_cache_config=TensorRTKvCacheConfig(
                     enable_block_reuse=True,
                     free_gpu_memory_fraction=0.8,
                 )
@@ -378,7 +379,7 @@ class TestBuildLlmKwargs:
         config = make_config(
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
-                scheduler=TensorRTSchedulerConfig(
+                scheduler_config=TensorRTSchedulerConfig(
                     capacity_scheduling_policy="MAX_UTILIZATION",
                 )
             ),
@@ -552,7 +553,8 @@ class TestValidateConfigFP8Checks:
             lambda gpu_index=0: (8, 0),
         )
         config = make_config(
-            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
         )
         engine = TensorRTEngine()
         errors = engine.validate_config(config)
@@ -568,7 +570,8 @@ class TestValidateConfigFP8Checks:
             lambda gpu_index=0: (8, 9),
         )
         config = make_config(
-            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
         )
         engine = TensorRTEngine()
         errors = engine.validate_config(config)
@@ -581,7 +584,8 @@ class TestValidateConfigFP8Checks:
             lambda gpu_index=0: (9, 0),
         )
         config = make_config(
-            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="FP8"))
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="FP8")),
         )
         engine = TensorRTEngine()
         errors = engine.validate_config(config)
@@ -595,7 +599,7 @@ class TestValidateConfigFP8Checks:
         )
         config = make_config(
             **_TRT_DEFAULTS,
-            tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(kv_cache_quant_algo="FP8")),
+            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(kv_cache_quant_algo="FP8")),
         )
         engine = TensorRTEngine()
         errors = engine.validate_config(config)
@@ -611,7 +615,8 @@ class TestValidateConfigFP8Checks:
             lambda gpu_index=0: (8, 0),
         )
         config = make_config(
-            **_TRT_DEFAULTS, tensorrt=TensorRTConfig(quant=TensorRTQuantConfig(quant_algo="INT8"))
+            **_TRT_DEFAULTS,
+            tensorrt=TensorRTConfig(quant_config=TensorRTQuantConfig(quant_algo="INT8")),
         )
         engine = TensorRTEngine()
         errors = engine.validate_config(config)
@@ -626,7 +631,7 @@ class TestValidateConfigFP8Checks:
         config = make_config(
             **_TRT_DEFAULTS,
             tensorrt=TensorRTConfig(
-                quant=TensorRTQuantConfig(quant_algo="FP8", kv_cache_quant_algo="FP8")
+                quant_config=TensorRTQuantConfig(quant_algo="FP8", kv_cache_quant_algo="FP8")
             ),
         )
         engine = TensorRTEngine()

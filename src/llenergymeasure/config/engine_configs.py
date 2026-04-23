@@ -23,7 +23,7 @@ Usage in YAML:
     tensorrt:
       tensor_parallel_size: 2
       dtype: bfloat16
-      quant:
+      quant_config:
         quant_algo: W4A16_AWQ
 """
 
@@ -584,11 +584,11 @@ class VLLMEngineConfig(BaseModel):
     # Speculative decoding (typed nested sub-config)
     # -------------------------------------------------------------------------
 
-    speculative: VLLMSpeculativeConfig | None = Field(
+    speculative_config: VLLMSpeculativeConfig | None = Field(
         default=None,
         description=(
-            "Speculative decoding configuration. Replaces flat speculative_model / "
-            "num_speculative_tokens fields. Mirrors vLLM native speculative_config shape."
+            "Speculative decoding configuration. Mirrors vLLM native "
+            "EngineArgs.speculative_config shape."
         ),
     )
 
@@ -805,7 +805,7 @@ class VLLMConfig(BaseModel):
             enforce_eager: false
             gpu_memory_utilization: 0.9
             kv_cache_dtype: fp8
-            speculative:
+            speculative_config:
               model: gpt2
               num_speculative_tokens: 3
           sampling:
@@ -1012,7 +1012,7 @@ class TensorRTConfig(BaseModel):
           tensor_parallel_size: 2
           max_batch_size: 8
           dtype: bfloat16
-          quant:
+          quant_config:
             quant_algo: W4A16_AWQ
     """
 
@@ -1082,17 +1082,17 @@ class TensorRTConfig(BaseModel):
     # Nested sub-configs
     # -------------------------------------------------------------------------
 
-    quant: TensorRTQuantConfig | None = Field(
+    quant_config: TensorRTQuantConfig | None = Field(
         default=None,
-        description="Quantisation configuration (QuantConfig)",
+        description="Quantisation configuration. Mirrors native TrtLlmArgs.quant_config.",
     )
-    kv_cache: TensorRTKvCacheConfig | None = Field(
+    kv_cache_config: TensorRTKvCacheConfig | None = Field(
         default=None,
-        description="KV cache configuration",
+        description="KV cache configuration. Mirrors native TrtLlmArgs.kv_cache_config.",
     )
-    scheduler: TensorRTSchedulerConfig | None = Field(
+    scheduler_config: TensorRTSchedulerConfig | None = Field(
         default=None,
-        description="Scheduler configuration",
+        description="Scheduler configuration. Mirrors native TrtLlmArgs.scheduler_config.",
     )
     sampling: TensorRTSamplingConfig | None = Field(
         default=None,
