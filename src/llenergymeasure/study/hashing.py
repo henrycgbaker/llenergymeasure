@@ -147,37 +147,24 @@ def build_h1_view(config: ExperimentConfig) -> ConfigHashView:
     canonicaliser has already applied dormant rules to fixpoint before this
     runs. Callers pass the canonicalised config, not the declared one — H1 is
     meaningless on a pre-canonicalisation config.
-    """
-    engine_name = config.engine.value if hasattr(config.engine, "value") else str(config.engine)
-    engine_section: Any = getattr(config, engine_name, None)
-
-    engine_params, sampling_params = _split_engine_section(engine_section)
-
-    task_dump = config.task.model_dump(mode="python")
-    passthrough = dict(config.passthrough_kwargs or {})
-
-    return ConfigHashView(
-        engine=engine_name,
-        task=task_dump,
-        effective_engine_params=engine_params,
-        effective_sampling_params=sampling_params,
-        lora=None,  # No LoRA field yet on ExperimentConfig — reserved for future.
-        passthrough_kwargs=passthrough,
-    )
-
-
-def _split_engine_section(section: Any) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Return ``(engine_params, sampling_params)`` from a config engine section.
 
     Engine-specific sub-models carry a ``sampling`` attribute; it is lifted
     into its own dict so H1/H3 ordering separates "how the engine constructs"
-    from "what it generates with". Missing section → both dicts empty.
+    from "what it generates with".
     """
-    if section is None:
-        return {}, {}
-    dump = section.model_dump(mode="python") if hasattr(section, "model_dump") else dict(section)
+    engine_name = config.engine.value if hasattr(config.engine, "value") else str(config.engine)
+    section: Any = getattr(config, engine_name, None)
+    dump: dict[str, Any] = section.model_dump(mode="python") if section is not None else {}
     sampling = dump.pop("sampling", None) or {}
-    return dump, sampling
+
+    return ConfigHashView(
+        engine=engine_name,
+        task=config.task.model_dump(mode="python"),
+        effective_engine_params=dump,
+        effective_sampling_params=sampling,
+        lora=None,  # No LoRA field yet on ExperimentConfig — reserved for future.
+        passthrough_kwargs=dict(config.passthrough_kwargs or {}),
+    )
 
 
 # ---------------------------------------------------------------------------

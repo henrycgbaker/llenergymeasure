@@ -291,7 +291,7 @@ class VLLMEngine:
         params derive from ``llm.llm_engine.vllm_config`` when available;
         otherwise we fall back to the declared kwargs dict.
         """
-        from llenergymeasure.engines._helpers import extract_effective_params
+        from llenergymeasure.engines._helpers import extract_effective_params, library_version
 
         sampling: dict[str, Any] = {}
         try:
@@ -305,17 +305,10 @@ class VLLMEngine:
             if vllm_cfg is not None:
                 engine_params = extract_effective_params(vllm_cfg)
 
-        try:
-            import vllm as _vllm
-
-            library_version = str(_vllm.__version__)
-        except Exception:
-            library_version = "unknown"
-
         return {
             "engine": engine_params,
             "sampling": sampling,
-            "library_version": library_version,
+            "library_version": library_version("vllm"),
         }
 
     # -------------------------------------------------------------------------

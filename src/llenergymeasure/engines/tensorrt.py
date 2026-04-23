@@ -369,7 +369,7 @@ class TensorRTEngine:
         """
         import contextlib as _cl
 
-        from llenergymeasure.engines._helpers import extract_effective_params
+        from llenergymeasure.engines._helpers import extract_effective_params, library_version
 
         sampling: dict[str, Any] = {}
         with _cl.suppress(Exception):
@@ -381,17 +381,10 @@ class TensorRTEngine:
             if llm_args is not None:
                 engine_params = extract_effective_params(llm_args)
 
-        try:
-            import tensorrt_llm as _trt
-
-            library_version = str(_trt.__version__)
-        except Exception:
-            library_version = "unknown"
-
         return {
             "engine": engine_params,
             "sampling": sampling,
-            "library_version": library_version,
+            "library_version": library_version("tensorrt_llm"),
         }
 
     # -------------------------------------------------------------------------

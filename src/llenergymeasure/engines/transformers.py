@@ -273,7 +273,7 @@ class TransformersEngine:
         Returns a dict with ``engine`` / ``sampling`` / ``library_version``
         entries ready for the H3 hashing pipeline.
         """
-        from llenergymeasure.engines._helpers import extract_effective_params
+        from llenergymeasure.engines._helpers import extract_effective_params, library_version
 
         sampling: dict[str, Any] = {}
         try:
@@ -294,17 +294,10 @@ class TransformersEngine:
             except Exception as exc:  # pragma: no cover — best-effort capture
                 logger.debug("transformers BitsAndBytesConfig capture failed: %s", exc)
 
-        try:
-            import transformers as _tf
-
-            library_version = str(_tf.__version__)
-        except Exception:
-            library_version = "unknown"
-
         return {
             "engine": engine_params,
             "sampling": sampling,
-            "library_version": library_version,
+            "library_version": library_version("transformers"),
         }
 
     # -------------------------------------------------------------------------

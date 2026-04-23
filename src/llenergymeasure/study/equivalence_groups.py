@@ -157,13 +157,17 @@ def find_h3_groups(sidecars: list[dict[str, Any]]) -> list[PostRunH3Group]:
 
 
 def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
-    """Write :class:`EquivalenceGroups` to ``path`` atomically as JSON."""
+    """Write :class:`EquivalenceGroups` to ``path`` atomically as JSON.
+
+    ``json.dumps`` serialises frozen-dataclass tuples as arrays naturally, so
+    no pre-conversion is needed.
+    """
     payload = {
         "study_id": groups.study_id,
         "dedup_mode": groups.dedup_mode,
         "vendored_rules_version": groups.vendored_rules_version,
-        "groups": [_pre_to_dict(g) for g in groups.groups],
-        "post_run_h3_groups": [_post_to_dict(g) for g in groups.post_run_h3_groups],
+        "groups": [asdict(g) for g in groups.groups],
+        "post_run_h3_groups": [asdict(g) for g in groups.post_run_h3_groups],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(json.dumps(payload, indent=2, default=str), path)
@@ -172,29 +176,13 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
 def load_equivalence_groups(path: Path) -> EquivalenceGroups:
     """Load :class:`EquivalenceGroups` from a JSON file on disk."""
     data = json.loads(path.read_text())
-    pre = [_pre_from_dict(g) for g in data.get("groups", [])]
-    post = [_post_from_dict(g) for g in data.get("post_run_h3_groups", [])]
     return EquivalenceGroups(
         study_id=str(data.get("study_id", "")),
         dedup_mode=str(data.get("dedup_mode", "")),
         vendored_rules_version=str(data.get("vendored_rules_version", "")),
-        groups=pre,
-        post_run_h3_groups=post,
+        groups=[_pre_from_dict(g) for g in data.get("groups", [])],
+        post_run_h3_groups=[_post_from_dict(g) for g in data.get("post_run_h3_groups", [])],
     )
-
-
-def _pre_to_dict(g: PreRunGroup) -> dict[str, Any]:
-    d = asdict(g)
-    # asdict() leaves tuples as tuples in the top level too, but JSON wants lists
-    d["member_experiment_ids"] = list(g.member_experiment_ids)
-    return d
-
-
-def _post_to_dict(g: PostRunH3Group) -> dict[str, Any]:
-    d = asdict(g)
-    d["member_h1_hashes"] = list(g.member_h1_hashes)
-    d["member_experiment_ids"] = list(g.member_experiment_ids)
-    return d
 
 
 def _pre_from_dict(data: dict[str, Any]) -> PreRunGroup:
