@@ -1,27 +1,33 @@
-"""Transformers rules seeder — landmark-verified manual-seed module.
+"""Transformers validation-rules walker — landmark-verified orchestrator.
 
-Rule tuples (``_GREEDY_RULES``, ``_BEAM_RULES``, ``_GENERATION_VALIDATE_RULES``,
-``_BNB_TYPE_RULES``) are hand-curated from reading HF transformers source.
-Rule content (predicates, message templates, kwargs_positive/negative)
-is editorial, not derived programmatically — all emitted rules carry
-``added_by: "manual_seed"``.
+Composes two extraction paths to emit a deterministic rules corpus:
 
-What is empirical:
+1. **GenerationConfig rules via library-API introspection** — delegated to
+   :mod:`scripts.walkers.transformers_introspection`. Every dormancy rule is
+   discovered by probing ``GenerationConfig.validate(strict=True)`` against a
+   synthesised per-type probe value; every error-class rule's message is
+   lifted from the library's own ``ValueError``. Rules emitted:
+   ``added_by: introspection``.
 
-- Library landmarks: imports ``transformers`` and checks that
-  ``GenerationConfig``, ``BitsAndBytesConfig``, ``validate``, ``post_init``
-  exist. Missing landmark → :class:`WalkerLandmarkMissingError`.
-- Version envelope: :data:`TESTED_AGAINST_VERSIONS` pins the walker to a
-  known range; a mismatch raises :class:`WalkerVersionMismatchError` at
-  CI time, prompting a refresh.
-- Source paths + line numbers: derived via :func:`inspect.getsourcefile`
-  and a ``self.<field>`` text grep. Informational only (not used for
-  rule matching).
+2. **BitsAndBytesConfig type-check rules** — hand-curated here. BNB import
+   triggers a CUDA context on GPU-bearing hosts, which would make the walker
+   unsafe to run CPU-only in CI. Keeping BNB rules as landmark-verified
+   manual seed preserves CPU-safety; the justification is the CUDA-context
+   risk, not editorial preference. Rules emitted: ``added_by: manual_seed``.
 
-Covers ``GenerationConfig`` (sampling / greedy / beam / validate rules)
-and ``BitsAndBytesConfig`` (type-check rules from the ``post_init``
-TypeError raises). peft / LoraConfig out of scope — no near-term
-consumer.
+Landmark verification: imports ``transformers`` and confirms
+``GenerationConfig``, ``BitsAndBytesConfig``, ``validate`` and ``post_init``
+exist. Missing landmark → :class:`WalkerLandmarkMissingError`. Version
+envelope: :data:`TESTED_AGAINST_VERSIONS` pins the walker to a known range;
+a mismatch raises :class:`WalkerVersionMismatchError` at CI time. Source
+paths and line numbers are derived via :func:`inspect.getsourcefile` and a
+text grep — informational only, not used for rule matching.
+
+Flash-attention validation (``validate_transformers_flash_attn_dtype``) is
+out of scope: its check lives in ``PreTrainedModel._autoset_attn_implementation``,
+not ``GenerationConfig.validate`` or ``BitsAndBytesConfig.post_init``, and is
+not reachable via this walker's landmarks. Stays hand-written in
+``config/models.py`` pending a PreTrainedModel-level walker.
 
 Usage::
 
@@ -37,7 +43,7 @@ import datetime as dt
 import inspect
 import os
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -57,217 +63,47 @@ from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
     WalkerSource,
     check_installed_version,
 )
+from scripts.walkers.transformers_introspection import (  # noqa: E402
+    walk_generation_config_rules,
+)
 
 TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.49,<4.57")
 """Range of transformers versions this walker has been validated against.
 
 Lower bound tracks the project's own ``transformers>=4.49`` pin in
 ``pyproject.toml`` so CI's pinned version stays in range. Upper bound
-excludes 4.57 because HF 4.57 restructured
-``GenerationConfig.validate()`` — dropped several ``minor_issues``
-branches (``num_beam_groups``, ``diversity_penalty``, ``constraints``
-single-beam dormancies) and the watermarking auto-coercion. The rules
-in this walker reflect the 4.49-4.56 shape of ``validate()``; rule
-content was primarily verified against 4.56 source.
+excludes 4.57 because HF 4.57 restructured ``GenerationConfig.validate()`` —
+dropped several ``minor_issues`` branches (``num_beam_groups``,
+``diversity_penalty``, ``constraints`` single-beam dormancies) and the
+watermarking auto-coercion. The introspection path inherits this pin:
+on 4.57+, the auto-enumerator would surface a different rule set, and the
+diff-rules CI comment would flag the drift for maintainer reconciliation.
 
 On mismatch, :func:`check_installed_version` raises
-:class:`WalkerVersionMismatchError` and CI fails. When the project
-bumps to 4.57+, a maintainer reconciles the rule tuples against the new
-source and bumps this pin — the narrow upper bound forces a deliberate
-refresh rather than silent shape-drift.
+:class:`WalkerVersionMismatchError` and CI fails.
 """
 
 
 # ---------------------------------------------------------------------------
-# Known rule templates
+# BitsAndBytesConfig type-check rules (kept hand-curated — CPU-safe)
 # ---------------------------------------------------------------------------
-# The introspection path surfaces issues by field name and by message; it
-# does not expose structured predicates. For each HF field we know about, we
-# encode the match predicate here (the walker's equivalent of the AST
-# condition-extraction step). This is explicit rather than hidden in a
-# library-source regex and stays comparable to the vLLM/TRT-LLM walkers'
-# output.
-
-
-# --- Greedy dormancy (fires when do_sample=False and the field is set) ---
 #
-# HF emits these as minor_issues entries. Match predicate: do_sample is False
-# AND the field is present and not equal to its default. Default values come
-# from the library's own GenerationConfig defaults.
-
-_GREEDY_RULES: tuple[tuple[str, Any, Any], ...] = (
-    # (field_name, default_value, positive_value)
-    ("temperature", 1.0, 0.9),
-    ("top_p", 1.0, 0.95),
-    ("top_k", 50, 40),
-    ("min_p", None, 0.1),
-    ("typical_p", 1.0, 0.9),
-    ("epsilon_cutoff", 0.0, 0.05),
-    ("eta_cutoff", 0.0, 0.05),
-)
-
-# --- Single-beam dormancy (fires when num_beams=1 and the field is set) ---
+# These rules surface BNB's ``isinstance``-checking ``post_init`` TypeErrors
+# before BNB is actually constructed. BNB's ``import`` triggers a CUDA
+# context on GPU hosts; the walker stays CPU-safe by not importing it.
+# Predicate uses ``type_is_not`` — fires only when the field is set AND has
+# the wrong concrete type; a valid value (``True`` for a bool field) does
+# not match.
 #
-# HF 4.56 handles these five fields in the `num_beams == 1` block
-# (configuration_utils.py:79-103). HF 4.57 dropped `num_beam_groups`,
-# `diversity_penalty`, `constraints` from this block. When the walker pin
-# moves forward to 4.57+, those three must be removed here to match.
-
-_BEAM_RULES: tuple[tuple[str, Any, Any], ...] = (
-    ("early_stopping", False, True),
-    ("num_beam_groups", 1, 2),
-    ("diversity_penalty", 0.0, 0.5),
-    ("length_penalty", 1.0, 2.0),
-    ("constraints", None, ["..."]),
-)
-
-# --- GenerationConfig.validate() cross-field rules (error + dormant) ---
-# Most are error-class (raise ValueError); a few are dormant-class (write to
-# HF's `minor_issues` dict, emitted via logger.warning_once). Dormant rules
-# set `severity` / `outcome` / `emission_channel` explicitly; errors use
-# factory defaults.
-#
-# Deliberately NOT captured here (follow-up PR once the predicate grammar
-# gains the needed expressiveness):
-# - watermarking_config validation: HF 4.56 accepts both WatermarkingConfig
-#   AND SynthIDTextWatermarkingConfig and silently auto-coerces dicts —
-#   writes to minor_issues. Needs `type_is_any` predicate to express the
-#   two-class allowlist; current `type_is_not: <single>` is insufficient.
-# - num_beams % num_beam_groups divisibility (line 132-133 of 4.56.0
-#   validate): real error-class rule, but the kwargs_negative in the
-#   naive encoding also trips downstream raises. Needs a modulo predicate
-#   operator AND a kwargs_negative that supplies compensating fields.
-# - diversity_penalty > 0 required when in group-beam mode (line 134-137
-#   of 4.56.0 validate): semantic is conditional on an earlier branch
-#   entry; simple single-rule predicate doesn't express it cleanly.
-_GENERATION_VALIDATE_RULES: tuple[dict[str, Any], ...] = (
-    {
-        "id": "transformers_negative_max_new_tokens",
-        "rule_under_test": ("GenerationConfig(max_new_tokens) rejects non-positive values"),
-        "match_fields": {
-            "transformers.sampling.max_new_tokens": {"<=": 0},
-        },
-        "kwargs_positive": {"max_new_tokens": -1},
-        "kwargs_negative": {"max_new_tokens": 16},
-        "message_template": ("`max_new_tokens` must be greater than 0, but is {declared_value}."),
-        "source_method": "validate",
-    },
-    {
-        "id": "transformers_invalid_cache_implementation",
-        "rule_under_test": ("GenerationConfig rejects unknown cache_implementation strings"),
-        "match_fields": {
-            "transformers.sampling.cache_implementation": {"present": True},
-        },
-        "kwargs_positive": {"cache_implementation": "nonsense"},
-        "kwargs_negative": {"cache_implementation": "static"},
-        "message_template": (
-            "Invalid `cache_implementation` ({declared_value}). Choose one from the supported set."
-        ),
-        "source_method": "validate",
-    },
-    {
-        "id": "transformers_invalid_early_stopping",
-        "rule_under_test": ("GenerationConfig.early_stopping must be bool or the literal 'never'"),
-        "match_fields": {
-            # `present: true` guards against firing on the LlmEnergyMeasure
-            # default (None) — HF's GenerationConfig default is False but
-            # our ExperimentConfig defaults the field to None, and the
-            # predicate runs against our config.
-            "transformers.sampling.early_stopping": {
-                "present": True,
-                "not_in": [True, False, "never"],
-            },
-        },
-        "kwargs_positive": {"early_stopping": "sometimes"},
-        "kwargs_negative": {"early_stopping": True},
-        "message_template": (
-            "`early_stopping` must be a boolean or 'never', but is {declared_value}."
-        ),
-        "source_method": "validate",
-    },
-    {
-        "id": "transformers_num_return_sequences_exceeds_num_beams",
-        "rule_under_test": ("GenerationConfig rejects num_return_sequences > num_beams"),
-        "match_fields": {
-            "transformers.sampling.num_return_sequences": {">": 1},
-            "transformers.sampling.num_beams": {"present": True},
-        },
-        "kwargs_positive": {"num_return_sequences": 4, "num_beams": 2},
-        "kwargs_negative": {"num_return_sequences": 2, "num_beams": 4},
-        "message_template": ("`num_return_sequences` ({declared_value}) must be <= `num_beams`."),
-        "source_method": "validate",
-    },
-    {
-        "id": "transformers_greedy_rejects_num_return_sequences",
-        "rule_under_test": (
-            "Greedy decoding (do_sample=False, num_beams=1) requires num_return_sequences=1"
-        ),
-        "match_fields": {
-            "transformers.sampling.do_sample": False,
-            "transformers.sampling.num_beams": 1,
-            "transformers.sampling.num_return_sequences": {">": 1},
-        },
-        "kwargs_positive": {"do_sample": False, "num_beams": 1, "num_return_sequences": 3},
-        "kwargs_negative": {"do_sample": False, "num_beams": 1, "num_return_sequences": 1},
-        "message_template": (
-            "Greedy methods without beam search do not support "
-            "`num_return_sequences` != 1 (got {declared_value})."
-        ),
-        "source_method": "validate",
-    },
-    {
-        # pad_token_id < 0 writes to HF's minor_issues dict, NOT raises.
-        # Emission is via logger.warning_once post-collection. Severity is
-        # dormant-announcement, not error.
-        "id": "transformers_negative_pad_token_id",
-        "rule_under_test": "GenerationConfig.validate() records dormant pad_token_id < 0",
-        "severity": "dormant",
-        "outcome": "dormant_announced",
-        "emission_channel": "logger_warning_once",
-        "match_fields": {
-            "transformers.sampling.pad_token_id": {"<": 0},
-        },
-        "kwargs_positive": {"pad_token_id": -1},
-        "kwargs_negative": {"pad_token_id": 0},
-        "message_template": (
-            "`pad_token_id` ({declared_value}) should be non-negative. This will cause "
-            "errors when batch generating, if there is padding."
-        ),
-        "source_method": "validate",
-    },
-    {
-        # HF raises ValueError when compile_config is not an instance of
-        # CompileConfig. We mirror with a type predicate for user-friendly
-        # pre-construction detection.
-        "id": "transformers_compile_config_type",
-        "rule_under_test": (
-            "GenerationConfig rejects compile_config that is not a CompileConfig instance"
-        ),
-        "match_fields": {
-            "transformers.sampling.compile_config": {
-                "present": True,
-                "type_is_not": "CompileConfig",
-            },
-        },
-        "kwargs_positive": {"compile_config": {"mode": "reduce-overhead"}},
-        "kwargs_negative": {"compile_config": None},
-        "message_template": (
-            "`compile_config` must be a CompileConfig instance, got {declared_value}."
-        ),
-        "source_method": "validate",
-    },
-)
-
-# --- BitsAndBytesConfig type-check rules (post_init) ---
-# These are pure type-check raises: if not isinstance(value, T): raise TypeError(...).
-# We keep them here rather than running bnb's post_init directly because bnb
-# import triggers a CUDA context on GPU-bearing hosts. The walker stays CPU-safe.
+# Provenance: ``manual_seed``. Re-auditing on BNB library bumps is a
+# maintainer task — until a BNB-side introspection path is wired up (e.g.
+# inside a CUDA-bearing container at CI time), the partition stays as-is.
 
 _BNB_TYPE_RULES: tuple[tuple[str, str, Any, Any], ...] = (
     # (field, expected_type_label, positive_value, negative_value)
-    # type_label matches `type(value).__name__` (strict class-name match
-    # used by the loader's `type_is_not` predicate). `torch.dtype`
-    # instances have `type(v).__name__ == "dtype"` — not "torch.dtype".
+    # type_label matches ``type(value).__name__`` (strict class-name match
+    # used by the loader's ``type_is_not`` predicate). ``torch.dtype``
+    # instances have ``type(v).__name__ == "dtype"`` — not "torch.dtype".
     ("load_in_4bit", "bool", "yes", False),
     ("load_in_8bit", "bool", 1, False),
     ("llm_int8_threshold", "float", "6.0", 6.0),
@@ -281,14 +117,14 @@ _BNB_TYPE_RULES: tuple[tuple[str, str, Any, Any], ...] = (
 
 
 # ---------------------------------------------------------------------------
-# Walker entry points
+# Landmark + source-path utilities
 # ---------------------------------------------------------------------------
 
 
 def _check_landmarks() -> tuple[str, str]:
-    """Import transformers, verify the landmarks we rely on exist.
+    """Import transformers, verify the landmarks the walker relies on.
 
-    Returns ``(installed_version, generation_config_path)`` for the envelope.
+    Returns ``(installed_version, generation_config_source_path)``.
     """
     try:
         import transformers  # type: ignore
@@ -323,23 +159,11 @@ def _check_landmarks() -> tuple[str, str]:
 
 @cache
 def _read_source_lines(source_file: str) -> tuple[str, ...]:
-    """Cache parsed source-file lines. Walker runs 20+ line lookups per walk."""
+    """Cache parsed source-file lines. BNB path-line lookups hit this cache."""
     try:
         return tuple(Path(source_file).read_text().splitlines())
     except OSError:
         return ()
-
-
-def _line_for_field(source_file: str, needle: str) -> int:
-    """Best-effort line lookup for ``self.<needle>`` inside ``source_file``.
-
-    The corpus entry's ``line_at_scan`` is informational only — not used for
-    matching — so approximate lookup is acceptable. Returns 0 if not found.
-    """
-    for i, line in enumerate(_read_source_lines(source_file), start=1):
-        if needle in line:
-            return i
-    return 0
 
 
 def _relative_source_path(abs_path: str) -> str:
@@ -359,143 +183,9 @@ def _today() -> str:
     return dt.date.today().isoformat()
 
 
-def _predicate_from_default(default: Any) -> dict[str, Any]:
-    """Predicate that fires when a field is set to a non-default value."""
-    if default is None:
-        return {"present": True}
-    return {"present": True, "not_equal": default}
-
-
-@dataclass(frozen=True)
-class _DormancyKind:
-    """Parameters that differ between greedy-mode vs single-beam dormancy factories."""
-
-    id_prefix: str  # e.g. "transformers_greedy_strips_"
-    trigger_field: str  # e.g. "do_sample"
-    trigger_positive: Any  # value that triggers dormancy (False for do_sample, 1 for num_beams)
-    trigger_negative: Any  # value that doesn't trigger (True for do_sample, 4 for num_beams)
-    rule_under_test_template: str  # f-string taking {field}
-    message_template_template: str  # f-string taking {field}
-
-
-_GREEDY_KIND = _DormancyKind(
-    id_prefix="transformers_greedy_strips_",
-    trigger_field="do_sample",
-    trigger_positive=False,
-    trigger_negative=True,
-    rule_under_test_template=(
-        "GenerationConfig.validate() records dormant `{field}` when "
-        "do_sample=False and `{field}` is set to a non-default value"
-    ),
-    message_template_template=(
-        "`do_sample=False` is set, so `{field}` ({{declared_value}}) "
-        "has no effect. Remove it or set do_sample=True."
-    ),
-)
-
-
-_BEAM_KIND = _DormancyKind(
-    id_prefix="transformers_single_beam_strips_",
-    trigger_field="num_beams",
-    trigger_positive=1,
-    trigger_negative=4,
-    rule_under_test_template=(
-        "GenerationConfig.validate() records dormant `{field}` when "
-        "num_beams=1 and `{field}` is set"
-    ),
-    message_template_template=(
-        "`num_beams=1` is set, so `{field}` ({{declared_value}}) is ignored. "
-        "Set num_beams>1 or remove {field}."
-    ),
-)
-
-
-def _make_dormancy_rule(
-    kind: _DormancyKind,
-    field: str,
-    default: Any,
-    positive: Any,
-    abs_source_path: str,
-    rel_source_path: str,
-    today: str,
-) -> RuleCandidate:
-    """Build a dormancy RuleCandidate. See :class:`_DormancyKind`."""
-    line = _line_for_field(abs_source_path, f"self.{field}")
-    return RuleCandidate(
-        id=f"{kind.id_prefix}{field}",
-        engine="transformers",
-        library="transformers",
-        rule_under_test=kind.rule_under_test_template.format(field=field),
-        severity="dormant",
-        native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
-            path=rel_source_path,
-            method="validate",
-            line_at_scan=line,
-            walker_confidence="high",
-        ),
-        match_fields={
-            f"transformers.sampling.{kind.trigger_field}": kind.trigger_positive,
-            f"transformers.sampling.{field}": _predicate_from_default(default),
-        },
-        kwargs_positive={kind.trigger_field: kind.trigger_positive, field: positive},
-        kwargs_negative={kind.trigger_field: kind.trigger_negative, field: positive},
-        expected_outcome={
-            "outcome": "dormant_announced",
-            "emission_channel": "logger_warning_once",
-            "normalised_fields": [],
-        },
-        message_template=kind.message_template_template.format(field=field),
-        references=[f"transformers.GenerationConfig.validate() (line ~{line})"],
-        added_by="manual_seed",
-        added_at=today,
-    )
-
-
-def _make_validate_rule(
-    spec: dict[str, Any], abs_source_path: str, rel_source_path: str, today: str
-) -> RuleCandidate:
-    """Factory for GenerationConfig.validate() rules (error OR dormant).
-
-    Severity / outcome / emission_channel can be overridden in the spec dict
-    for dormancy rules like ``pad_token_id < 0`` (HF writes to minor_issues,
-    which users observe via logger.warning_once). Defaults match the common
-    case: severity=error, outcome=error, emission_channel=none.
-    """
-    probe_field = next(iter(spec["match_fields"]))
-    suffix = probe_field.rsplit(".", 1)[-1]
-    line = _line_for_field(abs_source_path, f"self.{suffix}")
-    severity = spec.get("severity", "error")
-    outcome = spec.get("outcome", "error")
-    emission_channel = spec.get("emission_channel", "none")
-    return RuleCandidate(
-        id=spec["id"],
-        engine="transformers",
-        library="transformers",
-        rule_under_test=spec["rule_under_test"],
-        severity=severity,
-        native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
-            path=rel_source_path,
-            method=spec["source_method"],
-            line_at_scan=line,
-            walker_confidence="high",
-        ),
-        match_fields=spec["match_fields"],
-        kwargs_positive=spec["kwargs_positive"],
-        kwargs_negative=spec["kwargs_negative"],
-        expected_outcome={
-            "outcome": outcome,
-            "emission_channel": emission_channel,
-            "normalised_fields": [],
-        },
-        message_template=spec["message_template"],
-        references=[
-            "transformers.GenerationConfig.validate() — manual seed from HF 4.56 source",
-        ],
-        added_by="manual_seed",
-        added_at=today,
-    )
+# ---------------------------------------------------------------------------
+# BNB rule factory
+# ---------------------------------------------------------------------------
 
 
 def _make_bnb_type_rule(
@@ -506,19 +196,7 @@ def _make_bnb_type_rule(
     source_path: str,
     today: str,
 ) -> RuleCandidate:
-    """Factory for BitsAndBytesConfig type-check rules.
-
-    These rules surface BNB's `isinstance`-checking `post_init` TypeErrors
-    before BNB is actually constructed (BNB import triggers a CUDA context
-    on GPU hosts). Predicate uses `type_is_not` — fires only when the field
-    is set AND has the wrong concrete type; a valid value (`True` for a
-    bool field) does not match.
-
-    Provenance is `manual_seed`: these rules are hand-curated from a
-    one-off audit of the BitsAndBytesConfig source, not derived
-    programmatically. Re-auditing on BNB library bumps is a maintainer
-    task.
-    """
+    """Factory for ``BitsAndBytesConfig`` type-check rules."""
     return RuleCandidate(
         id=f"transformers_bnb_{field}_type",
         engine="transformers",
@@ -535,10 +213,6 @@ def _make_bnb_type_rule(
             walker_confidence="high",
         ),
         match_fields={
-            # `present + type_is_not`: fire only when set AND wrong type.
-            # Bare `present: true` (the old predicate) fired on any set
-            # value regardless of type — a user setting `load_in_4bit: true`
-            # would wrongly trigger `severity=error`.
             f"transformers.quant.{field}": {
                 "present": True,
                 "type_is_not": type_label,
@@ -591,7 +265,12 @@ def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
 
 
 def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
-    """Return ``(candidates, envelope_metadata)``."""
+    """Return ``(candidates, envelope_metadata)`` — full corpus for this engine.
+
+    Composes the introspection-derived GenerationConfig rules with the
+    hand-curated BNB rules. Rules in the returned list carry their own
+    ``added_by`` tag; the envelope captures the shared version pin.
+    """
     installed_version, abs_source_path = _check_landmarks()
     check_installed_version("transformers", installed_version, TESTED_AGAINST_VERSIONS)
 
@@ -602,16 +281,16 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
     today = _today()
     candidates: list[RuleCandidate] = []
 
-    for kind, rules in ((_GREEDY_KIND, _GREEDY_RULES), (_BEAM_KIND, _BEAM_RULES)):
-        for field, default, pos in rules:
-            candidates.append(
-                _make_dormancy_rule(kind, field, default, pos, abs_source_path, source_path, today)
-            )
-    for spec in _GENERATION_VALIDATE_RULES:
-        candidates.append(_make_validate_rule(spec, abs_source_path, source_path, today))
+    candidates.extend(
+        walk_generation_config_rules(
+            abs_source_path=abs_source_path,
+            rel_source_path=source_path,
+            today=today,
+        )
+    )
 
     # BitsAndBytesConfig rules — source path is the quantization_config module.
-    # We cheaply locate it without importing bnb (which may touch CUDA).
+    # Cheaply locate it without importing bnb (which may touch CUDA).
     bnb_source_path = source_path
     try:
         import transformers.utils.quantization_config as _qcfg  # type: ignore
@@ -645,12 +324,10 @@ def emit_yaml(candidates: list[RuleCandidate], envelope: dict[str, Any]) -> str:
     """Serialise candidates + envelope to a deterministic YAML string.
 
     Key order is fixed (not alphabetical) for readability: envelope first,
-    then candidates in source order. Within each candidate, keys follow the
-    corpus schema's documented layout.
+    then candidates sorted by ``(walker_source.method, id)``.
     """
     import yaml
 
-    # Sort candidates deterministically for byte-stable output.
     sorted_candidates = sorted(candidates, key=lambda c: (c.walker_source.method, c.id))
     doc = {
         "schema_version": envelope["schema_version"],
