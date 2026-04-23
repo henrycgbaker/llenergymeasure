@@ -2,11 +2,9 @@
 
 Walker depth is fixed at 1 (same module, no helper-call tracing). This
 module ships the AST primitives and pattern detectors that future
-per-engine walkers (vLLM, TRT-LLM) will compose to extract validation
-rules from pinned library source. No walker is wired up here — the first
-concrete consumer is the transformers introspection wrapper, which uses
-only the dataclasses and version-pin check; the AST machinery waits for
-its first AST-walker consumer.
+per-engine walkers will compose to extract validation rules from pinned
+library source. No concrete walker ships today; they land as independent
+PRs per engine.
 
 - :class:`RuleCandidate` — the walker output type, serialised to the YAML
   corpus entry shape in :mod:`llenergymeasure.engines.vendored_rules.loader`.
@@ -447,7 +445,14 @@ def default_detectors() -> tuple[
     | MinorIssuesDictAssignDetector,
     ...,
 ]:
-    """Return the default detector tuple — walkers copy / slice this to taste."""
+    """Return the default detector tuple — walkers copy / slice this to taste.
+
+    **Stability contract:** the tuple's *contents* and *ordering* may grow
+    or shift as new detectors are added to cover additional libraries.
+    Walkers that need behaviour-stable detection across corpus-pipeline
+    reruns should capture a local tuple (e.g. select-by-class-name) at
+    walker definition time rather than calling this each walk.
+    """
     return _DEFAULT_DETECTORS
 
 
