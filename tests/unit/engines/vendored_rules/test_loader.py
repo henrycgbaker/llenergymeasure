@@ -260,3 +260,105 @@ def test_enum_value_errors_share_common_base_class() -> None:
     assert issubclass(UnknownSeverityError, UnknownEnumValueError)
     assert issubclass(UnknownOutcomeError, UnknownEnumValueError)
     assert issubclass(UnknownEmissionChannelError, UnknownEnumValueError)
+
+
+# ---------------------------------------------------------------------------
+# Vendored JSON overlay (config-rules-refresh CI)
+# ---------------------------------------------------------------------------
+
+
+def test_overlay_applied_when_vendored_json_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+
+    vendored_payload = {
+        "schema_version": "1.0.0",
+        "engine": "transformers",
+        "engine_version": "4.56.0",
+        "cases": [
+            {
+                "id": "transformers_test_rule",
+                "outcome": "dormant_announced",
+                "emission_channel": "logger_warning",
+                "observed_messages": ["library emitted this"],
+            }
+        ],
+        "divergences": [],
+    }
+
+    monkeypatch.setattr(loader_mod, "_try_load_vendored_json", lambda _engine: vendored_payload)
+
+    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+    assert len(result.rules) == 1
+    expected = result.rules[0].expected_outcome
+    assert expected["observed_outcome"] == "dormant_announced"
+    assert expected["observed_emission_channel"] == "logger_warning"
+    assert expected["observed_messages"] == ["library emitted this"]
+
+
+def test_no_overlay_when_vendored_json_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+    monkeypatch.setattr(loader_mod, "_try_load_vendored_json", lambda _e: None)
+
+    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+    assert len(result.rules) == 1
+    expected = result.rules[0].expected_outcome
+    # The corpus's declared fields are preserved; no observed_* keys appear.
+    assert "observed_outcome" not in expected
+    assert "observed_emission_channel" not in expected
+
+
+def test_overlay_skips_rules_without_matching_vendor_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+    monkeypatch.setattr(
+        loader_mod,
+        "_try_load_vendored_json",
+        lambda _e: {"cases": [{"id": "some_other_rule", "outcome": "error"}]},
+    )
+    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+    # No matching case -> rule is returned unchanged.
+    assert "observed_outcome" not in result.rules[0].expected_outcome
+
+
+def test_try_load_vendored_json_rejects_non_numeric_schema_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A corrupt commit-back could write a non-numeric schema_version
+    # (e.g. "dev"). The loader must return None rather than propagating
+    # UnsupportedSchemaVersionError from _major() — the vendor CI job
+    # resurfaces the issue separately.
+    from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+    _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+
+    def fake_read(_self: object, _name: str) -> str:
+        import json as _json
+
+        return _json.dumps({"schema_version": "dev", "cases": []})
+
+    class _FakeFiles:
+        def __truediv__(self, name: str) -> _FakeEntry:
+            return _FakeEntry()
+
+    class _FakeEntry:
+        def read_text(self) -> str:
+            import json as _json
+
+            return _json.dumps({"schema_version": "dev", "cases": []})
+
+    monkeypatch.setattr(loader_mod.resources, "files", lambda _pkg: _FakeFiles())
+
+    # Should not raise; should fall back to YAML-only (no observed_* keys).
+    result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+    assert "observed_outcome" not in result.rules[0].expected_outcome

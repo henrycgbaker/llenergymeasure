@@ -1,0 +1,230 @@
+name: Config Rules Refresh
+
+# Re-vendors the validation-rules JSON by running scripts/vendor_rules.py
+# inside each engine's Docker container. Observes whether the real library
+# matches the corpus's declared expected_outcome; fails CI on divergence;
+# commits regenerated JSON back to the PR.
+#
+# Sibling of schema-refresh.yml (parameter-discovery). Same shape, same
+# commit-back + labelling + PR-comment pattern, different artifact kind.
+#
+# Trigger paths (auto):
+#   - docker/Dockerfile.{engine}        (Renovate-driven image bumps)
+#   - configs/validation_rules/{engine}.yaml
+#   - scripts/vendor_rules.py
+#   - scripts/walkers/{engine}.py
+#   - scripts/_vendor_common.py
+#
+# Trigger (manual): workflow_dispatch with explicit engine choice.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "docker/Dockerfile.*"
+      - "configs/validation_rules/*.yaml"
+      - "scripts/vendor_rules.py"
+      - "scripts/_vendor_common.py"
+      - "scripts/walkers/*.py"
+      - "scripts/update_engine_rules.sh"
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: "Engine to re-vendor"
+        required: true
+        type: choice
+        options:
+          - transformers
+          - vllm
+          - tensorrt
+          - all
+      pr_number:
+        description: "PR number to comment on and label (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: config-rules-refresh-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORPUS_DIR: configs/validation_rules
+  VENDORED_DIR: src/llenergymeasure/engines/vendored_rules
+
+jobs:
+  vendor-transformers:
+    # Path filters on the pull_request trigger restrict which PRs fire this
+    # workflow; workflow_dispatch always runs when explicitly invoked. No
+    # per-job `if:` gate needed.
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Short-lived (~1 hour) GitHub App token. Events it produces
+        # (commits, PR comments, label edits) are NOT subject to the
+        # default GITHUB_TOKEN recursive-workflow-protection gate, so
+        # the commit-back below can legitimately trigger subsequent
+        # CI runs. Skipped on fork PRs (secrets are not exposed there)
+        # so the workflow still runs read-only for external contributors.
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: vendor-rules-3.12
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --dev --extra transformers
+
+      - name: Save current vendored JSON for diffing
+        id: save_old
+        run: |
+          OLD_JSON="${VENDORED_DIR}/transformers.json"
+          mkdir -p /tmp/rules-diff
+          if [[ -f "$OLD_JSON" ]]; then
+            cp "$OLD_JSON" /tmp/rules-diff/transformers.old.json
+          else
+            echo '{"cases":[],"divergences":[]}' > /tmp/rules-diff/transformers.old.json
+          fi
+
+      - name: Run fixpoint test against corpus
+        run: |
+          uv run python -c "
+          import yaml
+          from scripts.walkers._fixpoint_test import fixpoint_test_corpus
+          corpus = yaml.safe_load(open('${CORPUS_DIR}/transformers.yaml'))
+          fixpoint_test_corpus(corpus)
+          print('fixpoint test passed')
+          "
+
+      - name: Compute stable vendor anchor
+        id: anchor
+        # Pin the vendor envelope to the SHA + author date of the most
+        # recent commit that touched any INPUT path. Stable across the
+        # workflow's own commit-back (which only touches the output JSON),
+        # so re-runs produce byte-identical envelopes on unchanged source.
+        # Without this, every re-run emits fresh `vendor_commit` +
+        # `vendored_at` fields, git diff picks them up, commit-back fires,
+        # and the synchronize loops.
+        run: |
+          PATHS=(
+            "docker/Dockerfile.transformers"
+            "configs/validation_rules/transformers.yaml"
+            "scripts/vendor_rules.py"
+            "scripts/_vendor_common.py"
+            "scripts/walkers/transformers.py"
+            "scripts/walkers/_fixpoint_test.py"
+            "scripts/walkers/_base.py"
+            "scripts/update_engine_rules.sh"
+          )
+          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Re-vendor transformers rules
+        id: vendor
+        env:
+          LLENERGY_VENDOR_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+        run: |
+          set +e
+          uv run python scripts/vendor_rules.py \
+            --engine transformers \
+            --corpus "${CORPUS_DIR}/transformers.yaml" \
+            --out "${VENDORED_DIR}/transformers.json" \
+            --vendor-commit "${{ steps.anchor.outputs.sha }}" \
+            --fail-on-divergence
+          echo "vendor_exit=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Classify diff
+        id: diff
+        run: |
+          mkdir -p /tmp/rules-diff
+          set +e
+          uv run python scripts/diff_rules.py \
+            /tmp/rules-diff/transformers.old.json \
+            "${VENDORED_DIR}/transformers.json" \
+            --out /tmp/rules-diff/transformers.md \
+            --title "Transformers rules diff"
+          DIFF_EXIT=$?
+          set -e
+          echo "is_breaking=$([[ $DIFF_EXIT -eq 1 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit regenerated rule-observations JSON
+        # Runs even when vendor detected divergence — the diff comment is
+        # more actionable when paired with the exact regenerated JSON on
+        # the PR branch. Skipped for forks (App token isn't minted there)
+        # and when no App token was provided.
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add "${VENDORED_DIR}/transformers.json"
+
+          if git diff --cached --quiet; then
+            echo "No vendored JSON changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(config): refresh transformers rule-observations"
+          # --force-with-lease guards against clobbering a concurrent push
+          # from the PR author. On stale-ref failure the workflow exits
+          # non-zero and a rerun picks up the latest state.
+          git push --force-with-lease
+
+      - name: Post diff comment
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number available, skipping comment."
+            exit 0
+          fi
+          if [[ -f /tmp/rules-diff/transformers.md ]]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/rules-diff/transformers.md
+          fi
+
+      - name: Apply label
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.is_breaking }}" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "rules-breaking" --remove-label "rules-safe" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --add-label "rules-safe" --remove-label "rules-breaking" 2>/dev/null || true
+          fi
+
+      - name: Fail on divergence
+        if: steps.vendor.outputs.vendor_exit != '0'
+        run: |
+          echo "::error::One or more rules diverged from their declared expected_outcome." >&2
+          echo "Inspect ${VENDORED_DIR}/transformers.json > .divergences[] for details." >&2
+          exit 1
