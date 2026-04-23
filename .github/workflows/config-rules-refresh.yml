@@ -64,11 +64,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Mint llem-ci-bot App token
+        # Short-lived (~1 hour) GitHub App token. Events it produces
+        # (commits, PR comments, label edits) are NOT subject to the
+        # default GITHUB_TOKEN recursive-workflow-protection gate, so
+        # the commit-back below can legitimately trigger subsequent
+        # CI runs. Skipped on fork PRs (secrets are not exposed there)
+        # so the workflow still runs read-only for external contributors.
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref || github.ref }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: astral-sh/setup-uv@v7
@@ -155,16 +170,15 @@ jobs:
           set -e
           echo "is_breaking=$([[ $DIFF_EXIT -eq 1 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
-      - name: Commit regenerated JSON
-        # Commit-back runs even when vendor detected divergence — the diff
-        # comment is more actionable when paired with the exact regenerated
-        # JSON on the PR branch. Intentionally not gated on vendor_exit.
-        # Skipped for forks (no write token on a fork PR) — the diff
-        # comment on the PR is still informative in that case.
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      - name: Commit regenerated rule-observations JSON
+        # Runs even when vendor detected divergence — the diff comment is
+        # more actionable when paired with the exact regenerated JSON on
+        # the PR branch. Skipped for forks (App token isn't minted there)
+        # and when no App token was provided.
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
 
           git add "${VENDORED_DIR}/transformers.json"
 
@@ -173,21 +187,16 @@ jobs:
             exit 0
           fi
 
-          # [skip ci] on the commit-back prevents a re-trigger loop: the
-          # regenerated JSON contains a fresh `vendored_at` timestamp on
-          # every run, so without the skip the auto-triggered synchronize
-          # would fire another vendor run that produces another commit,
-          # ad infinitum.
-          git commit -m "chore(config): refresh transformers vendored rules [skip ci]"
+          git commit -m "chore(config): refresh transformers rule-observations"
           # --force-with-lease guards against clobbering a concurrent push
           # from the PR author. On stale-ref failure the workflow exits
-          # non-zero and a rerun will pick up the latest state.
+          # non-zero and a rerun picks up the latest state.
           git push --force-with-lease
 
       - name: Post diff comment
         if: github.event_name == 'pull_request' || inputs.pr_number != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
           if [[ -z "$PR_NUMBER" ]]; then
@@ -201,7 +210,7 @@ jobs:
       - name: Apply label
         if: github.event_name == 'pull_request' || inputs.pr_number != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
           if [[ -z "$PR_NUMBER" ]]; then
