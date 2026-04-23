@@ -48,17 +48,17 @@ class TestDottedNestedSweep:
     """Tests for dotted sweep keys expanding into nested TensorRT config."""
 
     def test_dotted_quant_algo_sweep(self):
-        """tensorrt.quant.quant_algo: [INT8, FP8, W4A16_AWQ] produces 3 configs."""
+        """tensorrt.quant_config.quant_algo: [INT8, FP8, W4A16_AWQ] produces 3 configs."""
         raw_study = {
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
             "sweep": {
-                "tensorrt.quant.quant_algo": ["INT8", "FP8", "W4A16_AWQ"],
+                "tensorrt.quant_config.quant_algo": ["INT8", "FP8", "W4A16_AWQ"],
             },
         }
         valid, _skipped = expand_grid(raw_study)
         assert len(valid) == 3
-        algos = [c.tensorrt.quant.quant_algo for c in valid]
+        algos = [c.tensorrt.quant_config.quant_algo for c in valid]
         assert set(algos) == {"INT8", "FP8", "W4A16_AWQ"}
 
     def test_dotted_nested_max_num_tokens_sweep(self):
@@ -86,11 +86,11 @@ class TestDottedNestedSweep:
                 "max_input_len": 1024,
                 "max_seq_len": 2048,
                 "dtype": "bfloat16",
-                "kv_cache": {
+                "kv_cache_config": {
                     "enable_block_reuse": True,
                     "free_gpu_memory_fraction": 0.9,
                 },
-                "scheduler": {
+                "scheduler_config": {
                     "capacity_scheduling_policy": "MAX_UTILIZATION",
                 },
                 "sampling": {
@@ -98,7 +98,7 @@ class TestDottedNestedSweep:
                 },
             },
             "sweep": {
-                "tensorrt.quant.quant_algo": ["INT8", "W4A16_AWQ"],
+                "tensorrt.quant_config.quant_algo": ["INT8", "W4A16_AWQ"],
             },
         }
         valid, _skipped = expand_grid(raw_study)
@@ -109,12 +109,12 @@ class TestDottedNestedSweep:
             assert config.tensorrt.tensor_parallel_size == 2
             assert config.tensorrt.max_batch_size == 8
             assert config.tensorrt.dtype == "bfloat16"
-            assert config.tensorrt.kv_cache is not None
-            assert config.tensorrt.kv_cache.enable_block_reuse is True
-            assert config.tensorrt.scheduler is not None
+            assert config.tensorrt.kv_cache_config is not None
+            assert config.tensorrt.kv_cache_config.enable_block_reuse is True
+            assert config.tensorrt.scheduler_config is not None
             assert config.tensorrt.sampling is not None
             assert config.tensorrt.sampling.n == 1
-        algos = {c.tensorrt.quant.quant_algo for c in valid}
+        algos = {c.tensorrt.quant_config.quant_algo for c in valid}
         assert algos == {"INT8", "W4A16_AWQ"}
 
     def test_invalid_quant_algo_in_sweep_is_skipped(self):
@@ -123,11 +123,11 @@ class TestDottedNestedSweep:
             "task": {"model": "gpt2"},
             "engine": "tensorrt",
             "sweep": {
-                "tensorrt.quant.quant_algo": ["INT8", "INVALID_VALUE"],
+                "tensorrt.quant_config.quant_algo": ["INT8", "INVALID_VALUE"],
             },
         }
         valid, skipped = expand_grid(raw_study)
         assert len(valid) == 1
-        assert valid[0].tensorrt.quant.quant_algo == "INT8"
+        assert valid[0].tensorrt.quant_config.quant_algo == "INT8"
         assert len(skipped) == 1
         assert "INVALID_VALUE" in skipped[0].reason

@@ -385,10 +385,10 @@ sweep:
   tensorrt.quant_config:
     - {}                              # baseline: no quantisation
     - &trt_int8
-      tensorrt.quant.quant_algo: INT8
+      tensorrt.quant_config.quant_algo: INT8
     - <<: *trt_int8
-      tensorrt.quant.kv_cache_quant_algo: INT8
-    - tensorrt.quant.quant_algo: W4A16_AWQ
+      tensorrt.quant_config.kv_cache_quant_algo: INT8
+    - tensorrt.quant_config.quant_algo: W4A16_AWQ
 ```
 
 ---
@@ -748,7 +748,7 @@ relates to energy measurement.
 | `num_scheduler_steps` | integer | None | `null` | Multi-step scheduling: decode steps per scheduler iteration (None -> 1). Increases throughput at the cost of more VRAM per step. |
 | `max_seq_len_to_capture` | integer | None | `null` | Max sequence length eligible for CUDA graph capture (None -> 8192). Longer sequences fall back to eager mode. |
 | `distributed_executor_backend` | 'mp' | 'ray' | None | `null` | Multi-GPU executor backend (None -> 'mp'). |
-| `speculative` | VLLMSpeculativeConfig | None | `null` | Speculative decoding sub-config. Fields: model (str), num_speculative_tokens (int), method (str). |
+| `speculative_config` | VLLMSpeculativeConfig | None | `null` | Speculative decoding sub-config. Fields: model (str), num_speculative_tokens (int), method (str). |
 | `offload_group_size` | integer | None | `null` | Groups of layers for CPU offloading (None -> 0). |
 | `offload_num_in_group` | integer | None | `null` | Number of layers offloaded per group (None -> 1). |
 | `offload_prefetch_step` | integer | None | `null` | Prefetch steps ahead for CPU offload (None -> 1). |

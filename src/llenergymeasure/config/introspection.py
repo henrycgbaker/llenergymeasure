@@ -283,7 +283,7 @@ def _get_custom_test_values() -> dict[str, list[Any]]:
         "tensorrt.max_input_len": [0],  # ge=1: 0 violates ge
         "tensorrt.max_seq_len": [0],  # ge=1: 0 violates ge
         # TensorRTKvCacheConfig: cache params
-        "tensorrt.kv_cache.max_tokens": [0],  # ge=1: 0 violates ge
+        "tensorrt.kv_cache_config.max_tokens": [0],  # ge=1: 0 violates ge
         # TensorRTSamplingConfig: sampling params
         "tensorrt.sampling.n": [0],  # ge=1: 0 violates ge
     }
@@ -533,7 +533,7 @@ def get_mutual_exclusions() -> dict[str, list[str]]:
         "vllm.beam_search": ["vllm.sampling"],
         "vllm.sampling": ["vllm.beam_search"],
         # TensorRT: quantisation method is exclusive
-        "tensorrt.quant.quant_algo": [],  # Handled by Literal type constraint
+        "tensorrt.quant_config.quant_algo": [],  # Handled by Literal type constraint
     }
 
 
@@ -569,8 +569,8 @@ def get_special_test_models() -> dict[str, str]:
         "vllm.engine.quantization=awq": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
         "vllm.engine.quantization=gptq": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
         # TensorRT quantisation methods requiring pre-quantized models
-        "tensorrt.quant.quant_algo=W4A16_AWQ": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
-        "tensorrt.quant.quant_algo=W4A16_GPTQ": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
+        "tensorrt.quant_config.quant_algo=W4A16_AWQ": "Qwen/Qwen2.5-0.5B-Instruct-AWQ",
+        "tensorrt.quant_config.quant_algo=W4A16_GPTQ": "Qwen/Qwen2.5-0.5B-Instruct-GPTQ-Int4",
     }
 
 
@@ -586,7 +586,7 @@ def get_params_requiring_gpu_capability(min_compute_capability: float = 8.0) -> 
     # These features require Ampere (8.0) or newer GPUs
     ampere_required = [
         "vllm.engine.quantization=fp8",
-        "tensorrt.quant.quant_algo=FP8",
+        "tensorrt.quant_config.quant_algo=FP8",
         "transformers.attn_implementation=flash_attention_2",
         "transformers.attn_implementation=flash_attention_3",
     ]
@@ -617,10 +617,10 @@ def get_param_skip_conditions() -> dict[str, str]:
         "transformers.torch_compile=True": "May fail on some model architectures (non-fatal fallback)",
         # FP8 - Ampere or newer
         "vllm.engine.quantization=fp8": "Requires Ampere+ GPU",
-        "tensorrt.quant.quant_algo=FP8": "Requires Ada Lovelace+ GPU (SM >= 8.9)",
+        "tensorrt.quant_config.quant_algo=FP8": "Requires Ada Lovelace+ GPU (SM >= 8.9)",
         # TensorRT quantisation - requires pre-quantized models
-        "tensorrt.quant.quant_algo=W4A16_AWQ": "Requires AWQ-quantized model",
-        "tensorrt.quant.quant_algo=W4A16_GPTQ": "Requires GPTQ-quantized model",
+        "tensorrt.quant_config.quant_algo=W4A16_AWQ": "Requires AWQ-quantized model",
+        "tensorrt.quant_config.quant_algo=W4A16_GPTQ": "Requires GPTQ-quantized model",
         # Quantization - requires pre-quantized models (see get_special_test_models)
         "vllm.engine.quantization=awq": "Requires AWQ-quantized model",
         "vllm.engine.quantization=gptq": "Requires GPTQ-quantized model",
@@ -979,7 +979,7 @@ def get_runtime_limitations() -> list[dict[str, str]]:
         },
         {
             "engine": "tensorrt",
-            "parameter": "tensorrt.quant.quant_algo=FP8",
+            "parameter": "tensorrt.quant_config.quant_algo=FP8",
             "limitation": "FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises ConfigurationError - no silent emulation or fallback",
             "resolution": "Use INT8, W4A16_AWQ, W4A16_GPTQ, or W8A16 on A100",
         },

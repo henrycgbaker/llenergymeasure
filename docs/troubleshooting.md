@@ -225,7 +225,7 @@ model, or package requirements.
 | vllm | `vllm.engine.attention.backend: FLASHINFER` | FlashInfer requires JIT compilation on first use | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.attention.backend: TORCH_SDPA` | TORCH_SDPA not registered in vLLM attention backends | Use `attention.backend: auto` or `FLASH_ATTN` |
 | vllm | `vllm.engine.quantization: awq` or `gptq` | Requires a pre-quantized model checkpoint | Use a quantized model (e.g. `TheBloke/*-AWQ`) or omit |
-| tensorrt | `tensorrt.quant.quant_algo: FP8` | FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises a `ConfigurationError` — no silent emulation or fallback | Use `INT8`, `W4A16_AWQ`, `W4A16_GPTQ`, or `W8A16` on A100 |
+| tensorrt | `tensorrt.quant_config.quant_algo: FP8` | FP8 requires SM >= 8.9 (Ada Lovelace or Hopper). A100 (SM80) raises a `ConfigurationError` — no silent emulation or fallback | Use `INT8`, `W4A16_AWQ`, `W4A16_GPTQ`, or `W8A16` on A100 |
 | tensorrt | `tensorrt.quantization: int8_sq` | INT8 SmoothQuant requires a calibration dataset | Provide calibration config or use a supported quantization method |
 
 ### Engine Capability Matrix

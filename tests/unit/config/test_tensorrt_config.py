@@ -259,12 +259,12 @@ class TestExperimentConfigIntegration:
                 "max_num_tokens": 4096,
                 "dtype": "bfloat16",
                 "fast_build": True,
-                "quant": {"quant_algo": "W4A16_AWQ"},
-                "kv_cache": {
+                "quant_config": {"quant_algo": "W4A16_AWQ"},
+                "kv_cache_config": {
                     "enable_block_reuse": True,
                     "free_gpu_memory_fraction": 0.9,
                 },
-                "scheduler": {
+                "scheduler_config": {
                     "capacity_scheduling_policy": "MAX_UTILIZATION",
                 },
                 "sampling": {
@@ -279,12 +279,12 @@ class TestExperimentConfigIntegration:
         assert config.tensorrt.tensor_parallel_size == 2
         assert config.tensorrt.pipeline_parallel_size == 2
         assert config.tensorrt.max_num_tokens == 4096
-        assert config.tensorrt.quant is not None
-        assert config.tensorrt.quant.quant_algo == "W4A16_AWQ"
-        assert config.tensorrt.kv_cache is not None
-        assert config.tensorrt.kv_cache.enable_block_reuse is True
-        assert config.tensorrt.scheduler is not None
-        assert config.tensorrt.scheduler.capacity_scheduling_policy == "MAX_UTILIZATION"
+        assert config.tensorrt.quant_config is not None
+        assert config.tensorrt.quant_config.quant_algo == "W4A16_AWQ"
+        assert config.tensorrt.kv_cache_config is not None
+        assert config.tensorrt.kv_cache_config.enable_block_reuse is True
+        assert config.tensorrt.scheduler_config is not None
+        assert config.tensorrt.scheduler_config.capacity_scheduling_policy == "MAX_UTILIZATION"
         assert config.tensorrt.sampling is not None
         assert config.tensorrt.sampling.n == 1
 
@@ -314,9 +314,9 @@ class TestExperimentConfigIntegration:
         assert config.max_num_tokens is None
         assert config.dtype is None
         assert config.fast_build is None
-        assert config.quant is None
-        assert config.kv_cache is None
-        assert config.scheduler is None
+        assert config.quant_config is None
+        assert config.kv_cache_config is None
+        assert config.scheduler_config is None
         assert config.sampling is None
         # backend and engine_path are no longer typed fields (D2/D1 drop)
         # calib and build_cache sub-configs dropped (D3/D1)
