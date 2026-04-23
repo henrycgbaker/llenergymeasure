@@ -561,6 +561,24 @@ def build_preflight_panel(
         if has_both:
             body.append(f"    {_pl(n_configs, 'unique config')} total\n")
 
+    # -- Dedup summary (sweep-dedup.md §2) --
+    # Present whenever the canonicaliser collapsed configs. Shows the
+    # N declared -> K canonical reduction that researchers use to
+    # reason about measurement-equivalent runs.
+    pre_run_groups = study_config.pre_run_equivalence_groups or []
+    if pre_run_groups:
+        declared = sum(int(g.get("member_count", 0)) for g in pre_run_groups)
+        canonical = len(pre_run_groups)
+        would_dedup = sum(1 for g in pre_run_groups if g.get("would_dedup"))
+        if declared != canonical or would_dedup:
+            _section(body, "Dedup")
+            suffix = (
+                f"{would_dedup} collapsed group(s)"
+                if study_config.dedup_mode == "h1"
+                else f"dedup OFF; {would_dedup} group(s) would collapse"
+            )
+            body.append(f"    {declared} declared -> {canonical} canonical ({suffix})\n")
+
     body.append("\n")
     # Hash (dimmed)
     body.append("Study design hash:\n ", style="dim")
