@@ -144,3 +144,78 @@ def test_default_corpus_root_resolves_to_configs(tmp_path: Path) -> None:
     loader = VendoredRulesLoader()
     assert loader.corpus_root.name == "validation_rules"
     assert loader.corpus_root.parent.name == "configs"
+
+
+# ---------------------------------------------------------------------------
+# Vendored JSON overlay (phase 50.2b)
+# ---------------------------------------------------------------------------
+
+
+class TestVendoredJsonOverlay:
+    """The loader prefers vendored JSON observations when present."""
+
+    def test_overlay_applied_when_json_present(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+
+        from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+        _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+
+        vendored_payload = {
+            "schema_version": "1.0.0",
+            "engine": "transformers",
+            "engine_version": "4.56.0",
+            "cases": [
+                {
+                    "id": "transformers_test_rule",
+                    "outcome": "dormant_announced",
+                    "emission_channel": "logger_warning",
+                    "observed_messages": ["library emitted this"],
+                }
+            ],
+            "divergences": [],
+        }
+
+        def fake_try_load(engine: str) -> dict:
+            assert engine == "transformers"
+            return vendored_payload
+
+        monkeypatch.setattr(loader_mod, "_try_load_vendored_json", fake_try_load)
+
+        result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+        assert len(result.rules) == 1
+        expected = result.rules[0].expected_outcome
+        assert expected["observed_outcome"] == "dormant_announced"
+        assert expected["observed_emission_channel"] == "logger_warning"
+        assert expected["observed_messages"] == ["library emitted this"]
+
+    def test_no_overlay_when_json_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+        _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+        monkeypatch.setattr(loader_mod, "_try_load_vendored_json", lambda _e: None)
+
+        result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+        assert len(result.rules) == 1
+        expected = result.rules[0].expected_outcome
+        # The corpus's declared fields are preserved; no observed_* keys.
+        assert "observed_outcome" not in expected
+        assert "observed_emission_channel" not in expected
+
+    def test_overlay_skips_rules_without_matching_case(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llenergymeasure.engines.vendored_rules import loader as loader_mod
+
+        _write_corpus(tmp_path, "transformers", _CORPUS_MINIMAL)
+
+        def fake_try_load(_engine: str) -> dict:
+            return {"cases": [{"id": "some_other_rule", "outcome": "error"}]}
+
+        monkeypatch.setattr(loader_mod, "_try_load_vendored_json", fake_try_load)
+        result = VendoredRulesLoader(corpus_root=tmp_path).load_rules("transformers")
+        # No matching case -> rule is returned unchanged.
+        assert "observed_outcome" not in result.rules[0].expected_outcome

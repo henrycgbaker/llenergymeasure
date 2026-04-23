@@ -13,15 +13,19 @@ from parameter-discovery — same envelope validation
 per-instance caching for test isolation, same lazy load pattern.
 
 Corpus vs vendored JSON:
-  Phase 50.2a (this PR) consumes the YAML corpus directly. Phase 50.2b
-  adds the vendor CI pipeline which emits ``{engine}.json`` files alongside
-  the corpus; the loader will grow a JSON consumption path then. The JSON
-  path is sketched below but disabled — hooks are in place, no user impact.
+  Phase 50.2a seeded the loader against the YAML corpus. Phase 50.2b
+  (this phase) adds JSON path consumption: when a vendored JSON envelope
+  exists alongside the corpus (produced by ``scripts/vendor_rules.py``),
+  the loader prefers it — it is the CI-validated projection of the corpus.
+  On missing JSON, the loader falls back to the YAML corpus so local
+  development without a vendor run still works.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -288,6 +292,7 @@ def _parse_envelope(engine: str, raw_text: str) -> VendoredRules:
 
 
 _DEFAULT_CORPUS_ROOT = Path(__file__).resolve().parents[4] / "configs" / "validation_rules"
+_VENDORED_JSON_PACKAGE = "llenergymeasure.engines.vendored_rules"
 
 
 class VendoredRulesLoader:
@@ -295,6 +300,13 @@ class VendoredRulesLoader:
 
     Per-instance cache (rather than module-level LRU) — tests can instantiate
     a loader and monkeypatch ``corpus_root`` without polluting other tests.
+
+    Load order (picked up automatically):
+      1. **Vendored JSON** shipped beside this module
+         (``{engine}.json``) — CI-validated observed behaviour, preferred
+         whenever present. Written by ``scripts/vendor_rules.py``.
+      2. **YAML corpus** under ``configs/validation_rules/{engine}.yaml`` —
+         the walker-seeded source of truth; always present in-repo.
     """
 
     def __init__(self, corpus_root: Path | None = None) -> None:
@@ -302,19 +314,33 @@ class VendoredRulesLoader:
         self._cache: dict[str, VendoredRules] = {}
 
     def load_rules(self, engine: str) -> VendoredRules:
-        """Return the parsed corpus for ``engine``, parsing once per engine."""
+        """Return the parsed corpus for ``engine``, parsing once per engine.
+
+        Prefers the CI-validated vendored JSON when present; falls back to
+        the in-tree YAML corpus otherwise. The JSON envelope carries observed
+        outcomes per rule — these populate the returned ``Rule.expected_outcome``
+        so downstream consumers see empirically-confirmed behaviour rather
+        than the corpus's declared shape.
+        """
         cached = self._cache.get(engine)
         if cached is not None:
             return cached
-        path = self.corpus_root / f"{engine}.yaml"
+
+        yaml_path = self.corpus_root / f"{engine}.yaml"
         try:
-            raw_text = path.read_text()
+            yaml_text = yaml_path.read_text()
         except FileNotFoundError as exc:
             raise FileNotFoundError(
-                f"Vendored rules for engine {engine!r} not found at {path}. "
-                f"Run `python -m scripts.walkers.{engine} --out {path}` to generate."
+                f"Vendored rules for engine {engine!r} not found at {yaml_path}. "
+                f"Run `python -m scripts.walkers.{engine} --out {yaml_path}` to generate."
             ) from exc
-        parsed = _parse_envelope(engine, raw_text)
+
+        parsed = _parse_envelope(engine, yaml_text)
+
+        vendored_json = _try_load_vendored_json(engine)
+        if vendored_json is not None:
+            parsed = _overlay_vendored_observations(parsed, vendored_json)
+
         self._cache[engine] = parsed
         return parsed
 
@@ -324,3 +350,67 @@ class VendoredRulesLoader:
             self._cache.clear()
         else:
             self._cache.pop(engine, None)
+
+
+def _try_load_vendored_json(engine: str) -> dict[str, Any] | None:
+    """Return parsed vendored-rules JSON for ``engine`` or ``None`` if absent."""
+    try:
+        raw = (resources.files(_VENDORED_JSON_PACKAGE) / f"{engine}.json").read_text()
+    except (FileNotFoundError, ModuleNotFoundError):
+        return None
+    try:
+        parsed: dict[str, Any] = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return parsed
+
+
+def _overlay_vendored_observations(
+    parsed: VendoredRules, vendored: dict[str, Any]
+) -> VendoredRules:
+    """Overlay observed outcomes from a vendored JSON envelope onto the corpus rules.
+
+    The corpus carries the declared shape; the vendored JSON carries what CI
+    observed. On presence of JSON, the loader surfaces the observed fields so
+    consumers (the generic validator in 50.2c) can act on CI-validated truth.
+    """
+    cases = {c["id"]: c for c in vendored.get("cases", []) if isinstance(c, dict) and "id" in c}
+    overlaid: list[Rule] = []
+    for rule in parsed.rules:
+        observed = cases.get(rule.id)
+        if observed is None:
+            overlaid.append(rule)
+            continue
+        merged_expected = dict(rule.expected_outcome)
+        if "outcome" in observed:
+            merged_expected.setdefault("observed_outcome", observed["outcome"])
+        if "emission_channel" in observed:
+            merged_expected.setdefault("observed_emission_channel", observed["emission_channel"])
+        if observed.get("observed_messages"):
+            merged_expected.setdefault("observed_messages", list(observed["observed_messages"]))
+        overlaid.append(
+            Rule(
+                id=rule.id,
+                engine=rule.engine,
+                library=rule.library,
+                rule_under_test=rule.rule_under_test,
+                severity=rule.severity,
+                native_type=rule.native_type,
+                match_engine=rule.match_engine,
+                match_fields=dict(rule.match_fields),
+                kwargs_positive=dict(rule.kwargs_positive),
+                kwargs_negative=dict(rule.kwargs_negative),
+                expected_outcome=merged_expected,
+                message_template=rule.message_template,
+                walker_source=dict(rule.walker_source),
+                references=rule.references,
+                added_by=rule.added_by,
+                added_at=rule.added_at,
+            )
+        )
+    return VendoredRules(
+        engine=parsed.engine,
+        schema_version=parsed.schema_version,
+        engine_version=parsed.engine_version,
+        rules=tuple(overlaid),
+    )
