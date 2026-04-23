@@ -655,6 +655,7 @@ rules:
     engine: transformers
     fields:
       transformers.sampling.early_stopping:
+        present: true
         not_in:
         - true
         - false
@@ -1002,4 +1003,40 @@ rules:
   references:
   - "transformers.GenerationConfig.validate() \u2014 PoC-J confirmed via strict-mode ValueError"
   added_by: ast_walker
+  added_at: '2026-04-23'
+- id: tf_flash_attn_requires_half_precision
+  engine: transformers
+  library: transformers
+  rule_under_test: FlashAttention 2/3 rejects float32 dtype at model-load time
+  severity: error
+  native_type: transformers.PreTrainedModel
+  walker_source:
+    path: transformers/modeling_flash_attention_utils.py
+    method: _check_and_enable_flash_attn
+    line_at_scan: 0
+    walker_confidence: high
+  match:
+    engine: transformers
+    fields:
+      transformers.attn_implementation:
+        in:
+        - flash_attention_2
+        - flash_attention_3
+      transformers.dtype: float32
+  kwargs_positive:
+    attn_implementation: flash_attention_2
+    torch_dtype: float32
+  kwargs_negative:
+    attn_implementation: flash_attention_2
+    torch_dtype: bfloat16
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: "FlashAttention (flash_attention_2 / flash_attention_3) requires dtype='float16' or
+    dtype='bfloat16'; got dtype='{declared_value}'. FlashAttention does not support float32 computation."
+  references:
+  - "transformers.modeling_flash_attention_utils — FlashAttention half-precision requirement"
+  - "PoC-E (scripts/probe_validator_retirement_map.py) — 20/20 equivalence agreement"
+  added_by: manual_seed
   added_at: '2026-04-23'
