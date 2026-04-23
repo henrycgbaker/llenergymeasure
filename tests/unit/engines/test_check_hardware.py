@@ -8,9 +8,9 @@ Tests here cover:
 - Transformers / vLLM return ``[]`` (behavioural stubs; rules move to the
   vendored corpus when their respective walkers ship).
 - TensorRT's SM floor, FP8 gate, FP8 KV-cache gate, and multi-error collection.
-- Structural property: a TensorRT ``probe_config`` call on a config whose
-  engine-kwargs build would fail still surfaces hardware errors, i.e. the
-  hardware check is no longer short-circuited by a T0 kwargs-build failure.
+- Structural property: ``check_hardware`` and ``_build_llm_kwargs`` are
+  independent code paths, so a T0 kwargs-build failure can no longer
+  short-circuit hardware compat (the bug the new seam exists to preclude).
 """
 
 from __future__ import annotations
