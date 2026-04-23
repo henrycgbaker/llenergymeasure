@@ -251,6 +251,17 @@ class VLLMEngine:
         with contextlib.suppress(Exception):
             hf_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
 
+        # Library-observed effective params for H3 (sweep-dedup.md §3).
+        effective_params = self._capture_effective_params(config, llm, sampling_params)
+
+        extras: dict[str, Any] = {
+            "effective_engine_params": effective_params["engine"],
+            "effective_sampling_params": effective_params["sampling"],
+            "library_version": effective_params["library_version"],
+        }
+        if hf_model is not None:
+            extras["hf_model"] = hf_model
+
         return InferenceOutput(
             elapsed_time_sec=elapsed,
             input_tokens=input_token_count,
@@ -258,8 +269,54 @@ class VLLMEngine:
             peak_memory_mb=peak_mb,
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=[elapsed],
-            extras={"hf_model": hf_model} if hf_model is not None else {},
+            extras=extras,
         )
+
+    # -------------------------------------------------------------------------
+    # Private: effective-params capture (H3)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _capture_effective_params(
+        config: ExperimentConfig,
+        llm: Any,
+        sampling_params: Any,
+    ) -> dict[str, Any]:
+        """Extract post-construction state from the vLLM native types.
+
+        Sampling params are captured via :func:`extract_effective_params` —
+        PoC-C allowlist is unset (the private fields ``_all_stop_token_ids``,
+        ``_bad_words_token_ids``, ``_eos_token_id`` default-exclude since they
+        vary per-model without affecting measurement-equivalence). Engine
+        params derive from ``llm.llm_engine.vllm_config`` when available;
+        otherwise we fall back to the declared kwargs dict.
+        """
+        from llenergymeasure.engines._helpers import extract_effective_params
+
+        sampling: dict[str, Any] = {}
+        try:
+            sampling = extract_effective_params(sampling_params)
+        except Exception as exc:  # pragma: no cover — best-effort capture
+            logger.debug("vLLM SamplingParams capture failed: %s", exc)
+
+        engine_params: dict[str, Any] = {}
+        with contextlib.suppress(Exception):
+            vllm_cfg = getattr(llm.llm_engine, "vllm_config", None)
+            if vllm_cfg is not None:
+                engine_params = extract_effective_params(vllm_cfg)
+
+        try:
+            import vllm as _vllm
+
+            library_version = str(_vllm.__version__)
+        except Exception:
+            library_version = "unknown"
+
+        return {
+            "engine": engine_params,
+            "sampling": sampling,
+            "library_version": library_version,
+        }
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

@@ -232,6 +232,11 @@ class TransformersEngine:
             total_time_sec,
         )
 
+        # Capture library-observed effective parameters for H3 (sweep-dedup.md §3).
+        # Runs after the measurement loop so we don't perturb timing; the
+        # GenerationConfig's post-__init__ state is stable throughout the run.
+        effective_params = self._capture_effective_params(config, hf_model, generate_kwargs)
+
         return InferenceOutput(
             elapsed_time_sec=total_time_sec,
             input_tokens=total_input_tokens,
@@ -239,8 +244,68 @@ class TransformersEngine:
             peak_memory_mb=peak_memory_mb,
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=batch_times,
-            extras={"hf_model": hf_model},  # For FLOPs estimation in harness
+            extras={
+                "hf_model": hf_model,  # For FLOPs estimation in harness
+                "effective_engine_params": effective_params["engine"],
+                "effective_sampling_params": effective_params["sampling"],
+                "library_version": effective_params["library_version"],
+            },
         )
+
+    # -------------------------------------------------------------------------
+    # Private: effective-params capture (H3)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _capture_effective_params(
+        config: ExperimentConfig,
+        hf_model: Any,
+        generate_kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Extract post-construction state from the native types the engine used.
+
+        Transformers splits its native state across ``GenerationConfig`` (the
+        sampling shape) and ``BitsAndBytesConfig`` (the engine-side quantisation
+        shape, when active). Both are Pydantic-style dumpable objects;
+        :func:`extract_effective_params` strips private fields (``_commit_hash``,
+        ``_from_model_config``) that would poison H3 if included.
+
+        Returns a dict with ``engine`` / ``sampling`` / ``library_version``
+        entries ready for the H3 hashing pipeline.
+        """
+        from llenergymeasure.engines._helpers import extract_effective_params
+
+        sampling: dict[str, Any] = {}
+        try:
+            from transformers import GenerationConfig
+
+            gen_cfg = GenerationConfig(**generate_kwargs)
+            sampling = extract_effective_params(gen_cfg)
+        except Exception as exc:  # pragma: no cover — best-effort capture
+            logger.debug("transformers GenerationConfig capture failed: %s", exc)
+
+        engine_params: dict[str, Any] = {}
+        pt = config.transformers
+        if pt is not None and (pt.load_in_4bit or pt.load_in_8bit):
+            try:
+                bnb = getattr(hf_model, "quantization_config", None)
+                if bnb is not None:
+                    engine_params["quantization_config"] = extract_effective_params(bnb)
+            except Exception as exc:  # pragma: no cover — best-effort capture
+                logger.debug("transformers BitsAndBytesConfig capture failed: %s", exc)
+
+        try:
+            import transformers as _tf
+
+            library_version = str(_tf.__version__)
+        except Exception:
+            library_version = "unknown"
+
+        return {
+            "engine": engine_params,
+            "sampling": sampling,
+            "library_version": library_version,
+        }
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup
