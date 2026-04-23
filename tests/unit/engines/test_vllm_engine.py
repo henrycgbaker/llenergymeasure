@@ -412,7 +412,9 @@ class TestEngineConfigFields:
 
         vllm_cfg = VLLMConfig(
             engine=VLLMEngineConfig(
-                speculative=VLLMSpeculativeConfig(model="draft-model", num_speculative_tokens=5)
+                speculative_config=VLLMSpeculativeConfig(
+                    model="draft-model", num_speculative_tokens=5
+                )
             )
         )
         config = make_config(**_VLLM_DEFAULTS, vllm=vllm_cfg)
@@ -429,7 +431,7 @@ class TestEngineConfigFields:
 
         vllm_cfg = VLLMConfig(
             engine=VLLMEngineConfig(
-                speculative=VLLMSpeculativeConfig(
+                speculative_config=VLLMSpeculativeConfig(
                     model="eagle-model", num_speculative_tokens=3, method="eagle"
                 )
             )

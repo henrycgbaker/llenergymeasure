@@ -592,7 +592,9 @@ def test_trt_fp8_accepts_float16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(dtype="float16", quant=TensorRTQuantConfig(quant_algo="FP8")),
+        tensorrt=TensorRTConfig(
+            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
+        ),
     )
     assert cfg.tensorrt.dtype == "float16"
 
@@ -604,7 +606,9 @@ def test_trt_fp8_accepts_bfloat16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(dtype="bfloat16", quant=TensorRTQuantConfig(quant_algo="FP8")),
+        tensorrt=TensorRTConfig(
+            dtype="bfloat16", quant_config=TensorRTQuantConfig(quant_algo="FP8")
+        ),
     )
     assert cfg.tensorrt.dtype == "bfloat16"
 
@@ -616,7 +620,9 @@ def test_trt_non_fp8_accepts_float16() -> None:
     cfg = ExperimentConfig(
         task={"model": "gpt2"},
         engine="tensorrt",
-        tensorrt=TensorRTConfig(dtype="float16", quant=TensorRTQuantConfig(quant_algo="INT8")),
+        tensorrt=TensorRTConfig(
+            dtype="float16", quant_config=TensorRTQuantConfig(quant_algo="INT8")
+        ),
     )
     assert cfg.tensorrt.dtype == "float16"
 
