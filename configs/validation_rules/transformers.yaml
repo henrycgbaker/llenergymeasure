@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.56.0
-walker_pinned_range: <4.57,>=4.56
+walker_pinned_range: <4.57,>=4.49
 walked_at: '2026-04-23T00:00:00Z'
 rules:
 - id: transformers_bnb_bnb_4bit_compute_dtype_type

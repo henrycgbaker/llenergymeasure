@@ -58,20 +58,23 @@ from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
     check_installed_version,
 )
 
-TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.56,<4.57")
-"""Range of transformers versions this walker was authored against.
+TESTED_AGAINST_VERSIONS: SpecifierSet = SpecifierSet(">=4.49,<4.57")
+"""Range of transformers versions this walker has been validated against.
 
-Pinned narrowly to 4.56.x because HF 4.57 restructured
-``GenerationConfig.validate()`` (dropped several minor_issues branches
-and the watermarking auto-coercion); the shipped corpus reflects 4.56
-rule shapes. When the project moves forward to 4.57+ support, a
-maintainer reconciles the rule tuples against the new source and bumps
-this pin.
+Lower bound tracks the project's own ``transformers>=4.49`` pin in
+``pyproject.toml`` so CI's pinned version stays in range. Upper bound
+excludes 4.57 because HF 4.57 restructured
+``GenerationConfig.validate()`` — dropped several ``minor_issues``
+branches (``num_beam_groups``, ``diversity_penalty``, ``constraints``
+single-beam dormancies) and the watermarking auto-coercion. The rules
+in this walker reflect the 4.49-4.56 shape of ``validate()``; rule
+content was primarily verified against 4.56 source.
 
 On mismatch, :func:`check_installed_version` raises
-:class:`WalkerVersionMismatchError` and CI fails. Intentionally narrow:
-minor-version drift in HF's validate() has proven to shift rule shapes,
-so loud failure prompts a deliberate refresh.
+:class:`WalkerVersionMismatchError` and CI fails. When the project
+bumps to 4.57+, a maintainer reconciles the rule tuples against the new
+source and bumps this pin — the narrow upper bound forces a deliberate
+refresh rather than silent shape-drift.
 """
 
 
