@@ -1,0 +1,772 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "transformers",
+  "engine_version": "4.51.0",
+  "image_ref": "llenergymeasure:transformers",
+  "base_image_ref": "llenergymeasure:transformers",
+  "vendored_at": "2026-04-23T14:43:16.789679+00:00",
+  "vendor_commit": "c1dc40befe8e413f231debe2933d527b31ff0c64",
+  "cases": [
+    {
+      "id": "transformers_bnb_bnb_4bit_compute_dtype_type",
+      "outcome": "no_op",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "positive_confirmed": false,
+      "negative_confirmed": true,
+      "duration_ms": 12
+    },
+    {
+      "id": "transformers_bnb_bnb_4bit_quant_type_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "bnb_4bit_quant_type must be a string"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_bnb_bnb_4bit_use_double_quant_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "bnb_4bit_use_double_quant must be a boolean"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_bnb_llm_int8_enable_fp32_cpu_offload_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "llm_int8_enable_fp32_cpu_offload must be a boolean"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_bnb_llm_int8_has_fp16_weight_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "llm_int8_has_fp16_weight must be a boolean"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_bnb_llm_int8_skip_modules_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "llm_int8_skip_modules must be a list of strings"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_bnb_llm_int8_threshold_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "llm_int8_threshold must be a float"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_bnb_load_in_4bit_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "load_in_4bit must be a boolean"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_bnb_load_in_8bit_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "load_in_8bit must be a boolean"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_compile_config_type",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0",
+        "Detected torch version: 2.6.0"
+      ],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "You provided `compile_config` as an instance of <class 'dict'>, but it must be an instance of `CompileConfig`."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false,
+      "duration_ms": 107
+    },
+    {
+      "id": "transformers_greedy_rejects_num_return_sequences",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "Greedy methods without beam search do not support `num_return_sequences` different than 1 (got 3)."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_greedy_strips_epsilon_cutoff",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_greedy_strips_eta_cutoff",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_greedy_strips_min_p",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_greedy_strips_temperature",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_greedy_strips_top_k",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_greedy_strips_top_p",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_greedy_strips_typical_p",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_invalid_cache_implementation",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "Invalid `cache_implementation` (nonsense). Choose one of: ['static', 'offloaded_static', 'sliding_window', 'hybrid', 'hybrid_chunked', 'mamba', 'quantized', 'static', 'offloaded', 'dynamic']"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_invalid_early_stopping",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "`early_stopping` must be a boolean or 'never', but is sometimes."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_negative_max_new_tokens",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "`max_new_tokens` must be greater than 0, but is -1."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_negative_pad_token_id",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_num_return_sequences_exceeds_num_beams",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2)."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_single_beam_strips_constraints",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_single_beam_strips_diversity_penalty",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_single_beam_strips_early_stopping",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_single_beam_strips_length_penalty",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    },
+    {
+      "id": "transformers_single_beam_strips_num_beam_groups",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false,
+      "duration_ms": 0
+    }
+  ],
+  "divergences": [
+    {
+      "rule_id": "transformers_bnb_bnb_4bit_compute_dtype_type",
+      "field": "outcome",
+      "expected": "error",
+      "observed": "no_op"
+    },
+    {
+      "rule_id": "transformers_bnb_bnb_4bit_compute_dtype_type",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_compile_config_type",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_rejects_num_return_sequences",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_epsilon_cutoff",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_epsilon_cutoff",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_epsilon_cutoff",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_epsilon_cutoff",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_eta_cutoff",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_eta_cutoff",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_eta_cutoff",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_eta_cutoff",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_min_p",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_min_p",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_min_p",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_min_p",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_temperature",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_temperature",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_temperature",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_temperature",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_k",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_k",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_k",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_k",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_p",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_p",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_p",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_p",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_typical_p",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_typical_p",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_typical_p",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_typical_p",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_invalid_cache_implementation",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_invalid_early_stopping",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_negative_max_new_tokens",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_negative_pad_token_id",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_negative_pad_token_id",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_negative_pad_token_id",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_negative_pad_token_id",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_num_return_sequences_exceeds_num_beams",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_constraints",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_constraints",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_constraints",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_constraints",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_diversity_penalty",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_diversity_penalty",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_diversity_penalty",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_diversity_penalty",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_early_stopping",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_early_stopping",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_early_stopping",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_early_stopping",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_length_penalty",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_length_penalty",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_length_penalty",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_length_penalty",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_num_beam_groups",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_num_beam_groups",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_num_beam_groups",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_num_beam_groups",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    }
+  ]
+}
