@@ -4,8 +4,8 @@
   "engine_version": "4.51.0",
   "image_ref": "llenergymeasure:transformers",
   "base_image_ref": "llenergymeasure:transformers",
-  "vendored_at": "2026-04-23T21:54:02+02:00",
-  "vendor_commit": "30fe188b1c892cf7684c27e2ffa634521e854b15",
+  "vendored_at": "2026-04-24T01:26:04+02:00",
+  "vendor_commit": "8b73ab81d9a0ee1c8699958dcb9a17976a3e1003",
   "cases": [
     {
       "id": "transformers_bnb_bnb_4bit_compute_dtype_type",
@@ -162,7 +162,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`do_sample` is set to `False`. However, `epsilon_cutoff` is set to `0.05` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `epsilon_cutoff`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`do_sample` is set to `False`. However, `epsilon_cutoff` is set to `0.5` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `epsilon_cutoff`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -177,7 +177,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`do_sample` is set to `False`. However, `eta_cutoff` is set to `0.05` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `eta_cutoff`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`do_sample` is set to `False`. However, `eta_cutoff` is set to `0.5` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `eta_cutoff`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -192,7 +192,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`do_sample` is set to `False`. However, `min_p` is set to `0.1` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`do_sample` is set to `False`. However, `min_p` is set to `0.5` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -207,7 +207,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`do_sample` is set to `False`. However, `temperature` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`do_sample` is set to `False`. However, `temperature` is set to `0.5` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -222,7 +222,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`do_sample` is set to `False`. However, `top_k` is set to `40` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`do_sample` is set to `False`. However, `top_k` is set to `51` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -237,7 +237,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`do_sample` is set to `False`. However, `top_p` is set to `0.95` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`do_sample` is set to `False`. However, `top_p` is set to `0.5` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -252,7 +252,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`do_sample` is set to `False`. However, `typical_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `typical_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`do_sample` is set to `False`. However, `typical_p` is set to `0.5` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `typical_p`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -317,6 +317,51 @@
       "negative_confirmed": false
     },
     {
+      "id": "transformers_no_return_dict_strips_output_attentions",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [
+        "`return_dict_in_generate` is NOT set to `True`, but `output_attentions` is. When `return_dict_in_generate` is not `True`, `output_attentions` is ignored."
+      ],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "transformers_no_return_dict_strips_output_hidden_states",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [
+        "`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states` is. When `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored."
+      ],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "transformers_no_return_dict_strips_output_scores",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [
+        "`return_dict_in_generate` is NOT set to `True`, but `output_scores` is. When `return_dict_in_generate` is not `True`, `output_scores` is ignored."
+      ],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
       "id": "transformers_num_return_sequences_exceeds_num_beams",
       "outcome": "error",
       "emission_channel": "none",
@@ -334,7 +379,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`num_beams` is set to 1. However, `constraints` is set to `['...']` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `constraints`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`num_beams` is set to 1. However, `constraints` is set to `0.5` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `constraints`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -379,7 +424,7 @@
       "outcome": "error",
       "emission_channel": "none",
       "observed_messages": [
-        "`num_beams` is set to 1. However, `length_penalty` is set to `2.0` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
+        "`num_beams` is set to 1. However, `length_penalty` is set to `0.5` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`. This was detected when initializing the generation config instance, which means the corresponding file may hold incorrect parameterization and should be fixed."
       ],
       "observed_silent_normalisations": {},
       "observed_exception": {
@@ -636,6 +681,78 @@
     },
     {
       "rule_id": "transformers_negative_pad_token_id",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_attentions",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_attentions",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_attentions",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_attentions",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_scores",
+      "field": "outcome",
+      "expected": "dormant_announced",
+      "observed": "error"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_scores",
+      "field": "emission_channel",
+      "expected": "logger_warning_once",
+      "observed": "none"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_scores",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_scores",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false

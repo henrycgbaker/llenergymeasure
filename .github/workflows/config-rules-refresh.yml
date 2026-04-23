@@ -132,6 +132,7 @@ jobs:
             "scripts/vendor_rules.py"
             "scripts/_vendor_common.py"
             "scripts/walkers/transformers.py"
+            "scripts/walkers/transformers_introspection.py"
             "scripts/walkers/_fixpoint_test.py"
             "scripts/walkers/_base.py"
             "scripts/update_engine_rules.sh"

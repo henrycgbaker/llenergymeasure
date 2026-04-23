@@ -2,7 +2,7 @@ schema_version: 1.0.0
 engine: transformers
 engine_version: 4.56.0
 walker_pinned_range: <4.57,>=4.49
-walked_at: '2026-04-23T00:00:00Z'
+walked_at: '2026-04-24T00:00:00Z'
 rules:
 - id: transformers_bnb_bnb_4bit_compute_dtype_type
   engine: transformers
@@ -34,7 +34,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_bnb_4bit_quant_type_type
   engine: transformers
   library: bitsandbytes
@@ -65,7 +65,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_bnb_4bit_use_double_quant_type
   engine: transformers
   library: bitsandbytes
@@ -96,7 +96,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_llm_int8_enable_fp32_cpu_offload_type
   engine: transformers
   library: bitsandbytes
@@ -127,7 +127,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_llm_int8_has_fp16_weight_type
   engine: transformers
   library: bitsandbytes
@@ -158,7 +158,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_llm_int8_skip_modules_type
   engine: transformers
   library: bitsandbytes
@@ -190,7 +190,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_llm_int8_threshold_type
   engine: transformers
   library: bitsandbytes
@@ -221,7 +221,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_load_in_4bit_type
   engine: transformers
   library: bitsandbytes
@@ -252,7 +252,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_bnb_load_in_8bit_type
   engine: transformers
   library: bitsandbytes
@@ -283,7 +283,7 @@ rules:
   - "transformers.utils.quantization_config.BitsAndBytesConfig.post_init() \u2014 manually audited type-check\
     \ raises"
   added_by: manual_seed
-  added_at: '2026-04-23'
+  added_at: '2026-04-24'
 - id: transformers_compile_config_type
   engine: transformers
   library: transformers
@@ -306,15 +306,16 @@ rules:
       mode: reduce-overhead
   kwargs_negative:
     compile_config: null
-  expected_outcome:
+  expected_outcome: &id001
     outcome: error
     emission_channel: none
     normalised_fields: []
-  message_template: '`compile_config` must be a CompileConfig instance, got {declared_value}.'
+  message_template: You provided `compile_config` as an instance of <class 'dict'>, but it must be an
+    instance of `CompileConfig`.
   references:
-  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_rejects_num_return_sequences
   engine: transformers
   library: transformers
@@ -324,7 +325,7 @@ rules:
   walker_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 360
+    line_at_scan: 408
     walker_confidence: high
   match:
     engine: transformers
@@ -341,16 +342,13 @@ rules:
     do_sample: false
     num_beams: 1
     num_return_sequences: 1
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: Greedy methods without beam search do not support `num_return_sequences` != 1 (got
-    {declared_value}).
+  expected_outcome: *id001
+  message_template: Greedy methods without beam search do not support `num_return_sequences` different
+    than 1 (got 3).
   references:
-  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
   library: transformers
@@ -372,20 +370,21 @@ rules:
         not_equal: 0.0
   kwargs_positive:
     do_sample: false
-    epsilon_cutoff: 0.05
+    epsilon_cutoff: 0.5
   kwargs_negative:
     do_sample: true
-    epsilon_cutoff: 0.05
+    epsilon_cutoff: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`do_sample=False` is set, so `epsilon_cutoff` ({declared_value}) has no effect. Remove
-    it or set do_sample=True.'
+  message_template: '`do_sample` is set to `False`. However, `epsilon_cutoff` is set to `{declared_value}`
+    -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `epsilon_cutoff`.'
   references:
   - transformers.GenerationConfig.validate() (line ~378)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_strips_eta_cutoff
   engine: transformers
   library: transformers
@@ -407,20 +406,21 @@ rules:
         not_equal: 0.0
   kwargs_positive:
     do_sample: false
-    eta_cutoff: 0.05
+    eta_cutoff: 0.5
   kwargs_negative:
     do_sample: true
-    eta_cutoff: 0.05
+    eta_cutoff: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`do_sample=False` is set, so `eta_cutoff` ({declared_value}) has no effect. Remove
-    it or set do_sample=True.'
+  message_template: '`do_sample` is set to `False`. However, `eta_cutoff` is set to `{declared_value}`
+    -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `eta_cutoff`.'
   references:
   - transformers.GenerationConfig.validate() (line ~379)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_strips_min_p
   engine: transformers
   library: transformers
@@ -441,20 +441,20 @@ rules:
         present: true
   kwargs_positive:
     do_sample: false
-    min_p: 0.1
+    min_p: 0.5
   kwargs_negative:
     do_sample: true
-    min_p: 0.1
+    min_p: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`do_sample=False` is set, so `min_p` ({declared_value}) has no effect. Remove it
-    or set do_sample=True.'
+  message_template: '`do_sample` is set to `False`. However, `min_p` is set to `{declared_value}` -- this
+    flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`.'
   references:
   - transformers.GenerationConfig.validate() (line ~376)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_strips_temperature
   engine: transformers
   library: transformers
@@ -476,20 +476,21 @@ rules:
         not_equal: 1.0
   kwargs_positive:
     do_sample: false
-    temperature: 0.9
+    temperature: 0.5
   kwargs_negative:
     do_sample: true
-    temperature: 0.9
+    temperature: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`do_sample=False` is set, so `temperature` ({declared_value}) has no effect. Remove
-    it or set do_sample=True.'
+  message_template: '`do_sample` is set to `False`. However, `temperature` is set to `{declared_value}`
+    -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `temperature`.'
   references:
   - transformers.GenerationConfig.validate() (line ~373)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_strips_top_k
   engine: transformers
   library: transformers
@@ -511,20 +512,20 @@ rules:
         not_equal: 50
   kwargs_positive:
     do_sample: false
-    top_k: 40
+    top_k: 51
   kwargs_negative:
     do_sample: true
-    top_k: 40
+    top_k: 51
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`do_sample=False` is set, so `top_k` ({declared_value}) has no effect. Remove it
-    or set do_sample=True.'
+  message_template: '`do_sample` is set to `False`. However, `top_k` is set to `{declared_value}` -- this
+    flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.'
   references:
   - transformers.GenerationConfig.validate() (line ~374)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_strips_top_p
   engine: transformers
   library: transformers
@@ -546,20 +547,20 @@ rules:
         not_equal: 1.0
   kwargs_positive:
     do_sample: false
-    top_p: 0.95
+    top_p: 0.5
   kwargs_negative:
     do_sample: true
-    top_p: 0.95
+    top_p: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`do_sample=False` is set, so `top_p` ({declared_value}) has no effect. Remove it
-    or set do_sample=True.'
+  message_template: '`do_sample` is set to `False`. However, `top_p` is set to `{declared_value}` -- this
+    flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.'
   references:
   - transformers.GenerationConfig.validate() (line ~375)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_greedy_strips_typical_p
   engine: transformers
   library: transformers
@@ -581,20 +582,21 @@ rules:
         not_equal: 1.0
   kwargs_positive:
     do_sample: false
-    typical_p: 0.9
+    typical_p: 0.5
   kwargs_negative:
     do_sample: true
-    typical_p: 0.9
+    typical_p: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`do_sample=False` is set, so `typical_p` ({declared_value}) has no effect. Remove
-    it or set do_sample=True.'
+  message_template: '`do_sample` is set to `False`. However, `typical_p` is set to `{declared_value}`
+    -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
+    `typical_p`.'
   references:
   - transformers.GenerationConfig.validate() (line ~377)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_invalid_cache_implementation
   engine: transformers
   library: transformers
@@ -615,15 +617,14 @@ rules:
     cache_implementation: nonsense
   kwargs_negative:
     cache_implementation: static
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: Invalid `cache_implementation` ({declared_value}). Choose one from the supported set.
+  expected_outcome: *id001
+  message_template: 'Invalid `cache_implementation` (nonsense). Choose one of: (''static'', ''offloaded_static'',
+    ''sliding_window'', ''hybrid'', ''hybrid_chunked'', ''offloaded_hybrid'', ''offloaded_hybrid_chunked'',
+    ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'')'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_invalid_early_stopping
   engine: transformers
   library: transformers
@@ -648,15 +649,12 @@ rules:
     early_stopping: sometimes
   kwargs_negative:
     early_stopping: true
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: '`early_stopping` must be a boolean or ''never'', but is {declared_value}.'
+  expected_outcome: *id001
+  message_template: '`early_stopping` must be a boolean or ''never'', but is sometimes.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_negative_max_new_tokens
   engine: transformers
   library: transformers
@@ -677,15 +675,12 @@ rules:
     max_new_tokens: -1
   kwargs_negative:
     max_new_tokens: 16
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: '`max_new_tokens` must be greater than 0, but is {declared_value}.'
+  expected_outcome: *id001
+  message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_negative_pad_token_id
   engine: transformers
   library: transformers
@@ -710,12 +705,118 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`pad_token_id` ({declared_value}) should be non-negative. This will cause errors
-    when batch generating, if there is padding.'
+  message_template: '`pad_token_id` should be positive but got -1. This will cause errors when batch generating,
+    if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID`
+    to avoid errors in generation'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
+  added_by: introspection
+  added_at: '2026-04-24'
+- id: transformers_no_return_dict_strips_output_attentions
+  engine: transformers
+  library: transformers
+  rule_under_test: GenerationConfig.validate() records dormant `output_attentions` when return_dict_in_generate=False
+    and `output_attentions` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  walker_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 409
+    walker_confidence: high
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate: false
+      transformers.sampling.output_attentions:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_attentions: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_attentions: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_attentions` is. When
+    `return_dict_in_generate` is not `True`, `output_attentions` is ignored.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~409)
+  added_by: introspection
+  added_at: '2026-04-24'
+- id: transformers_no_return_dict_strips_output_hidden_states
+  engine: transformers
+  library: transformers
+  rule_under_test: GenerationConfig.validate() records dormant `output_hidden_states` when return_dict_in_generate=False
+    and `output_hidden_states` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  walker_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 410
+    walker_confidence: high
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate: false
+      transformers.sampling.output_hidden_states:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_hidden_states: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_hidden_states: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states` is. When
+    `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~410)
+  added_by: introspection
+  added_at: '2026-04-24'
+- id: transformers_no_return_dict_strips_output_scores
+  engine: transformers
+  library: transformers
+  rule_under_test: GenerationConfig.validate() records dormant `output_scores` when return_dict_in_generate=False
+    and `output_scores` is set
+  severity: dormant
+  native_type: transformers.GenerationConfig
+  walker_source:
+    path: transformers/generation/configuration_utils.py
+    method: validate
+    line_at_scan: 411
+    walker_confidence: high
+  match:
+    engine: transformers
+    fields:
+      transformers.sampling.return_dict_in_generate: false
+      transformers.sampling.output_scores:
+        present: true
+        not_equal: false
+  kwargs_positive:
+    return_dict_in_generate: false
+    output_scores: true
+  kwargs_negative:
+    return_dict_in_generate: true
+    output_scores: true
+  expected_outcome:
+    outcome: dormant_announced
+    emission_channel: logger_warning_once
+    normalised_fields: []
+  message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_scores` is. When `return_dict_in_generate`
+    is not `True`, `output_scores` is ignored.'
+  references:
+  - transformers.GenerationConfig.validate() (line ~411)
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_num_return_sequences_exceeds_num_beams
   engine: transformers
   library: transformers
@@ -740,15 +841,12 @@ rules:
   kwargs_negative:
     num_return_sequences: 2
     num_beams: 4
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: '`num_return_sequences` ({declared_value}) must be <= `num_beams`.'
+  expected_outcome: *id001
+  message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
-  - "transformers.GenerationConfig.validate() \u2014 manual seed from HF 4.56 source"
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_single_beam_strips_constraints
   engine: transformers
   library: transformers
@@ -769,21 +867,20 @@ rules:
         present: true
   kwargs_positive:
     num_beams: 1
-    constraints: &id001
-    - '...'
+    constraints: 0.5
   kwargs_negative:
     num_beams: 4
-    constraints: *id001
+    constraints: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`num_beams=1` is set, so `constraints` ({declared_value}) is ignored. Set num_beams>1
-    or remove constraints.'
+  message_template: '`num_beams` is set to 1. However, `constraints` is set to `{declared_value}` -- this
+    flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `constraints`.'
   references:
   - transformers.GenerationConfig.validate() (line ~388)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_single_beam_strips_diversity_penalty
   engine: transformers
   library: transformers
@@ -813,12 +910,12 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`num_beams=1` is set, so `diversity_penalty` ({declared_value}) is ignored. Set num_beams>1
-    or remove diversity_penalty.'
+  message_template: '`num_beams` is set to 1. However, `diversity_penalty` is set to `{declared_value}`
+    -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `diversity_penalty`.'
   references:
   - transformers.GenerationConfig.validate() (line ~380)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_single_beam_strips_early_stopping
   engine: transformers
   library: transformers
@@ -848,12 +945,12 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`num_beams=1` is set, so `early_stopping` ({declared_value}) is ignored. Set num_beams>1
-    or remove early_stopping.'
+  message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `{declared_value}` --
+    this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   references:
   - transformers.GenerationConfig.validate() (line ~355)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
   library: transformers
@@ -875,20 +972,20 @@ rules:
         not_equal: 1.0
   kwargs_positive:
     num_beams: 1
-    length_penalty: 2.0
+    length_penalty: 0.5
   kwargs_negative:
     num_beams: 4
-    length_penalty: 2.0
+    length_penalty: 0.5
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`num_beams=1` is set, so `length_penalty` ({declared_value}) is ignored. Set num_beams>1
-    or remove length_penalty.'
+  message_template: '`num_beams` is set to 1. However, `length_penalty` is set to `{declared_value}` --
+    this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`.'
   references:
   - transformers.GenerationConfig.validate() (line ~383)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'
 - id: transformers_single_beam_strips_num_beam_groups
   engine: transformers
   library: transformers
@@ -918,9 +1015,9 @@ rules:
     outcome: dormant_announced
     emission_channel: logger_warning_once
     normalised_fields: []
-  message_template: '`num_beams=1` is set, so `num_beam_groups` ({declared_value}) is ignored. Set num_beams>1
-    or remove num_beam_groups.'
+  message_template: '`num_beams` is set to 1. However, `num_beam_groups` is set to `{declared_value}`
+    -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `num_beam_groups`.'
   references:
   - transformers.GenerationConfig.validate() (line ~362)
-  added_by: manual_seed
-  added_at: '2026-04-23'
+  added_by: introspection
+  added_at: '2026-04-24'

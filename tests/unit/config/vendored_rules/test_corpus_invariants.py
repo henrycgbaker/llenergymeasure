@@ -55,6 +55,12 @@ def test_corpus_has_expected_rule_ids(transformers_corpus) -> None:
         "transformers_single_beam_strips_diversity_penalty",
         "transformers_single_beam_strips_length_penalty",
         "transformers_single_beam_strips_constraints",
+        # No-return-dict dormancy (return_dict_in_generate=False strips
+        # scalar-output-only fields). Surfaced by introspection auto-discovery;
+        # not present in the prior hand-curated corpus.
+        "transformers_no_return_dict_strips_output_scores",
+        "transformers_no_return_dict_strips_output_attentions",
+        "transformers_no_return_dict_strips_output_hidden_states",
         # GenerationConfig.validate() — raises + announced-dormant mixture
         "transformers_negative_max_new_tokens",
         "transformers_invalid_cache_implementation",
