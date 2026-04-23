@@ -8,7 +8,14 @@ import pytest
 
 from llenergymeasure.engines.vendored_rules import (
     VALID_ADDED_BY,
+    VALID_EMISSION_CHANNEL,
+    VALID_OUTCOME,
+    VALID_SEVERITY,
     UnknownAddedByError,
+    UnknownEmissionChannelError,
+    UnknownEnumValueError,
+    UnknownOutcomeError,
+    UnknownSeverityError,
     UnsupportedSchemaVersionError,
     VendoredRules,
     VendoredRulesLoader,
@@ -188,3 +195,68 @@ def test_missing_added_by_defaults_to_manual_seed(tmp_path: Path) -> None:
     loader = VendoredRulesLoader(corpus_root=tmp_path)
     rules = loader.load_rules("transformers").rules
     assert rules[0].added_by == "manual_seed"
+
+
+# ---------------------------------------------------------------------------
+# Closed-enum validation — severity / outcome / emission_channel
+# ---------------------------------------------------------------------------
+
+
+def test_valid_severity_set_matches_design_spec() -> None:
+    assert frozenset({"dormant", "warn", "error"}) == VALID_SEVERITY
+
+
+def test_valid_outcome_set_matches_design_spec() -> None:
+    assert (
+        frozenset({"dormant_silent", "dormant_announced", "warn", "error", "pass"}) == VALID_OUTCOME
+    )
+
+
+def test_valid_emission_channel_set_matches_design_spec() -> None:
+    assert (
+        frozenset(
+            {
+                "warnings_warn",
+                "logger_warning",
+                "logger_warning_once",
+                "minor_issues_dict",
+                "none",
+                "runtime_exception",
+            }
+        )
+        == VALID_EMISSION_CHANNEL
+    )
+
+
+def test_unknown_severity_value_raises(tmp_path: Path) -> None:
+    bad_corpus = _CORPUS_MINIMAL.replace("severity: dormant", "severity: kritical")
+    _write_corpus(tmp_path, "transformers", bad_corpus)
+    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    with pytest.raises(UnknownSeverityError, match="kritical"):
+        loader.load_rules("transformers")
+
+
+def test_unknown_outcome_value_raises(tmp_path: Path) -> None:
+    bad_corpus = _CORPUS_MINIMAL.replace("outcome: dormant_announced", "outcome: totally_made_up")
+    _write_corpus(tmp_path, "transformers", bad_corpus)
+    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    with pytest.raises(UnknownOutcomeError, match="totally_made_up"):
+        loader.load_rules("transformers")
+
+
+def test_unknown_emission_channel_value_raises(tmp_path: Path) -> None:
+    bad_corpus = _CORPUS_MINIMAL.replace(
+        "emission_channel: minor_issues_dict", "emission_channel: smoke_signals"
+    )
+    _write_corpus(tmp_path, "transformers", bad_corpus)
+    loader = VendoredRulesLoader(corpus_root=tmp_path)
+    with pytest.raises(UnknownEmissionChannelError, match="smoke_signals"):
+        loader.load_rules("transformers")
+
+
+def test_enum_value_errors_share_common_base_class() -> None:
+    # Callers that don't care which enum is wrong can catch UnknownEnumValueError.
+    assert issubclass(UnknownAddedByError, UnknownEnumValueError)
+    assert issubclass(UnknownSeverityError, UnknownEnumValueError)
+    assert issubclass(UnknownOutcomeError, UnknownEnumValueError)
+    assert issubclass(UnknownEmissionChannelError, UnknownEnumValueError)

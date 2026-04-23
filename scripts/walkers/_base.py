@@ -1,17 +1,18 @@
 """Shared infrastructure for per-engine validation-rule walkers.
 
-Per the 2026-04-23 plan amendment, walker depth is fixed at 1 (same module,
-one helper-call hop deep). This module ships the public surface that the
-transformers introspection wrapper needs today, plus the AST primitives the
-vLLM and TensorRT-LLM walkers will consume when they land in later phases:
+Walker depth is fixed at 1 (same module, no helper-call tracing). This
+module ships the AST primitives and pattern detectors that future
+per-engine walkers will compose to extract validation rules from pinned
+library source. No concrete walker ships today; they land as independent
+PRs per engine.
 
-- :class:`RuleCandidate` — the walker's output type, serialised to the YAML
+- :class:`RuleCandidate` — the walker output type, serialised to the YAML
   corpus entry shape in :mod:`llenergymeasure.engines.vendored_rules.loader`.
 - :class:`WalkerVersionMismatchError`, :class:`WalkerLandmarkMissingError` —
   fail-loud exceptions CI treats as fatal.
 - :func:`check_installed_version` — version-envelope guard for each walker.
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
-  etc.) — deterministic, stateless primitives.
+  etc.) — deterministic, stateless primitives for AST-based walkers.
 - Pattern detectors (``ConditionalRaiseDetector``, etc.) — one class per
   known library rule shape; each fires on one ``ast.If`` body at a time.
 
@@ -229,6 +230,15 @@ def resolve_local_assign(func: ast.FunctionDef, name: str) -> str | None:
 
     Used for HF's ``greedy_wrong_parameter_msg`` pattern — the message template
     is a local variable defined earlier in the same function body.
+
+    **Scope limitation:** only scans top-level statements in ``func.body``.
+    Assignments nested in ``if`` / ``try`` / ``with`` / ``for`` blocks are
+    not followed. Returns the *first* matching assignment, so a function
+    that rebinds the name later will still surface the earliest value —
+    fine for message templates that are constant per function call,
+    brittle for names the function reassigns. Suits current HF validate()
+    shape; if a future library uses branch-local message templates, the
+    walker calling site needs a richer resolver.
     """
     for node in func.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -340,13 +350,19 @@ class ConditionalWarningsWarnDetector:
 
 
 class ConditionalLoggerWarningDetector:
-    """``if X: logger.warning(...)`` / ``logger.warning_once(...)`` — announced."""
+    """``if X: logger.warning(...)`` / ``logger.warning_once(...)`` — announced.
+
+    Strictly matches two-element paths (``logger.<method>``). Patterns like
+    ``logger.sub.warning(...)`` or ``self.logger.warning(...)`` do NOT match
+    — if a real library rule uses a non-top-level logger attribute, the
+    walker for that library must supply its own detector.
+    """
 
     def detect(self, stmt: ast.stmt) -> DetectedPattern | None:
         if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
             return None
         path = call_func_path(stmt.value)
-        if not path or path[0] != "logger":
+        if path is None or len(path) != 2 or path[0] != "logger":
             return None
         method = path[-1]
         if method not in {"warning", "warning_once", "error"}:
@@ -396,7 +412,7 @@ class MinorIssuesDictAssignDetector:
         )
 
 
-ALL_DETECTORS: tuple[
+_DEFAULT_DETECTORS: tuple[
     ConditionalRaiseDetector
     | ConditionalSelfAssignDetector
     | ConditionalWarningsWarnDetector
@@ -410,13 +426,34 @@ ALL_DETECTORS: tuple[
     ConditionalLoggerWarningDetector(),
     MinorIssuesDictAssignDetector(),
 )
-"""Detector fixed order matters: the first detector to fire on a statement wins.
+"""Private default detector bundle — ordered by specificity.
 
-Ordering rationale: the most-specific patterns come first. ``raise`` before
-self-assign ensures raise+rollback chains are attributed to the raise.
-``minor_issues`` before generic ``self.x = y`` ensures HF's dict-assign is
-picked up before the fallback self-assign detector.
+Per-engine walkers are expected to assemble their own tuple from the
+individual detector classes, so this constant is not part of the public
+API. Ordering rationale for the default: ``raise`` before self-assign
+ensures raise+rollback chains are attributed to the raise; ``minor_issues``
+before generic ``self.x = y`` ensures HF's dict-assign is picked up
+before the fallback self-assign detector.
 """
+
+
+def default_detectors() -> tuple[
+    ConditionalRaiseDetector
+    | ConditionalSelfAssignDetector
+    | ConditionalWarningsWarnDetector
+    | ConditionalLoggerWarningDetector
+    | MinorIssuesDictAssignDetector,
+    ...,
+]:
+    """Return the default detector tuple — walkers copy / slice this to taste.
+
+    **Stability contract:** the tuple's *contents* and *ordering* may grow
+    or shift as new detectors are added to cover additional libraries.
+    Walkers that need behaviour-stable detection across corpus-pipeline
+    reruns should capture a local tuple (e.g. select-by-class-name) at
+    walker definition time rather than calling this each walk.
+    """
+    return _DEFAULT_DETECTORS
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +466,15 @@ def filter_condition_references_self(condition: ast.expr, public_fields: frozens
 
     Drops argument-dependent rules (``if strict: raise``) and private-state
     rules (``if self._initialized: ...``) that don't constrain user config.
+
+    **Known false-negative:** kwarg-gated rules like HF's
+    ``if strict: raise ValueError(...)`` inside ``validate(self, strict=False)``
+    get dropped even though they CAN represent real config constraints when
+    the kwarg's default changes the behaviour. If a library exposes such a
+    rule, the walker for it must supply its own condition-inclusion filter
+    (via composition) rather than relying on this one. Pinning this
+    behaviour explicitly here so the contract is discoverable at the
+    definition site, not only in design-review notes.
     """
     referenced = extract_condition_fields(condition)
     return bool(referenced & public_fields)
@@ -481,6 +527,12 @@ def score_confidence(pass_count: int) -> Confidence:
     """Map 0-3 filter-pass count to a confidence tier.
 
     3 passes → ``high``. 2 → ``medium``. 0-1 → ``low``.
+
+    The tier thresholds are deliberately simple: three-hot = high, two-hot =
+    medium, else low. No target distribution is enforced — the design's
+    earlier 60/25/15 target was descoped pending empirical calibration
+    against real walker output. Callers should treat ``medium`` / ``low``
+    as "needs human review before landing", not as a quality score.
     """
     if pass_count >= 3:
         return "high"
