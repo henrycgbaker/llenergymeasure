@@ -31,7 +31,7 @@ def _hash_canonical(canonical: str) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
-def compute_measurement_config_hash(config: ExperimentConfig) -> str:
+def compute_declared_config_hash(config: ExperimentConfig) -> str:
     """SHA-256[:16] of ExperimentConfig. Layer 3 fields excluded by design.
 
     Layer 3 fields (datacenter_pue, grid_carbon_intensity) are not in

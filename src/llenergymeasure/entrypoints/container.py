@@ -160,7 +160,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     # Lazy imports — only needed at runtime, not import time
     from llenergymeasure.config.models import ExperimentConfig
     from llenergymeasure.device.gpu_info import _resolve_gpu_indices
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
     from llenergymeasure.engines import get_engine
     from llenergymeasure.harness import MeasurementHarness
     from llenergymeasure.harness.preflight import run_preflight
@@ -180,7 +180,7 @@ def run_container_experiment(config_path: Path, result_dir: Path) -> Path:
     )
 
     # --- Stable file name derived from config content ---
-    config_hash = compute_measurement_config_hash(config)
+    config_hash = compute_declared_config_hash(config)
 
     # --- Create progress callback for streaming to host ---
     progress = StreamProgressCallback()

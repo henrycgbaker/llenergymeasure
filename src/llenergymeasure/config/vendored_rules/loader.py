@@ -62,7 +62,7 @@ Outcome = Literal[
 """What the engine does when the rule's predicate holds.
 
 - ``dormant_silent`` — the engine silently normalises or ignores
-  (observable only via ``extract_effective_params`` post-construction).
+  (observable only via ``extract_observed_params`` post-construction).
 - ``dormant_announced`` — the engine writes to a ``minor_issues`` dict /
   logger, but the config still runs.
 - ``warn`` — the engine calls ``warnings.warn(...)`` or equivalent.
@@ -115,8 +115,8 @@ Five discovery paths with distinct trust/verifiability profiles:
 - ``runtime_warning`` — proposed by the feedback loop from captured
   ``logger.warning_once`` emissions (needs human generalisation before
   landing).
-- ``h3_collision`` — proposed by the feedback loop from H3-collision
-  canonicaliser-gap detection (needs human generalisation before landing).
+- ``h3_collision`` — proposed by the feedback loop from observed-config-hash
+  collision detection (needs human generalisation before landing).
 """
 
 VALID_SEVERITY: frozenset[str] = frozenset(get_args(Severity))

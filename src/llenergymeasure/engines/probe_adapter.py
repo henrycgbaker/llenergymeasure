@@ -30,8 +30,8 @@ def build_config_probe(config: ExperimentConfig) -> ConfigProbe:
     dormant_fields: dict[str, DormantField] = getattr(config, "_dormant_observations", None) or {}
 
     return ConfigProbe(
-        effective_engine_params={},
-        effective_sampling_params={},
+        observed_engine_params={},
+        observed_sampling_params={},
         dormant_fields=dormant_fields,
         errors=errors,
         warnings=[],

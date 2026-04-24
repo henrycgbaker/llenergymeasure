@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.domain.experiment import (
     ExperimentResult,
-    compute_measurement_config_hash,
+    compute_declared_config_hash,
 )
 from llenergymeasure.domain.metrics import EnergyBreakdown, MultiGPUMetrics
 
@@ -282,14 +282,14 @@ def test_tokens_per_joule_zero_energy(make_result):
 
 
 # ---------------------------------------------------------------------------
-# Tasks 2.22-2.24: compute_measurement_config_hash
+# Tasks 2.22-2.24: compute_declared_config_hash
 # ---------------------------------------------------------------------------
 
 
-def test_compute_measurement_config_hash():
+def test_compute_declared_config_hash():
     """Known ExperimentConfig produces 16-char hex string."""
     cfg = ExperimentConfig(task={"model": "gpt2"})
-    h = compute_measurement_config_hash(cfg)
+    h = compute_declared_config_hash(cfg)
     assert len(h) == 16
     assert all(c in "0123456789abcdef" for c in h)
 
@@ -297,8 +297,8 @@ def test_compute_measurement_config_hash():
 def test_config_hash_deterministic():
     """Same config always produces same hash."""
     cfg = ExperimentConfig(task={"model": "gpt2"})
-    h1 = compute_measurement_config_hash(cfg)
-    h2 = compute_measurement_config_hash(cfg)
+    h1 = compute_declared_config_hash(cfg)
+    h2 = compute_declared_config_hash(cfg)
     assert h1 == h2
 
 
@@ -306,8 +306,8 @@ def test_config_hash_different_configs():
     """Different configs produce different hashes."""
     cfg1 = ExperimentConfig(task={"model": "gpt2"})
     cfg2 = ExperimentConfig(task={"model": "meta-llama/Llama-2-7b-hf"})
-    h1 = compute_measurement_config_hash(cfg1)
-    h2 = compute_measurement_config_hash(cfg2)
+    h1 = compute_declared_config_hash(cfg1)
+    h2 = compute_declared_config_hash(cfg2)
     assert h1 != h2
 
 

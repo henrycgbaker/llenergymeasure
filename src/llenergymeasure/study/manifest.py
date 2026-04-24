@@ -342,12 +342,12 @@ class ManifestWriter:
         of 6. Deduplicate by config_hash first to recover the unique configs, then
         build one entry per (config_hash, cycle) pair.
         """
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
 
         # Deduplicate: preserve first-seen order, discard repetitions from cycling.
         seen: dict[str, ExperimentConfig] = {}
         for exp in study.experiments:
-            h = compute_measurement_config_hash(exp)
+            h = compute_declared_config_hash(exp)
             if h not in seen:
                 seen[h] = exp
 

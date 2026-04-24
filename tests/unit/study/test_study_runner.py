@@ -153,9 +153,9 @@ def test_study_runner_success_path(
     """Happy path: fake worker sends result via Pipe; mark_completed is called."""
     manifest = MagicMock()
 
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-    config_hash = compute_measurement_config_hash(basic_config)
+    config_hash = compute_declared_config_hash(basic_config)
     fake_result = {"config_hash": config_hash, "status": "success", "value": 42}
 
     proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
@@ -717,7 +717,7 @@ def test_cycle_counter_increments_per_config_hash() -> None:
     """
     from llenergymeasure.config.grid import ExperimentOrder, apply_cycles
     from llenergymeasure.config.models import DatasetConfig
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
 
     exp_a = ExperimentConfig(
         task={
@@ -733,8 +733,8 @@ def test_cycle_counter_increments_per_config_hash() -> None:
         },
         engine="transformers",
     )
-    hash_a = compute_measurement_config_hash(exp_a)
-    hash_b = compute_measurement_config_hash(exp_b)
+    hash_a = compute_declared_config_hash(exp_a)
+    hash_b = compute_declared_config_hash(exp_b)
 
     ordered = apply_cycles([exp_a, exp_b], 2, ExperimentOrder.INTERLEAVE, "aabb0011", None)
     assert len(ordered) == 4, "sanity: 2 configs x 2 cycles = 4"
@@ -1371,9 +1371,9 @@ def test_local_subprocess_passes_output_dir_as_kwarg(
     """
     manifest = MagicMock()
 
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-    config_hash = compute_measurement_config_hash(basic_config)
+    config_hash = compute_declared_config_hash(basic_config)
     fake_result = {"config_hash": config_hash, "status": "success"}
 
     proc = _make_mock_process(is_alive_after_join=False, exitcode=0)
@@ -1424,7 +1424,7 @@ def test_error_payload_persisted_to_failed_runs_subdir(
     and enriches the manifest with the structured error type/message."""
     import json
 
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
     from llenergymeasure.infra.docker_errors import DockerContainerError
 
     manifest = MagicMock()
@@ -1432,7 +1432,7 @@ def test_error_payload_persisted_to_failed_runs_subdir(
     runner_specs = {"transformers": spec}
 
     config = study_config.experiments[0]
-    config_hash = compute_measurement_config_hash(config)
+    config_hash = compute_declared_config_hash(config)
 
     # Simulate exchange dir with both container.log and error JSON
     exchange_dir = tmp_path / "llem-exchange"

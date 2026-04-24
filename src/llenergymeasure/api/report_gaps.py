@@ -277,18 +277,18 @@ def find_runtime_gaps(
             continue
 
         fired_hashes = {e.config_hash for e in emissions}
-        fired_configs: list[dict[str, Any]] = []
-        not_fired_configs: list[dict[str, Any]] = []
+        collision_configs: list[dict[str, Any]] = []
+        not_collision_configs: list[dict[str, Any]] = []
         for rec in records_by_engine.get(eng, []):
             if rec.kwargs is None:
                 continue
             if rec.config_hash in fired_hashes:
-                fired_configs.append(rec.kwargs)
+                collision_configs.append(rec.kwargs)
             elif rec.outcome not in {"subprocess_died", "exception"}:
-                not_fired_configs.append(rec.kwargs)
+                not_collision_configs.append(rec.kwargs)
 
-        match_fields = _infer_predicate(fired_configs, not_fired_configs)
-        evidence = _field_value_distribution(fired_configs, not_fired_configs)
+        match_fields = _infer_predicate(collision_configs, not_collision_configs)
+        evidence = _field_value_distribution(collision_configs, not_collision_configs)
         rep = representative_by_key[(eng, template)]
         severity: Literal["warn", "error"] = (
             "error" if rep.channel == "runtime_exception" else "warn"
@@ -303,12 +303,12 @@ def find_runtime_gaps(
                 library_version=rep.library_version,
                 match_fields=match_fields,
                 evidence_field_value_distribution=evidence,
-                fired_count=len(fired_configs),
-                not_fired_count=len(not_fired_configs),
+                fired_count=len(collision_configs),
+                not_fired_count=len(not_collision_configs),
                 representative_message=rep.representative_message,
                 needs_generalisation_review=needs_review,
                 severity=severity,
-                representative_kwargs=fired_configs[0] if fired_configs else {},
+                representative_kwargs=collision_configs[0] if collision_configs else {},
             )
         )
     return proposals

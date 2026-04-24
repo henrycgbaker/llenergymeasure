@@ -36,9 +36,9 @@ class ConfigProbe:
     loading weights, allocating GPU memory, or initialising engine contexts.
 
     Attributes:
-        effective_engine_params: Kwargs that would be passed to the engine
+        observed_engine_params: Kwargs that would be passed to the engine
             constructor (vllm.LLM, AutoModelForCausalLM, tensorrt_llm.LLM).
-        effective_sampling_params: Kwargs that would be passed to the
+        observed_sampling_params: Kwargs that would be passed to the
             sampling-params constructor after any greedy stripping.
         dormant_fields: Keyed by dotted path (e.g. ``"vllm.sampling.top_p"``)
             — fields the user declared that the engine will silently ignore
@@ -48,8 +48,8 @@ class ConfigProbe:
         warnings: Non-fatal observations.
     """
 
-    effective_engine_params: dict[str, Any]
-    effective_sampling_params: dict[str, Any]
+    observed_engine_params: dict[str, Any]
+    observed_sampling_params: dict[str, Any]
     dormant_fields: dict[str, DormantField]
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
