@@ -547,7 +547,7 @@ def test_sigint_second_ctrl_c_kills_immediately() -> None:
 # =============================================================================
 
 
-def test_worker_no_longer_stub(monkeypatch) -> None:
+def test_worker_no_longer_stub(monkeypatch, tmp_path) -> None:
     """_run_experiment_worker no longer raises NotImplementedError."""
     from llenergymeasure.config.models import DatasetConfig
     from tests.conftest import make_result
@@ -572,11 +572,19 @@ def test_worker_no_longer_stub(monkeypatch) -> None:
     progress_q: queue.SimpleQueue = queue.SimpleQueue()
 
     # Must not raise NotImplementedError
-    _run_experiment_worker(config, mock_conn, progress_q)
+    _run_experiment_worker(
+        config,
+        mock_conn,
+        progress_q,
+        study_dir=str(tmp_path),
+        study_run_id="test-run",
+        cycle=1,
+        config_hash="test-hash",
+    )
     mock_conn.send.assert_called_once()
 
 
-def test_worker_calls_get_engine(monkeypatch) -> None:
+def test_worker_calls_get_engine(monkeypatch, tmp_path) -> None:
     """_run_experiment_worker calls get_engine with the config's engine name.
 
     Uses a mock conn (not a real Pipe) so MagicMock results don't need pickling.
@@ -613,7 +621,15 @@ def test_worker_calls_get_engine(monkeypatch) -> None:
 
     progress_q: queue.SimpleQueue = queue.SimpleQueue()
 
-    _run_experiment_worker(config, mock_conn, progress_q)
+    _run_experiment_worker(
+        config,
+        mock_conn,
+        progress_q,
+        study_dir=str(tmp_path),
+        study_run_id="test-run",
+        cycle=1,
+        config_hash="test-hash",
+    )
 
     assert len(engine_calls) == 1, f"Expected 1 get_engine call, got {engine_calls}"
     assert engine_calls[0] == "transformers"
@@ -1179,7 +1195,7 @@ def test_parent_conn_closed_after_collect_result(study_config: StudyConfig) -> N
 # =============================================================================
 
 
-def test_worker_calls_setpgrp(monkeypatch) -> None:
+def test_worker_calls_setpgrp(monkeypatch, tmp_path) -> None:
     """_run_experiment_worker calls os.setpgrp() as the first line before any other work."""
     from llenergymeasure.config.models import DatasetConfig
     from tests.conftest import make_result
@@ -1209,7 +1225,15 @@ def test_worker_calls_setpgrp(monkeypatch) -> None:
     mock_conn = MagicMock()
     progress_q: queue.SimpleQueue = queue.SimpleQueue()
 
-    _run_experiment_worker(config, mock_conn, progress_q)
+    _run_experiment_worker(
+        config,
+        mock_conn,
+        progress_q,
+        study_dir=str(tmp_path),
+        study_run_id="test-run",
+        cycle=1,
+        config_hash="test-hash",
+    )
 
     assert len(setpgrp_calls) == 1, f"Expected os.setpgrp() called once, got {len(setpgrp_calls)}"
 

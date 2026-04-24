@@ -28,6 +28,7 @@ import tempfile
 import threading
 import time
 import traceback
+import uuid
 from concurrent.futures import Future
 from datetime import datetime, timezone
 from pathlib import Path
@@ -80,6 +81,28 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Module-level helpers
 # =============================================================================
+
+
+# Failure classifiers produced by ``_collect_result`` and consumed by
+# parent-side sentinel handling. Lifted so the producer and consumer don't
+# drift on bare strings.
+COLLECT_RESULT_PROCESS_CRASH = "ProcessCrash"
+COLLECT_RESULT_TIMEOUT = "TimeoutError"
+
+
+def _derive_exit_reason(exitcode: int | None) -> str | None:
+    """Map a negative subprocess exit code to its POSIX signal name.
+
+    Negative exit codes are signals (POSIX convention). Returns the signal
+    name (e.g. ``SIGKILL``, ``SIGSEGV``, ``SIGTERM``) for any recognised
+    signal, ``None`` otherwise. The raw code is preserved elsewhere.
+    """
+    if exitcode is None or exitcode >= 0:
+        return None
+    try:
+        return signal.Signals(-exitcode).name
+    except ValueError:
+        return None
 
 
 def _sanitize_image_for_filename(image: str) -> str:
@@ -258,12 +281,16 @@ def _run_experiment_worker(
     output_dir: str | None = None,
     save_timeseries: bool = True,
     baseline: Any = None,  # BaselineCache | None (avoids import at module level)
+    *,
+    study_dir: str,
+    study_run_id: str,
+    cycle: int,
+    config_hash: str,
 ) -> None:
     """Entry point for the child process. Runs one experiment and returns result via Pipe.
 
     Signal handling:
         Installs SIGINT → SIG_IGN so the child ignores Ctrl+C.
-        # parent owns SIGINT; child ignores it
         The parent handles SIGINT and decides whether to kill the child.
 
     IPC protocol:
@@ -275,54 +302,69 @@ def _run_experiment_worker(
         output_dir: Directory for timeseries parquet output. Passed through to harness.
         save_timeseries: Whether to persist GPU timeseries. Passed through to harness.
         baseline: Pre-measured baseline power from parent process (study-level cache).
+        study_dir: Study output directory. Runtime observations append to
+            ``{study_dir}/runtime_observations.jsonl``.
+        study_run_id: UUID identifying this invocation of ``StudyRunner.run()``.
+        cycle: 1-based cycle counter for this config within the study.
+        config_hash: ``compute_measurement_config_hash(config)``. The parent is
+            the single SSOT for this value.
     """
     # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
     # share this PGID. The parent can then kill the whole group via os.killpg().
     os.setpgrp()
 
-    # parent owns SIGINT; child ignores it
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+    # Wrap the worker body BEFORE run_preflight() / get_engine() so engine
+    # import-time warnings under ``spawn`` are captured.
+    from llenergymeasure.study.runtime_observations import capture_runtime_observations
+
+    obs_ctx = capture_runtime_observations(
+        config,
+        study_dir=study_dir,
+        study_run_id=study_run_id,
+        cycle=cycle,
+        config_hash=config_hash,
+    )
+
     try:
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        with obs_ctx:
+            progress_queue.put({"event": "started", "config_hash": config_hash})
 
-        config_hash = compute_measurement_config_hash(config)
-        progress_queue.put({"event": "started", "config_hash": config_hash})
+            # Create progress callback that serialises step events to queue
+            progress_cb = _QueueProgressCallback(progress_queue)
 
-        # Create progress callback that serialises step events to queue
-        progress_cb = _QueueProgressCallback(progress_queue)
+            # Run the actual experiment in-process (within the spawned subprocess)
+            from llenergymeasure.engines import get_engine
+            from llenergymeasure.harness import MeasurementHarness
+            from llenergymeasure.harness.preflight import run_preflight
 
-        # Run the actual experiment in-process (within the spawned subprocess)
-        from llenergymeasure.engines import get_engine
-        from llenergymeasure.harness import MeasurementHarness
-        from llenergymeasure.harness.preflight import run_preflight
+            # Pre-flight inside subprocess: CUDA availability must be checked in the
+            # process that will use the GPU.
+            progress_cb.on_step_start("container_preflight", "Checking", "CUDA, model access")
+            t0_pf = time.perf_counter()
+            run_preflight(config)
+            progress_cb.on_step_done("container_preflight", time.perf_counter() - t0_pf)
 
-        # Pre-flight inside subprocess: CUDA availability must be checked in the
-        # process that will use the GPU.
-        progress_cb.on_step_start("container_preflight", "Checking", "CUDA, model access")
-        t0_pf = time.perf_counter()
-        run_preflight(config)
-        progress_cb.on_step_done("container_preflight", time.perf_counter() - t0_pf)
+            engine = get_engine(config.engine)
+            harness = MeasurementHarness()
+            from llenergymeasure.device.gpu_info import _resolve_gpu_indices
 
-        engine = get_engine(config.engine)
-        harness = MeasurementHarness()
-        from llenergymeasure.device.gpu_info import _resolve_gpu_indices
+            gpu_indices = _resolve_gpu_indices(config)
+            result = harness.run(
+                engine,
+                config,
+                snapshot=snapshot,
+                gpu_indices=gpu_indices,
+                progress=progress_cb,
+                output_dir=output_dir,
+                save_timeseries=save_timeseries,
+                baseline=baseline,
+            )
 
-        gpu_indices = _resolve_gpu_indices(config)
-        result = harness.run(
-            engine,
-            config,
-            snapshot=snapshot,
-            gpu_indices=gpu_indices,
-            progress=progress_cb,
-            output_dir=output_dir,
-            save_timeseries=save_timeseries,
-            baseline=baseline,
-        )
-
-        # Send result back to parent via Pipe
-        conn.send(result)
-        progress_queue.put({"event": "completed", "config_hash": config_hash})
+            # Send result back to parent via Pipe
+            conn.send(result)
+            progress_queue.put({"event": "completed", "config_hash": config_hash})
 
     except Exception as exc:
         error_payload = {
@@ -435,7 +477,7 @@ def _collect_result(
         _kill_process_group(p.pid, signal.SIGKILL)
         p.join()
         return {
-            "type": "TimeoutError",
+            "type": COLLECT_RESULT_TIMEOUT,
             "message": f"Experiment exceeded timeout of {timeout}s and was killed.",
             "config_hash": config_hash,
         }
@@ -458,7 +500,7 @@ def _collect_result(
                 pass
 
         return {
-            "type": "ProcessCrash",
+            "type": COLLECT_RESULT_PROCESS_CRASH,
             "message": f"Subprocess exited with code {p.exitcode} and no error data in Pipe.",
             "config_hash": config_hash,
         }
@@ -496,7 +538,7 @@ def _collect_result(
             }
 
     return {
-        "type": "ProcessCrash",
+        "type": COLLECT_RESULT_PROCESS_CRASH,
         "message": "Subprocess exited 0 but sent no data through Pipe.",
         "config_hash": config_hash,
     }
@@ -554,6 +596,10 @@ class StudyRunner:
         self._experiments_since_validation: dict[str, int] = {}
         # Study-level image preparation: True after _prepare_images() succeeds
         self._images_prepared: bool = False
+        # Per-run UUID tagging every runtime-observation record from this
+        # StudyRunner.run() invocation. Generated once so re-runs against
+        # the same study_dir can be disambiguated by downstream consumers.
+        self.study_run_id: str = str(uuid.uuid4())
 
     def run(self) -> list[Any]:
         """Run all experiments in order; return list of results or failure dicts.
@@ -1516,6 +1562,10 @@ class StudyRunner:
                 "output_dir": str(ts_tmpdir) if ts_tmpdir else None,
                 "save_timeseries": save_ts,
                 "baseline": baseline,
+                "study_dir": str(self.study_dir),
+                "study_run_id": self.study_run_id,
+                "cycle": cycle,
+                "config_hash": config_hash,
             },
             daemon=False,  # daemon=False: clean CUDA teardown if parent exits unexpectedly
         )
@@ -1567,6 +1617,30 @@ class StudyRunner:
 
         result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
+
+        # Parent writes the sentinel record for SIGKILL / timeout — the
+        # worker's context manager can't flush when its ``__exit__`` never
+        # ran. ``write_sentinel`` is itself best-effort and swallows OSError.
+        if isinstance(result, dict) and result.get("type") in {
+            COLLECT_RESULT_PROCESS_CRASH,
+            COLLECT_RESULT_TIMEOUT,
+        }:
+            from llenergymeasure.study.runtime_observations import write_sentinel
+
+            exit_reason = (
+                "timeout"
+                if result.get("type") == COLLECT_RESULT_TIMEOUT
+                else _derive_exit_reason(p.exitcode)
+            )
+            write_sentinel(
+                config,
+                study_dir=self.study_dir,
+                study_run_id=self.study_run_id,
+                cycle=cycle,
+                config_hash=config_hash,
+                exit_reason=exit_reason,
+                exit_code=p.exitcode,
+            )
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(
