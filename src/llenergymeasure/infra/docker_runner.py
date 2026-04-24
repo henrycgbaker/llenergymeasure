@@ -179,7 +179,7 @@ class DockerRunner:
             DockerContainerError:  Generic container failure (non-zero exit).
         """
         # Lazy import to avoid heavy domain imports at module load time
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
 
         exchange_dir = Path(tempfile.mkdtemp(prefix=TEMP_PREFIX_EXCHANGE))
 
@@ -199,7 +199,7 @@ class DockerRunner:
             # --- Write config JSON ---
             # Compute config_hash from the clean config (no output path mutation).
             # Output dir and save_timeseries are passed via env vars, not config.
-            config_hash = compute_measurement_config_hash(config)
+            config_hash = compute_declared_config_hash(config)
             config_path = exchange_dir / f"{config_hash}_config.json"
             config_path.write_text(
                 config.model_dump_json(),

@@ -3,7 +3,7 @@
 Reads ``runtime_observations.jsonl`` emitted by
 :mod:`llenergymeasure.study.runtime_observations`, groups captured warnings
 and log records by their normalised message template, partitions configs
-into *fired* (A) and *not fired* (B), and proposes corpus rules for
+into *collision_configs* (A) and *not collision_configs* (B), and proposes corpus rules for
 templates the existing rules corpus does not already match.
 
 Design:
@@ -85,8 +85,8 @@ class GapProposal:
     library_version: str
     match_fields: dict[str, Any] | None
     evidence_field_value_distribution: dict[str, dict[str, list[str]]]
-    fired_count: int
-    not_fired_count: int
+    collision_count: int
+    contrast_count: int
     representative_message: str
     needs_generalisation_review: bool
     severity: Literal["warn", "error"]
@@ -277,18 +277,18 @@ def find_runtime_gaps(
             continue
 
         fired_hashes = {e.config_hash for e in emissions}
-        fired_configs: list[dict[str, Any]] = []
-        not_fired_configs: list[dict[str, Any]] = []
+        collision_configs: list[dict[str, Any]] = []
+        contrast_configs: list[dict[str, Any]] = []
         for rec in records_by_engine.get(eng, []):
             if rec.kwargs is None:
                 continue
             if rec.config_hash in fired_hashes:
-                fired_configs.append(rec.kwargs)
+                collision_configs.append(rec.kwargs)
             elif rec.outcome not in {"subprocess_died", "exception"}:
-                not_fired_configs.append(rec.kwargs)
+                contrast_configs.append(rec.kwargs)
 
-        match_fields = _infer_predicate(fired_configs, not_fired_configs)
-        evidence = _field_value_distribution(fired_configs, not_fired_configs)
+        match_fields = _infer_predicate(collision_configs, contrast_configs)
+        evidence = _field_value_distribution(collision_configs, contrast_configs)
         rep = representative_by_key[(eng, template)]
         severity: Literal["warn", "error"] = (
             "error" if rep.channel == "runtime_exception" else "warn"
@@ -303,12 +303,12 @@ def find_runtime_gaps(
                 library_version=rep.library_version,
                 match_fields=match_fields,
                 evidence_field_value_distribution=evidence,
-                fired_count=len(fired_configs),
-                not_fired_count=len(not_fired_configs),
+                collision_count=len(collision_configs),
+                contrast_count=len(contrast_configs),
                 representative_message=rep.representative_message,
                 needs_generalisation_review=needs_review,
                 severity=severity,
-                representative_kwargs=fired_configs[0] if fired_configs else {},
+                representative_kwargs=collision_configs[0] if collision_configs else {},
             )
         )
     return proposals
@@ -592,8 +592,8 @@ def _template_matched_by_corpus(
 
 
 def _infer_predicate(
-    fired: list[dict[str, Any]],
-    not_fired: list[dict[str, Any]],
+    collision_configs: list[dict[str, Any]],
+    contrast_configs: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     """Return the smallest field-value dict that distinguishes A from B, or None.
 
@@ -601,9 +601,9 @@ def _infer_predicate(
     across A and absent in B wins. ``present:true`` fallback catches "any
     non-None value triggers" shapes that equality-on-value never sees.
     """
-    if not fired:
+    if not collision_configs:
         return None
-    fields = sorted({k for c in fired + not_fired for k in c})
+    fields = sorted({k for c in collision_configs + contrast_configs for k in c})
     if not fields:
         return None
 
@@ -611,36 +611,36 @@ def _infer_predicate(
         if arity > len(fields):
             break
         for fset in combinations(fields, arity):
-            a_tuples = {tuple(c.get(f) for f in fset) for c in fired}
+            a_tuples = {tuple(c.get(f) for f in fset) for c in collision_configs}
             if len(a_tuples) != 1:
                 continue
             value_tuple = next(iter(a_tuples))
             if any(
                 all(b.get(f) == v for f, v in zip(fset, value_tuple, strict=False))
-                for b in not_fired
+                for b in contrast_configs
             ):
                 continue
             return dict(zip(fset, value_tuple, strict=False))
 
     for fname in fields:
-        if all(c.get(fname) is not None for c in fired) and all(
-            b.get(fname) is None for b in not_fired
+        if all(c.get(fname) is not None for c in collision_configs) and all(
+            b.get(fname) is None for b in contrast_configs
         ):
             return {fname: {"present": True}}
     return None
 
 
 def _field_value_distribution(
-    fired: list[dict[str, Any]],
-    not_fired: list[dict[str, Any]],
+    collision_configs: list[dict[str, Any]],
+    contrast_configs: list[dict[str, Any]],
 ) -> dict[str, dict[str, list[str]]]:
     """Return per-field string-ified value sets for the A and B partitions."""
     out: dict[str, dict[str, list[str]]] = {}
-    fields = sorted({k for c in fired + not_fired for k in c})
+    fields = sorted({k for c in collision_configs + contrast_configs for k in c})
     for f in fields:
         out[f] = {
-            "fired": sorted({str(c.get(f)) for c in fired}),
-            "not_fired": sorted({str(c.get(f)) for c in not_fired}),
+            "collision_configs": sorted({str(c.get(f)) for c in collision_configs}),
+            "contrast_configs": sorted({str(c.get(f)) for c in contrast_configs}),
         }
     return out
 
@@ -702,8 +702,8 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
         "message_template": template,
         "references": [
             (
-                f"Observed in {proposal.fired_count} configs; "
-                f"absent in {proposal.not_fired_count} configs."
+                f"Observed in {proposal.collision_count} configs; "
+                f"absent in {proposal.contrast_count} configs."
             ),
             f"Representative raw message: {proposal.representative_message!r}",
         ],

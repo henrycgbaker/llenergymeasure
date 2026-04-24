@@ -81,66 +81,69 @@ rules:
 
 def test_predicate_inference_equality() -> None:
     """Single-field equality is recovered cleanly."""
-    fired = [
+    collision_configs = [
         {"do_sample": False, "temperature": 0.3, "top_p": 0.95},
         {"do_sample": False, "temperature": 0.7, "top_p": 1.0},
         {"do_sample": False, "temperature": 1.0, "top_p": 0.5},
     ]
-    not_fired = [
+    contrast_configs = [
         {"do_sample": True, "temperature": 0.7, "top_p": 0.95},
         {"do_sample": True, "temperature": 0.3, "top_p": 1.0},
     ]
-    assert _infer_predicate(fired, not_fired) == {"do_sample": False}
+    assert _infer_predicate(collision_configs, contrast_configs) == {"do_sample": False}
 
 
 def test_predicate_inference_multi_field() -> None:
     """Arity-2 predicate is recovered when no single field distinguishes."""
     # temperature=0.0 fires only when do_sample=True (greedy-with-temp-0 rule).
-    fired = [
+    collision_configs = [
         {"do_sample": True, "temperature": 0.0, "top_p": 0.95},
         {"do_sample": True, "temperature": 0.0, "top_p": 1.0},
     ]
-    not_fired = [
+    contrast_configs = [
         {"do_sample": True, "temperature": 0.7, "top_p": 0.95},
         {"do_sample": False, "temperature": 0.0, "top_p": 0.95},
         {"do_sample": False, "temperature": 0.7, "top_p": 0.95},
     ]
-    assert _infer_predicate(fired, not_fired) == {"do_sample": True, "temperature": 0.0}
+    assert _infer_predicate(collision_configs, contrast_configs) == {
+        "do_sample": True,
+        "temperature": 0.0,
+    }
 
 
 def test_predicate_inference_range_fails_safely() -> None:
-    """Range predicate (varying fired values) returns None, evidence intact."""
-    fired = [
+    """Range predicate (varying collision_configs values) returns None, evidence intact."""
+    collision_configs = [
         {"temperature": 0.001, "top_p": 0.95},
         {"temperature": 0.005, "top_p": 1.0},
         {"temperature": 0.0001, "top_p": 0.5},
     ]
-    not_fired = [
+    contrast_configs = [
         {"temperature": 0.5, "top_p": 0.95},
         {"temperature": 1.0, "top_p": 1.0},
     ]
-    # Every fired config has a distinct temperature, so no single tuple is
+    # Every collision_configs config has a distinct temperature, so no single tuple is
     # shared — arity-1, 2, 3 all fail. present:true fallback is also False
     # because top_p is set in both partitions.
-    assert _infer_predicate(fired, not_fired) is None
-    evidence = _field_value_distribution(fired, not_fired)
-    # Sanity: evidence still lists the fired temperature values.
-    assert set(evidence["temperature"]["fired"]) == {"0.001", "0.005", "0.0001"}
+    assert _infer_predicate(collision_configs, contrast_configs) is None
+    evidence = _field_value_distribution(collision_configs, contrast_configs)
+    # Sanity: evidence still lists the collision_configs temperature values.
+    assert set(evidence["temperature"]["collision_configs"]) == {"0.001", "0.005", "0.0001"}
 
 
 def test_present_true_fallback() -> None:
     """Fields-set-vs-null recovers via present:true when equality fails."""
-    # quant config present in all fired; absent in all not_fired.
-    fired = [
+    # quant config present in all collision_configs; absent in all contrast_configs.
+    collision_configs = [
         {"quant": "bnb_4bit"},
         {"quant": "bnb_8bit"},
         {"quant": "awq"},
     ]
-    not_fired = [
+    contrast_configs = [
         {"quant": None},
         {"quant": None},
     ]
-    got = _infer_predicate(fired, not_fired)
+    got = _infer_predicate(collision_configs, contrast_configs)
     assert got == {"quant": {"present": True}}
 
 
@@ -153,14 +156,14 @@ def test_sentinel_records_excluded_from_b(tmp_path: Path) -> None:
     """subprocess_died records don't pollute the B partition.
 
     Setup: 2 configs fire the template; 1 sentinel config has the same
-    kwargs as the fired ones (would otherwise falsify the predicate). After
+    kwargs as the collision_configs ones (would otherwise falsify the predicate). After
     exclusion, the predicate stays inferable.
     """
     study = tmp_path / "study-1"
     study.mkdir()
 
-    # 2 fired configs + 1 not-fired, all on do_sample=False.
-    # Sentinel config has do_sample=False too — would collide with fired if B included it.
+    # 2 collision_configs configs + 1 not-collision_configs, all on do_sample=False.
+    # Sentinel config has do_sample=False too — would collide with collision_configs if B included it.
     hashes = {
         "fire_a": _fake_hash("fire_a"),
         "fire_b": _fake_hash("fire_b"),
@@ -206,9 +209,9 @@ def test_sentinel_records_excluded_from_b(tmp_path: Path) -> None:
     gaps = find_runtime_gaps([study], rules_corpus=_build_empty_corpus())
     assert len(gaps) == 1
     gap = gaps[0]
-    assert gap.fired_count == 2
+    assert gap.collision_count == 2
     # B partition contains only the notfire config — the sentinel is excluded.
-    assert gap.not_fired_count == 1
+    assert gap.contrast_count == 1
     assert gap.match_fields == {"do_sample": False}
 
 
@@ -243,8 +246,8 @@ def test_exception_records_excluded_by_default(tmp_path: Path) -> None:
     # exc record is excluded from B (would have had do_sample=False, breaking predicate).
     # Predicate still resolves cleanly.
     assert gaps[0].match_fields == {"do_sample": False}
-    assert gaps[0].fired_count == 2
-    assert gaps[0].not_fired_count == 1
+    assert gaps[0].collision_count == 2
+    assert gaps[0].contrast_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -536,8 +539,8 @@ def test_manifest_path_resolves_full_hash(tmp_path: Path) -> None:
 
     gaps = find_runtime_gaps([study], rules_corpus=_build_empty_corpus())
     assert len(gaps) == 1
-    assert gaps[0].fired_count == 1
-    assert gaps[0].not_fired_count == 1
+    assert gaps[0].collision_count == 1
+    assert gaps[0].contrast_count == 1
     assert gaps[0].match_fields == {"do_sample": False}
 
 
@@ -562,5 +565,5 @@ def test_multiple_study_dirs_aggregate(tmp_path: Path) -> None:
 
     gaps = find_runtime_gaps([s1, s2], rules_corpus=_build_empty_corpus())
     assert len(gaps) == 1
-    assert gaps[0].fired_count == 2
-    assert gaps[0].not_fired_count == 1
+    assert gaps[0].collision_count == 2
+    assert gaps[0].contrast_count == 1

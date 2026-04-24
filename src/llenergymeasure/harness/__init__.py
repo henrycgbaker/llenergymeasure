@@ -21,7 +21,7 @@ from llenergymeasure.datasets import load_prompts
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     ExperimentResult,
-    compute_measurement_config_hash,
+    compute_declared_config_hash,
     mj_per_token,
 )
 from llenergymeasure.domain.progress import STEP_BASELINE
@@ -753,7 +753,7 @@ class MeasurementHarness:
 
         return ExperimentResult(
             experiment_id=experiment_id,
-            measurement_config_hash=compute_measurement_config_hash(config),
+            measurement_config_hash=compute_declared_config_hash(config),
             llenergymeasure_version=__version__,
             measurement_methodology="total",
             engine=engine_name,

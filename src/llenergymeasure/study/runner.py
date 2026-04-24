@@ -306,7 +306,7 @@ def _run_experiment_worker(
             ``{study_dir}/runtime_observations.jsonl``.
         study_run_id: UUID identifying this invocation of ``StudyRunner.run()``.
         cycle: 1-based cycle counter for this config within the study.
-        config_hash: ``compute_measurement_config_hash(config)``. The parent is
+        config_hash: ``compute_declared_config_hash(config)``. The parent is
             the single SSOT for this value.
     """
     # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
@@ -467,9 +467,9 @@ def _collect_result(
     Returns:
         ExperimentResult on success, dict with keys (type, message) on failure.
     """
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-    config_hash = compute_measurement_config_hash(config)
+    config_hash = compute_declared_config_hash(config)
 
     if p.is_alive():
         # Timed out — kill with SIGKILL
@@ -620,7 +620,7 @@ class StudyRunner:
         by apply_cycles() in load_study_config(). The runner must not call apply_cycles()
         again — doing so would multiply the count by n_cycles a second time.
         """
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
         from llenergymeasure.study.circuit_breaker import CircuitBreaker
 
         # study.experiments is already cycled by load_study_config(); use as-is.
@@ -628,7 +628,7 @@ class StudyRunner:
 
         # n_unique: count of distinct configs (for cycle-gap detection).
         # Do not use len(ordered) — that includes repetitions.
-        seen_hashes = {compute_measurement_config_hash(c) for c in self.study.experiments}
+        seen_hashes = {compute_declared_config_hash(c) for c in self.study.experiments}
         n_unique = len(seen_hashes)
 
         # spawn: CUDA-safe; fork causes silent CUDA corruption (CP-1)
@@ -711,7 +711,7 @@ class StudyRunner:
 
                 # Resume skip-set: skip experiments that completed in a previous run.
                 if self._skip_set:
-                    config_hash_pre = compute_measurement_config_hash(config)
+                    config_hash_pre = compute_declared_config_hash(config)
                     next_cycle = self._cycle_counters.get(config_hash_pre, 0) + 1
                     if (config_hash_pre, next_cycle) in self._skip_set:
                         self._cycle_counters[config_hash_pre] = next_cycle
@@ -724,7 +724,7 @@ class StudyRunner:
 
                 # Wall-clock timeout check: mark remaining experiments skipped.
                 if deadline is not None and time.monotonic() > deadline:
-                    self._mark_remaining_skipped(ordered, i, compute_measurement_config_hash)
+                    self._mark_remaining_skipped(ordered, i, compute_declared_config_hash)
                     self.manifest.mark_study_timed_out()
                     logger.warning(
                         "Study timed out after %.1f hours",
@@ -769,9 +769,7 @@ class StudyRunner:
 
                     elif action == "abort":
                         # Probe failed — abort the study immediately.
-                        self._mark_remaining_skipped(
-                            ordered, i + 1, compute_measurement_config_hash
-                        )
+                        self._mark_remaining_skipped(ordered, i + 1, compute_declared_config_hash)
                         self.manifest.mark_study_circuit_breaker()
                         logger.error("Circuit breaker: probe experiment failed, aborting study")
                         _aborted = True
@@ -821,7 +819,7 @@ class StudyRunner:
         Args:
             ordered: Full ordered experiment list (study.experiments).
             start_index: Index of the first experiment to mark as skipped.
-            hash_fn: compute_measurement_config_hash callable.
+            hash_fn: compute_declared_config_hash callable.
         """
         for j in range(start_index, len(ordered)):
             cfg = ordered[j]
@@ -1509,9 +1507,9 @@ class StudyRunner:
         If interrupt_event is set after join, attempts graceful SIGTERM → 2s grace →
         SIGKILL before collecting whatever result is available.
         """
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-        config_hash = compute_measurement_config_hash(config)
+        config_hash = compute_declared_config_hash(config)
         # Increment per-config_hash counter: 1st run → cycle=1, 2nd → cycle=2, etc.
         current = self._cycle_counters.get(config_hash, 0) + 1
         self._cycle_counters[config_hash] = current

@@ -449,12 +449,12 @@ def _run(
     try:
         from llenergymeasure.config.introspection import get_swept_field_paths
         from llenergymeasure.config.resolution import build_resolution_log
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
 
         swept_fields = get_swept_field_paths(study.experiments)
         seen_hashes: set[str] = set()
         for exp in study.experiments:
-            h = compute_measurement_config_hash(exp)
+            h = compute_declared_config_hash(exp)
             if h in seen_hashes:
                 continue
             seen_hashes.add(h)
@@ -603,11 +603,11 @@ def _run_in_process(
     EngineError). Only result-saving errors are caught so a save failure does not
     discard a completed measurement.
     """
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
     from llenergymeasure.study.runner import _save_and_record
 
     config = study.experiments[0]
-    config_hash = compute_measurement_config_hash(config)
+    config_hash = compute_declared_config_hash(config)
     cycle = 1
 
     # Pre-dispatch GPU memory residual check (MEAS-01, MEAS-02)

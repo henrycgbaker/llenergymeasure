@@ -42,9 +42,9 @@ def _docker_config_hash(config) -> str:
     longer a config field). Tests that write result files must use this helper
     to match the actual file name.
     """
-    from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    from llenergymeasure.domain.experiment import compute_declared_config_hash
 
-    return compute_measurement_config_hash(config)
+    return compute_declared_config_hash(config)
 
 
 def _subprocess_run_with_image_cached(*run_results: MagicMock):
@@ -104,13 +104,13 @@ class TestSuccessPath:
         deterministic and stable regardless of any output settings (which are now
         passed via env vars, not config fields).
         """
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+        from llenergymeasure.domain.experiment import compute_declared_config_hash
 
         config = make_config()
         result = make_result()
 
         # Hash is the same whether computed directly or via the helper
-        direct_hash = compute_measurement_config_hash(config)
+        direct_hash = compute_declared_config_hash(config)
         helper_hash = _docker_config_hash(config)
         assert direct_hash == helper_hash
 

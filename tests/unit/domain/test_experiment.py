@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from llenergymeasure.domain.experiment import (
     AggregationMetadata,
     StudySummary,
-    compute_measurement_config_hash,
+    compute_declared_config_hash,
 )
 from llenergymeasure.domain.metrics import ExtendedEfficiencyMetrics
 from tests.conftest import (
@@ -155,24 +155,24 @@ class TestExperimentResultEdgeCases:
 
 
 class TestMeasurementConfigHash:
-    """compute_measurement_config_hash() determinism and shape."""
+    """compute_declared_config_hash() determinism and shape."""
 
     def test_hash_length(self):
         config = make_config()
-        h = compute_measurement_config_hash(config)
+        h = compute_declared_config_hash(config)
         assert len(h) == 16
 
     def test_deterministic(self):
         config = make_config()
-        h1 = compute_measurement_config_hash(config)
-        h2 = compute_measurement_config_hash(config)
+        h1 = compute_declared_config_hash(config)
+        h2 = compute_declared_config_hash(config)
         assert h1 == h2
 
     def test_different_engines_different_hash(self):
-        h1 = compute_measurement_config_hash(make_config(engine="transformers"))
-        h2 = compute_measurement_config_hash(make_config(engine="vllm"))
+        h1 = compute_declared_config_hash(make_config(engine="transformers"))
+        h2 = compute_declared_config_hash(make_config(engine="vllm"))
         assert h1 != h2
 
     def test_hash_is_string(self):
-        h = compute_measurement_config_hash(make_config())
+        h = compute_declared_config_hash(make_config())
         assert isinstance(h, str)
