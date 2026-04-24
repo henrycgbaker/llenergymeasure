@@ -83,22 +83,26 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def _derive_exit_reason(exitcode: int | None) -> str | None:
-    """Map a subprocess exit code to a short classifier string.
+# Failure classifiers produced by ``_collect_result`` and consumed by
+# parent-side sentinel handling. Lifted so the producer and consumer don't
+# drift on bare strings.
+COLLECT_RESULT_PROCESS_CRASH = "ProcessCrash"
+COLLECT_RESULT_TIMEOUT = "TimeoutError"
 
-    Negative exit codes are signal numbers (POSIX convention). We return
-    ``SIGKILL`` and ``SIGSEGV`` explicitly because they are the most common
-    causes of a worker vanishing before its runtime-observations context
-    could flush. Other negatives collapse to ``None`` — downstream
-    consumers can consult ``exit_code`` for the raw value.
+
+def _derive_exit_reason(exitcode: int | None) -> str | None:
+    """Map a negative subprocess exit code to its POSIX signal name.
+
+    Negative exit codes are signals (POSIX convention). Returns the signal
+    name (e.g. ``SIGKILL``, ``SIGSEGV``, ``SIGTERM``) for any recognised
+    signal, ``None`` otherwise. The raw code is preserved elsewhere.
     """
-    if exitcode is None:
+    if exitcode is None or exitcode >= 0:
         return None
-    if exitcode == -signal.SIGKILL:
-        return "SIGKILL"
-    if exitcode == -signal.SIGSEGV:
-        return "SIGSEGV"
-    return None
+    try:
+        return signal.Signals(-exitcode).name
+    except ValueError:
+        return None
 
 
 def _sanitize_image_for_filename(image: str) -> str:
@@ -277,16 +281,16 @@ def _run_experiment_worker(
     output_dir: str | None = None,
     save_timeseries: bool = True,
     baseline: Any = None,  # BaselineCache | None (avoids import at module level)
-    study_dir: str | None = None,
-    study_run_id: str | None = None,
-    cycle: int | None = None,
-    config_hash: str | None = None,
+    *,
+    study_dir: str,
+    study_run_id: str,
+    cycle: int,
+    config_hash: str,
 ) -> None:
     """Entry point for the child process. Runs one experiment and returns result via Pipe.
 
     Signal handling:
         Installs SIGINT → SIG_IGN so the child ignores Ctrl+C.
-        # parent owns SIGINT; child ignores it
         The parent handles SIGINT and decides whether to kill the child.
 
     IPC protocol:
@@ -298,46 +302,30 @@ def _run_experiment_worker(
         output_dir: Directory for timeseries parquet output. Passed through to harness.
         save_timeseries: Whether to persist GPU timeseries. Passed through to harness.
         baseline: Pre-measured baseline power from parent process (study-level cache).
-        study_dir: Study output directory. When provided together with
-            ``study_run_id``, ``cycle``, and ``config_hash``, the worker body is
-            wrapped in :func:`capture_runtime_observations` so one JSONL record
-            is appended to ``{study_dir}/runtime_observations.jsonl``.
+        study_dir: Study output directory. Runtime observations append to
+            ``{study_dir}/runtime_observations.jsonl``.
         study_run_id: UUID identifying this invocation of ``StudyRunner.run()``.
         cycle: 1-based cycle counter for this config within the study.
-        config_hash: ``compute_measurement_config_hash(config)`` — passed
-            instead of recomputed so the parent is the single SSOT.
+        config_hash: ``compute_measurement_config_hash(config)``. The parent is
+            the single SSOT for this value.
     """
     # Become process group leader so all descendants (vLLM workers, MPI ranks, etc.)
     # share this PGID. The parent can then kill the whole group via os.killpg().
     os.setpgrp()
 
-    # parent owns SIGINT; child ignores it
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    # Recompute config_hash only if the parent didn't plumb one — keeps the
-    # worker usable in isolation (test fixtures).
-    if config_hash is None:
-        from llenergymeasure.domain.experiment import compute_measurement_config_hash
+    # Wrap the worker body BEFORE run_preflight() / get_engine() so engine
+    # import-time warnings under ``spawn`` are captured.
+    from llenergymeasure.study.runtime_observations import capture_runtime_observations
 
-        config_hash = compute_measurement_config_hash(config)
-
-    # Build the runtime-observations wrapper if the parent plumbed the
-    # identification triple. Fallback to a no-op context for older callers
-    # / tests that don't need capture. The wrapper must enter BEFORE
-    # run_preflight() / get_engine() so engine-library import-time warnings
-    # under ``spawn`` are captured.
-    if study_dir is not None and study_run_id is not None and cycle is not None:
-        from llenergymeasure.study.runtime_observations import capture_runtime_observations
-
-        obs_ctx: contextlib.AbstractContextManager[Any] = capture_runtime_observations(
-            config,
-            study_dir=study_dir,
-            study_run_id=study_run_id,
-            cycle=cycle,
-            config_hash=config_hash,
-        )
-    else:
-        obs_ctx = contextlib.nullcontext()
+    obs_ctx = capture_runtime_observations(
+        config,
+        study_dir=study_dir,
+        study_run_id=study_run_id,
+        cycle=cycle,
+        config_hash=config_hash,
+    )
 
     try:
         with obs_ctx:
@@ -489,7 +477,7 @@ def _collect_result(
         _kill_process_group(p.pid, signal.SIGKILL)
         p.join()
         return {
-            "type": "TimeoutError",
+            "type": COLLECT_RESULT_TIMEOUT,
             "message": f"Experiment exceeded timeout of {timeout}s and was killed.",
             "config_hash": config_hash,
         }
@@ -512,7 +500,7 @@ def _collect_result(
                 pass
 
         return {
-            "type": "ProcessCrash",
+            "type": COLLECT_RESULT_PROCESS_CRASH,
             "message": f"Subprocess exited with code {p.exitcode} and no error data in Pipe.",
             "config_hash": config_hash,
         }
@@ -550,7 +538,7 @@ def _collect_result(
             }
 
     return {
-        "type": "ProcessCrash",
+        "type": COLLECT_RESULT_PROCESS_CRASH,
         "message": "Subprocess exited 0 but sent no data through Pipe.",
         "config_hash": config_hash,
     }
@@ -1630,31 +1618,29 @@ class StudyRunner:
         result = _collect_result(p, parent_conn, config, timeout, pipe_payload=pipe_payload)
         parent_conn.close()
 
-        # Parent-side sentinel: the worker's runtime-observations context
-        # cannot fire when the process was SIGKILLed or timed out before
-        # ``__exit__`` ran. Record one observation line from the parent so
-        # the feedback-loop consumer still sees the outcome.
+        # Parent writes the sentinel record for SIGKILL / timeout — the
+        # worker's context manager can't flush when its ``__exit__`` never
+        # ran. ``write_sentinel`` is itself best-effort and swallows OSError.
         if isinstance(result, dict) and result.get("type") in {
-            "ProcessCrash",
-            "TimeoutError",
+            COLLECT_RESULT_PROCESS_CRASH,
+            COLLECT_RESULT_TIMEOUT,
         }:
+            from llenergymeasure.study.runtime_observations import write_sentinel
+
             exit_reason = (
                 "timeout"
-                if result.get("type") == "TimeoutError"
+                if result.get("type") == COLLECT_RESULT_TIMEOUT
                 else _derive_exit_reason(p.exitcode)
             )
-            with contextlib.suppress(Exception):
-                from llenergymeasure.study.runtime_observations import write_sentinel
-
-                write_sentinel(
-                    config,
-                    study_dir=self.study_dir,
-                    study_run_id=self.study_run_id,
-                    cycle=cycle,
-                    config_hash=config_hash,
-                    exit_reason=exit_reason,
-                    exit_code=p.exitcode,
-                )
+            write_sentinel(
+                config,
+                study_dir=self.study_dir,
+                study_run_id=self.study_run_id,
+                cycle=cycle,
+                config_hash=config_hash,
+                exit_reason=exit_reason,
+                exit_code=p.exitcode,
+            )
 
         exp_elapsed = time.monotonic() - exp_start
         self._handle_result(

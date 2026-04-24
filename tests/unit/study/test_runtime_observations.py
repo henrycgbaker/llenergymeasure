@@ -14,9 +14,9 @@ import pytest
 
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.runtime_observations import (
-    _TRACEBACK_TRUNC_BYTES,
     RUNTIME_OBSERVATIONS_FILENAME,
     SCHEMA_VERSION,
+    TRACEBACK_TRUNC_BYTES,
     capture_runtime_observations,
     engine_logger_name,
     write_sentinel,
@@ -126,18 +126,6 @@ class TestSuccessPath:
         assert rec["exception"] is None
         assert rec["exit_reason"] is None
         assert rec["exit_code"] is None
-
-    def test_file_name_and_location(self, tmp_path: Path) -> None:
-        cfg = _mk_config()
-        with capture_runtime_observations(
-            cfg,
-            study_dir=tmp_path,
-            study_run_id=_run_id(),
-            cycle=1,
-            config_hash="h",
-        ):
-            pass
-        assert (tmp_path / "runtime_observations.jsonl").exists()
 
     def test_multiple_experiments_append(self, tmp_path: Path) -> None:
         cfg = _mk_config()
@@ -320,7 +308,7 @@ class TestExceptionCapture:
 
         rec = _read_records(tmp_path)[0]
         tb = rec["exception"]["traceback_truncated"]
-        assert len(tb.encode("utf-8")) <= _TRACEBACK_TRUNC_BYTES
+        assert len(tb.encode("utf-8")) <= TRACEBACK_TRUNC_BYTES
 
 
 # ---------------------------------------------------------------------------

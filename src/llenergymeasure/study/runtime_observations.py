@@ -35,14 +35,18 @@ import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
+from llenergymeasure.config.ssot import ENGINE_PACKAGES, Engine
+from llenergymeasure.study.message_normalise import normalise
 
 __all__ = [
     "RUNTIME_OBSERVATIONS_FILENAME",
     "SCHEMA_VERSION",
+    "TRACEBACK_TRUNC_BYTES",
     "capture_runtime_observations",
     "engine_logger_name",
     "write_sentinel",
@@ -56,20 +60,7 @@ SCHEMA_VERSION = 1
 # Max bytes of traceback retained in the JSONL record. The full traceback
 # stays in the per-experiment result.json; this cap keeps each JSONL line
 # under typical kernel atomic-write limits (PIPE_BUF ~= 4 KiB).
-_TRACEBACK_TRUNC_BYTES = 3 * 1024
-
-# Python-logger name for each engine. Hardcoded here rather than reused from
-# ``config.ssot.ENGINE_PACKAGES`` because the two mappings have different
-# responsibilities: ``ENGINE_PACKAGES`` names the installable pip package,
-# while this dict names the top-level logger we attach a handler to. They
-# coincide today but the concerns are orthogonal (e.g. a package could split
-# its logger root) — keeping the indirection explicit prevents accidental
-# coupling.
-_ENGINE_LOGGER_NAME: dict[str, str] = {
-    "transformers": "transformers",
-    "vllm": "vllm",
-    "tensorrt": "tensorrt_llm",
-}
+TRACEBACK_TRUNC_BYTES = 3 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -77,10 +68,12 @@ _ENGINE_LOGGER_NAME: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 
-def engine_logger_name(engine: Any) -> str:
-    """Return the Python logger name for ``engine`` (string or ``Engine`` enum)."""
-    value = engine.value if hasattr(engine, "value") else str(engine)
-    return _ENGINE_LOGGER_NAME.get(value, value)
+def engine_logger_name(engine: str | Engine) -> str:
+    """Return the Python logger name for ``engine`` (string or :class:`Engine`)."""
+    try:
+        return ENGINE_PACKAGES[Engine(engine)]
+    except (ValueError, KeyError):
+        return str(engine.value if isinstance(engine, Engine) else engine)
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +147,7 @@ def capture_runtime_observations(
     try:
         try:
             yield
-        except BaseException as exc:
+        except Exception as exc:
             outcome = "exception"
             exception_info = _serialise_exception(exc)
             raise
@@ -207,7 +200,7 @@ def write_sentinel(
         exit_reason=exit_reason,
         exit_code=exit_code,
     )
-    _append_observation_atomic(target, record)
+    _append_observation(target, record)
 
 
 # ---------------------------------------------------------------------------
@@ -278,8 +271,8 @@ def _serialise_exception(exc: BaseException) -> dict[str, Any]:
     message = str(exc)
     full_tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     encoded = full_tb.encode("utf-8", errors="replace")
-    if len(encoded) > _TRACEBACK_TRUNC_BYTES:
-        truncated = encoded[:_TRACEBACK_TRUNC_BYTES].decode("utf-8", errors="replace")
+    if len(encoded) > TRACEBACK_TRUNC_BYTES:
+        truncated = encoded[:TRACEBACK_TRUNC_BYTES].decode("utf-8", errors="replace")
     else:
         truncated = full_tb
     return {
@@ -291,9 +284,6 @@ def _serialise_exception(exc: BaseException) -> dict[str, Any]:
 
 
 def _normalise_message(message: str) -> str:
-    """Delegate to :mod:`message_normalise` — kept private so callers don't couple."""
-    from llenergymeasure.study.message_normalise import normalise
-
     return normalise(message).template
 
 
@@ -301,9 +291,17 @@ def _engine_value(engine: Any) -> str:
     return engine.value if hasattr(engine, "value") else str(engine)
 
 
+@lru_cache(maxsize=8)
 def _installed_version(engine_value: str) -> str:
-    """Return the installed package version for ``engine``, or ``""`` if missing."""
-    package = _ENGINE_LOGGER_NAME.get(engine_value, engine_value)
+    """Return the installed package version for ``engine``, or ``""`` if missing.
+
+    Cached per-engine: library versions cannot change mid-study, and
+    ``importlib.metadata.version`` walks ``sys.path`` on every call.
+    """
+    try:
+        package = ENGINE_PACKAGES[Engine(engine_value)]
+    except (ValueError, KeyError):
+        package = engine_value
     try:
         from importlib.metadata import PackageNotFoundError, version
     except ImportError:  # pragma: no cover - Python <3.8 not supported
@@ -338,25 +336,3 @@ def _append_observation(path: Path, record: dict[str, Any]) -> None:
                 os.fsync(fh.fileno())
     except OSError as exc:
         logger.warning("Could not append runtime observation to %s: %s", path, exc)
-
-
-def _append_observation_atomic(path: Path, record: dict[str, Any]) -> None:
-    """Append one JSONL record using ``os.open + O_APPEND + os.write``.
-
-    Single ``os.write()`` call — kernel treats it as one atomic append on
-    O_APPEND fds up to PIPE_BUF. Used by the parent-side sentinel where
-    the writer may be racing with nothing (worker is dead) but the
-    guarantee is still load-bearing if the user re-runs ``llem run``.
-    """
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = (json.dumps(record, default=str) + "\n").encode("utf-8")
-        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
-        try:
-            os.write(fd, line)
-            with contextlib.suppress(OSError):
-                os.fsync(fd)
-        finally:
-            os.close(fd)
-    except OSError as exc:
-        logger.warning("Could not append runtime sentinel to %s: %s", path, exc)
