@@ -93,6 +93,62 @@ def _atomic_write(content: str, path: Path) -> None:
         raise
 
 
+def save_config_sidecar(
+    experiment_dir: Path,
+    *,
+    experiment_id: str,
+    config_hash: str,
+    engine: str,
+    library_version: str,
+    observed_engine_params: dict[str, object] | None = None,
+    observed_sampling_params: dict[str, object] | None = None,
+    resolved_config_hash: str | None = None,
+    observed_config_hash: str | None = None,
+    config_validation_observations: list[dict[str, object]] | None = None,
+) -> Path:
+    """Write the per-experiment ``config.json`` sidecar with H1/H3 payload.
+
+    Schema lives in ``.product/designs/config-deduplication-dormancy/sweep-dedup.md``
+    §3.3. Fields:
+
+    - ``observed_engine_params`` / ``observed_sampling_params`` — authoritative
+      post-construction library state (populated by
+      :func:`llenergymeasure.engines._helpers.extract_observed_params`).
+    - ``resolved_config_hash`` — library-resolution mechanism-output hash, carried forward from sweep
+      expansion via ``StudyConfig.declared_resolved_config_hashes``.
+    - ``observed_config_hash`` — library-observation hash computed from the effective
+      params at sidecar-write time.
+    - ``config_validation_observations`` — DormantField entries that
+      ``_apply_vendored_rules`` attached at load time.
+
+    Any missing optional field is omitted from the sidecar (not written as
+    null) so downstream consumers distinguish "not available" from
+    "explicitly null". The file is small (< 4 KB typical) and atomically
+    written.
+    """
+    payload: dict[str, object] = {
+        "experiment_id": experiment_id,
+        "measurement_config_hash": config_hash,
+        "engine": engine,
+        "library_version": library_version,
+    }
+    if observed_engine_params is not None:
+        payload["observed_engine_params"] = observed_engine_params
+    if observed_sampling_params is not None:
+        payload["observed_sampling_params"] = observed_sampling_params
+    if resolved_config_hash is not None:
+        payload["resolved_config_hash"] = resolved_config_hash
+    if observed_config_hash is not None:
+        payload["observed_config_hash"] = observed_config_hash
+    if config_validation_observations is not None:
+        payload["config_validation_observations"] = config_validation_observations
+
+    path = experiment_dir / "config.json"
+    _atomic_write(json.dumps(payload, indent=2, default=str), path)
+    logger.debug("Saved config sidecar to %s", path)
+    return path
+
+
 def save_environment(
     snapshot: EnvironmentSnapshot,
     experiment_id: str,

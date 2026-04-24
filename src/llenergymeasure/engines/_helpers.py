@@ -6,8 +6,10 @@ to reduce duplication while keeping engines thin.
 
 from __future__ import annotations
 
+import dataclasses
 import gc
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -15,6 +17,162 @@ import numpy as np
 from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Effective-params extraction (H3 source)
+# ---------------------------------------------------------------------------
+
+
+def extract_observed_params(
+    native_obj: Any,
+    *,
+    private_field_allowlist: set[str] | None = None,
+) -> dict[str, Any]:
+    """Dump a constructed native type's post-``__post_init__`` state.
+
+    Used by the H3 hashing pipeline (sweep-dedup.md §3.2) — after each
+    backend constructs its native type (``GenerationConfig``,
+    ``SamplingParams``, ``LlmArgs``), the harness calls this to extract
+    the authoritative effective parameters the library settled on.
+
+    PoC-C finding (sweep-dedup.md §3.2 and §10 decision log): live
+    libraries leak private state that poisons H3 if passed through
+    unfiltered. Specific leaks observed:
+
+    - ``transformers.GenerationConfig``: ``_commit_hash``,
+      ``_from_model_config``
+    - ``vllm.SamplingParams``: ``_all_stop_token_ids``,
+      ``_bad_words_token_ids``, ``_eos_token_id``
+
+    Default behaviour is to strip all ``_``-prefixed fields. Engines pass
+    ``private_field_allowlist`` only when a specific private field is
+    genuinely measurement-relevant (rare).
+
+    Dispatch covers the three observed native-type shapes — Pydantic
+    (``model_dump``), dataclass (``dataclasses.asdict``), and
+    ``__slots__``-based (vLLM msgspec-adjacent). Fallback is ``__dict__``.
+    """
+    allow = private_field_allowlist or set()
+    raw = _dump_raw(native_obj)
+    return {k: v for k, v in raw.items() if not k.startswith("_") or k in allow}
+
+
+def library_version(module_name: str) -> str:
+    """Return ``__version__`` of an imported library or ``"unknown"`` on failure.
+
+    Shared helper for the H3 capture path — all three engines publish the
+    library version alongside their effective-params dump so researchers can
+    disambiguate identical H3 hashes across library versions.
+    """
+    try:
+        import importlib
+
+        mod = importlib.import_module(module_name)
+        return str(getattr(mod, "__version__", "unknown"))
+    except Exception:
+        return "unknown"
+
+
+def assemble_observed_params_safe(
+    *,
+    engine_extractor: Callable[[], dict[str, Any]] | None,
+    sampling_extractor: Callable[[], dict[str, Any]] | None,
+    module_name: str,
+    logger: logging.Logger,
+) -> dict[str, Any]:
+    """Try-extract-and-assemble scaffold shared by all three engine capture methods.
+
+    Each engine supplies small callables that produce its engine-specific and
+    sampling-specific observed-params dicts.  Extraction failures are logged at
+    DEBUG and silently produce empty dicts — sidecar writes are best-effort.
+
+    Args:
+        engine_extractor: Zero-arg callable returning engine-section params dict,
+            or ``None`` to skip engine extraction.
+        sampling_extractor: Zero-arg callable returning sampling-section params dict,
+            or ``None`` to skip sampling extraction.
+        module_name: Library module name for :func:`library_version` lookup.
+        logger: Caller's module-level logger for DEBUG messages.
+
+    Returns:
+        ``{"engine": ..., "sampling": ..., "library_version": ...}`` dict.
+    """
+    engine_params: dict[str, Any] = {}
+    if engine_extractor is not None:
+        try:
+            engine_params = engine_extractor()
+        except Exception as exc:
+            logger.debug("Engine param extraction failed: %s", exc)
+
+    sampling: dict[str, Any] = {}
+    if sampling_extractor is not None:
+        try:
+            sampling = sampling_extractor()
+        except Exception as exc:
+            logger.debug("Sampling param extraction failed: %s", exc)
+
+    return assemble_observed_params(engine_params, sampling, module_name)
+
+
+def assemble_observed_params(
+    engine_params: dict[str, Any],
+    sampling_params: dict[str, Any],
+    module_name: str,
+) -> dict[str, Any]:
+    """Assemble the standard observed-params return dict for the sidecar.
+
+    All three engines share the same return shape: ``{"engine": ...,
+    "sampling": ..., "library_version": ...}``. Engine-specific extraction
+    logic (BnB detection, vllm_config, llm.args) stays in each caller;
+    this helper assembles the final dict and fills in the library version.
+
+    Args:
+        engine_params: Engine-specific observed params (engine section).
+        sampling_params: Sampling-specific observed params.
+        module_name: Library module name for :func:`library_version` lookup
+            (e.g. ``"transformers"``, ``"vllm"``, ``"tensorrt_llm"``).
+    """
+    return {
+        "engine": engine_params,
+        "sampling": sampling_params,
+        "library_version": library_version(module_name),
+    }
+
+
+def _dump_raw(native_obj: Any) -> dict[str, Any]:
+    """Return a ``dict`` of every attribute observable on ``native_obj``.
+
+    Order of attempts mirrors the three shapes :func:`extract_observed_params`
+    commits to supporting; each is an explicit ``hasattr`` rather than
+    ``try/except`` because some libraries raise non-``AttributeError`` for
+    ``model_dump`` failures. The inner ``except Exception`` is intentional:
+    sidecar-write errors should never crash a measurement run.
+    """
+    if hasattr(native_obj, "model_dump"):
+        # Pydantic (transformers GenerationConfig inherits from PushToHubMixin;
+        # its model_dump accepts mode="python").
+        try:
+            dumped = native_obj.model_dump(mode="python")
+        except Exception:
+            try:
+                dumped = native_obj.model_dump()
+            except Exception:
+                dumped = None
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    if dataclasses.is_dataclass(native_obj) and not isinstance(native_obj, type):
+        return dataclasses.asdict(native_obj)
+    if hasattr(native_obj, "__slots__"):
+        out: dict[str, Any] = {}
+        for slot in native_obj.__slots__:
+            if hasattr(native_obj, slot):
+                out[slot] = getattr(native_obj, slot)
+        if out:
+            return out
+    if hasattr(native_obj, "__dict__"):
+        return dict(native_obj.__dict__)
+    return {}
 
 
 # ---------------------------------------------------------------------------

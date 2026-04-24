@@ -251,6 +251,10 @@ class VLLMEngine:
         with contextlib.suppress(Exception):
             hf_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
 
+        extras: dict[str, Any] = {}
+        if hf_model is not None:
+            extras["hf_model"] = hf_model
+
         return InferenceOutput(
             elapsed_time_sec=elapsed,
             input_tokens=input_token_count,
@@ -258,8 +262,69 @@ class VLLMEngine:
             peak_memory_mb=peak_mb,
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=[elapsed],
-            extras={"hf_model": hf_model} if hf_model is not None else {},
+            extras=extras,
         )
+
+    # -------------------------------------------------------------------------
+    # Private: observed-params capture (observed_config_hash)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _capture_observed_params(
+        config: ExperimentConfig,
+        llm: Any,
+        sampling_params: Any,
+    ) -> dict[str, Any]:
+        """Extract post-construction state from the vLLM native types.
+
+        Sampling params are captured via :func:`extract_observed_params` —
+        PoC-C allowlist is unset (the private fields ``_all_stop_token_ids``,
+        ``_bad_words_token_ids``, ``_eos_token_id`` default-exclude since they
+        vary per-model without affecting measurement-equivalence). Engine
+        params derive from ``llm.llm_engine.vllm_config`` when available;
+        otherwise we fall back to the declared kwargs dict.
+        """
+        from llenergymeasure.engines._helpers import (
+            assemble_observed_params,
+            extract_observed_params,
+        )
+
+        sampling: dict[str, Any] = {}
+        try:
+            sampling = extract_observed_params(sampling_params)
+        except Exception as exc:  # pragma: no cover — best-effort capture
+            logger.debug("vLLM SamplingParams capture failed: %s", exc)
+
+        engine_params: dict[str, Any] = {}
+        try:
+            vllm_cfg = getattr(llm.llm_engine, "vllm_config", None)
+            if vllm_cfg is not None:
+                engine_params = extract_observed_params(vllm_cfg)
+        except Exception as exc:  # pragma: no cover — best-effort capture
+            logger.debug("vLLM config capture failed: %s", exc)
+
+        return assemble_observed_params(engine_params, sampling, "vllm")
+
+    # -------------------------------------------------------------------------
+    # EnginePlugin: capture_observed_params (post-measurement-window)
+    # -------------------------------------------------------------------------
+
+    def capture_observed_params(
+        self,
+        config: ExperimentConfig,
+        model: Any,
+        output: InferenceOutput,
+    ) -> dict[str, Any]:
+        """Extract library-observed effective parameters post-measurement-window.
+
+        Called by the harness after ``t_inference_end`` + ``_cuda_sync`` so
+        this overhead is outside the NVML energy window.
+
+        The ``sampling_params`` object is already in the model tuple from
+        ``load_model()``; the ``llm`` object provides the live vllm_config.
+        """
+        llm, sampling_params = model
+        return self._capture_observed_params(config, llm, sampling_params)
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

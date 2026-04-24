@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import ValidationError
@@ -191,17 +191,47 @@ def load_study_config(
             "Nothing to run. Check sweep dimensions against engine constraints.\n" + skip_details
         )
 
-    # Compute study_design_hash BEFORE applying cycles (hash is over unique configs)
-    study_hash = compute_study_design_hash(valid_experiments)
+    # Apply library-resolution mechanism + resolved-config-hash dedup to the declared configs
+    # before running cycles. See sweep-dedup.md §2 — this collapses measurement-equivalent
+    # configs so a 6-config sweep with dormant sampling fields becomes 4 unique runs.
+    from llenergymeasure.study.library_resolution import resolve_library_effective
+
+    dedup = resolve_library_effective(
+        valid_experiments,
+        deduplicate=execution.deduplicate_equivalent,
+    )
+
+    run_experiments = dedup.canonical_configs
+    dedup_mode: Literal["resolved", "off"] = (
+        "resolved" if execution.deduplicate_equivalent else "off"
+    )
+
+    # Compute study_design_hash over the post-dedup configs — the hash
+    # identifies the *unique* measurement set, not duplicate declarations.
+    study_hash = compute_study_design_hash(run_experiments)
 
     # Apply cycle ordering to produce execution sequence
     ordered = apply_cycles(
-        valid_experiments,
+        run_experiments,
         n_cycles=execution.n_cycles,
         experiment_order=ExperimentOrder(execution.experiment_order),
         study_design_hash=study_hash,
         shuffle_seed=execution.shuffle_seed,
     )
+
+    # Serialise pre-run equivalence groups for the sidecar writer.
+    pre_run_groups = [
+        {
+            "resolved_config_hash": g.resolved_config_hash,
+            "canonical_config_excerpt": g.canonical_excerpt,
+            "member_indices": list(g.member_indices),
+            "member_count": g.member_count,
+            "representative_index": g.representative_index,
+            "would_dedup": g.member_count > 1,
+            "deduplicated": dedup.deduplicated and g.member_count > 1,
+        }
+        for g in dedup.groups
+    ]
 
     return StudyConfig(
         experiments=ordered,
@@ -212,6 +242,9 @@ def load_study_config(
         images=images,
         study_design_hash=study_hash,
         skipped_configs=[s.to_dict() for s in skipped],
+        dedup_mode=dedup_mode,
+        pre_run_equivalence_groups=pre_run_groups,
+        declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
     )
 
 

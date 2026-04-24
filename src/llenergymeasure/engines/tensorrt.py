@@ -342,6 +342,66 @@ class TensorRTEngine:
         )
 
     # -------------------------------------------------------------------------
+    # Private: observed-params capture (observed_config_hash)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _capture_observed_params(
+        config: ExperimentConfig,
+        llm: Any,
+        sampling_params: Any,
+    ) -> dict[str, Any]:
+        """Extract post-construction state from the TRT-LLM native types.
+
+        TRT-LLM's ``LlmArgs`` + nested ``BuildConfig`` are Pydantic; accessible
+        on ``llm.args`` in current releases. Private fields (if any surface in
+        a given TRT-LLM version) are stripped by the default
+        ``_``-prefix allowlist behaviour in
+        :func:`extract_observed_params`.
+        """
+        from llenergymeasure.engines._helpers import (
+            assemble_observed_params,
+            extract_observed_params,
+        )
+
+        sampling: dict[str, Any] = {}
+        try:
+            sampling = extract_observed_params(sampling_params)
+        except Exception as e:
+            logger.debug("TRT-LLM sampling param extraction failed: %s", e)
+
+        engine_params: dict[str, Any] = {}
+        try:
+            llm_args = getattr(llm, "args", None)
+            if llm_args is not None:
+                engine_params = extract_observed_params(llm_args)
+        except Exception as e:
+            logger.debug("TRT-LLM engine param extraction failed: %s", e)
+
+        return assemble_observed_params(engine_params, sampling, "tensorrt_llm")
+
+    # -------------------------------------------------------------------------
+    # EnginePlugin: capture_observed_params (post-measurement-window)
+    # -------------------------------------------------------------------------
+
+    def capture_observed_params(
+        self,
+        config: ExperimentConfig,
+        model: Any,
+        output: InferenceOutput,
+    ) -> dict[str, Any]:
+        """Extract library-observed effective parameters post-measurement-window.
+
+        Called by the harness after ``t_inference_end`` + ``_cuda_sync`` so
+        this overhead is outside the NVML energy window.
+
+        The ``sampling_params`` object and ``llm`` are in the model tuple
+        from ``load_model()``.
+        """
+        llm, sampling_params = model
+        return self._capture_observed_params(config, llm, sampling_params)
+
+    # -------------------------------------------------------------------------
     # EnginePlugin: cleanup
     # -------------------------------------------------------------------------
 

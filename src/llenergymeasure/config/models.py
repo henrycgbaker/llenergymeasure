@@ -688,6 +688,17 @@ class ExecutionConfig(BaseModel):
             "the circuit breaker counts them toward max_consecutive_failures."
         ),
     )
+    deduplicate_equivalent: bool = Field(
+        default=True,
+        description=(
+            "When true (default), sweep expansion applies library resolution to each declared "
+            "ExperimentConfig via vendored dormant-rule application and drops "
+            "duplicates that share an resolved_config_hash. When false, every declared "
+            "config runs — the library-resolution mechanism still populates equivalence-group "
+            "metadata for the sidecar but no configs are elided. The --no-dedup "
+            "CLI flag is the equivalent. See sweep-dedup.md §2.3.1."
+        ),
+    )
 
 
 class StudyConfig(BaseModel):
@@ -747,5 +758,32 @@ class StudyConfig(BaseModel):
         description=(
             "Grid points that failed Pydantic validation during expansion. "
             "Persisted for post-hoc review and pre-flight display."
+        ),
+    )
+    dedup_mode: Literal["resolved", "off"] = Field(
+        default="resolved",
+        description=(
+            "Library-resolution mechanism dedup mode. 'resolved' applies dormant-rule "
+            "library resolution at expansion and collapses resolved-config-hash-equivalent "
+            "configs to a single run. 'off' runs every declared config "
+            "regardless of equivalence. Set via "
+            "ExecutionConfig.deduplicate_equivalent / --no-dedup."
+        ),
+    )
+    pre_run_equivalence_groups: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Pre-run equivalence groups computed at sweep-expansion time. "
+            "Each group records the resolved_config_hash, canonical excerpt, and member "
+            "declared-indices. Written to 'equivalence_groups.json' alongside "
+            "the results bundle. See sweep-dedup.md §6."
+        ),
+    )
+    declared_resolved_config_hashes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Per-declared-config resolved_config_hashes (parallel to the pre-resolved "
+            "sweep input). Harness consults this to tag each experiment with "
+            "its equivalence group at sidecar-write time."
         ),
     )

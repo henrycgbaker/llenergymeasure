@@ -32,7 +32,7 @@ import uuid
 from concurrent.futures import Future
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from llenergymeasure._version import __version__ as _HOST_PKG_VERSION
 from llenergymeasure.config.ssot import (
@@ -130,6 +130,7 @@ def _save_and_record(
     ts_source_dir: Path | None = None,
     environment_snapshot: Any | None = None,
     resolution_log: dict[str, Any] | None = None,
+    resolved_config_hash: str | None = None,
 ) -> None:
     """Save result to disk and update manifest. Appends result path to result_files.
 
@@ -175,6 +176,31 @@ def _save_and_record(
                 config_hash,
                 result_path.parent,
             )
+
+        # Move config.json sidecar (written by harness to temp dir) to experiment dir.
+        # Also patch in the resolved_config_hash (H1) from StudyConfig, which the harness
+        # doesn't have access to at write time.
+        if ts_source_dir is not None:
+            config_sidecar_src = ts_source_dir / "config.json"
+            if config_sidecar_src.exists():
+                import json as _json
+
+                try:
+                    _payload = _json.loads(config_sidecar_src.read_text())
+                    if resolved_config_hash is not None:
+                        _payload["resolved_config_hash"] = resolved_config_hash
+                    from llenergymeasure.results.persistence import _atomic_write
+
+                    _atomic_write(
+                        _json.dumps(_payload, indent=2, default=str),
+                        result_path.parent / "config.json",
+                    )
+                except Exception as exc:  # pragma: no cover — best-effort
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).debug("config.json sidecar move failed: %s", exc)
+                finally:
+                    config_sidecar_src.unlink(missing_ok=True)
 
         # Clean up the stale flat parquet file after it has been copied into the
         # experiment subdirectory (mirrors cli/run.py line 288).
@@ -582,6 +608,10 @@ class StudyRunner:
         self._skip_set: set[tuple[str, int]] = skip_set or set()
         # Pre-built resolution logs keyed by config_hash (written as _resolution.json sidecar)
         self._resolution_logs: dict[str, dict[str, Any]] = resolution_logs or {}
+        # Declared-config-hash → resolved-config-hash (H1) mapping.
+        # Built from study.experiments (post-dedup unique configs) so _save_and_record
+        # can patch the resolved_config_hash into each config.json sidecar.
+        self._resolved_hashes: dict[str, str] = self._build_resolved_hashes(study)
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -783,6 +813,8 @@ class StudyRunner:
             # Mark study completed on clean exit (no interrupt, timeout, or circuit break).
             if not self._interrupt_event.is_set() and not _aborted:
                 self.manifest.mark_study_completed()
+                # Write equivalence_groups.json — post-run observed-config-hash groups.
+                self._write_equivalence_groups_sidecar()
 
         finally:
             signal.signal(signal.SIGINT, original_sigint)
@@ -804,6 +836,99 @@ class StudyRunner:
             sys.exit(130)
 
         return results
+
+    def _write_equivalence_groups_sidecar(self) -> None:
+        """Write ``equivalence_groups.json`` to the study directory after run completion.
+
+        Bundles:
+        - Pre-run groups from ``StudyConfig.pre_run_equivalence_groups`` (resolved-config-hash
+          dedup computed at sweep-expansion time).
+        - Post-run observed-config-hash collision groups built by scanning all ``config.json``
+          sidecars in the study directory.
+
+        Best-effort — failures are logged at DEBUG to avoid masking study results.
+        """
+        try:
+            import json as _json
+
+            from llenergymeasure.study.equivalence_groups import (
+                EquivalenceGroups,
+                PostRunH3Group,
+                PreRunGroup,
+                find_h3_groups,
+                write_equivalence_groups,
+            )
+
+            study = self.study
+            study_id = study.study_design_hash or "unknown"
+            raw_mode = getattr(study, "dedup_mode", "off")
+            dedup_mode: Literal["resolved", "off"] = "resolved" if raw_mode == "resolved" else "off"
+
+            # Deserialise pre-run groups from StudyConfig (stored as raw dicts)
+            pre_run_groups: list[PreRunGroup] = []
+            for g in getattr(study, "pre_run_equivalence_groups", []):
+                with contextlib.suppress(Exception):
+                    pre_run_groups.append(
+                        PreRunGroup(
+                            resolved_config_hash=str(g.get("resolved_config_hash", "")),
+                            canonical_config_excerpt=dict(g.get("canonical_config_excerpt", {})),
+                            member_experiment_ids=tuple(g.get("member_experiment_ids", [])),
+                            member_count=int(g.get("member_count", 0)),
+                            representative_experiment_id=str(
+                                g.get("representative_experiment_id", "")
+                            ),
+                            would_dedup=bool(g.get("would_dedup", False)),
+                            deduplicated=bool(g.get("deduplicated", False)),
+                        )
+                    )
+
+            # Scan config.json sidecars for post-run observed-config-hash groups
+            sidecars: list[dict[str, Any]] = []
+            for config_json in self.study_dir.rglob("config.json"):
+                with contextlib.suppress(Exception):
+                    sidecars.append(_json.loads(config_json.read_text()))
+            post_run_groups: list[PostRunH3Group] = find_h3_groups(sidecars)
+
+            groups = EquivalenceGroups(
+                study_id=study_id,
+                dedup_mode=dedup_mode,
+                groups=pre_run_groups,
+                post_run_h3_groups=post_run_groups,
+            )
+            write_equivalence_groups(groups, self.study_dir / "equivalence_groups.json")
+            logger.debug("Wrote equivalence_groups.json to %s", self.study_dir)
+        except Exception as exc:
+            logger.debug("equivalence_groups.json write failed (non-fatal): %s", exc)
+
+    @staticmethod
+    def _build_resolved_hashes(study: Any) -> dict[str, str]:
+        """Build a declared_config_hash → resolved_config_hash (H1) mapping.
+
+        Iterates the unique post-dedup experiments in ``study.experiments``
+        (cycles produce duplicates; seen_hashes deduplicates them) and
+        computes each experiment's resolved hash via the same H1 pipeline
+        used at sweep-expansion time.
+
+        Returns an empty dict on any failure — _save_and_record treats a
+        missing resolved_config_hash as best-effort and writes ``None``.
+        """
+        try:
+            from llenergymeasure.domain.experiment import compute_declared_config_hash
+            from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+            result: dict[str, str] = {}
+            seen: set[str] = set()
+            for exp in study.experiments:
+                declared_h = compute_declared_config_hash(exp)
+                if declared_h in seen:
+                    continue
+                seen.add(declared_h)
+                resolved_h = hash_config(build_resolved_view(exp))
+                result[declared_h] = resolved_h
+            return result
+        except Exception as exc:
+            logger.debug("_build_resolved_hashes failed (non-fatal): %s", exc)
+            return {}
 
     def _mark_remaining_skipped(
         self,
@@ -1690,6 +1815,7 @@ class StudyRunner:
                 ts_source_dir=ts_source_dir,
                 environment_snapshot=environment_snapshot,
                 resolution_log=self._resolution_logs.get(config_hash),
+                resolved_config_hash=self._resolved_hashes.get(config_hash),
             )
             if self._progress:
                 # Emit save paths as substeps BEFORE end_experiment_ok (which clears

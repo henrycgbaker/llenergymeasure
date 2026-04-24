@@ -61,6 +61,35 @@ def _cuda_sync() -> None:
             pass  # Non-fatal — best effort sync
 
 
+def _capture_observed_params_into_output(
+    engine: Any,
+    config: Any,
+    model: Any,
+    output: Any,
+) -> None:
+    """Call ``engine.capture_observed_params`` and merge the result into ``output.extras``.
+
+    Invoked post-window (after ``t_inference_end`` + ``_cuda_sync``) so capture
+    overhead does not perturb energy or timing measurements.
+
+    Best-effort: engines that haven't implemented the method yet silently skip.
+    The result dict is merged into ``output.extras`` under the standard keys
+    ``observed_engine_params``, ``observed_sampling_params``, and
+    ``library_version``.
+    """
+    try:
+        capture = getattr(engine, "capture_observed_params", None)
+        if capture is None:
+            return
+        params = capture(config, model, output)
+        if isinstance(params, dict):
+            output.extras["observed_engine_params"] = params.get("engine", {})
+            output.extras["observed_sampling_params"] = params.get("sampling", {})
+            output.extras["library_version"] = params.get("library_version", "unknown")
+    except Exception as exc:
+        logger.debug("capture_observed_params failed (non-fatal): %s", exc)
+
+
 def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
     """Check whether GPU persistence mode is enabled on all specified GPUs.
 
@@ -433,6 +462,11 @@ class MeasurementHarness:
             _cuda_sync()
             _substep("measure", "CUDA sync (post)")
 
+            # 11a. Capture observed params post-window (outside NVML sampling).
+            # Must run here — model is still alive; capture overhead (~5-50 ms pure
+            # Python) must not land inside the PowerThermalSampler context above.
+            _capture_observed_params_into_output(engine, config, model, output)
+
             if _p:
                 _p.on_step_done("measure", t_inference_end - t_inference_start)
 
@@ -511,6 +545,18 @@ class MeasurementHarness:
         )
         _substep("save", "result assembled")
 
+        # 17. Write config.json sidecar (observed-params + observed_config_hash)
+        # Written to output_dir (temp dir, same as timeseries.parquet) so the
+        # runner can move it to the per-experiment directory.
+        if resolved_output_dir is not None:
+            self._write_config_sidecar(
+                output=output,
+                config=config,
+                result=result,
+                output_dir=resolved_output_dir,
+            )
+            _substep("save", "config sidecar written")
+
         if _p:
             _p.on_step_done("save", time.perf_counter() - t0_save)
 
@@ -519,6 +565,55 @@ class MeasurementHarness:
     # -------------------------------------------------------------------------
     # Private helpers
     # -------------------------------------------------------------------------
+
+    def _write_config_sidecar(
+        self,
+        output: Any,
+        config: Any,
+        result: Any,
+        output_dir: Path,
+    ) -> None:
+        """Write ``config.json`` sidecar to ``output_dir`` (temp staging area).
+
+        Extracts observed params from ``output.extras`` (populated by each engine's
+        ``_capture_effective_params`` after inference), computes ``observed_config_hash``
+        from the H3 hashing pipeline, and writes the sidecar atomically. The runner's
+        ``_save_and_record`` moves this file to the per-experiment directory alongside
+        ``result.json``.
+
+        Best-effort — failures are logged at DEBUG to avoid masking measurement results.
+        """
+        try:
+            from llenergymeasure.domain.hashing import build_observed_view, hash_config
+            from llenergymeasure.results.persistence import save_config_sidecar
+
+            obs_engine = output.extras.get("observed_engine_params", {}) or {}
+            obs_sampling = output.extras.get("observed_sampling_params", {}) or {}
+            lib_ver = output.extras.get("library_version", "unknown") or "unknown"
+
+            # Compute observed_config_hash (H3) from extracted native-type state
+            engine_name = result.engine
+            task_dict = config.task.model_dump(mode="python")
+            h3_view = build_observed_view(
+                engine=engine_name,
+                task=task_dict,
+                observed_engine_params=obs_engine,
+                observed_sampling_params=obs_sampling,
+            )
+            obs_hash = hash_config(h3_view)
+
+            save_config_sidecar(
+                output_dir,
+                experiment_id=result.experiment_id,
+                config_hash=result.measurement_config_hash,
+                engine=engine_name,
+                library_version=lib_ver,
+                observed_engine_params=obs_engine if obs_engine else None,
+                observed_sampling_params=obs_sampling if obs_sampling else None,
+                observed_config_hash=obs_hash,
+            )
+        except Exception as exc:
+            logger.debug("Config sidecar write failed (non-fatal): %s", exc)
 
     def _capture_model_memory_mb(self, gpu_indices: list[int] | None = None) -> float:
         """Query torch for GPU max_memory_allocated() after model load.

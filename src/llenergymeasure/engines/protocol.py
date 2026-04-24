@@ -107,3 +107,21 @@ class EnginePlugin(Protocol):
         - Pure: no weight loading, no GPU allocation, no engine construction.
         """
         ...
+
+    def capture_observed_params(
+        self, config: ExperimentConfig, model: Any, output: InferenceOutput
+    ) -> dict[str, Any]:
+        """Extract library-observed effective parameters after inference.
+
+        Called by the harness AFTER the NVML measurement window closes
+        (post ``t_inference_end`` + ``_cuda_sync``), so the capture overhead
+        does not perturb energy or timing measurements.
+
+        Returns a dict with keys ``"engine"``, ``"sampling"``, and
+        ``"library_version"`` — same shape as
+        :func:`llenergymeasure.engines._helpers.assemble_observed_params`.
+
+        Engines must never raise; any extraction failure should be caught and
+        logged at DEBUG, returning empty dicts for the failed sub-field.
+        """
+        ...

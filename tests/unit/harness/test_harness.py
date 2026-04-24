@@ -668,6 +668,114 @@ def test_datetime_still_used_for_wall_clock(minimal_config):
 
 
 # ---------------------------------------------------------------------------
+# Bug 1 fix: sidecar write must succeed (kwarg name fix effective_→observed_)
+# ---------------------------------------------------------------------------
+
+
+def test_write_config_sidecar_creates_config_json(minimal_config, tmp_path: Path):
+    """_write_config_sidecar must create config.json with a non-null observed_config_hash.
+
+    Regression test for the kwarg mismatch: build_observed_view was called with
+    effective_engine_params=/effective_sampling_params= but the function signature
+    declared observed_engine_params=/observed_sampling_params=. This caused a
+    TypeError caught by the broad exception handler, silently skipping every sidecar write.
+    """
+    import json
+
+    from llenergymeasure.domain.experiment import ExperimentResult
+    from llenergymeasure.harness import MeasurementHarness
+
+    harness = MeasurementHarness()
+
+    from datetime import datetime
+
+    result = ExperimentResult(
+        experiment_id="test-sidecar-001",
+        measurement_config_hash="aabb1122ccdd3344",
+        measurement_methodology="total",
+        model_name="fake/model",
+        total_tokens=10,
+        total_energy_j=1.0,
+        total_inference_time_sec=0.5,
+        avg_tokens_per_second=20.0,
+        avg_energy_per_token_j=0.1,
+        total_flops=0,
+        engine="transformers",
+        start_time=datetime(2026, 1, 1),
+        end_time=datetime(2026, 1, 1),
+    )
+    output = InferenceOutput(
+        elapsed_time_sec=0.5,
+        input_tokens=5,
+        output_tokens=5,
+        peak_memory_mb=0.0,
+        model_memory_mb=0.0,
+        extras={
+            "observed_engine_params": {"dtype": "float16"},
+            "observed_sampling_params": {"temperature": 1.0},
+            "library_version": "4.50.0",
+        },
+    )
+
+    harness._write_config_sidecar(
+        output=output,
+        config=minimal_config,
+        result=result,
+        output_dir=tmp_path,
+    )
+
+    sidecar = tmp_path / "config.json"
+    assert sidecar.exists(), "config.json must be written by _write_config_sidecar"
+
+    payload = json.loads(sidecar.read_text())
+    assert payload.get("observed_config_hash") is not None, (
+        "observed_config_hash must be a non-null SHA-256 hex string"
+    )
+    assert len(payload["observed_config_hash"]) == 64
+
+
+# ---------------------------------------------------------------------------
+# Bug 3 fix: capture_observed_params called post-window
+# ---------------------------------------------------------------------------
+
+
+def test_capture_observed_params_called_post_window(minimal_config, tmp_path: Path):
+    """Harness calls engine.capture_observed_params after the measurement window.
+
+    The method must be called, its return value merged into output.extras, and
+    the extras keys (observed_engine_params/observed_sampling_params/library_version)
+    must be present so _write_config_sidecar can pick them up.
+    """
+    captured_calls: list[str] = []
+
+    class FakeBackendWithCapture(FakeBackend):
+        def capture_observed_params(self, config, model, output):
+            captured_calls.append("capture_observed_params")
+            return {
+                "engine": {"dtype": "float32"},
+                "sampling": {"temperature": 0.9},
+                "library_version": "5.0.0",
+            }
+
+    engine = FakeBackendWithCapture()
+    harness = MeasurementHarness()
+
+    with _apply_patches():
+        harness.run(engine, minimal_config, output_dir=str(tmp_path))
+
+    assert "capture_observed_params" in captured_calls, (
+        "engine.capture_observed_params must be called by the harness"
+    )
+    # config.json sidecar must exist and carry the captured params
+    sidecar = tmp_path / "config.json"
+    assert sidecar.exists(), "config.json must be written when output_dir is set"
+    import json
+
+    payload = json.loads(sidecar.read_text())
+    assert payload.get("observed_config_hash") is not None
+
+
+# ---------------------------------------------------------------------------
 # Dropped field wiring tests — warmup_result, energy_per_device_j, multi_gpu
 # ---------------------------------------------------------------------------
 

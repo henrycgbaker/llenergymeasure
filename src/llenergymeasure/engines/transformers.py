@@ -239,8 +239,83 @@ class TransformersEngine:
             peak_memory_mb=peak_memory_mb,
             model_memory_mb=0.0,  # Captured by harness before run_inference
             batch_times=batch_times,
-            extras={"hf_model": hf_model},  # For FLOPs estimation in harness
+            extras={
+                "hf_model": hf_model,  # For FLOPs estimation in harness
+                # generate_kwargs stashed so capture_observed_params can read
+                # GenerationConfig state post-window without recomputing.
+                "generate_kwargs": generate_kwargs,
+            },
         )
+
+    # -------------------------------------------------------------------------
+    # Private: observed-params capture (observed_config_hash)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _capture_observed_params(
+        config: ExperimentConfig,
+        hf_model: Any,
+        generate_kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Extract post-construction state from the native types the engine used.
+
+        Transformers splits its native state across ``GenerationConfig`` (the
+        sampling shape) and ``BitsAndBytesConfig`` (the engine-side quantisation
+        shape, when active). Both are Pydantic-style dumpable objects;
+        :func:`extract_observed_params` strips private fields (``_commit_hash``,
+        ``_from_model_config``) that would poison H3 if included.
+
+        Returns a dict with ``engine`` / ``sampling`` / ``library_version``
+        entries ready for the H3 hashing pipeline.
+        """
+        from llenergymeasure.engines._helpers import (
+            assemble_observed_params,
+            extract_observed_params,
+        )
+
+        sampling: dict[str, Any] = {}
+        try:
+            from transformers import GenerationConfig
+
+            gen_cfg = GenerationConfig(**generate_kwargs)
+            sampling = extract_observed_params(gen_cfg)
+        except Exception as exc:  # pragma: no cover — best-effort capture
+            logger.debug("transformers GenerationConfig capture failed: %s", exc)
+
+        engine_params: dict[str, Any] = {}
+        pt = config.transformers
+        if pt is not None and (pt.load_in_4bit or pt.load_in_8bit):
+            try:
+                bnb = getattr(hf_model, "quantization_config", None)
+                if bnb is not None:
+                    engine_params["quantization_config"] = extract_observed_params(bnb)
+            except Exception as exc:  # pragma: no cover — best-effort capture
+                logger.debug("transformers BitsAndBytesConfig capture failed: %s", exc)
+
+        return assemble_observed_params(engine_params, sampling, "transformers")
+
+    # -------------------------------------------------------------------------
+    # EnginePlugin: capture_observed_params (post-measurement-window)
+    # -------------------------------------------------------------------------
+
+    def capture_observed_params(
+        self,
+        config: ExperimentConfig,
+        model: Any,
+        output: InferenceOutput,
+    ) -> dict[str, Any]:
+        """Extract library-observed effective parameters post-measurement-window.
+
+        Called by the harness after ``t_inference_end`` + ``_cuda_sync`` so
+        this overhead is outside the NVML energy window.
+
+        Reads ``generate_kwargs`` from ``output.extras`` (stashed by
+        ``run_inference``) and the native model object for BnB config;
+        delegates to :func:`_capture_observed_params`.
+        """
+        hf_model, _tokenizer = model
+        generate_kwargs: dict[str, Any] = output.extras.get("generate_kwargs") or {}
+        return self._capture_observed_params(config, hf_model, generate_kwargs)
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup
