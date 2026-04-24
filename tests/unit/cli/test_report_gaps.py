@@ -8,6 +8,7 @@ surfaces here too.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -25,6 +26,14 @@ from tests.helpers.runtime_obs import (
 
 runner = CliRunner()
 
+# Typer/Rich emits ANSI escape codes that break substring matches on CI (no
+# NO_COLOR default). Match the pattern used by tests/unit/cli/test_cli_run.py.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
 
 # ---------------------------------------------------------------------------
 # Help + dispatch
@@ -34,9 +43,7 @@ runner = CliRunner()
 def test_report_gaps_help() -> None:
     result = runner.invoke(app, ["report-gaps", "--help"])
     assert result.exit_code == 0
-    # Typer's help formatter may wrap at narrow widths on small TTYs; strip
-    # whitespace/newlines before looking up flag names.
-    joined = " ".join(result.output.split())
+    joined = " ".join(_strip(result.output).split())
     for flag in ("--source", "--study-dir", "--engine", "--out", "--include-exceptions"):
         assert flag in joined
 
@@ -112,7 +119,8 @@ def test_report_gaps_missing_study_dir_errors(tmp_path: Path) -> None:
         ["report-gaps", "--source", "runtime-warnings", "--out", str(out)],
     )
     assert result.exit_code != 0
-    assert "study-dir" in result.output.lower() or "study_dir" in result.output.lower()
+    stripped = _strip(result.output).lower()
+    assert "study-dir" in stripped or "study_dir" in stripped
 
 
 def test_report_gaps_missing_out_errors(tmp_path: Path) -> None:
@@ -130,7 +138,8 @@ def test_report_gaps_missing_out_errors(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code != 0
-    assert "--out" in result.output or "out" in result.output.lower()
+    stripped = _strip(result.output).lower()
+    assert "--out" in stripped or "out" in stripped
 
 
 def test_report_gaps_unsupported_source_errors(tmp_path: Path) -> None:
@@ -151,4 +160,4 @@ def test_report_gaps_unsupported_source_errors(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code != 0
-    assert "runtime-warnings" in result.output
+    assert "runtime-warnings" in _strip(result.output)
