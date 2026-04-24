@@ -32,7 +32,7 @@ import uuid
 from concurrent.futures import Future
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from llenergymeasure._version import __version__ as _HOST_PKG_VERSION
 from llenergymeasure.config.ssot import (
@@ -861,7 +861,8 @@ class StudyRunner:
 
             study = self.study
             study_id = study.study_design_hash or "unknown"
-            dedup_mode = getattr(study, "dedup_mode", "off")
+            raw_mode = getattr(study, "dedup_mode", "off")
+            dedup_mode: Literal["resolved", "off"] = "resolved" if raw_mode == "resolved" else "off"
 
             # Deserialise pre-run groups from StudyConfig (stored as raw dicts)
             pre_run_groups: list[PreRunGroup] = []
@@ -882,7 +883,7 @@ class StudyRunner:
                     )
 
             # Scan config.json sidecars for post-run observed-config-hash groups
-            sidecars: list[dict] = []
+            sidecars: list[dict[str, Any]] = []
             for config_json in self.study_dir.rglob("config.json"):
                 with contextlib.suppress(Exception):
                     sidecars.append(_json.loads(config_json.read_text()))
