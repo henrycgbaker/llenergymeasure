@@ -19,7 +19,7 @@ import json
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from llenergymeasure.results.persistence import _atomic_write
 from llenergymeasure.study.library_resolution import DedupResult
@@ -60,7 +60,7 @@ class EquivalenceGroups:
     """Top-level equivalence-groups record written as ``equivalence_groups.json``."""
 
     study_id: str
-    dedup_mode: str
+    dedup_mode: Literal["resolved", "off"]
     vendored_rules_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
     post_run_h3_groups: list[PostRunH3Group] = field(default_factory=list)
@@ -176,9 +176,11 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
 def load_equivalence_groups(path: Path) -> EquivalenceGroups:
     """Load :class:`EquivalenceGroups` from a JSON file on disk."""
     data = json.loads(path.read_text())
+    raw_mode = str(data.get("dedup_mode", "off"))
+    dedup_mode: Literal["resolved", "off"] = "resolved" if raw_mode == "resolved" else "off"
     return EquivalenceGroups(
         study_id=str(data.get("study_id", "")),
-        dedup_mode=str(data.get("dedup_mode", "")),
+        dedup_mode=dedup_mode,
         vendored_rules_version=str(data.get("vendored_rules_version", "")),
         groups=[_pre_from_dict(g) for g in data.get("groups", [])],
         post_run_h3_groups=[_post_from_dict(g) for g in data.get("post_run_h3_groups", [])],

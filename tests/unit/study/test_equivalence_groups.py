@@ -27,7 +27,7 @@ class TestRoundTripSerialisation:
     def test_write_then_load_preserves_fields(self, tmp_path: Path):
         groups = EquivalenceGroups(
             study_id="study_abc",
-            dedup_mode="h1",
+            dedup_mode="resolved",
             vendored_rules_version="transformers:4.56.0@deadbee",
             groups=[
                 PreRunGroup(
@@ -57,7 +57,7 @@ class TestRoundTripSerialisation:
         loaded = load_equivalence_groups(path)
 
         assert loaded.study_id == "study_abc"
-        assert loaded.dedup_mode == "h1"
+        assert loaded.dedup_mode == "resolved"
         assert loaded.vendored_rules_version.startswith("transformers:")
         assert len(loaded.groups) == 1
         assert loaded.groups[0].member_count == 2

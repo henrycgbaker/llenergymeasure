@@ -164,6 +164,60 @@ def test_save_and_record_missing_source_file(tmp_path: Path) -> None:
     assert rel_path, "mark_completed must be called with a non-empty result_file"
 
 
+def test_save_and_record_writes_resolved_config_hash(tmp_path: Path) -> None:
+    """resolved_config_hash must be written into config.json sidecar when provided.
+
+    Regression test for Bug 2: _save_and_record had a resolved_config_hash
+    parameter that was never passed from the call site, leaving the sidecar
+    branch unreachable.  This test verifies the end-to-end write-and-read path.
+    """
+    import json
+
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+
+    # Write a minimal config.json in the ts_source_dir (simulates harness output)
+    config_sidecar_src = tmp_path / "config.json"
+    config_sidecar_src.write_text(
+        json.dumps(
+            {
+                "experiment_id": "test-resolved-001",
+                "config_hash": "aabb1122ccdd3344",
+                "engine": "transformers",
+                "library_version": "4.50.0",
+                "observed_config_hash": "sha256_h3_stub",
+            }
+        )
+    )
+
+    result = _make_result(with_timeseries=False)
+    manifest = MagicMock()
+    result_files: list[str] = []
+
+    _save_and_record(
+        result,
+        study_dir,
+        manifest,
+        "aabb1122",
+        1,
+        result_files,
+        ts_source_dir=tmp_path,
+        resolved_config_hash="resolved_sha256_h1_value",
+    )
+
+    assert len(result_files) == 1
+    result_json_path = Path(result_files[0])
+    dest_config = result_json_path.parent / "config.json"
+    assert dest_config.exists(), "config.json sidecar must be moved to result dir"
+
+    payload = json.loads(dest_config.read_text())
+    assert payload.get("resolved_config_hash") == "resolved_sha256_h1_value", (
+        "resolved_config_hash must be patched into config.json by _save_and_record"
+    )
+    # Source sidecar must be cleaned up
+    assert not config_sidecar_src.exists()
+
+
 def test_save_and_record_calls_mark_failed_on_exception(tmp_path: Path) -> None:
     """When save_result raises, manifest.mark_failed is called (not mark_completed).
 

@@ -251,14 +251,7 @@ class VLLMEngine:
         with contextlib.suppress(Exception):
             hf_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
 
-        # Library-observed effective params for H3 (sweep-dedup.md §3).
-        effective_params = self._capture_observed_params(config, llm, sampling_params)
-
-        extras: dict[str, Any] = {
-            "observed_engine_params": effective_params["engine"],
-            "observed_sampling_params": effective_params["sampling"],
-            "library_version": effective_params["library_version"],
-        }
+        extras: dict[str, Any] = {}
         if hf_model is not None:
             extras["hf_model"] = hf_model
 
@@ -311,6 +304,27 @@ class VLLMEngine:
             logger.debug("vLLM config capture failed: %s", exc)
 
         return assemble_observed_params(engine_params, sampling, "vllm")
+
+    # -------------------------------------------------------------------------
+    # EnginePlugin: capture_observed_params (post-measurement-window)
+    # -------------------------------------------------------------------------
+
+    def capture_observed_params(
+        self,
+        config: ExperimentConfig,
+        model: Any,
+        output: InferenceOutput,
+    ) -> dict[str, Any]:
+        """Extract library-observed effective parameters post-measurement-window.
+
+        Called by the harness after ``t_inference_end`` + ``_cuda_sync`` so
+        this overhead is outside the NVML energy window.
+
+        The ``sampling_params`` object is already in the model tuple from
+        ``load_model()``; the ``llm`` object provides the live vllm_config.
+        """
+        llm, sampling_params = model
+        return self._capture_observed_params(config, llm, sampling_params)
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

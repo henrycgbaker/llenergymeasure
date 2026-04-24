@@ -232,11 +232,6 @@ class TransformersEngine:
             total_time_sec,
         )
 
-        # Capture library-observed effective parameters for H3 (sweep-dedup.md §3).
-        # Runs after the measurement loop so we don't perturb timing; the
-        # GenerationConfig's post-__init__ state is stable throughout the run.
-        effective_params = self._capture_observed_params(config, hf_model, generate_kwargs)
-
         return InferenceOutput(
             elapsed_time_sec=total_time_sec,
             input_tokens=total_input_tokens,
@@ -246,9 +241,9 @@ class TransformersEngine:
             batch_times=batch_times,
             extras={
                 "hf_model": hf_model,  # For FLOPs estimation in harness
-                "observed_engine_params": effective_params["engine"],
-                "observed_sampling_params": effective_params["sampling"],
-                "library_version": effective_params["library_version"],
+                # generate_kwargs stashed so capture_observed_params can read
+                # GenerationConfig state post-window without recomputing.
+                "generate_kwargs": generate_kwargs,
             },
         )
 
@@ -298,6 +293,29 @@ class TransformersEngine:
                 logger.debug("transformers BitsAndBytesConfig capture failed: %s", exc)
 
         return assemble_observed_params(engine_params, sampling, "transformers")
+
+    # -------------------------------------------------------------------------
+    # EnginePlugin: capture_observed_params (post-measurement-window)
+    # -------------------------------------------------------------------------
+
+    def capture_observed_params(
+        self,
+        config: ExperimentConfig,
+        model: Any,
+        output: InferenceOutput,
+    ) -> dict[str, Any]:
+        """Extract library-observed effective parameters post-measurement-window.
+
+        Called by the harness after ``t_inference_end`` + ``_cuda_sync`` so
+        this overhead is outside the NVML energy window.
+
+        Reads ``generate_kwargs`` from ``output.extras`` (stashed by
+        ``run_inference``) and the native model object for BnB config;
+        delegates to :func:`_capture_observed_params`.
+        """
+        hf_model, _tokenizer = model
+        generate_kwargs: dict[str, Any] = output.extras.get("generate_kwargs") or {}
+        return self._capture_observed_params(config, hf_model, generate_kwargs)
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

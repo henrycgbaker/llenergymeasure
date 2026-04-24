@@ -331,14 +331,6 @@ class TensorRTEngine:
         if self._build_metadata is not None:
             extras["build_metadata"] = self._build_metadata
 
-        # Library-observed effective params for H3 (sweep-dedup.md §3).
-        # TRT-LLM runs in NGC container only; allowlist verification is
-        # deferred to a container run per the PoC-C notes.
-        effective_params = self._capture_observed_params(config, llm, sampling_params)
-        extras["observed_engine_params"] = effective_params["engine"]
-        extras["observed_sampling_params"] = effective_params["sampling"]
-        extras["library_version"] = effective_params["library_version"]
-
         return InferenceOutput(
             elapsed_time_sec=elapsed,
             input_tokens=input_token_count,
@@ -387,6 +379,27 @@ class TensorRTEngine:
             logger.debug("TRT-LLM engine param extraction failed: %s", e)
 
         return assemble_observed_params(engine_params, sampling, "tensorrt_llm")
+
+    # -------------------------------------------------------------------------
+    # EnginePlugin: capture_observed_params (post-measurement-window)
+    # -------------------------------------------------------------------------
+
+    def capture_observed_params(
+        self,
+        config: ExperimentConfig,
+        model: Any,
+        output: InferenceOutput,
+    ) -> dict[str, Any]:
+        """Extract library-observed effective parameters post-measurement-window.
+
+        Called by the harness after ``t_inference_end`` + ``_cuda_sync`` so
+        this overhead is outside the NVML energy window.
+
+        The ``sampling_params`` object and ``llm`` are in the model tuple
+        from ``load_model()``.
+        """
+        llm, sampling_params = model
+        return self._capture_observed_params(config, llm, sampling_params)
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

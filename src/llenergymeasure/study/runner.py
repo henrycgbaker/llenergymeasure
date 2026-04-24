@@ -608,6 +608,10 @@ class StudyRunner:
         self._skip_set: set[tuple[str, int]] = skip_set or set()
         # Pre-built resolution logs keyed by config_hash (written as _resolution.json sidecar)
         self._resolution_logs: dict[str, dict[str, Any]] = resolution_logs or {}
+        # Declared-config-hash → resolved-config-hash (H1) mapping.
+        # Built from study.experiments (post-dedup unique configs) so _save_and_record
+        # can patch the resolved_config_hash into each config.json sidecar.
+        self._resolved_hashes: dict[str, str] = self._build_resolved_hashes(study)
         # SIGINT state — initialised here, set live in run()
         self._interrupt_event: threading.Event = threading.Event()
         self._active_process: Any = None  # multiprocessing.Process | None
@@ -894,6 +898,36 @@ class StudyRunner:
             logger.debug("Wrote equivalence_groups.json to %s", self.study_dir)
         except Exception as exc:
             logger.debug("equivalence_groups.json write failed (non-fatal): %s", exc)
+
+    @staticmethod
+    def _build_resolved_hashes(study: Any) -> dict[str, str]:
+        """Build a declared_config_hash → resolved_config_hash (H1) mapping.
+
+        Iterates the unique post-dedup experiments in ``study.experiments``
+        (cycles produce duplicates; seen_hashes deduplicates them) and
+        computes each experiment's resolved hash via the same H1 pipeline
+        used at sweep-expansion time.
+
+        Returns an empty dict on any failure — _save_and_record treats a
+        missing resolved_config_hash as best-effort and writes ``None``.
+        """
+        try:
+            from llenergymeasure.domain.experiment import compute_declared_config_hash
+            from llenergymeasure.study.hashing import build_resolved_view, hash_config
+
+            result: dict[str, str] = {}
+            seen: set[str] = set()
+            for exp in study.experiments:
+                declared_h = compute_declared_config_hash(exp)
+                if declared_h in seen:
+                    continue
+                seen.add(declared_h)
+                resolved_h = hash_config(build_resolved_view(exp))
+                result[declared_h] = resolved_h
+            return result
+        except Exception as exc:
+            logger.debug("_build_resolved_hashes failed (non-fatal): %s", exc)
+            return {}
 
     def _mark_remaining_skipped(
         self,
@@ -1780,6 +1814,7 @@ class StudyRunner:
                 ts_source_dir=ts_source_dir,
                 environment_snapshot=environment_snapshot,
                 resolution_log=self._resolution_logs.get(config_hash),
+                resolved_config_hash=self._resolved_hashes.get(config_hash),
             )
             if self._progress:
                 # Emit save paths as substeps BEFORE end_experiment_ok (which clears

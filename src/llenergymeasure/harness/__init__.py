@@ -61,6 +61,35 @@ def _cuda_sync() -> None:
             pass  # Non-fatal — best effort sync
 
 
+def _capture_observed_params_into_output(
+    engine: Any,
+    config: Any,
+    model: Any,
+    output: Any,
+) -> None:
+    """Call ``engine.capture_observed_params`` and merge the result into ``output.extras``.
+
+    Invoked post-window (after ``t_inference_end`` + ``_cuda_sync``) so capture
+    overhead does not perturb energy or timing measurements.
+
+    Best-effort: engines that haven't implemented the method yet silently skip.
+    The result dict is merged into ``output.extras`` under the standard keys
+    ``observed_engine_params``, ``observed_sampling_params``, and
+    ``library_version``.
+    """
+    try:
+        capture = getattr(engine, "capture_observed_params", None)
+        if capture is None:
+            return
+        params = capture(config, model, output)
+        if isinstance(params, dict):
+            output.extras["observed_engine_params"] = params.get("engine", {})
+            output.extras["observed_sampling_params"] = params.get("sampling", {})
+            output.extras["library_version"] = params.get("library_version", "unknown")
+    except Exception as exc:
+        logger.debug("capture_observed_params failed (non-fatal): %s", exc)
+
+
 def _check_persistence_mode(gpu_indices: list[int] | None = None) -> bool:
     """Check whether GPU persistence mode is enabled on all specified GPUs.
 
@@ -433,6 +462,11 @@ class MeasurementHarness:
             _cuda_sync()
             _substep("measure", "CUDA sync (post)")
 
+            # 11a. Capture observed params post-window (outside NVML sampling).
+            # Must run here — model is still alive; capture overhead (~5-50 ms pure
+            # Python) must not land inside the PowerThermalSampler context above.
+            _capture_observed_params_into_output(engine, config, model, output)
+
             if _p:
                 _p.on_step_done("measure", t_inference_end - t_inference_start)
 
@@ -550,8 +584,8 @@ class MeasurementHarness:
         Best-effort — failures are logged at DEBUG to avoid masking measurement results.
         """
         try:
+            from llenergymeasure.domain.hashing import build_observed_view, hash_config
             from llenergymeasure.results.persistence import save_config_sidecar
-            from llenergymeasure.study.hashing import build_observed_view, hash_config
 
             obs_engine = output.extras.get("observed_engine_params", {}) or {}
             obs_sampling = output.extras.get("observed_sampling_params", {}) or {}
@@ -563,8 +597,8 @@ class MeasurementHarness:
             h3_view = build_observed_view(
                 engine=engine_name,
                 task=task_dict,
-                effective_engine_params=obs_engine,
-                effective_sampling_params=obs_sampling,
+                observed_engine_params=obs_engine,
+                observed_sampling_params=obs_sampling,
             )
             obs_hash = hash_config(h3_view)
 
