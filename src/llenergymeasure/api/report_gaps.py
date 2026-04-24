@@ -1,45 +1,32 @@
 """``llem report-gaps`` — feedback-loop proposer for the rules corpus.
 
-Reads ``runtime_observations.jsonl`` caches emitted by
-:mod:`llenergymeasure.study.runtime_observations` across one or more study
-directories, groups captured warnings / log records by their normalised
-message template, partitions configs into *fired* (A) and *not fired* (B),
-and runs a small predicate-inference pass to propose corpus rules for
-templates that the existing rules corpus does not already match.
+Reads ``runtime_observations.jsonl`` emitted by
+:mod:`llenergymeasure.study.runtime_observations`, groups captured warnings
+and log records by their normalised message template, partitions configs
+into *fired* (A) and *not fired* (B), and proposes corpus rules for
+templates the existing rules corpus does not already match.
 
-Design notes:
+Design:
 
-- **No corpus mutation.** We emit YAML *fragments* to ``--out PATH`` with a
-  loud banner comment for a maintainer to splice into the live corpus. The
+- **No corpus mutation.** We emit YAML *fragments* to ``--out PATH``; the
   live ``configs/validation_rules/{engine}.yaml`` is never touched.
-- **Severity is mechanical.** ``severity: warn`` from log-channel emissions
-  and ``severity: error`` when ``--include-exceptions`` is set and the
-  record is an exception. ``walker_confidence`` is always ``low`` and we
-  always flag ``needs_generalisation_review`` when the predicate was narrow
-  or missing — the final call belongs to the human reviewer.
-- **Round-trip safe.** Every emitted fragment parses through
-  :func:`llenergymeasure.config.vendored_rules.loader._parse_rule` without
-  error. Required-but-unknown fields (``native_type``,
-  ``walker_source.{path,method,line_at_scan}``, ``references``) get
-  minimally-acceptable placeholder values plus ``# TODO: human`` markers so
-  reviewers know what to fill in.
-- **Sentinel filtering.** Records with ``outcome in {"subprocess_died",
-  "exception"}`` do not prove "the rule did not fire" — they prove "we don't
-  know". They are excluded from the B (not-fired) partition. When
-  ``include_exceptions=False`` (default), exception records are also
-  excluded from the A partition so the proposer only acts on recorded
-  warnings / log-channel emissions.
+- **Severity is mechanical.** ``warn`` for log-channel emissions;
+  ``error`` when ``include_exceptions=True`` and the record is an
+  exception. ``walker_confidence`` is always ``low``.
+- **Round-trip safe.** Fragments parse through
+  :func:`llenergymeasure.config.vendored_rules.loader._parse_rule`;
+  placeholders carry ``# TODO: human`` markers.
+- **Sentinel filtering.** ``subprocess_died`` / ``exception`` records
+  don't prove "rule didn't fire" — excluded from B always; excluded from
+  A unless ``include_exceptions=True``.
+- **Emission channels.** This module produces ``warnings_warn``,
+  ``logger_warning``, ``logger_warning_once``, and ``runtime_exception``
+  only — a documented subset of :data:`EmissionChannel`.
 
-Source of config kwargs for predicate inference:
-
-    Per-experiment ``_resolution.json`` sidecars (written by the runner
-    alongside ``result.json``). Each sidecar maps dotted field paths to
-    their effective values; we flatten these into ``dict[str, Any]`` per
-    config_hash so the inference algorithm can look for arity-1, arity-2,
-    arity-3 distinguishing value-tuples between fired and not-fired configs.
-
-    Experiments whose subprocess died before the sidecar was written have
-    no kwargs — they are skipped at partition time regardless of outcome.
+Source of config kwargs: per-experiment ``_resolution.json`` sidecars,
+flattened into ``dict[str, Any]`` per ``config_hash``. Located via
+``manifest.json`` when present (keyed on full hash), with an 8-char
+prefix-scan fallback for manifest-less studies.
 """
 
 from __future__ import annotations
@@ -56,6 +43,7 @@ import yaml
 
 from llenergymeasure.config.ssot import Engine
 from llenergymeasure.config.vendored_rules import (
+    EmissionChannel,
     VendoredRules,
     VendoredRulesLoader,
 )
@@ -65,8 +53,6 @@ from llenergymeasure.study.runtime_observations import RUNTIME_OBSERVATIONS_FILE
 __all__ = [
     "GapProposal",
     "ReportGapsError",
-    "SourceChannel",
-    "SupportedEngine",
     "find_runtime_gaps",
     "load_rules_corpus",
     "render_yaml_fragment",
@@ -74,25 +60,14 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-SupportedEngine = Literal["transformers", "vllm", "tensorrt"]
-"""Engine literal re-exported for the CLI layer (cli-boundary contract)."""
-
-SourceChannel = Literal["warnings_warn", "logger_warning", "runtime_exception"]
-"""Which JSONL-record channel the emission came from.
-
-Kept as a narrow literal so downstream renderers can switch on it without a
-try/except. Logger levels INFO/DEBUG are not included — the capture wrapper
-only emits log records at WARNING+ and the corpus only cares about
-user-visible emissions.
-"""
+#: Eight-hex-char prefix used as the fallback key when ``manifest.json``
+#: is missing. Collision risk ~10^-9 per pair at study scale; the manifest
+#: path avoids it entirely when available.
+_HASH_PREFIX_LEN = 8
 
 
 class ReportGapsError(Exception):
-    """Raised when ``find_runtime_gaps`` or ``render_yaml_fragment`` fails.
-
-    Thin wrapper so the CLI can surface a helpful message without leaking
-    implementation-specific exception types (IO, YAML) to the user.
-    """
+    """Raised when ``find_runtime_gaps`` fails with a user-actionable cause."""
 
 
 # ---------------------------------------------------------------------------
@@ -102,23 +77,17 @@ class ReportGapsError(Exception):
 
 @dataclass(frozen=True)
 class GapProposal:
-    """One proposed corpus rule for a single unmatched normalised template.
-
-    Carries everything ``render_yaml_fragment`` needs to produce a YAML
-    fragment that parses through :func:`_parse_rule`. The struct itself is
-    pure data — no IO, no side effects.
-    """
+    """One proposed corpus rule for a single unmatched normalised template."""
 
     normalised_template: str
-    source_channel: SourceChannel
-    engine: SupportedEngine
+    source_channel: EmissionChannel
+    engine: Engine
     library_version: str
     match_fields: dict[str, Any] | None
     evidence_field_value_distribution: dict[str, dict[str, list[str]]]
     fired_count: int
     not_fired_count: int
     representative_message: str
-    walker_confidence: Literal["low"]
     needs_generalisation_review: bool
     severity: Literal["warn", "error"]
     representative_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -131,22 +100,18 @@ class GapProposal:
 
 @dataclass(frozen=True)
 class _Emission:
-    """One template-fired-by-a-config observation (in-memory only)."""
-
     template: str
     representative_message: str
-    channel: SourceChannel
+    channel: EmissionChannel
     config_hash: str
-    engine: SupportedEngine
+    engine: Engine
     library_version: str
 
 
 @dataclass(frozen=True)
 class _Record:
-    """Parsed JSONL record with resolved kwargs and derived emission list."""
-
     config_hash: str
-    engine: SupportedEngine
+    engine: Engine
     library_version: str
     outcome: str
     emissions: list[_Emission]
@@ -162,17 +127,27 @@ _ALLOWED_ENGINES: frozenset[str] = frozenset(e.value for e in Engine)
 
 
 def load_rules_corpus(
-    engines: list[SupportedEngine] | None = None,
+    engines: list[Engine] | list[str] | None = None,
     loader: VendoredRulesLoader | None = None,
 ) -> dict[str, VendoredRules]:
     """Load the rules corpus for each engine we may emit proposals against.
 
-    Engines missing a YAML corpus are skipped silently — a user scanning
-    only transformers studies shouldn't fail because there's no
-    ``tensorrt.yaml`` yet.
+    When ``loader`` is omitted, the memoised project-wide loader from
+    :func:`llenergymeasure.config.models._get_rules_loader` is used.
+    Tests inject a throwaway loader to sidestep the cache.
+
+    Engines without a YAML corpus are skipped silently — a user scanning
+    only transformers studies shouldn't fail because ``tensorrt.yaml`` is
+    absent.
     """
-    loader = loader or VendoredRulesLoader()
-    wanted = list(engines) if engines is not None else [e.value for e in Engine]
+    if loader is None:
+        # Lazy import keeps this module free of a hard ``config.models``
+        # dependency at import time and matches that module's documented
+        # monkeypatch-via-setattr pattern.
+        from llenergymeasure.config.models import _get_rules_loader
+
+        loader = _get_rules_loader()
+    wanted = [e.value for e in Engine] if engines is None else [str(e) for e in engines]
     out: dict[str, VendoredRules] = {}
     for engine in wanted:
         try:
@@ -180,6 +155,51 @@ def load_rules_corpus(
         except FileNotFoundError:
             logger.debug("No rules corpus for engine=%s; skipping match lookup.", engine)
     return out
+
+
+def _build_observed_template_index(
+    corpus: dict[str, VendoredRules],
+) -> dict[str, dict[str, frozenset[str]]]:
+    """Pre-normalise ``observed_messages`` once per rule at corpus-load time.
+
+    Means the hot unmatched-template loop does an O(1) set membership
+    probe rather than re-normalising every sample on every comparison.
+    """
+    index: dict[str, dict[str, frozenset[str]]] = {}
+    for engine_name, vr in corpus.items():
+        per_rule: dict[str, frozenset[str]] = {}
+        for rule in vr.rules:
+            observed = rule.expected_outcome.get("observed_messages")
+            if not isinstance(observed, list):
+                continue
+            templates = frozenset(normalise(s).template for s in observed if isinstance(s, str))
+            if templates:
+                per_rule[rule.id] = templates
+        index[engine_name] = per_rule
+    return index
+
+
+def _build_regex_index(
+    corpus: dict[str, VendoredRules],
+) -> dict[str, dict[str, tuple[re.Pattern[str], ...]]]:
+    """Compile ``observed_messages_regex`` once per rule at corpus-load time."""
+    index: dict[str, dict[str, tuple[re.Pattern[str], ...]]] = {}
+    for engine_name, vr in corpus.items():
+        per_rule: dict[str, tuple[re.Pattern[str], ...]] = {}
+        for rule in vr.rules:
+            regexes = rule.expected_outcome.get("observed_messages_regex")
+            if not isinstance(regexes, list):
+                continue
+            compiled: list[re.Pattern[str]] = []
+            for pat in regexes:
+                try:
+                    compiled.append(re.compile(str(pat)))
+                except re.error:
+                    continue
+            if compiled:
+                per_rule[rule.id] = tuple(compiled)
+        index[engine_name] = per_rule
+    return index
 
 
 # ---------------------------------------------------------------------------
@@ -190,38 +210,20 @@ def load_rules_corpus(
 def find_runtime_gaps(
     study_dirs: list[Path],
     rules_corpus: dict[str, VendoredRules] | None = None,
-    engine: str | None = None,
+    engine: Engine | str | None = None,
     include_exceptions: bool = False,
+    loader: VendoredRulesLoader | None = None,
 ) -> list[GapProposal]:
     """Scan one or more study directories and return unmatched-template proposals.
 
-    Args:
-        study_dirs: Study directories containing
-            ``runtime_observations.jsonl``. Missing JSONL files are ignored
-            with a log message — a study that produced no observations is a
-            valid (if useless) input.
-        rules_corpus: Pre-loaded per-engine corpus. When ``None`` the default
-            loader is used; engines without a YAML corpus are treated as
-            "no existing rules" and every template falls through to a
-            proposal.
-        engine: If set, only records matching this engine contribute
-            proposals. Filter applies before partitioning.
-        include_exceptions: If ``True``, records with
-            ``outcome == "exception"`` also produce candidate emissions
-            (marked ``source_channel="runtime_exception"`` and
-            ``severity="error"``). Default ``False`` — exceptions are a
-            separate feedback channel with different review semantics and
-            the design deliberately keeps this opt-in.
-
-    Returns:
-        One :class:`GapProposal` per unique unmatched normalised template.
-        Order is stable: sorted by (engine, normalised_template) so
-        diffing two runs is meaningful.
+    Order sorts by (engine, normalised_template). ``engine`` accepts an
+    :class:`Engine` enum or its string value. ``loader`` is only consulted
+    when ``rules_corpus`` is ``None``.
     """
     if not study_dirs:
         raise ReportGapsError("No study directories provided. Pass at least one --study-dir.")
 
-    engine_filter = engine
+    engine_filter: str | None = str(engine) if engine is not None else None
     if engine_filter is not None and engine_filter not in _ALLOWED_ENGINES:
         raise ReportGapsError(
             f"Unsupported engine filter: {engine_filter!r}. "
@@ -229,91 +231,86 @@ def find_runtime_gaps(
         )
 
     records: list[_Record] = []
+    sidecar_failures = 0
     for study_dir in study_dirs:
-        records.extend(_load_study(study_dir, engine_filter, include_exceptions))
+        study_records, study_failures = _load_study(
+            Path(study_dir), engine_filter, include_exceptions
+        )
+        records.extend(study_records)
+        sidecar_failures += study_failures
+    if sidecar_failures:
+        logger.warning(
+            "Skipped %d malformed _resolution.json sidecar(s); see prior WARNING log lines.",
+            sidecar_failures,
+        )
 
     if not records:
         return []
 
-    corpus = rules_corpus if rules_corpus is not None else load_rules_corpus()
+    corpus = rules_corpus if rules_corpus is not None else load_rules_corpus(loader=loader)
+    observed_index = _build_observed_template_index(corpus)
+    regex_index = _build_regex_index(corpus)
 
-    # Build unique (engine, template) → emissions map.
-    # Key on engine too because the same string emitted by two engines is
-    # conceptually two different rules (different native types, different
-    # severity conventions).
+    # Build unique (engine, template) → emissions map. Key on engine too
+    # because the same string emitted by two engines is conceptually two
+    # different rules (different native types, different severity).
     emissions_by_key: dict[tuple[str, str], list[_Emission]] = {}
     representative_by_key: dict[tuple[str, str], _Emission] = {}
-
     for rec in records:
         for emission in rec.emissions:
-            key = (emission.engine, emission.template)
+            key = (emission.engine.value, emission.template)
             emissions_by_key.setdefault(key, []).append(emission)
             representative_by_key.setdefault(key, emission)
 
-    # Partition records by engine once so the per-template loop stays O(1) per record.
     records_by_engine: dict[str, list[_Record]] = {}
     for rec in records:
-        records_by_engine.setdefault(rec.engine, []).append(rec)
+        records_by_engine.setdefault(rec.engine.value, []).append(rec)
 
     proposals: list[GapProposal] = []
     for (eng, template), emissions in sorted(emissions_by_key.items()):
-        corpus_entry = corpus.get(eng)
-        if corpus_entry is not None and _template_matched_by_corpus(template, corpus_entry):
+        if _template_matched_by_corpus(
+            template,
+            corpus.get(eng),
+            observed_index.get(eng, {}),
+            regex_index.get(eng, {}),
+        ):
             continue
 
         fired_hashes = {e.config_hash for e in emissions}
-
-        # A partition: records whose config fired this template.
-        # B partition: records for configs that did NOT fire this template.
-        # Excluded from B regardless of include_exceptions:
-        #   - subprocess_died: worker never reached the emission site.
-        #   - exception: we don't know whether the template would have been
-        #     emitted had the exception not fired.
-        # Excluded from A unless include_exceptions: exception records are
-        # not suitable evidence for warning-channel proposals.
         fired_configs: list[dict[str, Any]] = []
         not_fired_configs: list[dict[str, Any]] = []
-
         for rec in records_by_engine.get(eng, []):
             if rec.kwargs is None:
                 continue
             if rec.config_hash in fired_hashes:
                 fired_configs.append(rec.kwargs)
-            else:
-                if rec.outcome in {"subprocess_died", "exception"}:
-                    continue
+            elif rec.outcome not in {"subprocess_died", "exception"}:
                 not_fired_configs.append(rec.kwargs)
 
         match_fields = _infer_predicate(fired_configs, not_fired_configs)
         evidence = _field_value_distribution(fired_configs, not_fired_configs)
-
         rep = representative_by_key[(eng, template)]
-        channel = rep.channel
-        severity: Literal["warn", "error"] = "error" if channel == "runtime_exception" else "warn"
+        severity: Literal["warn", "error"] = (
+            "error" if rep.channel == "runtime_exception" else "warn"
+        )
         needs_review = match_fields is None or len(match_fields) >= 2
-
-        # Prefer the first fired config's kwargs as kwargs_positive evidence
-        # so reviewers see a concrete reproducer.
-        representative_kwargs: dict[str, Any] = fired_configs[0] if fired_configs else {}
 
         proposals.append(
             GapProposal(
                 normalised_template=template,
-                source_channel=channel,
-                engine=eng,  # type: ignore[arg-type]
+                source_channel=rep.channel,
+                engine=rep.engine,
                 library_version=rep.library_version,
                 match_fields=match_fields,
                 evidence_field_value_distribution=evidence,
                 fired_count=len(fired_configs),
                 not_fired_count=len(not_fired_configs),
                 representative_message=rep.representative_message,
-                walker_confidence="low",
                 needs_generalisation_review=needs_review,
                 severity=severity,
-                representative_kwargs=representative_kwargs,
+                representative_kwargs=fired_configs[0] if fired_configs else {},
             )
         )
-
     return proposals
 
 
@@ -322,18 +319,53 @@ def find_runtime_gaps(
 # ---------------------------------------------------------------------------
 
 
+# Table driving the two record-level list emission sources. Each entry is
+# ``(jsonl_list_key, emission_channel, template_field)``. Exception records
+# are a single-dict shape and get their own append block below.
+_EMISSION_SOURCES: tuple[tuple[str, EmissionChannel, str], ...] = (
+    ("warnings", "warnings_warn", "message_template"),
+    ("logger_records", "logger_warning", "message_template"),
+)
+
+
+def _append_emission(
+    emissions: list[_Emission],
+    item: dict[str, Any],
+    channel: EmissionChannel,
+    template_field: str,
+    *,
+    config_hash: str,
+    engine: Engine,
+    library_version: str,
+) -> None:
+    """Append one :class:`_Emission` if ``item`` carries a non-empty template."""
+    template = str(item.get(template_field) or "")
+    if not template:
+        return
+    emissions.append(
+        _Emission(
+            template=template,
+            representative_message=str(item.get("message") or template),
+            channel=channel,
+            config_hash=config_hash,
+            engine=engine,
+            library_version=library_version,
+        )
+    )
+
+
 def _load_study(
     study_dir: Path,
     engine_filter: str | None,
     include_exceptions: bool,
-) -> list[_Record]:
-    """Return parsed records from one study dir; tolerant of missing files."""
-    jsonl_path = Path(study_dir) / RUNTIME_OBSERVATIONS_FILENAME
+) -> tuple[list[_Record], int]:
+    """Return (records, sidecar_failure_count) for one study dir."""
+    jsonl_path = study_dir / RUNTIME_OBSERVATIONS_FILENAME
     if not jsonl_path.exists():
         logger.info("No %s in %s; skipping.", RUNTIME_OBSERVATIONS_FILENAME, study_dir)
-        return []
+        return [], 0
 
-    kwargs_by_hash = _load_kwargs_by_hash(Path(study_dir))
+    kwargs_by_hash, sidecar_failures = _load_kwargs_by_hash(study_dir)
 
     records: list[_Record] = []
     with open(jsonl_path, encoding="utf-8") as fh:
@@ -344,16 +376,12 @@ def _load_study(
             try:
                 raw = json.loads(line)
             except json.JSONDecodeError:
-                logger.warning(
-                    "Skipping malformed JSONL line %d in %s.",
-                    line_no,
-                    jsonl_path,
-                )
+                logger.warning("Skipping malformed JSONL line %d in %s.", line_no, jsonl_path)
                 continue
             rec = _parse_record(raw, engine_filter, include_exceptions, kwargs_by_hash)
             if rec is not None:
                 records.append(rec)
-    return records
+    return records, sidecar_failures
 
 
 def _parse_record(
@@ -367,61 +395,37 @@ def _parse_record(
         return None
     if engine_filter is not None and engine_str != engine_filter:
         return None
-
+    engine_enum = Engine(engine_str)
     outcome = str(raw.get("outcome", ""))
     config_hash = str(raw.get("config_hash", ""))
     library_version = str(raw.get("library_version", ""))
 
     emissions: list[_Emission] = []
-
-    for warn in raw.get("warnings") or []:
-        template = str(warn.get("message_template") or "")
-        if not template:
-            continue
-        emissions.append(
-            _Emission(
-                template=template,
-                representative_message=str(warn.get("message") or template),
-                channel="warnings_warn",
+    for list_key, channel, template_field in _EMISSION_SOURCES:
+        for item in raw.get(list_key) or []:
+            _append_emission(
+                emissions,
+                item,
+                channel,
+                template_field,
                 config_hash=config_hash,
-                engine=engine_str,  # type: ignore[arg-type]
+                engine=engine_enum,
                 library_version=library_version,
             )
-        )
-
-    for rec in raw.get("logger_records") or []:
-        template = str(rec.get("message_template") or "")
-        if not template:
-            continue
-        emissions.append(
-            _Emission(
-                template=template,
-                representative_message=str(rec.get("message") or template),
-                channel="logger_warning",
-                config_hash=config_hash,
-                engine=engine_str,  # type: ignore[arg-type]
-                library_version=library_version,
-            )
-        )
-
     if include_exceptions and outcome == "exception":
-        exc = raw.get("exception") or {}
-        template = str(exc.get("message_template") or "")
-        if template:
-            emissions.append(
-                _Emission(
-                    template=template,
-                    representative_message=str(exc.get("message") or template),
-                    channel="runtime_exception",
-                    config_hash=config_hash,
-                    engine=engine_str,  # type: ignore[arg-type]
-                    library_version=library_version,
-                )
-            )
+        _append_emission(
+            emissions,
+            raw.get("exception") or {},
+            "runtime_exception",
+            "message_template",
+            config_hash=config_hash,
+            engine=engine_enum,
+            library_version=library_version,
+        )
 
     return _Record(
         config_hash=config_hash,
-        engine=engine_str,  # type: ignore[arg-type]
+        engine=engine_enum,
         library_version=library_version,
         outcome=outcome,
         emissions=emissions,
@@ -429,70 +433,117 @@ def _parse_record(
     )
 
 
-def _load_kwargs_by_hash(study_dir: Path) -> dict[str, dict[str, Any]]:
-    """Walk experiment subdirs, load ``_resolution.json`` sidecars.
+def _load_kwargs_by_hash(study_dir: Path) -> tuple[dict[str, dict[str, Any]], int]:
+    """Return ``({full_config_hash: flat_kwargs_dict}, sidecar_failure_count)``.
 
-    Directory name ends with the 8-char config hash prefix. We key on the
-    *full* hash in the JSONL (not the 8-char prefix) so we need to derive a
-    reverse map. Two strategies:
+    Preferred path: read ``manifest.json`` (written by
+    :class:`llenergymeasure.study.manifest.ManifestWriter`) which keys
+    entries by full ``config_hash`` and records the ``result_file``
+    relative path — ``_resolution.json`` sits in the same directory.
 
-    1. Every ``_resolution.json`` contains the effective config — we hash it
-       ourselves to recover the full hash. But that re-implements the
-       canonical hasher and couples us to its internals.
-    2. Build a prefix-keyed map and accept that collisions within a single
-       study would conflate configs. On an 8-char hex prefix that's a ~10^-9
-       event per pair at study scale; negligible.
-
-    We use (2) and prefer it — the resolution log's effective dict IS the
-    flat, default-stripped view we want for predicate inference. Collision
-    risk is documented for reviewers.
+    Fallback path: scan experiment subdirs and key on the 8-char hex
+    suffix. Logged as a warning so operators know the preferred lookup
+    is unavailable.
     """
     if not study_dir.exists() or not study_dir.is_dir():
-        return {}
+        return {}, 0
+    manifest_path = study_dir / "manifest.json"
+    if manifest_path.exists():
+        return _load_kwargs_via_manifest(study_dir, manifest_path)
+    logger.warning(
+        "manifest.json not found in %s; falling back to prefix-scan (collision risk ~1e-9).",
+        study_dir,
+    )
+    return _load_kwargs_via_prefix_scan(study_dir)
 
+
+def _load_kwargs_via_manifest(
+    study_dir: Path, manifest_path: Path
+) -> tuple[dict[str, dict[str, Any]], int]:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to read manifest.json at %s: %s", manifest_path, exc)
+        return {}, 0
+    by_hash: dict[str, dict[str, Any]] = {}
+    failures = 0
+    for entry in manifest.get("experiments") or []:
+        if not isinstance(entry, dict):
+            continue
+        config_hash = str(entry.get("config_hash") or "")
+        result_file = entry.get("result_file")
+        if not config_hash or not isinstance(result_file, str) or not result_file:
+            continue
+        if config_hash in by_hash:
+            # Same config can repeat across cycles; one flat dict suffices.
+            continue
+        resolution_path = study_dir / Path(result_file).parent / "_resolution.json"
+        if not resolution_path.exists():
+            continue
+        flat, failed = _read_resolution_sidecar(resolution_path)
+        if failed:
+            failures += 1
+            continue
+        if flat is not None:
+            by_hash[config_hash] = flat
+    return by_hash, failures
+
+
+def _load_kwargs_via_prefix_scan(
+    study_dir: Path,
+) -> tuple[dict[str, dict[str, Any]], int]:
+    """Fallback: walk subdirs with ``*_{hash8}`` suffix; key on full hash."""
     by_prefix: dict[str, dict[str, Any]] = {}
+    failures = 0
     for entry in sorted(study_dir.iterdir()):
         if not entry.is_dir():
             continue
         # Dir format: [{NNN}_]c{cycle}_{slug}_{hash8}
-        # Trailing token is always an 8-char hex hash.
         parts = entry.name.rsplit("_", 1)
         if len(parts) != 2:
             continue
         hash_prefix = parts[1]
-        if len(hash_prefix) != 8 or not all(c in "0123456789abcdef" for c in hash_prefix):
+        if len(hash_prefix) != _HASH_PREFIX_LEN or not all(
+            c in "0123456789abcdef" for c in hash_prefix
+        ):
             continue
         resolution_path = entry / "_resolution.json"
         if not resolution_path.exists():
             continue
-        try:
-            payload = json.loads(resolution_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        flat, failed = _read_resolution_sidecar(resolution_path)
+        if failed:
+            failures += 1
             continue
-        overrides = payload.get("overrides") or {}
-        if not isinstance(overrides, dict):
-            continue
-        flat: dict[str, Any] = {}
-        for key, value in overrides.items():
-            if isinstance(value, dict) and "effective" in value:
-                flat[str(key)] = value["effective"]
-        by_prefix.setdefault(hash_prefix, flat)
-
-    # Expand to a full-hash lookup: any hash whose first 8 chars match.
-    # The JSONL record carries the full hash; its prefix is the key we built.
-    # Callers look up by full hash, so wrap with a proxy dict via __missing__?
-    # Simpler: return a dict whose keys are 8-char prefixes and let the caller
-    # slice. But _parse_record passes the full hash. Return a dict keyed on
-    # the full hash by propagating the prefix entry for every hash we've seen
-    # — but we don't know all hashes yet. Resolve this lazily with a wrapper.
-    return _PrefixLookupDict(by_prefix)
+        if flat is not None:
+            by_prefix.setdefault(hash_prefix, flat)
+    return _PrefixHashLookup(by_prefix), failures
 
 
-class _PrefixLookupDict(dict):  # type: ignore[type-arg]
-    """Dict that resolves lookups via a config-hash-prefix-keyed backing map.
+def _read_resolution_sidecar(
+    path: Path,
+) -> tuple[dict[str, Any] | None, bool]:
+    """Parse ``_resolution.json`` at ``path``; return (flat_dict or None, failed)."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to parse _resolution.json at %s: %s", path, exc)
+        return None, True
+    overrides = payload.get("overrides") or {}
+    if not isinstance(overrides, dict):
+        return None, False
+    flat: dict[str, Any] = {}
+    for key, value in overrides.items():
+        if isinstance(value, dict) and "effective" in value:
+            flat[str(key)] = value["effective"]
+    return flat, False
 
-    Keeps the caller's ``kwargs_by_hash[full_hash]`` API while the filesystem
-    layout only exposes 8-char prefixes.
+
+class _PrefixHashLookup(dict):  # type: ignore[type-arg]
+    """Prefix-scan fallback: ``.get(full_hash)`` resolves via first 8 hex chars.
+
+    Subclasses ``dict`` so the call site's type annotation
+    (``dict[str, dict[str, Any]]``) still holds. Only ``.get`` is
+    consulted by callers.
     """
 
     def __init__(self, prefix_map: dict[str, dict[str, Any]]) -> None:
@@ -500,20 +551,9 @@ class _PrefixLookupDict(dict):  # type: ignore[type-arg]
         self._prefix_map = prefix_map
 
     def get(self, key: Any, default: Any = None) -> Any:  # type: ignore[override]
-        if not isinstance(key, str) or len(key) < 8:
+        if not isinstance(key, str) or len(key) < _HASH_PREFIX_LEN:
             return default
-        prefix = key[:8]
-        return self._prefix_map.get(prefix, default)
-
-    def __getitem__(self, key: str) -> dict[str, Any]:  # type: ignore[override]
-        if len(key) < 8:
-            raise KeyError(key)
-        return self._prefix_map[key[:8]]
-
-    def __contains__(self, key: object) -> bool:  # type: ignore[override]
-        if not isinstance(key, str) or len(key) < 8:
-            return False
-        return key[:8] in self._prefix_map
+        return self._prefix_map.get(key[:_HASH_PREFIX_LEN], default)
 
 
 # ---------------------------------------------------------------------------
@@ -521,37 +561,28 @@ class _PrefixLookupDict(dict):  # type: ignore[type-arg]
 # ---------------------------------------------------------------------------
 
 
-def _template_matched_by_corpus(template: str, corpus: VendoredRules) -> bool:
-    """Return True if the corpus already has a rule whose expected_outcome captures ``template``.
+def _template_matched_by_corpus(
+    template: str,
+    corpus: VendoredRules | None,
+    observed_templates_by_rule: dict[str, frozenset[str]],
+    regexes_by_rule: dict[str, tuple[re.Pattern[str], ...]],
+) -> bool:
+    """Return True if any corpus rule already captures ``template``.
 
-    Match strategies (both supported for forward compat):
-
-    - ``observed_messages_regex``: list of anchored regexes written at rule
-      authoring time. Preferred because it captures value-specific
-      placeholders deliberately.
-    - ``observed_messages``: list of concrete emitted messages from the
-      vendored JSON overlay. We normalise each entry and compare templates
-      directly — a rule whose observed message normalises to the same
-      template is definitely firing for the same reason.
+    Both match strategies use pre-computed indexes:
+    - ``observed_messages_regex`` compiled once at corpus-load time.
+    - ``observed_messages`` pre-normalised once at corpus-load time so
+      the inner probe is O(1) set membership.
     """
+    if corpus is None:
+        return False
     for rule in corpus.rules:
-        outcome = rule.expected_outcome
-        regexes = outcome.get("observed_messages_regex")
-        if isinstance(regexes, list):
-            for pat in regexes:
-                try:
-                    if re.match(str(pat), template):
-                        return True
-                except re.error:
-                    continue
-        observed = outcome.get("observed_messages")
-        if isinstance(observed, list):
-            for sample in observed:
-                if not isinstance(sample, str):
-                    continue
-                sample_template = normalise(sample).template
-                if sample_template == template:
-                    return True
+        patterns = regexes_by_rule.get(rule.id)
+        if patterns is not None and any(pat.match(template) for pat in patterns):
+            return True
+        observed = observed_templates_by_rule.get(rule.id)
+        if observed is not None and template in observed:
+            return True
     return False
 
 
@@ -566,19 +597,12 @@ def _infer_predicate(
 ) -> dict[str, Any] | None:
     """Return the smallest field-value dict that distinguishes A from B, or None.
 
-    The search tries arity 1, then 2, then 3 — the first arity whose tuple
-    is *uniformly* shared by every config in A and *not* shared by any
-    config in B wins.
-
-    ``present:true`` fallback: if no arity-1..3 equality predicate works,
-    look for a single field that is set (non-None) in every fired config
-    and not set (missing or None) in every not-fired config. This catches
-    "any sampling_params present triggers the warning" shapes that
-    equality-on-value never sees.
+    Tries arity 1, 2, 3; the first arity whose tuple is uniformly shared
+    across A and absent in B wins. ``present:true`` fallback catches "any
+    non-None value triggers" shapes that equality-on-value never sees.
     """
     if not fired:
         return None
-
     fields = sorted({k for c in fired + not_fired for k in c})
     if not fields:
         return None
@@ -598,13 +622,11 @@ def _infer_predicate(
                 continue
             return dict(zip(fset, value_tuple, strict=False))
 
-    # present:true fallback — single-field presence predicate.
     for fname in fields:
         if all(c.get(fname) is not None for c in fired) and all(
             b.get(fname) is None for b in not_fired
         ):
             return {fname: {"present": True}}
-
     return None
 
 
@@ -612,12 +634,7 @@ def _field_value_distribution(
     fired: list[dict[str, Any]],
     not_fired: list[dict[str, Any]],
 ) -> dict[str, dict[str, list[str]]]:
-    """Return per-field string-ified value sets for the A and B partitions.
-
-    Useful to reviewers when the inferred predicate is missing or narrow:
-    the distribution tells you which fields actually vary across the A
-    partition and which are constant.
-    """
+    """Return per-field string-ified value sets for the A and B partitions."""
     out: dict[str, dict[str, list[str]]] = {}
     fields = sorted({k for c in fired + not_fired for k in c})
     for f in fields:
@@ -648,53 +665,38 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
     """Render one :class:`GapProposal` as a YAML document.
 
     The output always parses through
-    :func:`llenergymeasure.config.vendored_rules.loader._parse_rule` — stub
-    fields carry placeholder values that are enum-valid even if
-    semantically vacuous, so the round-trip test can assert successful
-    parse without the stubs being mistaken for production data.
+    :func:`llenergymeasure.config.vendored_rules.loader._parse_rule` —
+    placeholder fields are enum-valid so the round-trip test passes while
+    the ``# TODO: human`` markers make stubs obvious to reviewers.
     """
     template = proposal.normalised_template
-    rule_id = _proposed_rule_id(proposal)
-    match_regex = build_template_regex(template)
     match_fields: dict[str, Any] = dict(proposal.match_fields) if proposal.match_fields else {}
-    # Corpus convention: match.fields is always a dict; empty dict means
-    # "predicate not inferred — reviewer to fill in".
-
-    emission_channel = _emission_channel(proposal.source_channel)
     outcome_value = "error" if proposal.severity == "error" else "warn"
+    engine_str = proposal.engine.value
 
     proposal_doc: dict[str, Any] = {
-        "id": rule_id,
-        "engine": proposal.engine,
-        "library": proposal.engine,
+        "id": _proposed_rule_id(proposal),
+        "engine": engine_str,
+        "library": engine_str,
         "rule_under_test": (
             "(runtime-derived) Library emitted normalised template; reviewer to confirm semantic."
         ),
         "severity": proposal.severity,
-        # Placeholder enum-valid native_type — reviewer to replace.
-        # Kept here (rather than omitted) because `_parse_rule` treats
-        # native_type as required.
-        "native_type": f"{proposal.engine}.<TODO: human — set concrete native type>",
+        "native_type": f"{engine_str}.<TODO: human — set concrete native type>",
         "walker_source": {
             "path": "<TODO: human — runtime-derived; no AST source>",
             "method": "<TODO: human — no AST source>",
             "line_at_scan": 0,
-            "walker_confidence": proposal.walker_confidence,
+            "walker_confidence": "low",
         },
-        "match": {
-            "engine": proposal.engine,
-            "fields": match_fields,
-        },
+        "match": {"engine": engine_str, "fields": match_fields},
         "kwargs_positive": dict(proposal.representative_kwargs),
-        # kwargs_negative cannot be inferred from observations — reviewer
-        # hand-authors a known-clean config. Empty dict is accepted by the
-        # loader; we include it so the YAML round-trips.
         "kwargs_negative": {},
         "expected_outcome": {
             "outcome": outcome_value,
-            "emission_channel": emission_channel,
+            "emission_channel": proposal.source_channel,
             "normalised_fields": [],
-            "observed_messages_regex": [match_regex],
+            "observed_messages_regex": [build_template_regex(template)],
             "observed_messages": [proposal.representative_message],
         },
         "message_template": template,
@@ -712,32 +714,12 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
         "evidence_field_value_distribution": proposal.evidence_field_value_distribution,
     }
 
-    body = yaml.safe_dump(
-        proposal_doc,
-        sort_keys=False,
-        default_flow_style=False,
-        width=100,
-    )
+    body = yaml.safe_dump(proposal_doc, sort_keys=False, default_flow_style=False, width=100)
     return _BANNER + body
 
 
 def _proposed_rule_id(proposal: GapProposal) -> str:
-    """Derive a reviewer-friendly rule id from the template.
-
-    Format: ``{engine}_runtime_{slug}`` where ``slug`` is a short,
-    stable-ish slice of the template with non-identifier characters
-    replaced. Collisions within a study are possible; reviewers rename on
-    merge, so we don't bother with a hash suffix here.
-    """
+    """Return ``{engine}_runtime_{slug}`` for a reviewer-friendly rule id."""
     cleaned = re.sub(r"[^a-z0-9]+", "_", proposal.normalised_template.lower()).strip("_")
     slug = cleaned[:40] or "unnamed"
-    return f"{proposal.engine}_runtime_{slug}"
-
-
-def _emission_channel(source: SourceChannel) -> str:
-    """Map the JSONL source_channel to a corpus-schema emission_channel value."""
-    if source == "runtime_exception":
-        return "runtime_exception"
-    if source == "warnings_warn":
-        return "warnings_warn"
-    return "logger_warning"
+    return f"{proposal.engine.value}_runtime_{slug}"

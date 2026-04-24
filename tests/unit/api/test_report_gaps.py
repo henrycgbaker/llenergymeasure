@@ -7,10 +7,8 @@ real JSONL from a live run. JSONL schema matches
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
@@ -24,96 +22,19 @@ from llenergymeasure.api.report_gaps import (
 )
 from llenergymeasure.config.vendored_rules import VendoredRules
 from llenergymeasure.config.vendored_rules.loader import _parse_envelope
+from tests.helpers.runtime_obs import (
+    fake_hash as _fake_hash,
+)
+from tests.helpers.runtime_obs import (
+    write_jsonl_record as _write_jsonl_record,
+)
+from tests.helpers.runtime_obs import (
+    write_resolution as _write_resolution,
+)
 
 # ---------------------------------------------------------------------------
 # Fixture helpers
 # ---------------------------------------------------------------------------
-
-
-def _fake_hash(*parts: Any) -> str:
-    """Build a deterministic 64-char hex hash keyed by ``parts``."""
-    raw = "|".join(str(p) for p in parts).encode()
-    return hashlib.sha256(raw).hexdigest()
-
-
-def _write_resolution(
-    study_dir: Path,
-    index: int,
-    cycle: int,
-    engine: str,
-    full_hash: str,
-    overrides: dict[str, Any],
-) -> None:
-    """Create the experiment subdir + ``_resolution.json`` sidecar."""
-    dir_name = f"{index:03d}_c{cycle}_gpt2-{engine}_{full_hash[:8]}"
-    subdir = study_dir / dir_name
-    subdir.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema_version": "1.0",
-        "overrides": {k: {"effective": v, "source": "sweep"} for k, v in overrides.items()},
-    }
-    (subdir / "_resolution.json").write_text(json.dumps(payload))
-
-
-def _write_jsonl_record(
-    study_dir: Path,
-    *,
-    config_hash: str,
-    engine: str = "transformers",
-    library_version: str = "4.56.0",
-    cycle: int = 1,
-    outcome: str = "success",
-    warnings_emitted: list[str] | None = None,
-    logger_emitted: list[tuple[str, str]] | None = None,
-    exception: dict[str, Any] | None = None,
-    exit_reason: str | None = None,
-    exit_code: int | None = None,
-) -> None:
-    """Append one canonical JSONL record to ``runtime_observations.jsonl``.
-
-    Parameters mirror the schema doc in the brief. Warnings/log records are
-    passed as raw messages; we normalise to templates here so fixtures stay
-    readable.
-    """
-    from llenergymeasure.study.message_normalise import normalise
-
-    rec: dict[str, Any] = {
-        "schema_version": 1,
-        "observed_at": "2026-04-24T04:00:00Z",
-        "study_run_id": "fixture-run-id",
-        "config_hash": config_hash,
-        "cycle": cycle,
-        "engine": engine,
-        "library_version": library_version,
-        "outcome": outcome,
-        "warnings": [
-            {
-                "category": "UserWarning",
-                "message": w,
-                "message_template": normalise(w).template,
-                "filename": "fixture.py",
-                "lineno": 1,
-            }
-            for w in (warnings_emitted or [])
-        ],
-        "logger_records": [
-            {
-                "level": "WARNING",
-                "logger": lname,
-                "message": msg,
-                "message_template": normalise(msg).template,
-                "filename": "fixture.py",
-                "lineno": 1,
-            }
-            for (lname, msg) in (logger_emitted or [])
-        ],
-        "exception": exception,
-        "exit_reason": exit_reason,
-        "exit_code": exit_code,
-    }
-    path = study_dir / "runtime_observations.jsonl"
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(rec) + "\n")
 
 
 def _build_empty_corpus() -> dict[str, VendoredRules]:
@@ -552,15 +473,72 @@ rules:
 """
     corpus = _parse_envelope("transformers", envelope)
     # A different-temperature raw message normalises to the same template.
+    from llenergymeasure.api.report_gaps import (
+        _build_observed_template_index,
+        _build_regex_index,
+    )
     from llenergymeasure.study.message_normalise import normalise
 
     other_template = normalise("You have set temperature=0.9 which is below the minimum").template
-    assert _template_matched_by_corpus(other_template, corpus) is True
+    corpus_map = {"transformers": corpus}
+    observed_idx = _build_observed_template_index(corpus_map)
+    regex_idx = _build_regex_index(corpus_map)
+    assert (
+        _template_matched_by_corpus(
+            other_template,
+            corpus,
+            observed_idx["transformers"],
+            regex_idx["transformers"],
+        )
+        is True
+    )
 
 
 # ---------------------------------------------------------------------------
 # Multi-study dir aggregation
 # ---------------------------------------------------------------------------
+
+
+def test_manifest_path_resolves_full_hash(tmp_path: Path) -> None:
+    """When manifest.json is present, kwargs lookup uses the full hash (no prefix)."""
+    study = tmp_path / "study-manifest"
+    study.mkdir()
+
+    h_fire = _fake_hash("manifest-fire")
+    h_nf = _fake_hash("manifest-notfire")
+
+    # Create experiment subdirs + sidecars.
+    fire_dir = _write_resolution(study, 1, 1, "transformers", h_fire, {"do_sample": False})
+    nf_dir = _write_resolution(study, 2, 1, "transformers", h_nf, {"do_sample": True})
+
+    # Build a manifest keyed by full hash with result_file relative paths.
+    manifest = {
+        "schema_version": "2.0",
+        "experiments": [
+            {
+                "config_hash": h_fire,
+                "cycle": 1,
+                "status": "completed",
+                "result_file": f"{fire_dir.name}/result.json",
+            },
+            {
+                "config_hash": h_nf,
+                "cycle": 1,
+                "status": "completed",
+                "result_file": f"{nf_dir.name}/result.json",
+            },
+        ],
+    }
+    (study / "manifest.json").write_text(json.dumps(manifest))
+
+    _write_jsonl_record(study, config_hash=h_fire, warnings_emitted=["manifest-path warn"])
+    _write_jsonl_record(study, config_hash=h_nf)
+
+    gaps = find_runtime_gaps([study], rules_corpus=_build_empty_corpus())
+    assert len(gaps) == 1
+    assert gaps[0].fired_count == 1
+    assert gaps[0].not_fired_count == 1
+    assert gaps[0].match_fields == {"do_sample": False}
 
 
 def test_multiple_study_dirs_aggregate(tmp_path: Path) -> None:

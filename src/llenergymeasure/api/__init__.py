@@ -4,8 +4,6 @@ from llenergymeasure.api._impl import run_experiment, run_study
 from llenergymeasure.api.report_gaps import (
     GapProposal,
     ReportGapsError,
-    SourceChannel,
-    SupportedEngine,
     find_runtime_gaps,
     load_rules_corpus,
     render_yaml_fragment,
@@ -17,8 +15,6 @@ from llenergymeasure.study.resume import find_resumable_study, load_resume_state
 __all__ = [
     "GapProposal",
     "ReportGapsError",
-    "SourceChannel",
-    "SupportedEngine",
     "find_resumable_study",
     "find_runtime_gaps",
     "load_resume_state",

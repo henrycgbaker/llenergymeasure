@@ -8,80 +8,22 @@ surfaces here too.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
-from typing import Any
 
 from typer.testing import CliRunner
 
 from llenergymeasure.cli import app
+from tests.helpers.runtime_obs import (
+    fake_hash as _fake_hash,
+)
+from tests.helpers.runtime_obs import (
+    write_jsonl_record as _write_jsonl_record,
+)
+from tests.helpers.runtime_obs import (
+    write_resolution as _write_resolution,
+)
 
 runner = CliRunner()
-
-
-def _fake_hash(*parts: Any) -> str:
-    return hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()
-
-
-def _write_resolution(
-    study_dir: Path,
-    index: int,
-    cycle: int,
-    engine: str,
-    full_hash: str,
-    overrides: dict[str, Any],
-) -> None:
-    subdir = study_dir / f"{index:03d}_c{cycle}_gpt2-{engine}_{full_hash[:8]}"
-    subdir.mkdir(parents=True, exist_ok=True)
-    (subdir / "_resolution.json").write_text(
-        json.dumps(
-            {
-                "schema_version": "1.0",
-                "overrides": {k: {"effective": v, "source": "sweep"} for k, v in overrides.items()},
-            }
-        )
-    )
-
-
-def _write_jsonl_record(
-    study_dir: Path,
-    *,
-    config_hash: str,
-    engine: str = "transformers",
-    library_version: str = "4.56.0",
-    cycle: int = 1,
-    outcome: str = "success",
-    warnings_emitted: list[str] | None = None,
-) -> None:
-    from llenergymeasure.study.message_normalise import normalise
-
-    rec = {
-        "schema_version": 1,
-        "observed_at": "2026-04-24T04:00:00Z",
-        "study_run_id": "fixture-run-id",
-        "config_hash": config_hash,
-        "cycle": cycle,
-        "engine": engine,
-        "library_version": library_version,
-        "outcome": outcome,
-        "warnings": [
-            {
-                "category": "UserWarning",
-                "message": w,
-                "message_template": normalise(w).template,
-                "filename": "fixture.py",
-                "lineno": 1,
-            }
-            for w in (warnings_emitted or [])
-        ],
-        "logger_records": [],
-        "exception": None,
-        "exit_reason": None,
-        "exit_code": None,
-    }
-    with open(study_dir / "runtime_observations.jsonl", "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(rec) + "\n")
 
 
 # ---------------------------------------------------------------------------
