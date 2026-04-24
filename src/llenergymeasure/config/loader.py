@@ -191,18 +191,20 @@ def load_study_config(
             "Nothing to run. Check sweep dimensions against engine constraints.\n" + skip_details
         )
 
-    # Canonicalise + H1-dedup the declared configs before running cycles.
-    # See sweep-dedup.md §2 — this collapses measurement-equivalent configs
-    # so a 6-config sweep with dormant sampling fields becomes 4 unique runs.
-    from llenergymeasure.study.sweep_canonicalise import dedup_sweep
+    # Apply library-resolution mechanism + resolved-config-hash dedup to the declared configs
+    # before running cycles. See sweep-dedup.md §2 — this collapses measurement-equivalent
+    # configs so a 6-config sweep with dormant sampling fields becomes 4 unique runs.
+    from llenergymeasure.study.library_resolution import resolve_library_effective
 
-    dedup = dedup_sweep(
+    dedup = resolve_library_effective(
         valid_experiments,
         deduplicate=execution.deduplicate_equivalent,
     )
 
     run_experiments = dedup.canonical_configs
-    dedup_mode: Literal["h1", "off"] = "h1" if execution.deduplicate_equivalent else "off"
+    dedup_mode: Literal["resolved", "off"] = (
+        "resolved" if execution.deduplicate_equivalent else "off"
+    )
 
     # Compute study_design_hash over the post-dedup configs — the hash
     # identifies the *unique* measurement set, not duplicate declarations.
@@ -220,7 +222,7 @@ def load_study_config(
     # Serialise pre-run equivalence groups for the sidecar writer.
     pre_run_groups = [
         {
-            "h1_hash": g.h1_hash,
+            "resolved_config_hash": g.resolved_config_hash,
             "canonical_config_excerpt": g.canonical_excerpt,
             "member_indices": list(g.member_indices),
             "member_count": g.member_count,
@@ -242,7 +244,7 @@ def load_study_config(
         skipped_configs=[s.to_dict() for s in skipped],
         dedup_mode=dedup_mode,
         pre_run_equivalence_groups=pre_run_groups,
-        declared_h1_hashes=list(dedup.declared_h1),
+        declared_resolved_config_hashes=list(dedup.declared_resolved_hashes),
     )
 
 

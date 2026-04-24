@@ -100,10 +100,10 @@ def save_config_sidecar(
     config_hash: str,
     engine: str,
     library_version: str,
-    effective_engine_params: dict[str, object] | None = None,
-    effective_sampling_params: dict[str, object] | None = None,
-    h1_hash: str | None = None,
-    h3_hash: str | None = None,
+    observed_engine_params: dict[str, object] | None = None,
+    observed_sampling_params: dict[str, object] | None = None,
+    resolved_config_hash: str | None = None,
+    observed_config_hash: str | None = None,
     config_validation_observations: list[dict[str, object]] | None = None,
 ) -> Path:
     """Write the per-experiment ``config.json`` sidecar with H1/H3 payload.
@@ -111,12 +111,12 @@ def save_config_sidecar(
     Schema lives in ``.product/designs/config-deduplication-dormancy/sweep-dedup.md``
     §3.3. Fields:
 
-    - ``effective_engine_params`` / ``effective_sampling_params`` — authoritative
+    - ``observed_engine_params`` / ``observed_sampling_params`` — authoritative
       post-construction library state (populated by
-      :func:`llenergymeasure.engines._helpers.extract_effective_params`).
-    - ``h1_hash`` — canonicaliser-output hash, carried forward from sweep
-      expansion via ``StudyConfig.declared_h1_hashes``.
-    - ``h3_hash`` — library-observation hash computed from the effective
+      :func:`llenergymeasure.engines._helpers.extract_observed_params`).
+    - ``resolved_config_hash`` — library-resolution mechanism-output hash, carried forward from sweep
+      expansion via ``StudyConfig.declared_resolved_config_hashes``.
+    - ``observed_config_hash`` — library-observation hash computed from the effective
       params at sidecar-write time.
     - ``config_validation_observations`` — DormantField entries that
       ``_apply_vendored_rules`` attached at load time.
@@ -132,14 +132,14 @@ def save_config_sidecar(
         "engine": engine,
         "library_version": library_version,
     }
-    if effective_engine_params is not None:
-        payload["effective_engine_params"] = effective_engine_params
-    if effective_sampling_params is not None:
-        payload["effective_sampling_params"] = effective_sampling_params
-    if h1_hash is not None:
-        payload["h1_hash"] = h1_hash
-    if h3_hash is not None:
-        payload["h3_hash"] = h3_hash
+    if observed_engine_params is not None:
+        payload["observed_engine_params"] = observed_engine_params
+    if observed_sampling_params is not None:
+        payload["observed_sampling_params"] = observed_sampling_params
+    if resolved_config_hash is not None:
+        payload["resolved_config_hash"] = resolved_config_hash
+    if observed_config_hash is not None:
+        payload["observed_config_hash"] = observed_config_hash
     if config_validation_observations is not None:
         payload["config_validation_observations"] = config_validation_observations
 

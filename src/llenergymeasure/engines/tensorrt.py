@@ -334,9 +334,9 @@ class TensorRTEngine:
         # Library-observed effective params for H3 (sweep-dedup.md §3).
         # TRT-LLM runs in NGC container only; allowlist verification is
         # deferred to a container run per the PoC-C notes.
-        effective_params = self._capture_effective_params(config, llm, sampling_params)
-        extras["effective_engine_params"] = effective_params["engine"]
-        extras["effective_sampling_params"] = effective_params["sampling"]
+        effective_params = self._capture_observed_params(config, llm, sampling_params)
+        extras["observed_engine_params"] = effective_params["engine"]
+        extras["observed_sampling_params"] = effective_params["sampling"]
         extras["library_version"] = effective_params["library_version"]
 
         return InferenceOutput(
@@ -350,11 +350,11 @@ class TensorRTEngine:
         )
 
     # -------------------------------------------------------------------------
-    # Private: effective-params capture (H3)
+    # Private: observed-params capture (observed_config_hash)
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _capture_effective_params(
+    def _capture_observed_params(
         config: ExperimentConfig,
         llm: Any,
         sampling_params: Any,
@@ -365,27 +365,28 @@ class TensorRTEngine:
         on ``llm.args`` in current releases. Private fields (if any surface in
         a given TRT-LLM version) are stripped by the default
         ``_``-prefix allowlist behaviour in
-        :func:`extract_effective_params`.
+        :func:`extract_observed_params`.
         """
-        import contextlib as _cl
-
-        from llenergymeasure.engines._helpers import extract_effective_params, library_version
+        from llenergymeasure.engines._helpers import (
+            assemble_observed_params,
+            extract_observed_params,
+        )
 
         sampling: dict[str, Any] = {}
-        with _cl.suppress(Exception):
-            sampling = extract_effective_params(sampling_params)
+        try:
+            sampling = extract_observed_params(sampling_params)
+        except Exception as e:
+            logger.debug("TRT-LLM sampling param extraction failed: %s", e)
 
         engine_params: dict[str, Any] = {}
-        with _cl.suppress(Exception):
+        try:
             llm_args = getattr(llm, "args", None)
             if llm_args is not None:
-                engine_params = extract_effective_params(llm_args)
+                engine_params = extract_observed_params(llm_args)
+        except Exception as e:
+            logger.debug("TRT-LLM engine param extraction failed: %s", e)
 
-        return {
-            "engine": engine_params,
-            "sampling": sampling,
-            "library_version": library_version("tensorrt_llm"),
-        }
+        return assemble_observed_params(engine_params, sampling, "tensorrt_llm")
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

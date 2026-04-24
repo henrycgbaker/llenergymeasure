@@ -1,6 +1,6 @@
 """Shuffle-application fixpoint contract test for the dormant-rule corpus.
 
-Enforces three invariants the dormant canonicaliser will depend on:
+Enforces three invariants the dormant library-resolution mechanism will depend on:
 
 1. **Idempotent** — applying the same rule twice leaves the state unchanged.
 2. **Order-independent at fixpoint** — multiple random application orderings
@@ -11,7 +11,7 @@ The test operates on a declarative projection: a dormant rule declares
 ``normalised_fields`` in ``expected_outcome``, and the "fix" is setting each
 normalised field to its declared default (from the predicate's ``not_equal``
 operand, falling back to ``None``). This is sufficient to catch the structural
-failure modes a canonicaliser would trip on.
+failure modes the library-resolution mechanism would trip on.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class FixpointError(Exception):
     """Base class for fixpoint-test failures."""
 
 
-class CanonicaliserCycleError(FixpointError):
+class LibraryResolutionCycleError(FixpointError):
     """A rule ordering failed to converge within ``_MAX_ITER`` passes."""
 
     def __init__(self, ordering: list[str], final_state: dict[str, Any]) -> None:
@@ -240,7 +240,7 @@ def apply_to_fixpoint(
 ) -> tuple[dict[str, Any], list[str]]:
     """Apply rules in the given order repeatedly until the state stops changing.
 
-    Returns ``(final_state, applied_rule_ids)``. Raises :class:`CanonicaliserCycleError`
+    Returns ``(final_state, applied_rule_ids)``. Raises :class:`LibraryResolutionCycleError`
     if ``_MAX_ITER`` passes fail to converge.
     """
     current = dict(state)
@@ -256,7 +256,7 @@ def apply_to_fixpoint(
                     changed = True
         if not changed:
             return current, applied
-    raise CanonicaliserCycleError([r.id for r in rules], current)
+    raise LibraryResolutionCycleError([r.id for r in rules], current)
 
 
 def assert_idempotent(rule: _ProjectedRule, seed: dict[str, Any]) -> None:
@@ -279,7 +279,7 @@ def assert_shuffle_stable(
     """Confirm that ``shuffle_count`` orderings all produce the same fixed point.
 
     Returns the canonical final state (shared across orderings). Raises
-    :class:`OrderDependentRuleError` on divergence or :class:`CanonicaliserCycleError`
+    :class:`OrderDependentRuleError` on divergence or :class:`LibraryResolutionCycleError`
     on non-convergence.
     """
     rng = random.Random(seed_rng)

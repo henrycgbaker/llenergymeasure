@@ -9,12 +9,10 @@ from __future__ import annotations
 import dataclasses
 import gc
 import logging
-from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 
-from llenergymeasure.config.probe import DormantField
 from llenergymeasure.utils.exceptions import EngineError
 
 logger = logging.getLogger(__name__)
@@ -25,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def extract_effective_params(
+def extract_observed_params(
     native_obj: Any,
     *,
     private_field_allowlist: set[str] | None = None,
@@ -75,10 +73,35 @@ def library_version(module_name: str) -> str:
         return "unknown"
 
 
+def assemble_observed_params(
+    engine_params: dict[str, Any],
+    sampling_params: dict[str, Any],
+    module_name: str,
+) -> dict[str, Any]:
+    """Assemble the standard observed-params return dict for the sidecar.
+
+    All three engines share the same return shape: ``{"engine": ...,
+    "sampling": ..., "library_version": ...}``. Engine-specific extraction
+    logic (BnB detection, vllm_config, llm.args) stays in each caller;
+    this helper assembles the final dict and fills in the library version.
+
+    Args:
+        engine_params: Engine-specific observed params (engine section).
+        sampling_params: Sampling-specific observed params.
+        module_name: Library module name for :func:`library_version` lookup
+            (e.g. ``"transformers"``, ``"vllm"``, ``"tensorrt_llm"``).
+    """
+    return {
+        "engine": engine_params,
+        "sampling": sampling_params,
+        "library_version": library_version(module_name),
+    }
+
+
 def _dump_raw(native_obj: Any) -> dict[str, Any]:
     """Return a ``dict`` of every attribute observable on ``native_obj``.
 
-    Order of attempts mirrors the three shapes :func:`extract_effective_params`
+    Order of attempts mirrors the three shapes :func:`extract_observed_params`
     commits to supporting; each is an explicit ``hasattr`` rather than
     ``try/except`` because the libraries raise non-``AttributeError`` for
     ``model_dump`` failures (e.g. transformers raises ``RuntimeError``).
@@ -104,57 +127,6 @@ def _dump_raw(native_obj: Any) -> dict[str, Any]:
     if hasattr(native_obj, "__dict__"):
         return dict(native_obj.__dict__)
     return {}
-
-
-# ---------------------------------------------------------------------------
-# Dormancy diff (available for probe-adapter / library-resolution use across engines)
-# ---------------------------------------------------------------------------
-
-
-def compute_dormant_fields(
-    declared: dict[str, Any],
-    effective: dict[str, Any],
-    prefix: str = "",
-    reason_fn: Callable[[str, Any, Any | None], str | None] | None = None,
-) -> dict[str, DormantField]:
-    """Return the set of declared keys that are stripped or overridden.
-
-    A key is *stripped* when it appears in ``declared`` but not in
-    ``effective`` (e.g. ``temperature`` removed under greedy decoding).
-    A key is *overridden* when both dicts contain it but the values differ
-    (e.g. ``top_k=0`` remapped to ``top_k=-1`` for vLLM).
-
-    Args:
-        declared: Kwargs the user declared before engine-side stripping.
-        effective: Kwargs the engine will actually construct with.
-        prefix: Dotted path prefix for result keys (e.g. ``"vllm.sampling."``).
-        reason_fn: Optional ``(key, declared_val, effective_val) -> str | None``
-            callback that attaches a human-readable reason to each entry.
-
-    Returns:
-        Mapping from prefixed key to :class:`DormantField`. Empty when
-        effective matches declared for every declared key.
-    """
-    dormant: dict[str, DormantField] = {}
-    for key, declared_val in declared.items():
-        if key not in effective:
-            effective_val: Any | None = None
-            reason = reason_fn(key, declared_val, None) if reason_fn is not None else None
-            dormant[f"{prefix}{key}"] = DormantField(
-                declared_value=declared_val,
-                effective_value=effective_val,
-                reason=reason,
-            )
-            continue
-        effective_val = effective[key]
-        if effective_val != declared_val:
-            reason = reason_fn(key, declared_val, effective_val) if reason_fn is not None else None
-            dormant[f"{prefix}{key}"] = DormantField(
-                declared_value=declared_val,
-                effective_value=effective_val,
-                reason=reason,
-            )
-    return dormant
 
 
 # ---------------------------------------------------------------------------

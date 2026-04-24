@@ -2,15 +2,15 @@
 
 Two hashes with orthogonal sources but identical shape:
 
-- **H1** (canonicaliser-output): hashed at sweep-expansion time over the
-  canonical form produced by :mod:`llenergymeasure.study.sweep_canonicalise`.
+- **H1** (library-resolution mechanism-output): hashed at sweep-expansion time over the
+  canonical form produced by :mod:`llenergymeasure.study.library_resolution`.
 - **H3** (library-observed): hashed at sidecar-write time over the native
   types the engine constructed during inference (via
-  :func:`llenergymeasure.engines._helpers.extract_effective_params`).
+  :func:`llenergymeasure.engines._helpers.extract_observed_params`).
 
-Sharing the schema and serialisation is what makes the H3-collision invariant
+Sharing the schema and serialisation is what makes the observed-config-hash collision invariant
 meaningful (see ``.product/designs/config-deduplication-dormancy/sweep-dedup.md``
-§4.1): after H1-dedup, any H3 duplicate is a proven canonicaliser gap.
+§4.1): after resolved-config-hash dedup, any observed-config-hash duplicate is a proven library-resolution mechanism gap.
 
 The normalisation rules below are locked by sweep-dedup.md §9.Q3 — over-
 normalising would hide library-enforced semantics (e.g. ``None`` vs missing in
@@ -72,6 +72,9 @@ def _normalise(value: Any) -> Any:
         mag = math.floor(math.log10(abs(value)))
         factor = 10 ** (_FLOAT_SIG_DIGITS - 1 - mag)
         return round(value * factor) / factor
+    if isinstance(value, (set, frozenset)):
+        # Sort for determinism; normalise elements recursively.
+        return [_normalise(v) for v in sorted(value, key=str)]
     if isinstance(value, (list, tuple)):
         return [_normalise(v) for v in value]
     if isinstance(value, dict):
@@ -103,14 +106,14 @@ def canonical_serialise(obj: Any) -> bytes:
 
 @dataclass(frozen=True)
 class ConfigHashView:
-    """Fixed-schema view of the fields hashed into H1 or H3.
+    """Fixed-schema view of the fields hashed into resolved or observed config hash.
 
     Per sweep-dedup.md §2.4, the hashed-field set is:
 
     - ``task`` — model, prompt source, batch shape
-    - ``effective_engine_params`` — engine state (canonicaliser output for H1,
+    - ``observed_engine_params`` — engine state (library-resolution mechanism output for H1,
       live library observation for H3)
-    - ``effective_sampling_params`` — sampling state (same sources as above)
+    - ``observed_sampling_params`` — sampling state (same sources as above)
     - ``lora`` / ``passthrough_kwargs`` — user-attached overrides
 
     Excluded: ``MeasurementConfig`` (observation dials), ``ExecutionConfig``
@@ -119,8 +122,8 @@ class ConfigHashView:
 
     engine: str
     task: dict[str, Any]
-    effective_engine_params: dict[str, Any] = field(default_factory=dict)
-    effective_sampling_params: dict[str, Any] = field(default_factory=dict)
+    observed_engine_params: dict[str, Any] = field(default_factory=dict)
+    observed_sampling_params: dict[str, Any] = field(default_factory=dict)
     lora: dict[str, Any] | None = None
     passthrough_kwargs: dict[str, Any] = field(default_factory=dict)
 
@@ -136,17 +139,17 @@ def hash_config(view: ConfigHashView) -> str:
 
 
 # ---------------------------------------------------------------------------
-# H1 view construction — from canonicaliser output
+# H1 view construction — from library-resolution mechanism output
 # ---------------------------------------------------------------------------
 
 
-def build_h1_view(config: ExperimentConfig) -> ConfigHashView:
-    """Project a (post-canonicalisation) ``ExperimentConfig`` into an H1 view.
+def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
+    """Project a (post-library-resolution) ``ExperimentConfig`` into an H1 view.
 
     Reads the active engine section's full post-normalisation state; the
-    canonicaliser has already applied dormant rules to fixpoint before this
-    runs. Callers pass the canonicalised config, not the declared one — H1 is
-    meaningless on a pre-canonicalisation config.
+    library-resolution mechanism has already applied dormant rules to fixpoint before this
+    runs. Callers pass the resolved config, not the declared one — resolved_config_hash is
+    meaningless on a pre-resolved config.
 
     Engine-specific sub-models carry a ``sampling`` attribute; it is lifted
     into its own dict so H1/H3 ordering separates "how the engine constructs"
@@ -160,8 +163,8 @@ def build_h1_view(config: ExperimentConfig) -> ConfigHashView:
     return ConfigHashView(
         engine=engine_name,
         task=config.task.model_dump(mode="python"),
-        effective_engine_params=dump,
-        effective_sampling_params=sampling,
+        observed_engine_params=dump,
+        observed_sampling_params=sampling,
         lora=None,  # No LoRA field yet on ExperimentConfig — reserved for future.
         passthrough_kwargs=dict(config.passthrough_kwargs or {}),
     )
@@ -172,16 +175,16 @@ def build_h1_view(config: ExperimentConfig) -> ConfigHashView:
 # ---------------------------------------------------------------------------
 
 
-def build_h3_view(
+def build_observed_view(
     *,
     engine: str,
     task: dict[str, Any],
-    effective_engine_params: dict[str, Any],
-    effective_sampling_params: dict[str, Any],
+    observed_engine_params: dict[str, Any],
+    observed_sampling_params: dict[str, Any],
     lora: dict[str, Any] | None = None,
     passthrough_kwargs: dict[str, Any] | None = None,
 ) -> ConfigHashView:
-    """Assemble an H3 view from per-engine ``extract_effective_params`` output.
+    """Assemble an H3 view from per-engine ``extract_observed_params`` output.
 
     Callers live in the harness/sidecar path — they read ``task`` from the
     same config that ran and pair it with the native-object dumps the engine
@@ -190,8 +193,8 @@ def build_h3_view(
     return ConfigHashView(
         engine=engine,
         task=task,
-        effective_engine_params=dict(effective_engine_params),
-        effective_sampling_params=dict(effective_sampling_params),
+        observed_engine_params=dict(observed_engine_params),
+        observed_sampling_params=dict(observed_sampling_params),
         lora=lora,
         passthrough_kwargs=dict(passthrough_kwargs or {}),
     )

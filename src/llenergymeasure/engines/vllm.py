@@ -252,11 +252,11 @@ class VLLMEngine:
             hf_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
 
         # Library-observed effective params for H3 (sweep-dedup.md §3).
-        effective_params = self._capture_effective_params(config, llm, sampling_params)
+        effective_params = self._capture_observed_params(config, llm, sampling_params)
 
         extras: dict[str, Any] = {
-            "effective_engine_params": effective_params["engine"],
-            "effective_sampling_params": effective_params["sampling"],
+            "observed_engine_params": effective_params["engine"],
+            "observed_sampling_params": effective_params["sampling"],
             "library_version": effective_params["library_version"],
         }
         if hf_model is not None:
@@ -273,43 +273,44 @@ class VLLMEngine:
         )
 
     # -------------------------------------------------------------------------
-    # Private: effective-params capture (H3)
+    # Private: observed-params capture (observed_config_hash)
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _capture_effective_params(
+    def _capture_observed_params(
         config: ExperimentConfig,
         llm: Any,
         sampling_params: Any,
     ) -> dict[str, Any]:
         """Extract post-construction state from the vLLM native types.
 
-        Sampling params are captured via :func:`extract_effective_params` —
+        Sampling params are captured via :func:`extract_observed_params` —
         PoC-C allowlist is unset (the private fields ``_all_stop_token_ids``,
         ``_bad_words_token_ids``, ``_eos_token_id`` default-exclude since they
         vary per-model without affecting measurement-equivalence). Engine
         params derive from ``llm.llm_engine.vllm_config`` when available;
         otherwise we fall back to the declared kwargs dict.
         """
-        from llenergymeasure.engines._helpers import extract_effective_params, library_version
+        from llenergymeasure.engines._helpers import (
+            assemble_observed_params,
+            extract_observed_params,
+        )
 
         sampling: dict[str, Any] = {}
         try:
-            sampling = extract_effective_params(sampling_params)
+            sampling = extract_observed_params(sampling_params)
         except Exception as exc:  # pragma: no cover — best-effort capture
             logger.debug("vLLM SamplingParams capture failed: %s", exc)
 
         engine_params: dict[str, Any] = {}
-        with contextlib.suppress(Exception):
+        try:
             vllm_cfg = getattr(llm.llm_engine, "vllm_config", None)
             if vllm_cfg is not None:
-                engine_params = extract_effective_params(vllm_cfg)
+                engine_params = extract_observed_params(vllm_cfg)
+        except Exception as exc:  # pragma: no cover — best-effort capture
+            logger.debug("vLLM config capture failed: %s", exc)
 
-        return {
-            "engine": engine_params,
-            "sampling": sampling,
-            "library_version": library_version("vllm"),
-        }
+        return assemble_observed_params(engine_params, sampling, "vllm")
 
     # -------------------------------------------------------------------------
     # EnginePlugin: cleanup

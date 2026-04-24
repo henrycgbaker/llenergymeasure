@@ -128,7 +128,7 @@ def run(
         typer.Option(
             "--no-dedup",
             help=(
-                "Disable canonicaliser-driven H1 sweep dedup. Every declared "
+                "Disable library-resolution mechanism sweep dedup. Every declared "
                 "config runs regardless of measurement equivalence (study mode)."
             ),
         ),
@@ -488,7 +488,7 @@ def _run_study_impl(
     if timeout is not None:
         exec_overrides["wall_clock_timeout_hours"] = timeout
 
-    # --no-dedup disables sweep canonicalisation (runs every declared config)
+    # --no-dedup disables library-resolution mechanism sweep dedup (runs every declared config)
     if no_dedup:
         exec_overrides["deduplicate_equivalent"] = False
 

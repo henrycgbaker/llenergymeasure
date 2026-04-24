@@ -1,9 +1,9 @@
-"""Tests for the sweep canonicaliser — fixpoint iteration + dedup.
+"""Tests for the sweep library-resolution mechanism — fixpoint iteration + dedup.
 
 Idempotence + shuffle-stability are enforced by
 ``scripts/walkers/_fixpoint_test.py`` (CI-time contract — any corpus PR that
 violates them is rejected before this module runs). These tests focus on
-the *runtime* behaviour: does the canonicaliser reach fixpoint, does it
+the *runtime* behaviour: does the library-resolution mechanism reach fixpoint, does it
 collapse measurement-equivalent configs, does it detect cycles, does it
 populate equivalence-group metadata.
 """
@@ -13,12 +13,12 @@ from __future__ import annotations
 import pytest
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.engines.vendored_rules.loader import Rule
-from llenergymeasure.study.hashing import build_h1_view, hash_config
-from llenergymeasure.study.sweep_canonicalise import (
-    CanonicaliserCycleError,
-    canonicalise,
-    dedup_sweep,
+from llenergymeasure.config.vendored_rules.loader import Rule
+from llenergymeasure.study.hashing import build_resolved_view, hash_config
+from llenergymeasure.study.library_resolution import (
+    LibraryResolutionCycleError,
+    _apply_rules_fixpoint,
+    resolve_library_effective,
 )
 
 
@@ -29,7 +29,7 @@ def _mk_rule(
     normalised_fields: list[str] | None = None,
     severity: str = "dormant",
 ) -> Rule:
-    """Construct a minimal ``Rule`` for canonicaliser tests."""
+    """Construct a minimal ``Rule`` for library-resolution mechanism tests."""
     return Rule(
         id=rule_id,
         engine="transformers",
@@ -57,14 +57,14 @@ def _mk_config(**overrides):
 
 
 # ---------------------------------------------------------------------------
-# canonicalise()
+# _apply_rules_fixpoint()
 # ---------------------------------------------------------------------------
 
 
 class TestCanonicalise:
     def test_empty_rules_returns_deep_copy(self):
         cfg = _mk_config()
-        result = canonicalise(cfg, [])
+        result = _apply_rules_fixpoint(cfg, [])
         assert result is not cfg
         assert result.model_dump() == cfg.model_dump()
 
@@ -77,7 +77,7 @@ class TestCanonicalise:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        result = canonicalise(cfg, [rule])
+        result = _apply_rules_fixpoint(cfg, [rule])
         # do_sample=True disqualifies the rule; temperature should be untouched.
         assert result.transformers.sampling.temperature == 0.5
 
@@ -90,7 +90,7 @@ class TestCanonicalise:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        result = canonicalise(cfg, [rule])
+        result = _apply_rules_fixpoint(cfg, [rule])
         # Canonical form is the not_equal sentinel.
         assert result.transformers.sampling.temperature == 1.0
 
@@ -103,7 +103,7 @@ class TestCanonicalise:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        result = canonicalise(cfg, [rule])
+        result = _apply_rules_fixpoint(cfg, [rule])
         assert result.transformers.sampling.temperature == 1.0
 
     def test_chained_rules_converge(self):
@@ -135,7 +135,7 @@ class TestCanonicalise:
                 "transformers.sampling.top_k": {"present": True, "not_equal": 50},
             },
         )
-        result = canonicalise(cfg, [rule_a, rule_b])
+        result = _apply_rules_fixpoint(cfg, [rule_a, rule_b])
         assert result.transformers.sampling.top_p is None
         # top_k unchanged: rule_b only fires when top_k != 50, but input is 50.
         assert result.transformers.sampling.top_k == 50
@@ -159,8 +159,8 @@ class TestCanonicalise:
                 "transformers.sampling.top_k": {"present": True, "not_equal": 50},
             },
         )
-        with pytest.raises(CanonicaliserCycleError):
-            canonicalise(cfg, [rule_a, rule_b])
+        with pytest.raises(LibraryResolutionCycleError):
+            _apply_rules_fixpoint(cfg, [rule_a, rule_b])
 
     def test_non_dormant_rules_ignored(self):
         cfg = _mk_config(transformers={"sampling": {"do_sample": True, "temperature": 0.5}})
@@ -171,19 +171,19 @@ class TestCanonicalise:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        result = canonicalise(cfg, [rule])
+        result = _apply_rules_fixpoint(cfg, [rule])
         # warn severity must not trigger normalisation.
         assert result.transformers.sampling.temperature == 0.5
 
 
 # ---------------------------------------------------------------------------
-# dedup_sweep()
+# resolve_library_effective()
 # ---------------------------------------------------------------------------
 
 
 class TestDedupSweep:
     def test_empty_sweep_returns_empty(self):
-        result = dedup_sweep([])
+        result = resolve_library_effective([])
         assert result.canonical_configs == []
         assert result.groups == []
 
@@ -199,7 +199,7 @@ class TestDedupSweep:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        result = dedup_sweep([cfg_a, cfg_b], rules=[rule])
+        result = resolve_library_effective([cfg_a, cfg_b], rules=[rule])
         assert len(result.canonical_configs) == 1
         assert len(result.groups) == 1
         assert result.groups[0].member_count == 2
@@ -216,7 +216,7 @@ class TestDedupSweep:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        result = dedup_sweep([cfg_a, cfg_b], rules=[rule])
+        result = resolve_library_effective([cfg_a, cfg_b], rules=[rule])
         assert len(result.canonical_configs) == 2
         assert len(result.groups) == 2
         assert result.would_dedup is False
@@ -232,7 +232,7 @@ class TestDedupSweep:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        result = dedup_sweep([cfg_a, cfg_b], rules=[rule], deduplicate=False)
+        result = resolve_library_effective([cfg_a, cfg_b], rules=[rule], deduplicate=False)
         # Every declared config still executes.
         assert len(result.canonical_configs) == 2
         # But the groups record the collapse that *would* have happened.
@@ -241,17 +241,17 @@ class TestDedupSweep:
         assert result.would_dedup is True
         assert result.deduplicated is False
 
-    def test_declared_h1_length_matches_input(self):
+    def test_declared_resolved_hashes_length_matches_input(self):
         cfg_a = _mk_config(transformers={"sampling": {"do_sample": True}})
         cfg_b = _mk_config(transformers={"sampling": {"do_sample": False}})
-        result = dedup_sweep([cfg_a, cfg_b], rules=[])
-        assert len(result.declared_h1) == 2
+        result = resolve_library_effective([cfg_a, cfg_b], rules=[])
+        assert len(result.declared_resolved_hashes) == 2
 
     def test_integration_with_real_corpus(self):
         # End-to-end with the actual vendored rules — the original motivating
         # example: do_sample x temperature = [T,F] x [0.5, 1.0, 1.5] -> 6 configs,
-        # canonicaliser collapses to 4 (1 greedy canonical + 3 sampling variants).
-        from llenergymeasure.engines.vendored_rules.loader import VendoredRulesLoader
+        # library-resolution mechanism collapses to 4 (1 greedy canonical + 3 sampling variants).
+        from llenergymeasure.config.vendored_rules.loader import VendoredRulesLoader
 
         loader = VendoredRulesLoader()
         rules = loader.load_rules("transformers").rules
@@ -264,7 +264,7 @@ class TestDedupSweep:
                         transformers={"sampling": {"do_sample": do_sample, "temperature": temp}}
                     )
                 )
-        result = dedup_sweep(configs, rules=rules)
+        result = resolve_library_effective(configs, rules=rules)
         # do_sample=True x temps=[0.5, 1.0, 1.5] -> 3 distinct sampling configs
         # do_sample=False x any temp -> 1 canonical greedy
         assert len(result.canonical_configs) == 4
@@ -278,14 +278,14 @@ class TestDedupSweep:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        r1 = dedup_sweep([cfg], rules=[rule])
-        r2 = dedup_sweep([cfg], rules=[rule])
-        assert r1.declared_h1 == r2.declared_h1
-        assert r1.groups[0].h1_hash == r2.groups[0].h1_hash
+        r1 = resolve_library_effective([cfg], rules=[rule])
+        r2 = resolve_library_effective([cfg], rules=[rule])
+        assert r1.declared_resolved_hashes == r2.declared_resolved_hashes
+        assert r1.groups[0].resolved_config_hash == r2.groups[0].resolved_config_hash
 
 
 # ---------------------------------------------------------------------------
-# H1 hashing symmetry
+# resolved_config_hashing symmetry
 # ---------------------------------------------------------------------------
 
 
@@ -300,6 +300,8 @@ class TestH1HashSymmetry:
                 "transformers.sampling.temperature": {"present": True, "not_equal": 1.0},
             },
         )
-        canon_a = canonicalise(cfg_a, [rule])
-        canon_b = canonicalise(cfg_b, [rule])
-        assert hash_config(build_h1_view(canon_a)) == hash_config(build_h1_view(canon_b))
+        canon_a = _apply_rules_fixpoint(cfg_a, [rule])
+        canon_b = _apply_rules_fixpoint(cfg_b, [rule])
+        assert hash_config(build_resolved_view(canon_a)) == hash_config(
+            build_resolved_view(canon_b)
+        )

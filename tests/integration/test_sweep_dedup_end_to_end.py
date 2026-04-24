@@ -39,11 +39,11 @@ def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
     study_config = load_study_config(path)
 
     # Dedup mode default is h1.
-    assert study_config.dedup_mode == "h1"
+    assert study_config.dedup_mode == "resolved"
     # 6 declared x 1 cycle -> 4 unique x 1 cycle = 4 experiments.
     assert len(study_config.experiments) == 4
     # Declared count preserved via H1 list.
-    assert len(study_config.declared_h1_hashes) == 6
+    assert len(study_config.declared_resolved_config_hashes) == 6
     # At least one group has multiple members (the greedy-family collapse).
     group_sizes = sorted(g["member_count"] for g in study_config.pre_run_equivalence_groups)
     assert max(group_sizes) >= 2
@@ -66,7 +66,7 @@ def test_no_dedup_preserves_all_configs(tmp_path: Path) -> None:
     study_config = load_study_config(path)
 
     assert study_config.dedup_mode == "off"
-    # All 6 declared configs run — canonicaliser still populated the groups.
+    # All 6 declared configs run — library-resolution mechanism still populated the groups.
     assert len(study_config.experiments) == 6
     # Groups still computed for the sidecar trail.
     assert sum(g["member_count"] for g in study_config.pre_run_equivalence_groups) == 6
@@ -110,8 +110,8 @@ def test_n_cycles_multiplies_unique_set(tmp_path: Path) -> None:
 
     # 4 declared -> 3 unique (greedy-0.5 + greedy-0.7 collapse to greedy-1.0,
     # plus 2 sampling variants). 3 unique x 3 cycles = 9 runs.
-    assert study_config.dedup_mode == "h1"
-    unique = {h for h in study_config.declared_h1_hashes}
+    assert study_config.dedup_mode == "resolved"
+    unique = {h for h in study_config.declared_resolved_config_hashes}
     # Two declared configs share the same H1 (both greedy).
     assert len(unique) == 3
     assert len(study_config.experiments) == 9

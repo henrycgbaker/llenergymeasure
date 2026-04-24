@@ -691,10 +691,10 @@ class ExecutionConfig(BaseModel):
     deduplicate_equivalent: bool = Field(
         default=True,
         description=(
-            "When true (default), sweep expansion canonicalises each declared "
+            "When true (default), sweep expansion applies library resolution to each declared "
             "ExperimentConfig via vendored dormant-rule application and drops "
-            "duplicates that share an H1 hash. When false, every declared "
-            "config runs — the canonicaliser still populates equivalence-group "
+            "duplicates that share an resolved_config_hash. When false, every declared "
+            "config runs — the library-resolution mechanism still populates equivalence-group "
             "metadata for the sidecar but no configs are elided. The --no-dedup "
             "CLI flag is the equivalent. See sweep-dedup.md §2.3.1."
         ),
@@ -760,11 +760,11 @@ class StudyConfig(BaseModel):
             "Persisted for post-hoc review and pre-flight display."
         ),
     )
-    dedup_mode: Literal["h1", "off"] = Field(
-        default="h1",
+    dedup_mode: Literal["resolved", "off"] = Field(
+        default="resolved",
         description=(
-            "Canonicaliser / H1 dedup mode. 'h1' applies dormant-rule "
-            "canonicalisation at expansion and collapses H1-equivalent "
+            "Library-resolution mechanism dedup mode. 'resolved' applies dormant-rule "
+            "library resolution at expansion and collapses resolved-config-hash-equivalent "
             "configs to a single run. 'off' runs every declared config "
             "regardless of equivalence. Set via "
             "ExecutionConfig.deduplicate_equivalent / --no-dedup."
@@ -774,15 +774,15 @@ class StudyConfig(BaseModel):
         default_factory=list,
         description=(
             "Pre-run equivalence groups computed at sweep-expansion time. "
-            "Each group records the H1 hash, canonical excerpt, and member "
+            "Each group records the resolved_config_hash, canonical excerpt, and member "
             "declared-indices. Written to 'equivalence_groups.json' alongside "
             "the results bundle. See sweep-dedup.md §6."
         ),
     )
-    declared_h1_hashes: list[str] = Field(
+    declared_resolved_config_hashes: list[str] = Field(
         default_factory=list,
         description=(
-            "Per-declared-config H1 hashes (parallel to the pre-canonicalised "
+            "Per-declared-config resolved_config_hashes (parallel to the pre-resolved "
             "sweep input). Harness consults this to tag each experiment with "
             "its equivalence group at sidecar-write time."
         ),

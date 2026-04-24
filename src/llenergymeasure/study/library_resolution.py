@@ -1,8 +1,8 @@
-"""Sweep canonicaliser — apply vendored dormant rules to fixpoint, dedup by H1.
+"""Sweep library-resolution mechanism — apply vendored dormant rules to fixpoint, dedup by H1.
 
 Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §2.
 
-The canonicaliser is the host-side, pre-dispatch layer that normalises every
+The library-resolution mechanism is the host-side, pre-dispatch layer that normalises every
 field the vendored corpus marks as ``dormant``. Each rule's fired-state
 projection is taken from its match predicate's "not_equal" / "present"
 operand (the sentinel value the predicate is *deviating from*) — that same
@@ -11,10 +11,10 @@ runtime canonicalisation and CI correctness tests apply an identical
 normalisation.
 
 Rules chain (vLLM epsilon-clamp → greedy-normalise); iteration is capped at
-:data:`_MAX_ITER` to surface cycles via :class:`CanonicaliserCycleError`.
+:data:`_MAX_ITER` to surface cycles via :class:`LibraryResolutionCycleError`.
 
 Out-of-scope per PLAN §Scope OUT: vLLM/TRT-LLM corpora don't exist yet, so
-this PR mostly exercises the transformers rules. The canonicaliser itself is
+this PR mostly exercises the transformers rules. The library-resolution mechanism itself is
 engine-generic.
 """
 
@@ -25,12 +25,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from llenergymeasure.config.models import ExperimentConfig
-from llenergymeasure.engines.vendored_rules.loader import (
+from llenergymeasure.config.vendored_rules.loader import (
     Rule,
     VendoredRulesLoader,
     resolve_field_path,
 )
-from llenergymeasure.study.hashing import build_h1_view, hash_config
+from llenergymeasure.study.hashing import build_resolved_view, hash_config
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,8 @@ passes; 10 is generous headroom that still surfaces a rule cycle quickly.
 """
 
 
-class CanonicaliserCycleError(RuntimeError):
-    """The canonicaliser did not reach a fixpoint within :data:`_MAX_ITER` passes.
+class LibraryResolutionCycleError(RuntimeError):
+    """The library-resolution mechanism did not reach a fixpoint within :data:`_MAX_ITER` passes.
 
     Indicates a cycle in the vendored rules corpus (rule A produces state
     matching rule B which produces state matching rule A). The corpus vendor
@@ -53,7 +53,7 @@ class CanonicaliserCycleError(RuntimeError):
 
     def __init__(self, final_config: ExperimentConfig, iterations: int) -> None:
         super().__init__(
-            f"Canonicaliser did not reach fixpoint within {iterations} iterations. "
+            f"Library resolution did not reach fixpoint within {iterations} iterations. "
             f"Likely a cycle in the vendored rules corpus. "
             f"Final engine={final_config.engine}."
         )
@@ -62,11 +62,11 @@ class CanonicaliserCycleError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
-# Core canonicalise() — one config
+# Core _apply_rules_fixpoint() — one config
 # ---------------------------------------------------------------------------
 
 
-def canonicalise(
+def _apply_rules_fixpoint(
     config: ExperimentConfig, rules: list[Rule] | tuple[Rule, ...]
 ) -> ExperimentConfig:
     """Apply every ``dormant``-severity rule to ``config`` repeatedly until stable.
@@ -80,7 +80,7 @@ def canonicalise(
             ``VendoredRulesLoader.load_rules(engine).rules``).
 
     Raises:
-        CanonicaliserCycleError: If the fixpoint loop exceeds
+        LibraryResolutionCycleError: If the fixpoint loop exceeds
             :data:`_MAX_ITER` passes — the vendored corpus has a rule cycle.
     """
     dormant_rules = [r for r in rules if r.severity in ("dormant", "dormant_silent")]
@@ -103,7 +103,7 @@ def canonicalise(
                     fired = True
         if not fired:
             return current
-    raise CanonicaliserCycleError(current, _MAX_ITER)
+    raise LibraryResolutionCycleError(current, _MAX_ITER)
 
 
 def _rule_normalisations(rule: Rule) -> dict[str, Any]:
@@ -171,9 +171,9 @@ def _assign_field_path(config: ExperimentConfig, path: str, value: Any) -> None:
             setattr(parent, leaf, value)
     except (ValueError, TypeError) as exc:
         # Pydantic model_config={"frozen": True} or field constraints can
-        # reject the assignment. Log at debug — the canonicaliser is best-
+        # reject the assignment. Log at debug — the library-resolution mechanism is best-
         # effort; a rejected field just stays at its declared value.
-        logger.debug("Canonicaliser could not assign %s=%r: %s", path, value, exc)
+        logger.debug("Library resolution could not assign %s=%r: %s", path, value, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ def _assign_field_path(config: ExperimentConfig, path: str, value: Any) -> None:
 class EquivalenceGroup:
     """Pre-run group of declared configs that collapse to the same H1 canonical form."""
 
-    h1_hash: str
+    resolved_config_hash: str
     canonical_excerpt: dict[str, Any]
     member_indices: tuple[int, ...]
     representative_index: int
@@ -197,16 +197,16 @@ class EquivalenceGroup:
 
 @dataclass
 class DedupResult:
-    """Return bundle from :func:`dedup_sweep`.
+    """Return bundle from :func:`resolve_library_effective`.
 
     Attributes:
         canonical_configs: The canonicalised configs after dedup (or all
             canonicalised configs when ``deduplicate=False``, with duplicates
             kept). This is what the runner iterates over.
-        groups: One :class:`EquivalenceGroup` per unique H1 hash, recording
+        groups: One :class:`EquivalenceGroup` per unique resolved_config_hash, recording
             which indices of the input sweep collapsed together.
-        declared_h1: ``declared_index → h1_hash`` — lets the runner tag the
-            manifest entry for each run with its equivalence group.
+        declared_resolved_hashes: ``declared_index → resolved_config_hash`` — lets the runner tag
+            the manifest entry for each run with its equivalence group.
         would_dedup: ``True`` iff any group has > 1 member (dedup would save
             runs even when ``deduplicate=False``).
         deduplicated: ``True`` iff dedup was actually applied to the
@@ -215,19 +215,19 @@ class DedupResult:
 
     canonical_configs: list[ExperimentConfig]
     groups: list[EquivalenceGroup] = field(default_factory=list)
-    declared_h1: list[str] = field(default_factory=list)
+    declared_resolved_hashes: list[str] = field(default_factory=list)
     would_dedup: bool = False
     deduplicated: bool = False
 
 
-def dedup_sweep(
+def resolve_library_effective(
     configs: list[ExperimentConfig],
     *,
     rules: list[Rule] | tuple[Rule, ...] | None = None,
     loader: VendoredRulesLoader | None = None,
     deduplicate: bool = True,
 ) -> DedupResult:
-    """Canonicalise then (optionally) H1-dedup ``configs``.
+    """Canonicalise then (optionally) resolved-config-hash dedup ``configs``.
 
     Rules are resolved lazily: if ``rules`` is None the loader is consulted
     per-engine for each config (cached by the loader instance). Callers
@@ -265,9 +265,9 @@ def dedup_sweep(
     canonicalised: list[ExperimentConfig] = []
     hashes: list[str] = []
     for cfg in configs:
-        canon = canonicalise(cfg, _rules_for(cfg))
+        canon = _apply_rules_fixpoint(cfg, _rules_for(cfg))
         canonicalised.append(canon)
-        hashes.append(hash_config(build_h1_view(canon)))
+        hashes.append(hash_config(build_resolved_view(canon)))
 
     groups_by_hash: dict[str, list[int]] = {}
     for idx, h in enumerate(hashes):
@@ -280,7 +280,7 @@ def dedup_sweep(
         excerpt = _canonical_excerpt(rep)
         groups.append(
             EquivalenceGroup(
-                h1_hash=h1,
+                resolved_config_hash=h1,
                 canonical_excerpt=excerpt,
                 member_indices=tuple(indices),
                 representative_index=representative,
@@ -297,7 +297,7 @@ def dedup_sweep(
     return DedupResult(
         canonical_configs=selected,
         groups=groups,
-        declared_h1=hashes,
+        declared_resolved_hashes=hashes,
         would_dedup=would_dedup,
         deduplicated=deduplicate and would_dedup,
     )

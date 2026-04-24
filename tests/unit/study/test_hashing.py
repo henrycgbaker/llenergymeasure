@@ -14,8 +14,8 @@ import pytest
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.hashing import (
     ConfigHashView,
-    build_h1_view,
-    build_h3_view,
+    build_observed_view,
+    build_resolved_view,
     canonical_serialise,
     hash_config,
 )
@@ -104,34 +104,34 @@ class TestHashConfig:
 class TestBuildH1View:
     def test_extracts_engine_and_task(self):
         cfg = _mk_config(transformers={"sampling": {"do_sample": False}})
-        view = build_h1_view(cfg)
+        view = build_resolved_view(cfg)
         assert view.engine == "transformers"
         assert view.task["model"] == "gpt2"
 
     def test_sampling_lifted_into_sampling_bucket(self):
         cfg = _mk_config(transformers={"sampling": {"do_sample": True, "temperature": 0.7}})
-        view = build_h1_view(cfg)
-        assert view.effective_sampling_params["do_sample"] is True
-        assert view.effective_sampling_params["temperature"] == 0.7
-        assert "sampling" not in view.effective_engine_params
+        view = build_resolved_view(cfg)
+        assert view.observed_sampling_params["do_sample"] is True
+        assert view.observed_sampling_params["temperature"] == 0.7
+        assert "sampling" not in view.observed_engine_params
 
     def test_passthrough_kwargs_propagated(self):
         cfg = _mk_config(passthrough_kwargs={"my_key": "my_val"})
-        view = build_h1_view(cfg)
+        view = build_resolved_view(cfg)
         assert view.passthrough_kwargs == {"my_key": "my_val"}
 
 
 class TestBuildH3View:
     def test_carries_inputs_through(self):
-        view = build_h3_view(
+        view = build_observed_view(
             engine="vllm",
             task={"model": "gpt2"},
-            effective_engine_params={"dtype": "float16"},
-            effective_sampling_params={"temperature": 1.0},
+            observed_engine_params={"dtype": "float16"},
+            observed_sampling_params={"temperature": 1.0},
         )
         assert view.engine == "vllm"
-        assert view.effective_engine_params["dtype"] == "float16"
-        assert view.effective_sampling_params["temperature"] == 1.0
+        assert view.observed_engine_params["dtype"] == "float16"
+        assert view.observed_sampling_params["temperature"] == 1.0
 
     def test_h1_and_h3_match_on_same_inputs(self):
         # Symmetry: both views hashed through the same pipe produce the same hash
@@ -144,14 +144,14 @@ class TestBuildH3View:
         h1_view = ConfigHashView(
             engine="vllm",
             task=task,
-            effective_engine_params=engine_params,
-            effective_sampling_params=sampling_params,
+            observed_engine_params=engine_params,
+            observed_sampling_params=sampling_params,
         )
-        h3_view = build_h3_view(
+        h3_view = build_observed_view(
             engine="vllm",
             task=task,
-            effective_engine_params=engine_params,
-            effective_sampling_params=sampling_params,
+            observed_engine_params=engine_params,
+            observed_sampling_params=sampling_params,
         )
         assert hash_config(h1_view) == hash_config(h3_view)
 
@@ -162,6 +162,6 @@ class TestHashStability:
         cfg = _mk_config(
             transformers={"sampling": {"do_sample": False, "temperature": 1.0}},
         )
-        h1 = hash_config(build_h1_view(cfg))
-        h2 = hash_config(build_h1_view(cfg))
+        h1 = hash_config(build_resolved_view(cfg))
+        h2 = hash_config(build_resolved_view(cfg))
         assert h1 == h2

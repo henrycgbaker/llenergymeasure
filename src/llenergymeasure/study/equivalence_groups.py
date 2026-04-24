@@ -3,12 +3,12 @@
 Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §6.
 
 Written alongside the study's results bundle. ``pre_run_groups`` is populated
-at sweep-expansion time by :func:`dedup_sweep` and serialised immediately;
+at sweep-expansion time by :func:`resolve_library_effective` and serialised immediately;
 ``post_run_h3_groups`` is populated after the study completes by scanning
 sidecars for shared H3 hashes.
 
-The H3-collision invariant (§4.1) guarantees that in a post-H1-dedup run set,
-any group with ``len(member_h1_hashes) >= 2`` is a **proven canonicaliser gap**.
+The observed-config-hash collision invariant (§4.1) guarantees that in a post-resolved-config-hash dedup run set,
+any group with ``len(member_resolved_config_hashes) >= 2`` is a **proven library-resolution mechanism gap**.
 Phase 50.3b's ``llem report-gaps`` command consumes this file to propose
 corpus additions.
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from llenergymeasure.results.persistence import _atomic_write
-from llenergymeasure.study.sweep_canonicalise import DedupResult
+from llenergymeasure.study.library_resolution import DedupResult
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -33,7 +33,7 @@ from llenergymeasure.study.sweep_canonicalise import DedupResult
 class PreRunGroup:
     """Pre-run equivalence group recorded at sweep-expansion time."""
 
-    h1_hash: str
+    resolved_config_hash: str
     canonical_config_excerpt: dict[str, Any]
     member_experiment_ids: tuple[str, ...]
     member_count: int
@@ -44,12 +44,12 @@ class PreRunGroup:
 
 @dataclass(frozen=True)
 class PostRunH3Group:
-    """Post-run H3-collision group — a canonicaliser gap if member count >= 2."""
+    """Post-run observed-config-hash collision group — a library-resolution mechanism gap if member count >= 2."""
 
-    h3_hash: str
+    observed_config_hash: str
     engine: str
     library_version: str
-    member_h1_hashes: tuple[str, ...]
+    member_resolved_config_hashes: tuple[str, ...]
     member_experiment_ids: tuple[str, ...]
     gap_detected: bool
     proposed_rule_id: str | None = None
@@ -67,7 +67,7 @@ class EquivalenceGroups:
 
 
 # ---------------------------------------------------------------------------
-# Pre-run population — from dedup_sweep output
+# Pre-run population — from resolve_library_effective output
 # ---------------------------------------------------------------------------
 
 
@@ -79,20 +79,20 @@ def build_pre_run_groups(
     """Bind :class:`DedupResult` group indices back to caller-supplied IDs.
 
     ``experiment_ids`` must be parallel to the declared-configs list passed
-    to :func:`dedup_sweep`. The runner is the natural source — it already
+    to :func:`resolve_library_effective`. The runner is the natural source — it already
     assigns per-experiment IDs before dispatch.
     """
-    if len(experiment_ids) != len(dedup.declared_h1):
+    if len(experiment_ids) != len(dedup.declared_resolved_hashes):
         raise ValueError(
             f"experiment_ids length {len(experiment_ids)} does not match the "
-            f"declared config count {len(dedup.declared_h1)}"
+            f"declared config count {len(dedup.declared_resolved_hashes)}"
         )
     pre: list[PreRunGroup] = []
     for group in dedup.groups:
         member_ids = tuple(experiment_ids[i] for i in group.member_indices)
         pre.append(
             PreRunGroup(
-                h1_hash=group.h1_hash,
+                resolved_config_hash=group.resolved_config_hash,
                 canonical_config_excerpt=group.canonical_excerpt,
                 member_experiment_ids=member_ids,
                 member_count=group.member_count,
@@ -110,19 +110,19 @@ def build_pre_run_groups(
 
 
 def find_h3_groups(sidecars: list[dict[str, Any]]) -> list[PostRunH3Group]:
-    """Group sidecars by ``(engine, library_version, h3_hash)``.
+    """Group sidecars by ``(engine, library_version, observed_config_hash)``.
 
-    Any group with size >= 2 AND distinct ``h1_hash`` across its members is
-    flagged as a proven canonicaliser gap — per sweep-dedup.md §4.1.
+    Any group with size >= 2 AND distinct ``resolved_config_hash`` across its members is
+    flagged as a proven library-resolution mechanism gap — per sweep-dedup.md §4.1.
 
     Each sidecar dict must carry at minimum ``engine``, ``library_version``,
-    ``h1_hash``, ``h3_hash``, and ``experiment_id`` keys. Sidecars missing any
+    ``resolved_config_hash``, ``observed_config_hash``, and ``experiment_id`` keys. Sidecars missing any
     of these are silently skipped (pre-50.3a data, or runs with dedup_mode=off
     for which H3 may be partial).
     """
     buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for sc in sidecars:
-        h3 = sc.get("h3_hash")
+        h3 = sc.get("observed_config_hash")
         if not h3:
             continue
         engine = str(sc.get("engine", ""))
@@ -133,17 +133,17 @@ def find_h3_groups(sidecars: list[dict[str, Any]]) -> list[PostRunH3Group]:
     for (engine, version, h3), members in buckets.items():
         if len(members) < 2:
             continue
-        h1_hashes = tuple(str(m.get("h1_hash", "")) for m in members)
+        resolved_config_hashes = tuple(str(m.get("resolved_config_hash", "")) for m in members)
         exp_ids = tuple(str(m.get("experiment_id", "")) for m in members)
-        # Gap only if the H1 hashes differ — matching H1 means the
-        # canonicaliser already collapsed them.
-        gap_detected = len(set(h1_hashes)) > 1
+        # Gap only if the resolved_config_hashes differ — matching H1 means the
+        # library-resolution mechanism already collapsed them.
+        gap_detected = len(set(resolved_config_hashes)) > 1
         groups.append(
             PostRunH3Group(
-                h3_hash=h3,
+                observed_config_hash=h3,
                 engine=engine,
                 library_version=version,
-                member_h1_hashes=h1_hashes,
+                member_resolved_config_hashes=resolved_config_hashes,
                 member_experiment_ids=exp_ids,
                 gap_detected=gap_detected,
             )
@@ -187,7 +187,7 @@ def load_equivalence_groups(path: Path) -> EquivalenceGroups:
 
 def _pre_from_dict(data: dict[str, Any]) -> PreRunGroup:
     return PreRunGroup(
-        h1_hash=str(data["h1_hash"]),
+        resolved_config_hash=str(data["resolved_config_hash"]),
         canonical_config_excerpt=dict(data.get("canonical_config_excerpt", {})),
         member_experiment_ids=tuple(data.get("member_experiment_ids", [])),
         member_count=int(data.get("member_count", 0)),
@@ -199,10 +199,10 @@ def _pre_from_dict(data: dict[str, Any]) -> PreRunGroup:
 
 def _post_from_dict(data: dict[str, Any]) -> PostRunH3Group:
     return PostRunH3Group(
-        h3_hash=str(data["h3_hash"]),
+        observed_config_hash=str(data["observed_config_hash"]),
         engine=str(data.get("engine", "")),
         library_version=str(data.get("library_version", "")),
-        member_h1_hashes=tuple(data.get("member_h1_hashes", [])),
+        member_resolved_config_hashes=tuple(data.get("member_resolved_config_hashes", [])),
         member_experiment_ids=tuple(data.get("member_experiment_ids", [])),
         gap_detected=bool(data.get("gap_detected", False)),
         proposed_rule_id=data.get("proposed_rule_id"),

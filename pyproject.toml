@@ -180,6 +180,12 @@ ignore_imports = [
     # may decide to invert this by moving dedup into api/cli callers; for now
     # the import is local-inside-function so there is no cycle risk.
     "llenergymeasure.config.loader -> llenergymeasure.study.library_resolution",
+    # Phase 50 M4: harness._write_config_sidecar() computes H3 observed_config_hash
+    # (needs study.hashing) and persists config.json (needs results.persistence).
+    # Both imports are local-inside-method and introduce no cycle risk. The harness
+    # is the natural site for this wiring (it has the InferenceOutput + ExperimentConfig).
+    "llenergymeasure.harness -> llenergymeasure.study.hashing",
+    "llenergymeasure.harness -> llenergymeasure.results.persistence",
 ]
 
 [[tool.importlinter.contracts]]

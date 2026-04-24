@@ -20,7 +20,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.walkers._fixpoint_test import (  # noqa: E402
-    CanonicaliserCycleError,
+    LibraryResolutionCycleError,
     NonIdempotentRuleError,
     OrderDependentRuleError,
     _ProjectedRule,
@@ -145,7 +145,7 @@ class TestShuffleStability:
 
         rules = [SetValue("ra", 1), SetValue("rb", 2)]
         seed = {"x": 0}
-        with pytest.raises(CanonicaliserCycleError):
+        with pytest.raises(LibraryResolutionCycleError):
             apply_to_fixpoint(seed, rules)
 
     def test_order_dependent_detected(self) -> None:
