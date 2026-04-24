@@ -102,6 +102,13 @@ app.command(
     help="Verify Docker images match the host ExperimentConfig schema",
 )(_doctor_cmd)
 
+from llenergymeasure.cli.report_gaps import report_gaps_cmd as _report_gaps_cmd  # noqa: E402
+
+app.command(
+    name="report-gaps",
+    help="Propose rules corpus entries from runtime observations",
+)(_report_gaps_cmd)
+
 __all__ = ["app"]
 
 if __name__ == "__main__":
