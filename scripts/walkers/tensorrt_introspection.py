@@ -32,7 +32,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import RuleCandidate, WalkerSource  # noqa: E402
+from scripts.walkers._base import (  # noqa: E402
+    RuleCandidate,
+    WalkerSource,
+    candidate_to_dict,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -138,7 +142,7 @@ def walk_tensorrt_args_rules(
     try:
         schema = LlmConfig.model_json_schema()
         properties = schema.get("properties", {})
-    except Exception as e:
+    except (AttributeError, TypeError) as e:
         print(f"[tensorrt_introspection] Failed to get schema: {e}", file=sys.stderr)
         return candidates
 
@@ -285,35 +289,6 @@ def _relative_source_path(abs_path: str) -> str:
     return Path(abs_path).name
 
 
-def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
-    """Render a :class:`RuleCandidate` into the YAML corpus entry shape."""
-    return {
-        "id": c.id,
-        "engine": c.engine,
-        "library": c.library,
-        "rule_under_test": c.rule_under_test,
-        "severity": c.severity,
-        "native_type": c.native_type,
-        "walker_source": {
-            "path": c.walker_source.path,
-            "method": c.walker_source.method,
-            "line_at_scan": c.walker_source.line_at_scan,
-            "walker_confidence": c.walker_source.walker_confidence,
-        },
-        "match": {
-            "engine": c.engine,
-            "fields": c.match_fields,
-        },
-        "kwargs_positive": c.kwargs_positive,
-        "kwargs_negative": c.kwargs_negative,
-        "expected_outcome": c.expected_outcome,
-        "message_template": c.message_template,
-        "references": c.references,
-        "added_by": c.added_by,
-        "added_at": c.added_at,
-    }
-
-
 def main(argv: list[str] | None = None) -> int:
     """Run the introspection extractor end-to-end and write the staging YAML."""
     import argparse
@@ -351,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         import tensorrt_llm  # type: ignore
 
         version = tensorrt_llm.__version__  # type: ignore
-    except Exception:
+    except ImportError:
         pass
 
     doc = {
@@ -360,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
         "engine_version": version,
         "walked_at": walked_at,
         "extractor": "tensorrt_introspection",
-        "rules": [_candidate_to_dict(c) for c in candidates_sorted],
+        "rules": [candidate_to_dict(c) for c in candidates_sorted],
     }
     out_path.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
 
