@@ -200,6 +200,21 @@ class Rule:
     references: tuple[str, ...]
     added_by: str
     added_at: str
+    cross_validated_by: tuple[str, ...] = ()
+    """Other extractor sources that produced the same fingerprint as this rule.
+
+    Empty for single-source rules. Populated by the corpus merger
+    (``scripts/walkers/build_corpus.py``) when two or more extractors
+    independently emitted a rule with the same ``(engine, severity,
+    match.fields)`` fingerprint. ``added_by`` remains the *primary*
+    source (used for downstream filtering); ``cross_validated_by`` is
+    additional provenance for the reviewer.
+
+    Schema choice rationale: keeping ``added_by`` as a single string
+    preserves the existing ``AddedBy`` Literal and the corpus-invariants
+    test that pins it; ``cross_validated_by`` is a strictly additive field
+    with a sane default for older rules.
+    """
 
     def try_match(self, config: Any) -> RuleMatch | None:
         """Return a :class:`RuleMatch` if every predicate in ``match_fields`` holds.
@@ -546,6 +561,17 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
         raise UnknownAddedByError(
             f"Rule {rule_id!r} has added_by={added_by!r}; must be one of: {sorted(VALID_ADDED_BY)}"
         )
+    raw_cross = raw.get("cross_validated_by") or ()
+    if isinstance(raw_cross, str):
+        # A single string is a corpus-authoring slip; coerce to a one-tuple.
+        raw_cross = (raw_cross,)
+    cross_validated_by: tuple[str, ...] = tuple(str(s) for s in raw_cross)
+    for source in cross_validated_by:
+        if source not in VALID_ADDED_BY:
+            raise UnknownAddedByError(
+                f"Rule {rule_id!r} has cross_validated_by entry={source!r}; "
+                f"must be one of: {sorted(VALID_ADDED_BY)}"
+            )
     return Rule(
         id=str(rule_id),
         engine=str(raw["engine"]),
@@ -563,6 +589,7 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
         references=tuple(raw.get("references") or ()),
         added_by=added_by,
         added_at=str(raw.get("added_at", "")),
+        cross_validated_by=cross_validated_by,
     )
 
 
