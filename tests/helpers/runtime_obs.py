@@ -107,3 +107,44 @@ def write_jsonl_record(
     path = study_dir / "runtime_observations.jsonl"
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec) + "\n")
+
+
+def write_manifest(
+    study_dir: Path,
+    entries: list[dict[str, Any]],
+) -> None:
+    """Write a minimal ``manifest.json`` mapping experiment_id → config_hash + result_file.
+
+    Each ``entries`` item must carry at least ``experiment_id``,
+    ``config_hash``, and ``result_file`` (relative path to the
+    ``result.json`` so ``_resolution.json`` is locatable as its sibling).
+    """
+    payload = {"schema_version": "1.0", "experiments": entries}
+    (study_dir / "manifest.json").write_text(json.dumps(payload))
+
+
+def write_equivalence_groups(
+    study_dir: Path,
+    *,
+    study_id: str = "fixture-study",
+    dedup_mode: str = "resolved",
+    observed_collision_groups: list[dict[str, Any]] | None = None,
+    pre_run_groups: list[dict[str, Any]] | None = None,
+) -> None:
+    """Write a minimal ``equivalence_groups.json`` for observed-collisions tests.
+
+    Schema matches
+    :class:`llenergymeasure.study.equivalence_groups.EquivalenceGroups`.
+    Each group dict in ``observed_collision_groups`` must carry at least
+    ``observed_config_hash``, ``engine``, ``library_version``,
+    ``member_resolved_config_hashes``, ``member_experiment_ids``, and
+    ``gap_detected``.
+    """
+    payload: dict[str, Any] = {
+        "study_id": study_id,
+        "dedup_mode": dedup_mode,
+        "vendored_rules_version": "",
+        "groups": pre_run_groups or [],
+        "observed_collision_groups": observed_collision_groups or [],
+    }
+    (study_dir / "equivalence_groups.json").write_text(json.dumps(payload, indent=2))

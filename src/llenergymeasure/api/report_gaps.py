@@ -1,27 +1,34 @@
 """``llem report-gaps`` — feedback-loop proposer for the rules corpus.
 
-Reads ``runtime_observations.jsonl`` emitted by
-:mod:`llenergymeasure.study.runtime_observations`, groups captured warnings
-and log records by their normalised message template, partitions configs
-into *collision_configs* (A) and *not collision_configs* (B), and proposes corpus rules for
-templates the existing rules corpus does not already match.
+Two source channels:
+
+- ``runtime-warnings`` reads ``runtime_observations.jsonl`` (announced
+  library emissions: ``warnings.warn``, ``logger.warning``, runtime
+  exceptions). Groups by normalised message template.
+- ``observed-collisions`` reads ``equivalence_groups.json`` (silent
+  library normalisations: two configs with distinct
+  ``resolved_config_hash`` collapsing to the same ``observed_config_hash``).
+  Groups by ``(engine, library_version, observed_config_hash)``.
+
+Both channels share predicate inference (:func:`_infer_predicate` —
+arity 1→2→3 + ``present:true`` fallback, requiring a unanimous trigger
+in collision_configs and zero contrast match), evidence emission
+(:func:`_field_value_distribution`), and YAML rendering
+(:func:`render_yaml_fragment`).
 
 Design:
 
-- **No corpus mutation.** We emit YAML *fragments* to ``--out PATH``; the
-  live ``configs/validation_rules/{engine}.yaml`` is never touched.
+- **No corpus mutation.** YAML fragments go to ``--out PATH``; the live
+  ``configs/validation_rules/{engine}.yaml`` is never touched.
 - **Severity is mechanical.** ``warn`` for log-channel emissions;
-  ``error`` when ``include_exceptions=True`` and the record is an
-  exception. ``walker_confidence`` is always ``low``.
+  ``error`` for runtime exceptions; ``dormant`` for silent observed
+  collisions. ``walker_confidence`` is always ``low``.
 - **Round-trip safe.** Fragments parse through
   :func:`llenergymeasure.config.vendored_rules.loader._parse_rule`;
   placeholders carry ``# TODO: human`` markers.
 - **Sentinel filtering.** ``subprocess_died`` / ``exception`` records
-  don't prove "rule didn't fire" — excluded from B always; excluded from
-  A unless ``include_exceptions=True``.
-- **Emission channels.** This module produces ``warnings_warn``,
-  ``logger_warning``, ``logger_warning_once``, and ``runtime_exception``
-  only — a documented subset of :data:`EmissionChannel`.
+  don't prove "rule didn't fire" — excluded from contrast always;
+  excluded from collision unless ``include_exceptions=True``.
 
 Source of config kwargs: per-experiment ``_resolution.json`` sidecars,
 flattened into ``dict[str, Any]`` per ``config_hash``. Located via
@@ -53,6 +60,7 @@ from llenergymeasure.study.runtime_observations import RUNTIME_OBSERVATIONS_FILE
 __all__ = [
     "GapProposal",
     "ReportGapsError",
+    "find_observed_collision_gaps",
     "find_runtime_gaps",
     "load_rules_corpus",
     "render_yaml_fragment",
@@ -77,7 +85,14 @@ class ReportGapsError(Exception):
 
 @dataclass(frozen=True)
 class GapProposal:
-    """One proposed corpus rule for a single unmatched normalised template."""
+    """One proposed corpus rule.
+
+    Two flavours share this dataclass: announced runtime warnings (a
+    normalised message template uniquely identifies the rule) and silent
+    observed-collisions (a ``(library_version, observed_config_hash)``
+    pair uniquely identifies the rule, with no message text). The
+    ``added_by`` field disambiguates at render time.
+    """
 
     normalised_template: str
     source_channel: EmissionChannel
@@ -89,7 +104,8 @@ class GapProposal:
     contrast_count: int
     representative_message: str
     needs_generalisation_review: bool
-    severity: Literal["warn", "error"]
+    severity: Literal["warn", "error", "dormant"]
+    added_by: Literal["runtime_warning", "observed_collision"] = "runtime_warning"
     representative_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -312,6 +328,185 @@ def find_runtime_gaps(
             )
         )
     return proposals
+
+
+# ---------------------------------------------------------------------------
+# Observed-config-hash collision proposals (silent-rule channel)
+# ---------------------------------------------------------------------------
+
+
+def find_observed_collision_gaps(
+    study_dirs: list[Path],
+    engine: Engine | str | None = None,
+) -> list[GapProposal]:
+    """Scan study dirs for observed-config-hash collisions; propose bridging rules.
+
+    Reads each study's ``equivalence_groups.json`` (see
+    :mod:`llenergymeasure.study.equivalence_groups`) and selects entries
+    where ``gap_detected=True`` — the proven library-resolution-mechanism
+    gap signal from sweep-dedup.md §4.1.
+
+    For each gap group, partitions the study's per-experiment configs:
+
+    - ``collision_configs`` — kwargs of the experiments whose
+      ``observed_config_hash`` matches the gap group.
+    - ``contrast_configs`` — kwargs of every other experiment in the
+      same study that has a *different* ``observed_config_hash`` (i.e.
+      not in this collision group).
+
+    Then runs :func:`_infer_predicate` on the partitions. The same
+    arity-1→2→3 + ``present:true`` fallback used by the runtime-warnings
+    flavour applies — it requires a unanimous trigger across collisions
+    AND zero contrast match, so range-trigger rules (where the trigger
+    field varies inside the collision group) correctly route to
+    evidence-only rather than producing a misanchored predicate.
+
+    Order sorts by (engine, library_version, observed_config_hash).
+    """
+    if not study_dirs:
+        raise ReportGapsError("No study directories provided. Pass at least one --study-dir.")
+
+    engine_filter: str | None = str(engine) if engine is not None else None
+    if engine_filter is not None and engine_filter not in _ALLOWED_ENGINES:
+        raise ReportGapsError(
+            f"Unsupported engine filter: {engine_filter!r}. "
+            f"Expected one of: {sorted(_ALLOWED_ENGINES)}."
+        )
+
+    proposals: list[GapProposal] = []
+    for study_dir in study_dirs:
+        proposals.extend(_collision_proposals_for_study(Path(study_dir), engine_filter))
+
+    proposals.sort(key=lambda p: (p.engine.value, p.library_version, p.normalised_template))
+    return proposals
+
+
+def _collision_proposals_for_study(
+    study_dir: Path,
+    engine_filter: str | None,
+) -> list[GapProposal]:
+    """Return proposals for a single study — empty if no gap-detected groups."""
+    groups_path = study_dir / "equivalence_groups.json"
+    if not groups_path.exists():
+        logger.info("No equivalence_groups.json in %s; skipping.", study_dir)
+        return []
+    try:
+        groups_doc = json.loads(groups_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to read equivalence_groups.json at %s: %s", groups_path, exc)
+        return []
+
+    raw_groups = groups_doc.get("observed_collision_groups") or []
+    gap_groups: list[dict[str, Any]] = [
+        g for g in raw_groups if isinstance(g, dict) and g.get("gap_detected")
+    ]
+    if not gap_groups:
+        return []
+
+    kwargs_by_hash, _ = _load_kwargs_by_hash(study_dir)
+    if not kwargs_by_hash:
+        logger.info(
+            "No _resolution.json sidecars found under %s; cannot partition gap groups.",
+            study_dir,
+        )
+        return []
+
+    # Build experiment_id → config_hash mapping from the manifest so we
+    # can resolve gap-group member ids back to declared kwargs.
+    exp_id_to_config_hash = _experiment_id_to_config_hash(study_dir)
+
+    proposals: list[GapProposal] = []
+    for group in gap_groups:
+        engine_str = str(group.get("engine") or "")
+        if engine_str not in _ALLOWED_ENGINES:
+            continue
+        if engine_filter is not None and engine_str != engine_filter:
+            continue
+        proposal = _proposal_from_collision_group(
+            group, engine_str, kwargs_by_hash, exp_id_to_config_hash
+        )
+        if proposal is not None:
+            proposals.append(proposal)
+    return proposals
+
+
+def _experiment_id_to_config_hash(study_dir: Path) -> dict[str, str]:
+    """Map each ``experiment_id`` to its full ``config_hash`` via ``manifest.json``.
+
+    Falls back to an empty mapping when the manifest is absent — gap
+    proposals that would have used the prefix-scan path lose their
+    declared-kwargs context but still surface as evidence-only entries.
+    """
+    manifest_path = study_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    out: dict[str, str] = {}
+    for entry in manifest.get("experiments") or []:
+        if not isinstance(entry, dict):
+            continue
+        exp_id = str(entry.get("experiment_id") or "")
+        config_hash = str(entry.get("config_hash") or "")
+        if exp_id and config_hash:
+            out[exp_id] = config_hash
+    return out
+
+
+def _proposal_from_collision_group(
+    group: dict[str, Any],
+    engine_str: str,
+    kwargs_by_hash: dict[str, dict[str, Any]],
+    exp_id_to_config_hash: dict[str, str],
+) -> GapProposal | None:
+    """Build one :class:`GapProposal` from one observed-collision group."""
+    observed_hash = str(group.get("observed_config_hash") or "")
+    library_version = str(group.get("library_version") or "")
+    member_ids = group.get("member_experiment_ids") or []
+    if not observed_hash or not isinstance(member_ids, list) or not member_ids:
+        return None
+
+    member_hashes: set[str] = set()
+    collision_configs: list[dict[str, Any]] = []
+    for exp_id in member_ids:
+        config_hash = exp_id_to_config_hash.get(str(exp_id))
+        if not config_hash:
+            continue
+        member_hashes.add(config_hash)
+        kwargs = kwargs_by_hash.get(config_hash)
+        if kwargs is not None:
+            collision_configs.append(kwargs)
+
+    contrast_configs: list[dict[str, Any]] = [
+        kwargs for h, kwargs in kwargs_by_hash.items() if h not in member_hashes
+    ]
+
+    match_fields = _infer_predicate(collision_configs, contrast_configs)
+    evidence = _field_value_distribution(collision_configs, contrast_configs)
+    needs_review = match_fields is None or len(match_fields) >= 2
+
+    return GapProposal(
+        # observed-collisions have no message template; use the hash as a
+        # stable id surrogate for sorting and slug generation.
+        normalised_template=f"observed_collision:{observed_hash[:16]}",
+        source_channel="none",
+        engine=Engine(engine_str),
+        library_version=library_version,
+        match_fields=match_fields,
+        evidence_field_value_distribution=evidence,
+        collision_count=len(collision_configs),
+        contrast_count=len(contrast_configs),
+        representative_message=(
+            f"Library silently collapsed {len(collision_configs)} declared configs "
+            f"to observed_config_hash={observed_hash[:16]}."
+        ),
+        needs_generalisation_review=needs_review,
+        severity="dormant",
+        added_by="observed_collision",
+        representative_kwargs=collision_configs[0] if collision_configs else {},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -661,6 +856,13 @@ _BANNER = (
 )
 
 
+_OUTCOME_BY_SEVERITY: dict[str, str] = {
+    "error": "error",
+    "warn": "warn",
+    "dormant": "dormant_silent",
+}
+
+
 def render_yaml_fragment(proposal: GapProposal) -> str:
     """Render one :class:`GapProposal` as a YAML document.
 
@@ -671,16 +873,57 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
     """
     template = proposal.normalised_template
     match_fields: dict[str, Any] = dict(proposal.match_fields) if proposal.match_fields else {}
-    outcome_value = "error" if proposal.severity == "error" else "warn"
+    outcome_value = _OUTCOME_BY_SEVERITY[proposal.severity]
     engine_str = proposal.engine.value
+    is_observed = proposal.added_by == "observed_collision"
+    rule_under_test = (
+        (
+            "(observed-collision) Two configs with distinct resolved_config_hash "
+            "collapsed to the same observed_config_hash; reviewer to confirm semantic."
+        )
+        if is_observed
+        else (
+            "(runtime-derived) Library emitted normalised template; reviewer to confirm semantic."
+        )
+    )
+    expected_outcome: dict[str, Any] = {
+        "outcome": outcome_value,
+        "emission_channel": proposal.source_channel,
+        "normalised_fields": [],
+    }
+    if not is_observed:
+        # Runtime-warnings flavour proves the library text emission.
+        # Observed-collisions are silent — there is no message to match against.
+        expected_outcome["observed_messages_regex"] = [build_template_regex(template)]
+        expected_outcome["observed_messages"] = [proposal.representative_message]
+
+    if is_observed:
+        references = [
+            (
+                f"observed_config_hash collision: {proposal.collision_count} member(s) "
+                f"share the same library-effective state; "
+                f"{proposal.contrast_count} contrast config(s) in the study."
+            ),
+            (
+                "Detected by the post-resolved-config-dedup invariant in "
+                "sweep-dedup.md §4.1: distinct resolved_config_hash + matching "
+                "observed_config_hash = proven library-resolution-mechanism gap."
+            ),
+        ]
+    else:
+        references = [
+            (
+                f"Observed in {proposal.collision_count} configs; "
+                f"absent in {proposal.contrast_count} configs."
+            ),
+            f"Representative raw message: {proposal.representative_message!r}",
+        ]
 
     proposal_doc: dict[str, Any] = {
         "id": _proposed_rule_id(proposal),
         "engine": engine_str,
         "library": engine_str,
-        "rule_under_test": (
-            "(runtime-derived) Library emitted normalised template; reviewer to confirm semantic."
-        ),
+        "rule_under_test": rule_under_test,
         "severity": proposal.severity,
         "native_type": f"{engine_str}.<TODO: human — set concrete native type>",
         "walker_source": {
@@ -692,22 +935,10 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
         "match": {"engine": engine_str, "fields": match_fields},
         "kwargs_positive": dict(proposal.representative_kwargs),
         "kwargs_negative": {},
-        "expected_outcome": {
-            "outcome": outcome_value,
-            "emission_channel": proposal.source_channel,
-            "normalised_fields": [],
-            "observed_messages_regex": [build_template_regex(template)],
-            "observed_messages": [proposal.representative_message],
-        },
+        "expected_outcome": expected_outcome,
         "message_template": template,
-        "references": [
-            (
-                f"Observed in {proposal.collision_count} configs; "
-                f"absent in {proposal.contrast_count} configs."
-            ),
-            f"Representative raw message: {proposal.representative_message!r}",
-        ],
-        "added_by": "runtime_warning",
+        "references": references,
+        "added_by": proposal.added_by,
         "added_at": "<TODO: human — YYYY-MM-DD>",
         "source_channel": proposal.source_channel,
         "needs_generalisation_review": proposal.needs_generalisation_review,
@@ -719,7 +950,8 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
 
 
 def _proposed_rule_id(proposal: GapProposal) -> str:
-    """Return ``{engine}_runtime_{slug}`` for a reviewer-friendly rule id."""
+    """Return ``{engine}_{provenance}_{slug}`` for a reviewer-friendly rule id."""
     cleaned = re.sub(r"[^a-z0-9]+", "_", proposal.normalised_template.lower()).strip("_")
     slug = cleaned[:40] or "unnamed"
-    return f"{proposal.engine.value}_runtime_{slug}"
+    provenance = "observed" if proposal.added_by == "observed_collision" else "runtime"
+    return f"{proposal.engine.value}_{provenance}_{slug}"

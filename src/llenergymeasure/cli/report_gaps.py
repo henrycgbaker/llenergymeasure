@@ -3,6 +3,14 @@
 Thin Typer command that delegates everything interesting to
 :mod:`llenergymeasure.api.report_gaps`. CLI-boundary contract: imports only
 from ``llenergymeasure.api``; never reaches into ``study``/``harness``/etc.
+
+Two source channels:
+
+- ``runtime-warnings`` — announced library emissions captured in
+  ``runtime_observations.jsonl``.
+- ``observed-collisions`` — silent library normalisations surfaced by
+  the post-resolved-config-dedup observed_config_hash collision invariant
+  in ``equivalence_groups.json``.
 """
 
 from __future__ import annotations
@@ -15,11 +23,14 @@ import typer
 
 from llenergymeasure.api import (
     ReportGapsError,
+    find_observed_collision_gaps,
     find_runtime_gaps,
     render_yaml_fragment,
 )
 
 __all__ = ["report_gaps_cmd"]
+
+_SUPPORTED_SOURCES: frozenset[str] = frozenset({"runtime-warnings", "observed-collisions"})
 
 
 def report_gaps_cmd(
@@ -27,7 +38,11 @@ def report_gaps_cmd(
         str,
         typer.Option(
             "--source",
-            help="Feedback source to scan. Only 'runtime-warnings' is wired in this release.",
+            help=(
+                "Feedback source to scan: 'runtime-warnings' "
+                "(announced library emissions) or 'observed-collisions' "
+                "(silent library normalisations)."
+            ),
         ),
     ] = "runtime-warnings",
     study_dir: Annotated[
@@ -56,16 +71,16 @@ def report_gaps_cmd(
         typer.Option(
             "--include-exceptions",
             help=(
-                "Also propose rules from runtime exceptions. "
-                "Disabled by default; exceptions ship through a different review path."
+                "(runtime-warnings only) Also propose rules from runtime exceptions. "
+                "Ignored for observed-collisions."
             ),
         ),
     ] = False,
 ) -> None:
     """Propose rules corpus entries from captured runtime observations."""
-    if source != "runtime-warnings":
+    if source not in _SUPPORTED_SOURCES:
         raise typer.BadParameter(
-            f"Unsupported source {source!r}. Only 'runtime-warnings' is wired in this release.",
+            f"Unsupported source {source!r}. Expected one of: {sorted(_SUPPORTED_SOURCES)}.",
             param_hint="--source",
         )
     if not study_dir:
@@ -80,11 +95,17 @@ def report_gaps_cmd(
         )
 
     try:
-        proposals = find_runtime_gaps(
-            study_dirs=list(study_dir),
-            engine=engine,
-            include_exceptions=include_exceptions,
-        )
+        if source == "runtime-warnings":
+            proposals = find_runtime_gaps(
+                study_dirs=list(study_dir),
+                engine=engine,
+                include_exceptions=include_exceptions,
+            )
+        else:
+            proposals = find_observed_collision_gaps(
+                study_dirs=list(study_dir),
+                engine=engine,
+            )
     except ReportGapsError as exc:
         print(f"llem report-gaps: {exc}", file=sys.stderr)
         raise typer.Exit(code=2) from None

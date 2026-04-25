@@ -143,7 +143,7 @@ def test_report_gaps_missing_out_errors(tmp_path: Path) -> None:
 
 
 def test_report_gaps_unsupported_source_errors(tmp_path: Path) -> None:
-    """--source h3-collisions (etc.) is not wired in this release."""
+    """--source h3-collisions (the legacy name) and other unknowns are rejected."""
     study = tmp_path / "s"
     study.mkdir()
     out = tmp_path / "out.yaml"
@@ -160,4 +160,28 @@ def test_report_gaps_unsupported_source_errors(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code != 0
-    assert "runtime-warnings" in _strip(result.output)
+    stripped = _strip(result.output)
+    # Error message lists the supported sources so users can self-correct.
+    assert "observed-collisions" in stripped or "runtime-warnings" in stripped
+
+
+def test_report_gaps_observed_collisions_no_groups_file(tmp_path: Path) -> None:
+    """--source observed-collisions on a study with no equivalence_groups.json exits 0 cleanly."""
+    study = tmp_path / "s-no-groups"
+    study.mkdir()
+    out = tmp_path / "proposals.yaml"
+    result = runner.invoke(
+        app,
+        [
+            "report-gaps",
+            "--source",
+            "observed-collisions",
+            "--study-dir",
+            str(study),
+            "--out",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0
+    assert not out.exists()
+    assert "No gaps found" in result.output
