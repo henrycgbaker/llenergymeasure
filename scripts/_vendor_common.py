@@ -217,10 +217,34 @@ def _patch_warning_once() -> Callable[[], None]:
     HF isn't importable (the attribute is attached at ``transformers.utils.logging``
     import time; outside the HF container the method is absent and there is
     nothing to patch).
+
+    HF's ``warning_once`` is ``@functools.lru_cache``-wrapped at the module
+    level — the cache survives across ``run_case`` calls in the same process.
+    Without clearing it, a dormancy rule that fires its message on rule N
+    would silently no-op on rule N+1 reusing the same template, and the
+    vendor classifier would observe ``logger_warning`` (the underlying
+    ``warning`` channel) instead of ``logger_warning_once`` for every rule
+    after the first hit. Clear the cache on every spy installation so each
+    rule sees a clean slate.
     """
     original = getattr(logging.Logger, "warning_once", None)
     if original is None:
         return lambda: None
+
+    # Best-effort: clear HF's process-level lru_cache on warning_once / info_once
+    # so successive run_case calls in one process don't trip the dedup wrapper.
+    # The wrappers live on ``transformers.utils.logging``; if HF isn't importable
+    # we already returned no-op above, so this branch is safe.
+    try:
+        from transformers.utils import logging as _hf_logging  # type: ignore
+
+        for attr in ("warning_once", "info_once"):
+            cached = getattr(_hf_logging, attr, None)
+            cache_clear = getattr(cached, "cache_clear", None)
+            if callable(cache_clear):
+                cache_clear()
+    except ImportError:
+        pass
 
     def spy(self: logging.Logger, msg: Any, *args: Any, **kwargs: Any) -> Any:
         tagged = f"{_WARNING_ONCE_SENTINEL}{msg}" if isinstance(msg, str) else msg

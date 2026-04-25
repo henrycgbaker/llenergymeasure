@@ -51,15 +51,13 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         return any(field_path in rule.match_fields for rule in rules)
 
     # Single-field invariants — at least one rule must touch each path.
-    # Scope today reflects what the on-disk canonical corpus actually
-    # contains. The follow-up vendor-validation PR (PR 5) will land the
-    # regenerated canonical from build_corpus.py and at that point the
-    # required set extends to: watermarking_config, the BNB type-check
-    # paths (transformers.load_in_4bit etc. — corrected from the old
-    # transformers.quant.<field> path that didn't actually resolve
-    # against the real ExperimentConfig schema). Until then, asserting
-    # those would be testing the merger's output rather than the
-    # committed corpus.
+    # Scope reflects the regenerated canonical corpus produced by
+    # ``scripts/walkers/build_corpus.py`` with the vendor-validation gate.
+    # Adding a path here means: a rule for that field must survive vendor
+    # validation against the pinned engine library (see ``engine_version``
+    # in the corpus envelope). If a path drops out, investigate WHY (real
+    # extractor regression, real library change, or vendor-harness gap)
+    # before weakening this list.
     required_fields = (
         # Greedy dormancy: do_sample=False / num_beams=1 strip these.
         "transformers.sampling.temperature",
@@ -86,18 +84,35 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.sampling.compile_config",
         # PR #387 cross-field invariant gates.
         "transformers.sampling.num_beams",
+        # Watermarking + BNB type-check paths landed in PR 5 (vendor-
+        # validation gate). The BNB rules use the field paths the real
+        # ExperimentConfig schema exposes (``transformers.load_in_4bit``
+        # etc.) rather than the old ``transformers.quant.<field>`` paths
+        # which never resolved at runtime.
+        "transformers.sampling.watermarking_config",
+        "transformers.load_in_4bit",
+        "transformers.load_in_8bit",
+        "transformers.llm_int8_threshold",
+        "transformers.llm_int8_skip_modules",
+        "transformers.llm_int8_enable_fp32_cpu_offload",
+        "transformers.llm_int8_has_fp16_weight",
+        "transformers.bnb_4bit_compute_dtype",
+        "transformers.bnb_4bit_quant_type",
+        "transformers.bnb_4bit_use_double_quant",
     )
     missing = [path for path in required_fields if not covers_field(path)]
     assert not missing, f"corpus is missing rules for {len(missing)} required invariants: {missing}"
 
     # Cross-field invariants — at least one rule must AND-combine the listed
     # fields. Catches regressions where the extractor lost the cross-field
-    # predicate machinery. Scope here matches the on-disk canonical corpus;
-    # the regenerated canonical (lands in PR 5 with vendor validation)
-    # will add (num_beam_groups, diversity_penalty) and tighten the
-    # (num_beams, num_return_sequences) pair predicate via @field_ref.
+    # predicate machinery. PR 5 added the (num_beam_groups,
+    # diversity_penalty) pair (the AST walker's beam-search divisibility
+    # invariant) and the (num_beams, num_return_sequences) pair (the
+    # @field_ref-tightened greedy-rejects predicate).
     cross_field_pairs = (
         ("transformers.sampling.num_beams", "transformers.sampling.num_beam_groups"),
+        ("transformers.sampling.num_beam_groups", "transformers.sampling.diversity_penalty"),
+        ("transformers.sampling.num_beams", "transformers.sampling.num_return_sequences"),
     )
     missing_pairs = [
         pair
@@ -108,13 +123,18 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         f"corpus missing cross-field rules for {len(missing_pairs)} invariants: {missing_pairs}"
     )
 
-    # Provenance assertion ("zero manual_seed rules — corpus is machine-
-    # extracted by construction") is enforced in the follow-up PR that
-    # regenerates the canonical from build_corpus.py output. The current
-    # on-disk canonical predates the corpus-as-measurement principle and
-    # contains hand-curated BNB type-check entries with added_by:
-    # manual_seed; those will retire when the merger output replaces the
-    # canonical alongside the vendor-validation gate.
+    # Corpus-as-measurement: the regenerated corpus is machine-extracted by
+    # construction, so no rule should carry ``added_by: manual_seed``. Any
+    # manual entry indicates a hand-edit of the canonical YAML that bypasses
+    # the build_corpus.py + vendor-validation gate and would silently drift
+    # on the next library bump. This PR's regeneration drops the legacy
+    # hand-curated BNB type-check entries; the AST walker now emits them
+    # under ``added_by: ast_walker``.
+    manual = [rule.id for rule in rules if rule.added_by == "manual_seed"]
+    assert not manual, (
+        f"corpus contains {len(manual)} hand-seeded rules; corpus must be "
+        f"machine-extracted (run scripts/walkers/build_corpus.py): {manual}"
+    )
 
 
 def test_corpus_schema_version_is_current(transformers_corpus) -> None:

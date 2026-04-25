@@ -116,7 +116,41 @@ class _ProjectedRule:
 
 
 def _evaluate(actual: Any, spec: Any) -> bool:
-    """Minimal predicate evaluator — supports the operator shapes in the corpus."""
+    """Minimal predicate evaluator — supports the operator shapes in the corpus.
+
+    Inequality operators (``<`` / ``<=`` / ``>`` / ``>=``) treat type
+    mismatches between ``actual`` and the rule's threshold as "predicate
+    does not hold" rather than raising. Cross-rule seed pollution is
+    real — one rule seeds ``pad_token_id`` with a string sentinel from
+    a ``not_in`` predicate, and a second rule with ``{"<": 0}`` then
+    runs against that state. Comparing a string with an int raises in
+    Python 3, but the rule simply does not apply.
+    """
+
+    def _safe_lt(a: Any, b: Any) -> bool:
+        try:
+            return a < b
+        except TypeError:
+            return False
+
+    def _safe_le(a: Any, b: Any) -> bool:
+        try:
+            return a <= b
+        except TypeError:
+            return False
+
+    def _safe_gt(a: Any, b: Any) -> bool:
+        try:
+            return a > b
+        except TypeError:
+            return False
+
+    def _safe_ge(a: Any, b: Any) -> bool:
+        try:
+            return a >= b
+        except TypeError:
+            return False
+
     if isinstance(spec, dict):
         if not spec:
             return True
@@ -125,13 +159,13 @@ def _evaluate(actual: Any, spec: Any) -> bool:
                 return False
             if op == "!=" and actual == value:
                 return False
-            if op == "<" and not (actual is not None and actual < value):
+            if op == "<" and not (actual is not None and _safe_lt(actual, value)):
                 return False
-            if op == "<=" and not (actual is not None and actual <= value):
+            if op == "<=" and not (actual is not None and _safe_le(actual, value)):
                 return False
-            if op == ">" and not (actual is not None and actual > value):
+            if op == ">" and not (actual is not None and _safe_gt(actual, value)):
                 return False
-            if op == ">=" and not (actual is not None and actual >= value):
+            if op == ">=" and not (actual is not None and _safe_ge(actual, value)):
                 return False
             if op == "in" and actual not in value:
                 return False

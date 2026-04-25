@@ -374,8 +374,8 @@ class TestStability:
             staging, "transformers_introspection.yaml", _envelope([_introspection_rule()])
         )
 
-        first = build_corpus.build_corpus_text("transformers", tmp_path)
-        second = build_corpus.build_corpus_text("transformers", tmp_path)
+        first = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
+        second = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
         assert first == second
 
     def test_rules_sorted_alphabetically_by_id(self, tmp_path: Path) -> None:
@@ -390,7 +390,7 @@ class TestStability:
                 ]
             ),
         )
-        text = build_corpus.build_corpus_text("transformers", tmp_path)
+        text = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
         doc = yaml.safe_load(text)
         ids = [r["id"] for r in doc["rules"]]
         assert ids == sorted(ids)
@@ -410,15 +410,15 @@ class TestCheckMode:
         )
 
         # Build then immediately check -> should pass.
-        build_corpus.write_corpus("transformers", tmp_path)
-        code, _ = build_corpus.check_drift("transformers", tmp_path)
+        build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
+        code, _ = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
         assert code == 0
 
     def test_check_fails_with_diff_on_drift(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
         _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
 
-        build_corpus.write_corpus("transformers", tmp_path)
+        build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
         # Mutate staging to introduce drift.
         _write_staging(
@@ -426,7 +426,7 @@ class TestCheckMode:
             "transformers_ast.yaml",
             _envelope([_ast_rule(message="Different message — drift!")]),
         )
-        code, diff = build_corpus.check_drift("transformers", tmp_path)
+        code, diff = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
         assert code == 1
         assert "Different message" in diff
 
@@ -434,7 +434,7 @@ class TestCheckMode:
         staging = tmp_path / "_staging"
         _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
         # No write_corpus call — canonical YAML missing.
-        code, msg = build_corpus.check_drift("transformers", tmp_path)
+        code, msg = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
         assert code == 2
         assert "not found" in msg
 
@@ -447,7 +447,7 @@ class TestCheckMode:
 class TestEmptyStaging:
     def test_no_staging_files_raises_filenotfounderror(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError, match="No staging files"):
-            build_corpus.build_corpus_text("transformers", tmp_path)
+            build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
 
     def test_no_staging_does_not_touch_existing_corpus(self, tmp_path: Path) -> None:
         # A pre-existing corpus must NOT be wiped if the merger fails to
@@ -456,7 +456,7 @@ class TestEmptyStaging:
         canonical.write_text("schema_version: 1.0.0\nengine: transformers\nrules: []\n")
 
         with pytest.raises(FileNotFoundError):
-            build_corpus.build_corpus_text("transformers", tmp_path)
+            build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
 
         assert canonical.read_text() == ("schema_version: 1.0.0\nengine: transformers\nrules: []\n")
 
@@ -474,7 +474,7 @@ class TestLoaderRoundTrip:
             staging, "transformers_introspection.yaml", _envelope([_introspection_rule()])
         )
 
-        build_corpus.write_corpus("transformers", tmp_path)
+        build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
         loader = VendoredRulesLoader(corpus_root=tmp_path)
         parsed = loader.load_rules("transformers")
@@ -498,3 +498,271 @@ class TestLoaderRoundTrip:
         loader = VendoredRulesLoader(corpus_root=tmp_path)
         with pytest.raises(UnknownAddedByError):
             loader.load_rules("transformers")
+
+
+# ---------------------------------------------------------------------------
+# Vendor-validation gate — PR 5
+# ---------------------------------------------------------------------------
+
+
+def _stub_vendor_engine(
+    *, divergent_rule_ids: tuple[str, ...] = (), divergence_field: str = "outcome"
+):
+    """Return a callable mirroring :func:`scripts.vendor_rules.vendor_engine`.
+
+    The stub doesn't run the real library — it returns synthetic divergences
+    keyed off rule ids. Tests monkeypatch ``scripts.vendor_rules.vendor_engine``
+    onto this stub so the merger's vendor wiring runs without needing the
+    transformers package available in the test environment.
+    """
+    from scripts._vendor_common import Divergence
+
+    def _stub(*, engine: str, corpus_path: Path, out_path: Path, **kwargs: Any):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("{}\n")
+        divergences = [
+            Divergence(
+                rule_id=rid,
+                field=divergence_field,
+                expected="expected_value",
+                observed="observed_value",
+            )
+            for rid in divergent_rule_ids
+        ]
+        envelope = {
+            "schema_version": "1.0.0",
+            "engine": engine,
+            "engine_version": "stub",
+            "cases": [],
+            "divergences": [d.as_dict() for d in divergences],
+        }
+        return envelope, divergences
+
+    return _stub
+
+
+class TestVendorValidationGate:
+    """Integration tests for the vendor-validation step in the merger."""
+
+    def test_vendor_kept_rules_land_in_canonical(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Rules with no divergence are kept in the canonical YAML."""
+        import scripts.vendor_rules as vr
+
+        monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
+
+        staging = tmp_path / "_staging"
+        _write_staging(
+            staging,
+            "transformers_ast.yaml",
+            _envelope([_ast_rule(rule_id="rule_kept")]),
+        )
+
+        result = build_corpus.write_corpus("transformers", tmp_path)
+        assert result.rules_in_canonical == 1
+        assert result.rules_quarantined == 0
+        assert result.quarantined_ids == ()
+
+        canonical = (tmp_path / "transformers.yaml").read_text()
+        assert "rule_kept" in canonical
+
+    def test_vendor_divergent_rule_is_quarantined(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A rule whose vendor outcome diverges is dropped from canonical."""
+        import scripts.vendor_rules as vr
+
+        monkeypatch.setattr(
+            vr,
+            "vendor_engine",
+            _stub_vendor_engine(divergent_rule_ids=("rule_bad",)),
+        )
+
+        staging = tmp_path / "_staging"
+        _write_staging(
+            staging,
+            "transformers_ast.yaml",
+            _envelope(
+                [
+                    _ast_rule(rule_id="rule_bad", fields={"f1": 1}),
+                    _ast_rule(rule_id="rule_kept", fields={"f2": 2}),
+                ]
+            ),
+        )
+
+        result = build_corpus.write_corpus("transformers", tmp_path)
+        assert result.rules_in_canonical == 1
+        assert result.rules_quarantined == 1
+        assert "rule_bad" in result.quarantined_ids
+
+        canonical = (tmp_path / "transformers.yaml").read_text()
+        assert "rule_kept" in canonical
+        assert "rule_bad" not in canonical
+
+    def test_skip_validation_keeps_all_candidates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--skip-validation`` short-circuits the gate; vendor never runs."""
+        import scripts.vendor_rules as vr
+
+        # If vendor_engine were called, this stub would mark ALL rules as
+        # divergent — but skip_validation should prevent the call entirely.
+        monkeypatch.setattr(
+            vr,
+            "vendor_engine",
+            _stub_vendor_engine(divergent_rule_ids=("rule_a", "rule_b")),
+        )
+
+        staging = tmp_path / "_staging"
+        _write_staging(
+            staging,
+            "transformers_ast.yaml",
+            _envelope(
+                [
+                    _ast_rule(rule_id="rule_a", fields={"f1": 1}),
+                    _ast_rule(rule_id="rule_b", fields={"f2": 2}),
+                ]
+            ),
+        )
+
+        result = build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
+        assert result.validation_skipped is True
+        assert result.rules_in_canonical == 2
+        assert result.rules_quarantined == 0
+
+        canonical = (tmp_path / "transformers.yaml").read_text()
+        assert "rule_a" in canonical
+        assert "rule_b" in canonical
+        # No quarantine file when validation is skipped.
+        assert not (tmp_path / "_staging" / "_failed_validation_transformers.yaml").exists()
+
+    def test_quarantine_yaml_has_documented_schema(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The quarantine file matches the documented {schema_version, engine, engine_version, generated_at, quarantined_rules} shape."""
+        import scripts.vendor_rules as vr
+
+        monkeypatch.setattr(
+            vr,
+            "vendor_engine",
+            _stub_vendor_engine(
+                divergent_rule_ids=("rule_bad",),
+                divergence_field="outcome",
+            ),
+        )
+
+        staging = tmp_path / "_staging"
+        _write_staging(
+            staging,
+            "transformers_ast.yaml",
+            _envelope([_ast_rule(rule_id="rule_bad")]),
+        )
+
+        build_corpus.write_corpus("transformers", tmp_path)
+
+        quarantine_path = tmp_path / "_staging" / "_failed_validation_transformers.yaml"
+        assert quarantine_path.exists()
+        doc = yaml.safe_load(quarantine_path.read_text())
+        assert set(doc) >= {
+            "schema_version",
+            "engine",
+            "engine_version",
+            "generated_at",
+            "quarantined_rules",
+        }
+        assert doc["engine"] == "transformers"
+        assert isinstance(doc["quarantined_rules"], list)
+        assert len(doc["quarantined_rules"]) == 1
+
+        entry = doc["quarantined_rules"][0]
+        assert entry["rule"]["id"] == "rule_bad"
+        assert entry["divergences"][0]["field"] == "outcome"
+        assert entry["divergences"][0]["expected"] == "expected_value"
+        assert entry["divergences"][0]["observed"] == "observed_value"
+
+    def test_quarantine_yaml_removed_when_no_divergences(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pre-existing quarantine file is cleared when the new run has no divergences."""
+        import scripts.vendor_rules as vr
+
+        # Plant a stale quarantine file from an earlier (hypothetical) run.
+        staging = tmp_path / "_staging"
+        staging.mkdir(parents=True, exist_ok=True)
+        stale = staging / "_failed_validation_transformers.yaml"
+        stale.write_text("schema_version: 1.0.0\nengine: transformers\nquarantined_rules: []\n")
+
+        monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
+        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+
+        build_corpus.write_corpus("transformers", tmp_path)
+        assert not stale.exists(), (
+            "stale quarantine file must be removed when the latest run has no divergences"
+        )
+
+    def test_check_mode_runs_validation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--check`` re-runs validation so drift detection compares apples-to-apples."""
+        import scripts.vendor_rules as vr
+
+        monkeypatch.setattr(
+            vr,
+            "vendor_engine",
+            _stub_vendor_engine(divergent_rule_ids=("rule_bad",)),
+        )
+
+        staging = tmp_path / "_staging"
+        _write_staging(
+            staging,
+            "transformers_ast.yaml",
+            _envelope(
+                [
+                    _ast_rule(rule_id="rule_bad", fields={"f1": 1}),
+                    _ast_rule(rule_id="rule_kept", fields={"f2": 2}),
+                ]
+            ),
+        )
+
+        # Build with validation: rule_bad gets quarantined and only rule_kept
+        # lands in canonical.
+        build_corpus.write_corpus("transformers", tmp_path)
+        canonical_path = tmp_path / "transformers.yaml"
+        assert "rule_bad" not in canonical_path.read_text()
+
+        # --check should now agree (re-runs validation, observes the same
+        # quarantine, produces matching canonical YAML).
+        code, _diff = build_corpus.check_drift("transformers", tmp_path)
+        assert code == 0
+
+    def test_merged_candidates_yaml_excluded_from_self_globbing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The merger's own previous output must not feed back into itself.
+
+        Regression guard: ``discover_staging_files`` previously matched
+        ``transformers_*.yaml`` indiscriminately, including the merger's own
+        ``transformers_merged_candidates.yaml`` from the prior run. That
+        caused stale kwargs to dominate the re-merge under fingerprint
+        dedup and silently masked extractor-side fixes.
+        """
+        import scripts.vendor_rules as vr
+
+        monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
+
+        staging = tmp_path / "_staging"
+        _write_staging(
+            staging,
+            "transformers_ast.yaml",
+            _envelope([_ast_rule(rule_id="rule_real")]),
+        )
+
+        build_corpus.write_corpus("transformers", tmp_path)
+        # The merger writes its candidates file; the next run must skip it.
+        merged_candidates = staging / "transformers_merged_candidates.yaml"
+        assert merged_candidates.exists()
+
+        discovered = build_corpus.discover_staging_files("transformers", tmp_path)
+        assert merged_candidates not in discovered
+        assert (staging / "transformers_ast.yaml") in discovered
