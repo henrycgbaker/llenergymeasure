@@ -61,6 +61,15 @@ __all__ = ["DockerRunner"]
 
 logger = logging.getLogger(__name__)
 
+# Watchdog poll cadence: small enough to surface timeouts promptly, large
+# enough to keep idle CPU near zero. 0.5s gives users at most a half-second
+# tail beyond their configured ceiling and matches the progress-display
+# heartbeat sampling cadence.
+_WATCHDOG_POLL_INTERVAL = 0.5
+
+# Sentinel for "budget disabled" in the deadline comparison.
+_NO_DEADLINE = float("inf")
+
 
 @contextmanager
 def _env_file(secrets: dict[str, str]) -> Iterator[Path | None]:
@@ -517,28 +526,18 @@ class DockerRunner:
         watchdog_start = time.monotonic()
         last_activity = watchdog_start
 
-        # Inner-loop poll cadence: small enough to surface timeouts
-        # promptly, large enough to keep idle CPU near zero. 0.5s gives
-        # users at most a half-second tail beyond their configured
-        # ceiling and matches the sampling cadence of the surrounding
-        # progress-display heartbeat.
-        _POLL_INTERVAL = 0.5
-
         try:
             while True:
-                # Effective deadlines this iteration. None means "no
-                # budget" — translate to a far-future sentinel so the
-                # min() comparison stays simple.
-                _INF = float("inf")
+                now = time.monotonic()
                 wall_remaining = (
-                    (self.timeout - (time.monotonic() - watchdog_start))
+                    self.timeout - (now - watchdog_start)
                     if self.timeout is not None
-                    else _INF
+                    else _NO_DEADLINE
                 )
                 silence_remaining = (
-                    (self.silence_timeout - (time.monotonic() - last_activity))
+                    self.silence_timeout - (now - last_activity)
                     if self.silence_timeout is not None
-                    else _INF
+                    else _NO_DEADLINE
                 )
 
                 if wall_remaining <= 0:
@@ -565,10 +564,10 @@ class DockerRunner:
                         ),
                     )
 
-                # Block on the queue for at most the smaller of the two
-                # remaining budgets, capped at the poll interval so we
-                # don't sleep through a Ctrl-C.
-                wait_for = min(wall_remaining, silence_remaining, _POLL_INTERVAL)
+                # Cap the queue wait at the poll interval so a Ctrl-C
+                # interrupt is observed within ~0.5s even with both
+                # budgets large.
+                wait_for = min(wall_remaining, silence_remaining, _WATCHDOG_POLL_INTERVAL)
                 try:
                     line = stdout_q.get(timeout=wait_for)
                 except queue.Empty:
@@ -663,18 +662,20 @@ class DockerRunner:
         Used by the unified watchdog when a timeout fires. Mirrors the
         existing wall-clock kill path: best-effort terminate, then kill,
         then a final wait so the process group is fully reaped. Any
-        exception from the cleanup path is suppressed — the watchdog's
-        responsibility is to *raise the right error*, not to handle a
-        cooperatively-shutting-down container.
+        exception from the cleanup path is logged at debug level — the
+        watchdog's responsibility is to *raise the right error*, not to
+        handle a cooperatively-shutting-down container.
         """
-        with suppress(Exception):
-            proc.terminate()
-        with suppress(Exception):
-            proc.wait(timeout=2.0)
-        with suppress(Exception):
-            proc.kill()
-        with suppress(Exception):
-            proc.wait(timeout=2.0)
+        for stage, action in (
+            ("terminate", proc.terminate),
+            ("wait-after-terminate", lambda: proc.wait(timeout=2.0)),
+            ("kill", proc.kill),
+            ("wait-after-kill", lambda: proc.wait(timeout=2.0)),
+        ):
+            try:
+                action()
+            except Exception as exc:
+                logger.debug("Watchdog cleanup %s failed: %s", stage, exc)
 
     def _build_docker_cmd(
         self,

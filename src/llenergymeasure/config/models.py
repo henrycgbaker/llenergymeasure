@@ -694,15 +694,9 @@ class ExecutionConfig(BaseModel):
         description=(
             "Maximum stdout/stderr-silent stretch tolerated by the Docker watchdog "
             "before the container is killed. Catches hangs that wouldn't trip "
-            "experiment_timeout_seconds — stuck CUDA kernels, deadlocked NCCL "
-            "collectives, frozen compilation steps. Set 0 to disable. Must be "
-            "less than experiment_timeout_seconds to fire usefully; values >= "
-            "experiment_timeout_seconds are equivalent to disabled. Default 300s "
-            "is empirically grounded in PoC-M (script preserved at "
-            "scripts/probe_vllm_stdout_silence.py): observed max-gap during "
-            "container startup is ~6s, leaving ~50x headroom for normal "
-            "operation. Raise (e.g. 600-900s) for fresh TRT-LLM engine builds "
-            "with infrequent compile progress lines."
+            "experiment_timeout_seconds (stuck CUDA kernels, deadlocked NCCL, "
+            "frozen compilation). Set 0 to disable. Raise (e.g. 600-900s) for "
+            "fresh TRT-LLM engine builds with infrequent compile progress lines."
         ),
     )
     deduplicate_equivalent: bool = Field(
