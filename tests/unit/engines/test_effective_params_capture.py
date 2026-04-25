@@ -2,7 +2,7 @@
 
 PoC-C finding (sweep-dedup.md §3.2): the extractor must strip private
 (``_``-prefixed) fields by default — transformers and vLLM both leak
-state that would poison H3 otherwise. These tests verify the default
+state that would poison observed_config_hash otherwise. These tests verify the default
 behaviour and the allowlist escape hatch.
 """
 

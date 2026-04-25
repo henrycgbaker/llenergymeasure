@@ -739,7 +739,7 @@ class TestBeamSearchParams:
 
 
 # =============================================================================
-# Test Group 15: Multi-output token counting (H3 audit fix)
+# Test Group 15: Multi-output token counting
 # =============================================================================
 
 

@@ -1,4 +1,4 @@
-"""H1 view construction from resolved ExperimentConfig (study layer).
+"""Resolved-config view construction from resolved ExperimentConfig (study layer).
 
 The pure hashing primitives live in :mod:`llenergymeasure.domain.hashing`
 (Layer 0).  This module contains only :func:`build_resolved_view`, which
@@ -36,12 +36,12 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# H1 view construction — from library-resolution mechanism output
+# Resolved-config view construction — from library-resolution mechanism output
 # ---------------------------------------------------------------------------
 
 
 def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
-    """Project a (post-library-resolution) ``ExperimentConfig`` into an H1 view.
+    """Project a (post-library-resolution) ``ExperimentConfig`` into a resolved-config view.
 
     Reads the active engine section's full post-normalisation state; the
     library-resolution mechanism has already applied dormant rules to fixpoint before this
@@ -49,8 +49,8 @@ def build_resolved_view(config: ExperimentConfig) -> ConfigHashView:
     meaningless on a pre-resolved config.
 
     Engine-specific sub-models carry a ``sampling`` attribute; it is lifted
-    into its own dict so H1/H3 ordering separates "how the engine constructs"
-    from "what it generates with".
+    into its own dict so the resolved-config / observed-config ordering separates
+    "how the engine constructs" from "what it generates with".
     """
     engine_name = config.engine.value if hasattr(config.engine, "value") else str(config.engine)
     section: Any = getattr(config, engine_name, None)

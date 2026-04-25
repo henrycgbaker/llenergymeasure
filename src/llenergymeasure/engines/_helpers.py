@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Effective-params extraction (H3 source)
+# Effective-params extraction (observed-config source)
 # ---------------------------------------------------------------------------
 
 
@@ -31,13 +31,13 @@ def extract_observed_params(
 ) -> dict[str, Any]:
     """Dump a constructed native type's post-``__post_init__`` state.
 
-    Used by the H3 hashing pipeline (sweep-dedup.md §3.2) — after each
+    Used by the observed-config hashing pipeline (sweep-dedup.md §3.2) — after each
     backend constructs its native type (``GenerationConfig``,
     ``SamplingParams``, ``LlmArgs``), the harness calls this to extract
     the authoritative effective parameters the library settled on.
 
     PoC-C finding (sweep-dedup.md §3.2 and §10 decision log): live
-    libraries leak private state that poisons H3 if passed through
+    libraries leak private state that poisons observed_config_hash if passed through
     unfiltered. Specific leaks observed:
 
     - ``transformers.GenerationConfig``: ``_commit_hash``,
@@ -61,9 +61,9 @@ def extract_observed_params(
 def library_version(module_name: str) -> str:
     """Return ``__version__`` of an imported library or ``"unknown"`` on failure.
 
-    Shared helper for the H3 capture path — all three engines publish the
+    Shared helper for the observed-config capture path — all three engines publish the
     library version alongside their effective-params dump so researchers can
-    disambiguate identical H3 hashes across library versions.
+    disambiguate identical observed_config_hash values across library versions.
     """
     try:
         import importlib

@@ -1,4 +1,4 @@
-"""Sweep library-resolution mechanism — apply vendored dormant rules to fixpoint, dedup by H1.
+"""Sweep library-resolution mechanism — apply vendored dormant rules to fixpoint, dedup by resolved_config_hash.
 
 Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §2.
 
@@ -143,7 +143,7 @@ def _rule_normalisations(rule: Rule) -> dict[str, Any]:
         elif spec.get("present") and "in" not in spec:
             # Subject field marked only as "present" — strip to None (the
             # library either ignores it, or the effective value is captured
-            # later via H3).
+            # later via observed_config_hash).
             out[path] = None
     return out
 
@@ -183,7 +183,7 @@ def _assign_field_path(config: ExperimentConfig, path: str, value: Any) -> None:
 
 @dataclass(frozen=True)
 class EquivalenceGroup:
-    """Pre-run group of declared configs that collapse to the same H1 canonical form."""
+    """Pre-run group of declared configs that collapse to the same resolved canonical form."""
 
     resolved_config_hash: str
     canonical_excerpt: dict[str, Any]

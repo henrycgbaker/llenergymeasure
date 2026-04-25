@@ -263,10 +263,10 @@ class TransformersEngine:
         sampling shape) and ``BitsAndBytesConfig`` (the engine-side quantisation
         shape, when active). Both are Pydantic-style dumpable objects;
         :func:`extract_observed_params` strips private fields (``_commit_hash``,
-        ``_from_model_config``) that would poison H3 if included.
+        ``_from_model_config``) that would poison observed_config_hash if included.
 
         Returns a dict with ``engine`` / ``sampling`` / ``library_version``
-        entries ready for the H3 hashing pipeline.
+        entries ready for the observed-config hashing pipeline.
         """
         from llenergymeasure.engines._helpers import (
             assemble_observed_params,

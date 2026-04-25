@@ -587,7 +587,7 @@ def test_capture_model_memory_mb_defaults_to_gpu_zero(minimal_config):
 
 
 # ---------------------------------------------------------------------------
-# H1: Harness-owned canonical inference timer (time.perf_counter)
+# Harness-owned canonical inference timer (time.perf_counter)
 # ---------------------------------------------------------------------------
 
 

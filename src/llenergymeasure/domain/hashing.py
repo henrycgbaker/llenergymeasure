@@ -1,7 +1,7 @@
-"""Canonical serialisation and SHA-256 hashing primitives (H1 and H3).
+"""Canonical serialisation and SHA-256 hashing primitives.
 
-Pure, dependency-free primitives shared by both the H1 (library-resolution
-mechanism output) and H3 (library-observed) hashing pipelines.  Neither
+Pure, dependency-free primitives shared by both the resolved-config (library-resolution
+mechanism output) and observed-config (library-observed) hashing pipelines.  Neither
 hash requires imports from upper layers, so these live at Layer 0 (domain).
 
 ``build_resolved_view`` — the one function that needs ``ExperimentConfig`` —
@@ -31,7 +31,7 @@ values a researcher would write differently.
 
 
 # ---------------------------------------------------------------------------
-# Canonical serialisation (shared by H1 and H3)
+# Canonical serialisation (shared by resolved-config and observed-config hashes)
 # ---------------------------------------------------------------------------
 
 
@@ -104,8 +104,8 @@ class ConfigHashView:
     Per sweep-dedup.md §2.4, the hashed-field set is:
 
     - ``task`` — model, prompt source, batch shape
-    - ``observed_engine_params`` — engine state (library-resolution mechanism output for H1,
-      live library observation for H3)
+    - ``observed_engine_params`` — engine state (library-resolution mechanism output for
+      resolved-config-hash, live library observation for observed-config-hash)
     - ``observed_sampling_params`` — sampling state (same sources as above)
     - ``lora`` / ``passthrough_kwargs`` — user-attached overrides
 
@@ -124,15 +124,15 @@ class ConfigHashView:
 def hash_config(view: ConfigHashView) -> str:
     """Return SHA-256 hex digest of ``view`` via :func:`canonical_serialise`.
 
-    Both H1 and H3 route through this function; they differ only in how
-    the :class:`ConfigHashView` is populated.
+    Both resolved-config-hash and observed-config-hash route through this function;
+    they differ only in how the :class:`ConfigHashView` is populated.
     """
     payload = asdict(view)
     return hashlib.sha256(canonical_serialise(payload)).hexdigest()
 
 
 # ---------------------------------------------------------------------------
-# H3 view construction — from library-observed effective params
+# Observed-config view construction — from library-observed effective params
 # ---------------------------------------------------------------------------
 
 
@@ -145,7 +145,7 @@ def build_observed_view(
     lora: dict[str, Any] | None = None,
     passthrough_kwargs: dict[str, Any] | None = None,
 ) -> ConfigHashView:
-    """Assemble an H3 view from per-engine ``extract_observed_params`` output.
+    """Assemble an observed-config view from per-engine ``extract_observed_params`` output.
 
     Callers live in the harness/sidecar path — they read ``task`` from the
     same config that ran and pair it with the native-object dumps the engine

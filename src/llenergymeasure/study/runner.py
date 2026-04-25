@@ -178,7 +178,7 @@ def _save_and_record(
             )
 
         # Move config.json sidecar (written by harness to temp dir) to experiment dir.
-        # Also patch in the resolved_config_hash (H1) from StudyConfig, which the harness
+        # Also patch in the resolved_config_hash from StudyConfig, which the harness
         # doesn't have access to at write time.
         if ts_source_dir is not None:
             config_sidecar_src = ts_source_dir / "config.json"
@@ -608,7 +608,7 @@ class StudyRunner:
         self._skip_set: set[tuple[str, int]] = skip_set or set()
         # Pre-built resolution logs keyed by config_hash (written as _resolution.json sidecar)
         self._resolution_logs: dict[str, dict[str, Any]] = resolution_logs or {}
-        # Declared-config-hash → resolved-config-hash (H1) mapping.
+        # Declared-config-hash → resolved-config-hash mapping.
         # Built from study.experiments (post-dedup unique configs) so _save_and_record
         # can patch the resolved_config_hash into each config.json sidecar.
         self._resolved_hashes: dict[str, str] = self._build_resolved_hashes(study)
@@ -853,9 +853,9 @@ class StudyRunner:
 
             from llenergymeasure.study.equivalence_groups import (
                 EquivalenceGroups,
-                PostRunH3Group,
+                ObservedCollisionGroup,
                 PreRunGroup,
-                find_h3_groups,
+                find_observed_collisions,
                 write_equivalence_groups,
             )
 
@@ -887,13 +887,13 @@ class StudyRunner:
             for config_json in self.study_dir.rglob("config.json"):
                 with contextlib.suppress(Exception):
                     sidecars.append(_json.loads(config_json.read_text()))
-            post_run_groups: list[PostRunH3Group] = find_h3_groups(sidecars)
+            post_run_groups: list[ObservedCollisionGroup] = find_observed_collisions(sidecars)
 
             groups = EquivalenceGroups(
                 study_id=study_id,
                 dedup_mode=dedup_mode,
                 groups=pre_run_groups,
-                post_run_h3_groups=post_run_groups,
+                observed_collision_groups=post_run_groups,
             )
             write_equivalence_groups(groups, self.study_dir / "equivalence_groups.json")
             logger.debug("Wrote equivalence_groups.json to %s", self.study_dir)
@@ -902,12 +902,12 @@ class StudyRunner:
 
     @staticmethod
     def _build_resolved_hashes(study: Any) -> dict[str, str]:
-        """Build a declared_config_hash → resolved_config_hash (H1) mapping.
+        """Build a declared_config_hash → resolved_config_hash mapping.
 
         Iterates the unique post-dedup experiments in ``study.experiments``
         (cycles produce duplicates; seen_hashes deduplicates them) and
-        computes each experiment's resolved hash via the same H1 pipeline
-        used at sweep-expansion time.
+        computes each experiment's resolved hash via the same resolved-config
+        pipeline used at sweep-expansion time.
 
         Returns an empty dict on any failure — _save_and_record treats a
         missing resolved_config_hash as best-effort and writes ``None``.

@@ -577,7 +577,7 @@ class MeasurementHarness:
 
         Extracts observed params from ``output.extras`` (populated by each engine's
         ``_capture_effective_params`` after inference), computes ``observed_config_hash``
-        from the H3 hashing pipeline, and writes the sidecar atomically. The runner's
+        from the observed-config hashing pipeline, and writes the sidecar atomically. The runner's
         ``_save_and_record`` moves this file to the per-experiment directory alongside
         ``result.json``.
 
@@ -591,16 +591,16 @@ class MeasurementHarness:
             obs_sampling = output.extras.get("observed_sampling_params", {}) or {}
             lib_ver = output.extras.get("library_version", "unknown") or "unknown"
 
-            # Compute observed_config_hash (H3) from extracted native-type state
+            # Compute observed_config_hash from extracted native-type state
             engine_name = result.engine
             task_dict = config.task.model_dump(mode="python")
-            h3_view = build_observed_view(
+            observed_view = build_observed_view(
                 engine=engine_name,
                 task=task_dict,
                 observed_engine_params=obs_engine,
                 observed_sampling_params=obs_sampling,
             )
-            obs_hash = hash_config(h3_view)
+            obs_hash = hash_config(observed_view)
 
             save_config_sidecar(
                 output_dir,

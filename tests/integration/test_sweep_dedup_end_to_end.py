@@ -1,4 +1,4 @@
-"""End-to-end integration test for sweep canonicalisation + H1 dedup.
+"""End-to-end integration test for sweep canonicalisation + resolved-config dedup.
 
 Exercises the full load path: a study YAML with measurement-equivalent
 sweep configs goes through ``load_study_config`` and the resulting
@@ -38,11 +38,11 @@ def test_greedy_temperature_sweep_collapses(tmp_path: Path) -> None:
     path = _write_study(tmp_path, study)
     study_config = load_study_config(path)
 
-    # Dedup mode default is h1.
+    # Dedup mode default is resolved.
     assert study_config.dedup_mode == "resolved"
     # 6 declared x 1 cycle -> 4 unique x 1 cycle = 4 experiments.
     assert len(study_config.experiments) == 4
-    # Declared count preserved via H1 list.
+    # Declared count preserved via resolved-config-hash list.
     assert len(study_config.declared_resolved_config_hashes) == 6
     # At least one group has multiple members (the greedy-family collapse).
     group_sizes = sorted(g["member_count"] for g in study_config.pre_run_equivalence_groups)
@@ -112,7 +112,7 @@ def test_n_cycles_multiplies_unique_set(tmp_path: Path) -> None:
     # plus 2 sampling variants). 3 unique x 3 cycles = 9 runs.
     assert study_config.dedup_mode == "resolved"
     unique = {h for h in study_config.declared_resolved_config_hashes}
-    # Two declared configs share the same H1 (both greedy).
+    # Two declared configs share the same resolved_config_hash (both greedy).
     assert len(unique) == 3
     assert len(study_config.experiments) == 9
 

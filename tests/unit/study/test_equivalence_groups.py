@@ -1,4 +1,4 @@
-"""Tests for the equivalence-groups sidecar writer + post-run H3 grouping."""
+"""Tests for the equivalence-groups sidecar writer + post-run observed-collision grouping."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from pathlib import Path
 from llenergymeasure.config.models import ExperimentConfig
 from llenergymeasure.study.equivalence_groups import (
     EquivalenceGroups,
-    PostRunH3Group,
+    ObservedCollisionGroup,
     PreRunGroup,
     build_pre_run_groups,
-    find_h3_groups,
+    find_observed_collisions,
     load_equivalence_groups,
     write_equivalence_groups,
 )
@@ -40,8 +40,8 @@ class TestRoundTripSerialisation:
                     deduplicated=True,
                 )
             ],
-            post_run_h3_groups=[
-                PostRunH3Group(
+            observed_collision_groups=[
+                ObservedCollisionGroup(
                     observed_config_hash="sha256:def",
                     engine="transformers",
                     library_version="4.56.0",
@@ -62,8 +62,8 @@ class TestRoundTripSerialisation:
         assert len(loaded.groups) == 1
         assert loaded.groups[0].member_count == 2
         assert loaded.groups[0].would_dedup is True
-        assert len(loaded.post_run_h3_groups) == 1
-        assert loaded.post_run_h3_groups[0].gap_detected is True
+        assert len(loaded.observed_collision_groups) == 1
+        assert loaded.observed_collision_groups[0].gap_detected is True
 
 
 class TestBuildPreRunGroups:
@@ -99,69 +99,69 @@ class TestBuildPreRunGroups:
         raise AssertionError("expected ValueError")
 
 
-class TestFindH3Groups:
-    def test_flags_gap_when_same_h3_distinct_h1(self):
+class TestFindObservedCollisions:
+    def test_flags_gap_when_same_observed_distinct_resolved(self):
         sidecars = [
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_a",
-                "observed_config_hash": "h3_shared",
+                "resolved_config_hash": "resolved_a",
+                "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_b",  # Distinct H1 — gap!
-                "observed_config_hash": "h3_shared",
+                "resolved_config_hash": "resolved_b",  # Distinct resolved — gap!
+                "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
             },
         ]
-        groups = find_h3_groups(sidecars)
+        groups = find_observed_collisions(sidecars)
         assert len(groups) == 1
         assert groups[0].gap_detected is True
 
-    def test_no_flag_when_h1_same(self):
-        # Same H1 collapsing on the library side is not a gap — the
+    def test_no_flag_when_resolved_same(self):
+        # Same resolved-config collapsing on the library side is not a gap — the
         # library-resolution mechanism already saw them as equivalent.
         sidecars = [
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_a",
-                "observed_config_hash": "h3_shared",
+                "resolved_config_hash": "resolved_a",
+                "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_a",
-                "observed_config_hash": "h3_shared",
+                "resolved_config_hash": "resolved_a",
+                "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
             },
         ]
-        groups = find_h3_groups(sidecars)
+        groups = find_observed_collisions(sidecars)
         assert len(groups) == 1
         assert groups[0].gap_detected is False
 
-    def test_distinct_h3_no_group(self):
+    def test_distinct_observed_no_group(self):
         sidecars = [
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_a",
-                "observed_config_hash": "h3_a",
+                "resolved_config_hash": "resolved_a",
+                "observed_config_hash": "observed_a",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_b",
-                "observed_config_hash": "h3_b",
+                "resolved_config_hash": "resolved_b",
+                "observed_config_hash": "observed_b",
                 "experiment_id": "exp_b",
             },
         ]
-        groups = find_h3_groups(sidecars)
+        groups = find_observed_collisions(sidecars)
         assert groups == []
 
     def test_different_versions_do_not_cross_groups(self):
@@ -169,33 +169,37 @@ class TestFindH3Groups:
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_a",
-                "observed_config_hash": "h3_shared",
+                "resolved_config_hash": "resolved_a",
+                "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_a",
             },
             {
                 "engine": "transformers",
                 "library_version": "4.57.0",  # Different version
-                "resolved_config_hash": "h1_b",
-                "observed_config_hash": "h3_shared",
+                "resolved_config_hash": "resolved_b",
+                "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
             },
         ]
-        groups = find_h3_groups(sidecars)
+        groups = find_observed_collisions(sidecars)
         # Version mismatch — grouped separately, each with len=1, so no gap.
         assert groups == []
 
-    def test_sidecar_missing_h3_skipped(self):
+    def test_sidecar_missing_observed_skipped(self):
         sidecars = [
-            {"engine": "transformers", "library_version": "4.56.0", "resolved_config_hash": "h1_a"},
             {
                 "engine": "transformers",
                 "library_version": "4.56.0",
-                "resolved_config_hash": "h1_b",
-                "observed_config_hash": "h3_shared",
+                "resolved_config_hash": "resolved_a",
+            },
+            {
+                "engine": "transformers",
+                "library_version": "4.56.0",
+                "resolved_config_hash": "resolved_b",
+                "observed_config_hash": "observed_shared",
                 "experiment_id": "exp_b",
             },
         ]
         # Only one valid sidecar; no group formed.
-        groups = find_h3_groups(sidecars)
+        groups = find_observed_collisions(sidecars)
         assert groups == []

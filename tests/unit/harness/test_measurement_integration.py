@@ -374,7 +374,7 @@ def test_harness_build_result_uses_real_energy_values() -> None:
 
 
 def test_harness_build_result_uses_energy_measurement_duration_for_baseline() -> None:
-    """H1: Baseline energy adjustment uses energy_measurement.duration_sec, not datetime delta."""
+    """Baseline energy adjustment uses energy_measurement.duration_sec, not datetime delta."""
     from datetime import datetime, timedelta
 
     from llenergymeasure.config.models import ExperimentConfig
