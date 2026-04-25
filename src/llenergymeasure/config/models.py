@@ -688,6 +688,17 @@ class ExecutionConfig(BaseModel):
             "the circuit breaker counts them toward max_consecutive_failures."
         ),
     )
+    stdout_silence_timeout_seconds: float = Field(
+        default=300.0,
+        ge=0.0,
+        description=(
+            "Maximum stdout/stderr-silent stretch tolerated by the Docker watchdog "
+            "before the container is killed. Catches hangs that wouldn't trip "
+            "experiment_timeout_seconds (stuck CUDA kernels, deadlocked NCCL, "
+            "frozen compilation). Set 0 to disable. Raise (e.g. 600-900s) for "
+            "fresh TRT-LLM engine builds with infrequent compile progress lines."
+        ),
+    )
     deduplicate_equivalent: bool = Field(
         default=True,
         description=(

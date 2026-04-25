@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
 import shutil
 import subprocess
 import sys
@@ -49,6 +50,7 @@ from llenergymeasure.config.ssot import (
 )
 from llenergymeasure.infra.docker_errors import (
     DockerContainerError,
+    DockerStdoutSilenceError,
     DockerTimeoutError,
     capture_stderr_snippet,
     translate_docker_error,
@@ -58,6 +60,15 @@ from llenergymeasure.utils.exceptions import DockerError
 __all__ = ["DockerRunner"]
 
 logger = logging.getLogger(__name__)
+
+# Watchdog poll cadence: small enough to surface timeouts promptly, large
+# enough to keep idle CPU near zero. 0.5s gives users at most a half-second
+# tail beyond their configured ceiling and matches the progress-display
+# heartbeat sampling cadence.
+_WATCHDOG_POLL_INTERVAL = 0.5
+
+# Sentinel for "budget disabled" in the deadline comparison.
+_NO_DEADLINE = float("inf")
 
 
 @contextmanager
@@ -114,6 +125,12 @@ class DockerRunner:
     Args:
         image:   Docker image to run (e.g. ``"ghcr.io/henrycgbaker/llenergymeasure/vllm:1.19.0-cuda12"``).
         timeout: Optional wall-clock timeout in seconds. None = no timeout.
+        silence_timeout: Optional stdout-silence ceiling in seconds. The
+                 streaming-mode watchdog kills the container if no
+                 stdout/stderr line arrives within this window. None or 0
+                 disables the silence watchdog (wall-clock only). Values
+                 >= ``timeout`` are accepted but redundant with the
+                 wall-clock — the watchdog raises whichever fires first.
         source:  Runner resolution source string (e.g. ``"yaml"``, ``"auto_detected"``).
                  Recorded in result effective_config for traceability.
     """
@@ -122,6 +139,7 @@ class DockerRunner:
         self,
         image: str,
         timeout: float | None = None,
+        silence_timeout: float | None = None,
         source: str = "unknown",
         extra_mounts: list[tuple[str, str]] | None = None,
         container_name: str | None = None,
@@ -129,6 +147,11 @@ class DockerRunner:
     ) -> None:
         self.image = image
         self.timeout = timeout
+        # 0 / None / negative all map to "disabled" so call-sites and
+        # config-side handling stay simple.
+        self.silence_timeout: float | None = (
+            silence_timeout if silence_timeout and silence_timeout > 0 else None
+        )
         self.source = source
         self.extra_mounts = extra_mounts or []
         self._container_name = container_name
@@ -479,73 +502,144 @@ class DockerRunner:
         stderr_thread = threading.Thread(target=_read_stderr, args=(proc.stderr,), daemon=True)
         stderr_thread.start()
 
-        # Stream stdout line by line — forward inner events as top-level steps.
-        # The container's "preflight" step is translated to "container_preflight"
-        # to avoid collision with the host-level preflight.
-        container_start_done = False
+        # Pump stdout into a queue from a daemon thread so the main loop
+        # can wake up periodically to check both timeout budgets even
+        # when the container is producing nothing. The blocking
+        # ``for line in proc.stdout`` shape this replaces would hang
+        # indefinitely on a stuck CUDA / NCCL / compile step — the
+        # wall-clock proc.wait() never gets a chance to fire because we
+        # never exit the for-loop. See issue #366.
+        stdout_q: queue.Queue[str | None] = queue.Queue()
+
+        def _pump_stdout(pipe: Any) -> None:
+            try:
+                for line in pipe:
+                    stdout_q.put(line)
+            finally:
+                stdout_q.put(None)  # sentinel: pipe closed (EOF or process exit)
+
         assert proc.stdout is not None
-        for line in proc.stdout:
-            stripped = line.strip()
-            if stripped.startswith('{"event":') and progress is not None:
+        stdout_thread = threading.Thread(target=_pump_stdout, args=(proc.stdout,), daemon=True)
+        stdout_thread.start()
+
+        container_start_done = False
+        watchdog_start = time.monotonic()
+        last_activity = watchdog_start
+
+        try:
+            while True:
+                now = time.monotonic()
+                wall_remaining = (
+                    self.timeout - (now - watchdog_start)
+                    if self.timeout is not None
+                    else _NO_DEADLINE
+                )
+                silence_remaining = (
+                    self.silence_timeout - (now - last_activity)
+                    if self.silence_timeout is not None
+                    else _NO_DEADLINE
+                )
+
+                if wall_remaining <= 0:
+                    self._kill_container_for_watchdog(proc)
+                    raise DockerTimeoutError(
+                        message=f"Container timed out after {self.timeout}s (wall-clock).",
+                        fix_suggestion=(
+                            "Increase study_execution.experiment_timeout_seconds or "
+                            "reduce experiment size."
+                        ),
+                    )
+                if silence_remaining <= 0:
+                    self._kill_container_for_watchdog(proc)
+                    raise DockerStdoutSilenceError(
+                        message=(
+                            f"Container produced no stdout for "
+                            f"{self.silence_timeout}s (likely stuck process)."
+                        ),
+                        fix_suggestion=(
+                            "Increase study_execution.stdout_silence_timeout_seconds "
+                            "if your workload legitimately goes silent for longer "
+                            "(e.g. fresh TRT-LLM engine builds), or investigate the "
+                            "stuck step. Check container logs in the exchange dir."
+                        ),
+                    )
+
+                # Cap the queue wait at the poll interval so a Ctrl-C
+                # interrupt is observed within ~0.5s even with both
+                # budgets large.
+                wait_for = min(wall_remaining, silence_remaining, _WATCHDOG_POLL_INTERVAL)
                 try:
-                    event = json.loads(stripped)
-                    event_type = event.get("event")
-                    step = event.get("step", "")
+                    line = stdout_q.get(timeout=wait_for)
+                except queue.Empty:
+                    continue
+                if line is None:
+                    break  # stdout pipe closed
+                last_activity = time.monotonic()
 
-                    # End "container_start" step on first inner event (boot time)
-                    if not container_start_done and container_start_time is not None:
-                        container_start_done = True
-                        container_start_done_event.set()
-                        progress.on_step_done(
-                            "container_start", time.perf_counter() - container_start_time
-                        )
+                stripped = line.strip()
+                if stripped.startswith('{"event":') and progress is not None:
+                    try:
+                        event = json.loads(stripped)
+                        event_type = event.get("event")
+                        step = event.get("step", "")
 
-                    # Translate container's "preflight" to avoid host collision
-                    if step == "preflight":
-                        step = "container_preflight"
+                        # End "container_start" on first inner event
+                        if not container_start_done and container_start_time is not None:
+                            container_start_done = True
+                            container_start_done_event.set()
+                            progress.on_step_done(
+                                "container_start",
+                                time.perf_counter() - container_start_time,
+                            )
 
-                    # Forward inner events as top-level steps
-                    if event_type == "step_start":
-                        progress.on_step_start(
-                            step,
-                            event.get("description", ""),
-                            event.get("detail", ""),
-                        )
-                    elif event_type == "step_update":
-                        progress.on_step_update(step, event.get("detail", ""))
-                    elif event_type == "step_done":
-                        progress.on_step_done(step, event.get("elapsed_sec", 0.0))
-                    elif event_type == "step_skip":
-                        progress.on_step_skip(step, event.get("reason", ""))
-                    elif event_type == "substep":
-                        progress.on_substep(
-                            step,
-                            event.get("text", ""),
-                            event.get("elapsed_sec", 0.0),
-                        )
-                    elif event_type == "substep_start":
-                        progress.on_substep_start(step, event.get("text", ""))
-                    elif event_type == "substep_done":
-                        progress.on_substep_done(
-                            step,
-                            event.get("text"),
-                            event.get("elapsed_sec"),
-                        )
-                except (json.JSONDecodeError, KeyError):
-                    logger.debug("Unparseable progress line: %s", stripped)
-            else:
-                # Non-progress line — log as container output
-                if stripped:
-                    masked = _mask_secrets_fn(stripped) if _mask_secrets_fn else stripped
-                    logger.debug("container stdout: %s", masked)
+                        # Translate container's "preflight" to avoid host collision
+                        if step == "preflight":
+                            step = "container_preflight"
 
-        proc.stdout.close()
+                        if event_type == "step_start":
+                            progress.on_step_start(
+                                step,
+                                event.get("description", ""),
+                                event.get("detail", ""),
+                            )
+                        elif event_type == "step_update":
+                            progress.on_step_update(step, event.get("detail", ""))
+                        elif event_type == "step_done":
+                            progress.on_step_done(step, event.get("elapsed_sec", 0.0))
+                        elif event_type == "step_skip":
+                            progress.on_step_skip(step, event.get("reason", ""))
+                        elif event_type == "substep":
+                            progress.on_substep(
+                                step,
+                                event.get("text", ""),
+                                event.get("elapsed_sec", 0.0),
+                            )
+                        elif event_type == "substep_start":
+                            progress.on_substep_start(step, event.get("text", ""))
+                        elif event_type == "substep_done":
+                            progress.on_substep_done(
+                                step,
+                                event.get("text"),
+                                event.get("elapsed_sec"),
+                            )
+                    except (json.JSONDecodeError, KeyError):
+                        logger.debug("Unparseable progress line: %s", stripped)
+                else:
+                    if stripped:
+                        masked = _mask_secrets_fn(stripped) if _mask_secrets_fn else stripped
+                        logger.debug("container stdout: %s", masked)
+        finally:
+            with suppress(Exception):
+                proc.stdout.close()
+            stdout_thread.join(timeout=TIMEOUT_THREAD_JOIN)
 
         # If no inner events arrived, end container_start now (old images)
         if not container_start_done and container_start_time is not None and progress is not None:
             progress.on_step_done("container_start", time.perf_counter() - container_start_time)
 
-        # Wait for process to finish
+        # Wait for process exit. The watchdog above ensures we only get
+        # here when stdout has closed; proc.wait() blocks only until the
+        # process actually reaps, which is bounded.
         try:
             proc.wait(timeout=self.timeout)
         except subprocess.TimeoutExpired as exc:
@@ -560,6 +654,28 @@ class DockerRunner:
         stderr_text = "".join(stderr_lines)
 
         return proc.returncode, stderr_text
+
+    @staticmethod
+    def _kill_container_for_watchdog(proc: subprocess.Popen[str]) -> None:
+        """Terminate then SIGKILL a hung container; swallow any wait failures.
+
+        Used by the unified watchdog when a timeout fires. Mirrors the
+        existing wall-clock kill path: best-effort terminate, then kill,
+        then a final wait so the process group is fully reaped. Any
+        exception from the cleanup path is logged at debug level — the
+        watchdog's responsibility is to *raise the right error*, not to
+        handle a cooperatively-shutting-down container.
+        """
+        for stage, action in (
+            ("terminate", proc.terminate),
+            ("wait-after-terminate", lambda: proc.wait(timeout=2.0)),
+            ("kill", proc.kill),
+            ("wait-after-kill", lambda: proc.wait(timeout=2.0)),
+        ):
+            try:
+                action()
+            except Exception as exc:
+                logger.debug("Watchdog cleanup %s failed: %s", stage, exc)
 
     def _build_docker_cmd(
         self,

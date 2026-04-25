@@ -631,7 +631,10 @@ def _run_in_process(
 
     if spec is not None and spec.mode == RUNNER_DOCKER:
         # Docker path: dispatch to container directly (no subprocess)
-        from llenergymeasure.infra.docker_errors import DockerTimeoutError
+        from llenergymeasure.infra.docker_errors import (
+            DockerStdoutSilenceError,
+            DockerTimeoutError,
+        )
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.utils.exceptions import DockerError
@@ -641,6 +644,7 @@ def _run_in_process(
         docker_runner = DockerRunner(
             image=image,
             timeout=study.study_execution.experiment_timeout_seconds,
+            silence_timeout=study.study_execution.stdout_silence_timeout_seconds,
             source=spec.source,
             extra_mounts=spec.extra_mounts,
         )
@@ -649,10 +653,22 @@ def _run_in_process(
             result, docker_ts_dir = docker_runner.run(
                 config, progress=progress, save_timeseries=save_ts
             )
+        except DockerStdoutSilenceError as exc:
+            # Distinct error type so users can tell stuck-process kills
+            # from wall-clock timeouts when reading the manifest.
+            error_payload: dict[str, Any] = {
+                "type": "StdoutSilenceTimeoutError",
+                "message": str(exc),
+                "config_hash": config_hash,
+            }
+            manifest.mark_failed(
+                config_hash, cycle, error_payload["type"], error_payload["message"]
+            )
+            return [], [None], [error_payload["message"]]
         except DockerTimeoutError as exc:
             # Normalise to "TimeoutError" so the circuit breaker sees the same
             # failure class as the subprocess path.
-            error_payload: dict[str, Any] = {
+            error_payload = {
                 "type": "TimeoutError",
                 "message": str(exc),
                 "config_hash": config_hash,
