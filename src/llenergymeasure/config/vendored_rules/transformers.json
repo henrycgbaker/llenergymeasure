@@ -4,8 +4,8 @@
   "engine_version": "4.51.0",
   "image_ref": "llenergymeasure:transformers",
   "base_image_ref": "llenergymeasure:transformers",
-  "vendored_at": "2026-04-25T19:03:26+02:00",
-  "vendor_commit": "9c435f0eb4d0a7b14ec034d9f1c5b681c430f522",
+  "vendored_at": "2026-04-25T19:07:06+02:00",
+  "vendor_commit": "9770586c1b38867fadd53ebb480ccdfc0326e968",
   "cases": [
     {
       "id": "transformers_bnb_bnb_4bit_compute_dtype_type",
