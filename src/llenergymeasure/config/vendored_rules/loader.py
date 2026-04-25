@@ -269,6 +269,24 @@ class VendoredRules:
 _FIELD_REF_PREFIX = "@"
 
 
+def _spec_has_field_ref(spec: Any) -> bool:
+    """Return True if ``spec`` contains any ``@field_path`` string anywhere.
+
+    Used to short-circuit :func:`_resolve_field_refs_in_spec` on the hot
+    path: most predicates are literal (no cross-field refs), so paying a
+    cheap pre-scan to skip the substitution-recursion's allocations is
+    a win — every ``Rule.try_match`` runs this on every match_fields
+    spec on every config construction.
+    """
+    if isinstance(spec, str):
+        return spec.startswith(_FIELD_REF_PREFIX)
+    if isinstance(spec, dict):
+        return any(_spec_has_field_ref(v) for v in spec.values())
+    if isinstance(spec, (list, tuple)):
+        return any(_spec_has_field_ref(v) for v in spec)
+    return False
+
+
 def _resolve_field_refs_in_spec(spec: Any, config: Any, predicate_field_path: str) -> Any:
     """Substitute ``@field`` references in a predicate spec with config values.
 
@@ -278,10 +296,17 @@ def _resolve_field_refs_in_spec(spec: Any, config: Any, predicate_field_path: st
     ``predicate_field_path``; dotted references (``@a.b.c``) resolve from
     the config root.
 
+    Short-circuits via :func:`_spec_has_field_ref` when the spec contains
+    no references — returns the original spec unchanged in that case,
+    avoiding the dict/list rebuild overhead on the common literal-spec
+    path.
+
     Returns a new spec with substitutions applied; the input is not
     mutated. Non-ref strings pass through unchanged.
     """
-    if isinstance(spec, str) and spec.startswith(_FIELD_REF_PREFIX):
+    if not _spec_has_field_ref(spec):
+        return spec
+    if isinstance(spec, str):
         return _resolve_one_ref(spec, config, predicate_field_path)
     if isinstance(spec, dict):
         return {
