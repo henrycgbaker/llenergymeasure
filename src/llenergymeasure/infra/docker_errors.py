@@ -6,12 +6,14 @@ useful guidance to the researcher without them needing to understand Docker
 internals.
 
 Error categories:
-    DockerImagePullError    — image not found, pull failed
-    DockerGPUAccessError    — NVIDIA Container Toolkit / GPU access problem
-    DockerOOMError          — out-of-memory inside container
-    DockerPermissionError   — permission denied (docker daemon socket)
-    DockerTimeoutError      — container hit timeout or was killed
-    DockerContainerError    — generic fallback with stderr snippet
+    DockerImagePullError       — image not found, pull failed
+    DockerGPUAccessError       — NVIDIA Container Toolkit / GPU access problem
+    DockerOOMError             — out-of-memory inside container
+    DockerPermissionError      — permission denied (docker daemon socket)
+    DockerTimeoutError         — container hit wall-clock timeout and was killed
+    DockerStdoutSilenceError   — container produced no output for the silence
+                                 budget (stuck process detected by watchdog)
+    DockerContainerError       — generic fallback with stderr snippet
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ __all__ = [
     "DockerImagePullError",
     "DockerOOMError",
     "DockerPermissionError",
+    "DockerStdoutSilenceError",
     "DockerTimeoutError",
     "capture_stderr_snippet",
     "translate_docker_error",
@@ -52,6 +55,20 @@ class DockerPermissionError(DockerError):
 
 class DockerTimeoutError(DockerError):
     """Container exceeded the allowed wall-clock time and was killed."""
+
+
+class DockerStdoutSilenceError(DockerError):
+    """Container produced no stdout/stderr output for the silence budget.
+
+    Distinct from :class:`DockerTimeoutError`: the wall-clock timeout
+    fires when the container has been running too long total. The
+    silence error fires when the container *might* still be progressing
+    on the wall-clock budget but has gone quiet — typically a hung CUDA
+    kernel, a deadlocked NCCL collective, or a stuck compilation step.
+
+    The watchdog tracks both budgets independently and reports which
+    one fired so users can tune the right knob.
+    """
 
 
 class DockerContainerError(DockerError):

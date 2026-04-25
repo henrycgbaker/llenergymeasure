@@ -1881,7 +1881,10 @@ class StudyRunner:
         Returns:
             ExperimentResult on success, or a failure dict on error.
         """
-        from llenergymeasure.infra.docker_errors import DockerTimeoutError
+        from llenergymeasure.infra.docker_errors import (
+            DockerStdoutSilenceError,
+            DockerTimeoutError,
+        )
         from llenergymeasure.infra.docker_runner import DockerRunner
         from llenergymeasure.infra.image_registry import get_default_image
         from llenergymeasure.study.container_lifecycle import (
@@ -1940,6 +1943,7 @@ class StudyRunner:
         docker_runner = DockerRunner(
             image=image,
             timeout=self.study.study_execution.experiment_timeout_seconds,
+            silence_timeout=self.study.study_execution.stdout_silence_timeout_seconds,
             source=spec.source,
             extra_mounts=extra_mounts,
             container_name=container_name,
@@ -1964,6 +1968,15 @@ class StudyRunner:
                 save_timeseries=self.study.output.save_timeseries,
                 skip_image_check=self._images_prepared,
             )
+        except DockerStdoutSilenceError as exc:
+            # Distinct error type from the wall-clock timeout so users
+            # can tell stuck-process kills apart in the manifest.
+            result = {
+                "type": "StdoutSilenceTimeoutError",
+                "message": str(exc),
+                "config_hash": config_hash,
+            }
+            self._persist_failure_artefacts(exc, config_hash, cycle, result)
         except DockerTimeoutError as exc:
             # Normalise to "TimeoutError" so the circuit breaker sees the same
             # failure class as the subprocess path (see _collect_result).
