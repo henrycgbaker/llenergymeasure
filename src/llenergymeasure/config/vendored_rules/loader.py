@@ -99,7 +99,7 @@ AddedBy = Literal[
     "introspection",
     "manual_seed",
     "runtime_warning",
-    "h3_collision",
+    "observed_collision",
 ]
 """Provenance of a rule in the corpus.
 
@@ -115,7 +115,7 @@ Five discovery paths with distinct trust/verifiability profiles:
 - ``runtime_warning`` — proposed by the feedback loop from captured
   ``logger.warning_once`` emissions (needs human generalisation before
   landing).
-- ``h3_collision`` — proposed by the feedback loop from observed-config-hash
+- ``observed_collision`` — proposed by the feedback loop from observed-config-hash
   collision detection (needs human generalisation before landing).
 """
 

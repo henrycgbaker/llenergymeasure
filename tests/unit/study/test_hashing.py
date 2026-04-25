@@ -1,4 +1,4 @@
-"""Tests for canonical serialisation + H1/H3 hashing.
+"""Tests for canonical serialisation + resolved/observed config hashing.
 
 Normalisation rules come from ``sweep-dedup.md`` §9.Q3. Each test pins one
 rule from the table so a rule change surfaces as a targeted failure rather
@@ -101,7 +101,7 @@ class TestHashConfig:
         assert hash_config(v1) != hash_config(v2)
 
 
-class TestBuildH1View:
+class TestBuildResolvedView:
     def test_extracts_engine_and_task(self):
         cfg = _mk_config(transformers={"sampling": {"do_sample": False}})
         view = build_resolved_view(cfg)
@@ -121,7 +121,7 @@ class TestBuildH1View:
         assert view.passthrough_kwargs == {"my_key": "my_val"}
 
 
-class TestBuildH3View:
+class TestBuildObservedView:
     def test_carries_inputs_through(self):
         view = build_observed_view(
             engine="vllm",
@@ -133,27 +133,27 @@ class TestBuildH3View:
         assert view.observed_engine_params["dtype"] == "float16"
         assert view.observed_sampling_params["temperature"] == 1.0
 
-    def test_h1_and_h3_match_on_same_inputs(self):
+    def test_resolved_and_observed_match_on_same_inputs(self):
         # Symmetry: both views hashed through the same pipe produce the same hash
-        # when the underlying fields match. This is what makes the H3-collision
+        # when the underlying fields match. This is what makes the observed-collision
         # invariant meaningful.
         task = {"model": "gpt2"}
         engine_params = {"dtype": "float16"}
         sampling_params = {"temperature": 1.0}
 
-        h1_view = ConfigHashView(
+        resolved_view = ConfigHashView(
             engine="vllm",
             task=task,
             observed_engine_params=engine_params,
             observed_sampling_params=sampling_params,
         )
-        h3_view = build_observed_view(
+        observed_view = build_observed_view(
             engine="vllm",
             task=task,
             observed_engine_params=engine_params,
             observed_sampling_params=sampling_params,
         )
-        assert hash_config(h1_view) == hash_config(h3_view)
+        assert hash_config(resolved_view) == hash_config(observed_view)
 
 
 class TestHashStability:

@@ -106,7 +106,7 @@ def save_config_sidecar(
     observed_config_hash: str | None = None,
     config_validation_observations: list[dict[str, object]] | None = None,
 ) -> Path:
-    """Write the per-experiment ``config.json`` sidecar with H1/H3 payload.
+    """Write the per-experiment ``config.json`` sidecar with resolved/observed config-hash payload.
 
     Schema lives in ``.product/designs/config-deduplication-dormancy/sweep-dedup.md``
     §3.3. Fields:

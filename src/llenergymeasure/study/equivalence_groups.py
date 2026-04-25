@@ -1,11 +1,11 @@
-"""Equivalence-groups sidecar — pre-run H1 groups + post-run H3 detection.
+"""Equivalence-groups sidecar — pre-run resolved groups + post-run observed detection.
 
 Design: ``.product/designs/config-deduplication-dormancy/sweep-dedup.md`` §6.
 
 Written alongside the study's results bundle. ``pre_run_groups`` is populated
 at sweep-expansion time by :func:`resolve_library_effective` and serialised immediately;
-``post_run_h3_groups`` is populated after the study completes by scanning
-sidecars for shared H3 hashes.
+``observed_collision_groups`` is populated after the study completes by scanning
+sidecars for shared observed-config-hash values.
 
 The observed-config-hash collision invariant (§4.1) guarantees that in a post-resolved-config-hash dedup run set,
 any group with ``len(member_resolved_config_hashes) >= 2`` is a **proven library-resolution mechanism gap**.
@@ -43,7 +43,7 @@ class PreRunGroup:
 
 
 @dataclass(frozen=True)
-class PostRunH3Group:
+class ObservedCollisionGroup:
     """Post-run observed-config-hash collision group — a library-resolution mechanism gap if member count >= 2."""
 
     observed_config_hash: str
@@ -63,7 +63,7 @@ class EquivalenceGroups:
     dedup_mode: Literal["resolved", "off"]
     vendored_rules_version: str = ""
     groups: list[PreRunGroup] = field(default_factory=list)
-    post_run_h3_groups: list[PostRunH3Group] = field(default_factory=list)
+    observed_collision_groups: list[ObservedCollisionGroup] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -105,11 +105,11 @@ def build_pre_run_groups(
 
 
 # ---------------------------------------------------------------------------
-# Post-run H3 grouping — scan sidecars after study completes
+# Post-run observed-config-hash grouping — scan sidecars after study completes
 # ---------------------------------------------------------------------------
 
 
-def find_h3_groups(sidecars: list[dict[str, Any]]) -> list[PostRunH3Group]:
+def find_observed_collisions(sidecars: list[dict[str, Any]]) -> list[ObservedCollisionGroup]:
     """Group sidecars by ``(engine, library_version, observed_config_hash)``.
 
     Any group with size >= 2 AND distinct ``resolved_config_hash`` across its members is
@@ -118,29 +118,29 @@ def find_h3_groups(sidecars: list[dict[str, Any]]) -> list[PostRunH3Group]:
     Each sidecar dict must carry at minimum ``engine``, ``library_version``,
     ``resolved_config_hash``, ``observed_config_hash``, and ``experiment_id`` keys. Sidecars missing any
     of these are silently skipped (pre-50.3a data, or runs with dedup_mode=off
-    for which H3 may be partial).
+    for which observed-config-hash may be partial).
     """
     buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for sc in sidecars:
-        h3 = sc.get("observed_config_hash")
-        if not h3:
+        obs_hash = sc.get("observed_config_hash")
+        if not obs_hash:
             continue
         engine = str(sc.get("engine", ""))
         version = str(sc.get("library_version", ""))
-        buckets[(engine, version, h3)].append(sc)
+        buckets[(engine, version, obs_hash)].append(sc)
 
-    groups: list[PostRunH3Group] = []
-    for (engine, version, h3), members in buckets.items():
+    groups: list[ObservedCollisionGroup] = []
+    for (engine, version, obs_hash), members in buckets.items():
         if len(members) < 2:
             continue
         resolved_config_hashes = tuple(str(m.get("resolved_config_hash", "")) for m in members)
         exp_ids = tuple(str(m.get("experiment_id", "")) for m in members)
-        # Gap only if the resolved_config_hashes differ — matching H1 means the
+        # Gap only if the resolved_config_hashes differ — matching resolved-config means the
         # library-resolution mechanism already collapsed them.
         gap_detected = len(set(resolved_config_hashes)) > 1
         groups.append(
-            PostRunH3Group(
-                observed_config_hash=h3,
+            ObservedCollisionGroup(
+                observed_config_hash=obs_hash,
                 engine=engine,
                 library_version=version,
                 member_resolved_config_hashes=resolved_config_hashes,
@@ -167,7 +167,7 @@ def write_equivalence_groups(groups: EquivalenceGroups, path: Path) -> None:
         "dedup_mode": groups.dedup_mode,
         "vendored_rules_version": groups.vendored_rules_version,
         "groups": [asdict(g) for g in groups.groups],
-        "post_run_h3_groups": [asdict(g) for g in groups.post_run_h3_groups],
+        "observed_collision_groups": [asdict(g) for g in groups.observed_collision_groups],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(json.dumps(payload, indent=2, default=str), path)
@@ -183,7 +183,9 @@ def load_equivalence_groups(path: Path) -> EquivalenceGroups:
         dedup_mode=dedup_mode,
         vendored_rules_version=str(data.get("vendored_rules_version", "")),
         groups=[_pre_from_dict(g) for g in data.get("groups", [])],
-        post_run_h3_groups=[_post_from_dict(g) for g in data.get("post_run_h3_groups", [])],
+        observed_collision_groups=[
+            _post_from_dict(g) for g in data.get("observed_collision_groups", [])
+        ],
     )
 
 
@@ -199,8 +201,8 @@ def _pre_from_dict(data: dict[str, Any]) -> PreRunGroup:
     )
 
 
-def _post_from_dict(data: dict[str, Any]) -> PostRunH3Group:
-    return PostRunH3Group(
+def _post_from_dict(data: dict[str, Any]) -> ObservedCollisionGroup:
+    return ObservedCollisionGroup(
         observed_config_hash=str(data["observed_config_hash"]),
         engine=str(data.get("engine", "")),
         library_version=str(data.get("library_version", "")),

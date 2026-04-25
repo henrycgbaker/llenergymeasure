@@ -82,7 +82,7 @@ Every entry under `rules:` must populate the following fields.
     Remove it or set do_sample=True.
   references:
     - "transformers.GenerationConfig.validate() (line ~598)"
-  added_by: ast_walker                   # ast_walker | manual_seed | runtime_warning_pr | h3_collision_pr
+  added_by: ast_walker                   # ast_walker | manual_seed | runtime_warning_pr | observed_collision_pr
   added_at: "2026-04-23"
 ```
 
@@ -157,7 +157,7 @@ YAML entry directly:
 ### Via feedback loop
 
 Phase 50.3 introduces two automated discovery channels: runtime warning
-capture (`runtime_warning_pr`) and H3-collision detection (`h3_collision_pr`).
+capture (`runtime_warning_pr`) and observed-collision detection (`observed_collision_pr`).
 Both open draft PRs with `added_by` set accordingly.
 
 ## PR review checklist
