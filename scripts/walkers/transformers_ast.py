@@ -69,6 +69,20 @@ from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
     first_string_arg,
 )
 
+# Why we DON'T import _base's detector classes (ConditionalRaiseDetector,
+# ConditionalSelfAssignDetector, etc.) and instead define parallel
+# ``_detect_*`` functions below: the base detectors emit ``DetectedPattern``
+# which carries severity / channel / affected_field but not the structured
+# ``FieldPredicate`` data we need for cross-field corpus rules using
+# operators like ``not_divisible_by`` and ``@field_ref``. Extending the base
+# classes would either change their public ``DetectedPattern`` shape
+# (breaking the introspection extractor that currently consumes it) or
+# require lossy adapter shims at every emission site. With one walker live
+# today, the cheaper choice is per-walker detectors that emit a richer
+# local ``DetectedBody`` type. Revisit when a second walker (vLLM, TRT-LLM)
+# lands and we can see whether the parallel detector logic is genuinely
+# divergent or accidentally so.
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
