@@ -99,6 +99,8 @@ Every entry under `rules:` must populate the following fields.
 | `{"!=": x}`, `{"not_equal": x}` | Inequality, None-safe. |
 | `{"in": [a, b]}`, `{"not_in": [a, b]}` | Membership. |
 | `{"present": true}`, `{"absent": true}` | None-presence check. |
+| `{"type_is": "X"}`, `{"type_is_not": "X"}` | Concrete `type(value).__name__` match. Spec accepts a single name or a list of names (any-of). |
+| `{"divisible_by": n}`, `{"not_divisible_by": n}` | Integer divisibility. Both operands must be non-bool ints; zero divisor never fires. |
 | Multi-key dict | All predicates AND-combined. |
 
 Multi-key example — "field is set AND isn't default":
@@ -107,8 +109,66 @@ Multi-key example — "field is set AND isn't default":
 transformers.sampling.temperature: {present: true, not_equal: 1.0}
 ```
 
+`match.fields` is also AND-combined **across field paths** — every entry
+under `match.fields` must satisfy its predicate for the rule to fire.
+Use this for cross-field preconditions (e.g. "fires when
+`num_beam_groups > 1` AND `diversity_penalty <= 0`").
+
+`type_is_not` accepts a list to express an allowlist negation — the
+predicate fires when the field's concrete type name is **not** in any of
+the listed names. Useful for "must be an instance of one of these
+classes" checks:
+
+```yaml
+transformers.sampling.watermarking_config:
+  present: true
+  type_is_not: [WatermarkingConfig, SynthIDTextWatermarkingConfig]
+```
+
 Every predicate in `match.fields` must hold for `rule.try_match(config)` to
 return a `RuleMatch`.
+
+### Cross-field references (`@field_path`)
+
+Any operator's right-hand side may carry a `@field_path` reference,
+substituted from the same config before evaluation. Two resolution modes:
+
+| Form | Resolves against | Example |
+|---|---|---|
+| Bare `@name` | Sibling of the predicate's field path | `'>': '@num_beams'` resolves `num_beams` next to the predicate's field |
+| Dotted `@a.b.c` | Config root | `'>': '@transformers.sampling.num_beams'` |
+
+Example — fires when `num_return_sequences > num_beams`:
+
+```yaml
+match:
+  fields:
+    transformers.sampling.num_return_sequences:
+      '>': '@num_beams'
+```
+
+Example — fires when `num_beams` is not a multiple of `num_beam_groups`,
+guarded by `num_beam_groups > 1`:
+
+```yaml
+match:
+  fields:
+    transformers.sampling.num_beam_groups:
+      '>': 1
+    transformers.sampling.num_beams:
+      not_divisible_by: '@num_beam_groups'
+```
+
+References resolve to `None` when the target is missing; comparison
+operators treat `None` as "predicate does not fire", so a partially-set
+config never trips a cross-field rule by accident. References are also
+walked recursively through list / tuple specs, so e.g.
+`{in: ['@x', '@y']}` resolves both items before evaluation.
+
+The `divisible_by` / `not_divisible_by` operators reject non-`int`
+operands (including `bool`, which would otherwise pass via Python's
+`bool < int`) and zero divisors, so a malformed config silently fails the
+predicate rather than raising.
 
 ### ID convention
 

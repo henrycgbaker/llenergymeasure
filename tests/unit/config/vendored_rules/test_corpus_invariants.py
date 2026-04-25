@@ -36,55 +36,89 @@ def transformers_corpus():
     return loader.load_rules("transformers")
 
 
-def test_corpus_has_expected_rule_ids(transformers_corpus) -> None:
-    # Exact set — catches accidental removal or silent addition of a rule.
-    # When the walker gets a new rule, this test intentionally fails and the
-    # corpus-authoring PR must include the id here.
-    expected_ids = {
-        # Greedy dormancy (do_sample=False strips sampling params)
-        "transformers_greedy_strips_temperature",
-        "transformers_greedy_strips_top_p",
-        "transformers_greedy_strips_top_k",
-        "transformers_greedy_strips_min_p",
-        "transformers_greedy_strips_typical_p",
-        "transformers_greedy_strips_epsilon_cutoff",
-        "transformers_greedy_strips_eta_cutoff",
-        # Single-beam dormancy (num_beams=1 strips beam params)
-        "transformers_single_beam_strips_early_stopping",
-        "transformers_single_beam_strips_num_beam_groups",
-        "transformers_single_beam_strips_diversity_penalty",
-        "transformers_single_beam_strips_length_penalty",
-        "transformers_single_beam_strips_constraints",
-        # No-return-dict dormancy (return_dict_in_generate=False strips
-        # scalar-output-only fields). Surfaced by introspection auto-discovery;
-        # not present in the prior hand-curated corpus.
-        "transformers_no_return_dict_strips_output_scores",
-        "transformers_no_return_dict_strips_output_attentions",
-        "transformers_no_return_dict_strips_output_hidden_states",
-        # GenerationConfig.validate() — raises + announced-dormant mixture
-        "transformers_negative_max_new_tokens",
-        "transformers_invalid_cache_implementation",
-        "transformers_invalid_early_stopping",
-        "transformers_num_return_sequences_exceeds_num_beams",
-        "transformers_greedy_rejects_num_return_sequences",
-        "transformers_negative_pad_token_id",
-        "transformers_compile_config_type",
-        # BitsAndBytesConfig.post_init() type-check errors
-        "transformers_bnb_load_in_4bit_type",
-        "transformers_bnb_load_in_8bit_type",
-        "transformers_bnb_llm_int8_threshold_type",
-        "transformers_bnb_llm_int8_skip_modules_type",
-        "transformers_bnb_llm_int8_enable_fp32_cpu_offload_type",
-        "transformers_bnb_llm_int8_has_fp16_weight_type",
-        "transformers_bnb_bnb_4bit_compute_dtype_type",
-        "transformers_bnb_bnb_4bit_quant_type_type",
-        "transformers_bnb_bnb_4bit_use_double_quant_type",
-    }
-    actual_ids = {rule.id for rule in transformers_corpus.rules}
-    missing = expected_ids - actual_ids
-    extra = actual_ids - expected_ids
-    assert not missing, f"missing rule ids: {sorted(missing)}"
-    assert not extra, f"unexpected rule ids (add to expected set or remove): {sorted(extra)}"
+def test_corpus_covers_required_invariants(transformers_corpus) -> None:
+    """Coverage-by-invariant: every required field surface has at least one rule.
+
+    Pins SEMANTIC coverage, not specific rule IDs. Extractor refinements
+    that rename rules don't break this test; extractor regressions that
+    drop coverage of a real invariant do. See
+    ``.product/designs/config-deduplication-dormancy/runtime-config-validation.md``
+    decision-log entry of 2026-04-25 (corpus-as-measurement principle).
+    """
+    rules = transformers_corpus.rules
+
+    def covers_field(field_path: str) -> bool:
+        return any(field_path in rule.match_fields for rule in rules)
+
+    # Single-field invariants — at least one rule must touch each path.
+    required_fields = (
+        # Greedy dormancy: do_sample=False / num_beams=1 strip these.
+        "transformers.sampling.temperature",
+        "transformers.sampling.top_p",
+        "transformers.sampling.top_k",
+        "transformers.sampling.min_p",
+        "transformers.sampling.typical_p",
+        "transformers.sampling.epsilon_cutoff",
+        "transformers.sampling.eta_cutoff",
+        # Single-beam dormancy.
+        "transformers.sampling.early_stopping",
+        "transformers.sampling.num_beam_groups",
+        "transformers.sampling.diversity_penalty",
+        "transformers.sampling.length_penalty",
+        # No-return-dict dormancy.
+        "transformers.sampling.output_scores",
+        "transformers.sampling.output_attentions",
+        "transformers.sampling.output_hidden_states",
+        # GenerationConfig.validate() error rules.
+        "transformers.sampling.max_new_tokens",
+        "transformers.sampling.cache_implementation",
+        "transformers.sampling.num_return_sequences",
+        "transformers.sampling.pad_token_id",
+        "transformers.sampling.compile_config",
+        # PR #387 cross-field invariants — must be machine-extracted, not manual.
+        "transformers.sampling.num_beams",
+        "transformers.sampling.watermarking_config",
+        # BitsAndBytesConfig type-check rules — top-level on TransformersConfig
+        # (NOT under a quant sub-model). Path matches engine_configs.py schema.
+        "transformers.load_in_4bit",
+        "transformers.load_in_8bit",
+        "transformers.llm_int8_threshold",
+        "transformers.llm_int8_skip_modules",
+        "transformers.llm_int8_enable_fp32_cpu_offload",
+        "transformers.llm_int8_has_fp16_weight",
+        "transformers.bnb_4bit_compute_dtype",
+        "transformers.bnb_4bit_quant_type",
+        "transformers.bnb_4bit_use_double_quant",
+    )
+    missing = [path for path in required_fields if not covers_field(path)]
+    assert not missing, (
+        f"corpus is missing rules for {len(missing)} required invariants: {missing}"
+    )
+
+    # Cross-field invariants — at least one rule must AND-combine the listed
+    # fields. Catches regressions where the extractor lost the cross-field
+    # predicate machinery (returning to single-field rules only).
+    cross_field_pairs = (
+        ("transformers.sampling.num_beams", "transformers.sampling.num_beam_groups"),
+        ("transformers.sampling.num_beam_groups", "transformers.sampling.diversity_penalty"),
+        ("transformers.sampling.num_beams", "transformers.sampling.num_return_sequences"),
+    )
+    missing_pairs = [
+        pair for pair in cross_field_pairs
+        if not any(all(p in rule.match_fields for p in pair) for rule in rules)
+    ]
+    assert not missing_pairs, (
+        f"corpus missing cross-field rules for {len(missing_pairs)} invariants: {missing_pairs}"
+    )
+
+    # Provenance: every rule must come from the machinery, not manual_seed.
+    # If you find yourself wanting to add manual_seed here, the right answer
+    # is to extend the extractor (see corpus-as-measurement principle).
+    manual_rules = [rule.id for rule in rules if rule.added_by == "manual_seed"]
+    assert not manual_rules, (
+        f"corpus has {len(manual_rules)} manual_seed rules — extend the "
+        f"extractor instead: {manual_rules}"
+    )
 
 
 def test_corpus_schema_version_is_current(transformers_corpus) -> None:

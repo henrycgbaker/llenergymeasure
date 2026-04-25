@@ -200,6 +200,21 @@ class Rule:
     references: tuple[str, ...]
     added_by: str
     added_at: str
+    cross_validated_by: tuple[str, ...] = ()
+    """Other extractor sources that produced the same fingerprint as this rule.
+
+    Empty for single-source rules. Populated by the corpus merger
+    (``scripts/walkers/build_corpus.py``) when two or more extractors
+    independently emitted a rule with the same ``(engine, severity,
+    match.fields)`` fingerprint. ``added_by`` remains the *primary*
+    source (used for downstream filtering); ``cross_validated_by`` is
+    additional provenance for the reviewer.
+
+    Schema choice rationale: keeping ``added_by`` as a single string
+    preserves the existing ``AddedBy`` Literal and the corpus-invariants
+    test that pins it; ``cross_validated_by`` is a strictly additive field
+    with a sane default for older rules.
+    """
 
     def try_match(self, config: Any) -> RuleMatch | None:
         """Return a :class:`RuleMatch` if every predicate in ``match_fields`` holds.
@@ -207,6 +222,13 @@ class Rule:
         Field paths are dotted (``"transformers.sampling.temperature"``) and
         resolve against ``config`` attribute-by-attribute, tolerating Pydantic
         models, dataclasses, and plain dicts.
+
+        Predicate specs may carry ``@field_path`` references on the
+        right-hand side of any operator. References are resolved against
+        the same ``config`` before predicate evaluation. Bare references
+        (``@num_beams``) resolve as siblings of the predicate's field;
+        dotted references (``@transformers.sampling.num_beams``) resolve
+        from the config root.
 
         ``declared_value`` on the returned match is the last field's value —
         corpus convention puts the precondition fields first and the
@@ -217,7 +239,8 @@ class Rule:
         last_value: Any = None
         for path, spec in self.match_fields.items():
             actual = resolve_field_path(config, path)
-            if not evaluate_predicate(actual, spec):
+            resolved_spec = _resolve_field_refs_in_spec(spec, config, path)
+            if not evaluate_predicate(actual, resolved_spec):
                 return None
             matched[path] = actual
             last_value = actual
@@ -258,27 +281,64 @@ class VendoredRules:
 # ---------------------------------------------------------------------------
 
 
+_FIELD_REF_PREFIX = "@"
+
+
+def _resolve_field_refs_in_spec(spec: Any, config: Any, predicate_field_path: str) -> Any:
+    """Substitute ``@field`` references in a predicate spec with config values.
+
+    Walks the spec dict (or bare value) and replaces any string starting
+    with ``@`` with the corresponding field's value resolved against
+    ``config``. Bare references (``@num_beams``) resolve as siblings of
+    ``predicate_field_path``; dotted references (``@a.b.c``) resolve from
+    the config root.
+
+    Returns a new spec with substitutions applied; the input is not
+    mutated. Non-ref strings pass through unchanged.
+    """
+    if isinstance(spec, str) and spec.startswith(_FIELD_REF_PREFIX):
+        return _resolve_one_ref(spec, config, predicate_field_path)
+    if isinstance(spec, dict):
+        return {op: _resolve_field_refs_in_spec(v, config, predicate_field_path) for op, v in spec.items()}
+    if isinstance(spec, (list, tuple)):
+        return type(spec)(_resolve_field_refs_in_spec(v, config, predicate_field_path) for v in spec)
+    return spec
+
+
+def _resolve_one_ref(ref: str, config: Any, predicate_field_path: str) -> Any:
+    target = ref[len(_FIELD_REF_PREFIX):]
+    if "." in target:
+        return resolve_field_path(config, target)
+    parent_parts = predicate_field_path.split(".")[:-1]
+    full_path = ".".join([*parent_parts, target]) if parent_parts else target
+    return resolve_field_path(config, full_path)
+
+
 _OPERATOR_HANDLERS: dict[str, Any] = {
-    # Comparison operators: all None-safe on the *asymmetric* ones (a missing
-    # field doesn't trip ``!=`` / ``not_equal`` / ``<`` / etc). ``==`` and
-    # ``equals`` stay as-is — `None == x` evaluates to `False` for any
-    # non-None `x`, so they naturally don't fire on None.
+    # Comparison operators: bilaterally None-safe on the *asymmetric* ones.
+    # ``a`` may be None when the predicate's field is unset; ``b`` may be
+    # None when a ``@field_ref`` resolves against a missing target. Both
+    # cases must yield False (rule does not fire) rather than raise.
+    # ``==`` and ``equals`` stay as plain equality — `None == x` evaluates
+    # to `False` for any non-None `x`, so they naturally don't fire on None.
     # ``equals`` / ``not_equal`` are word-form aliases of ``==`` / ``!=``
     # and MUST match their symbol forms exactly — corpus authors swap them.
     "==": lambda a, b: a == b,
-    "!=": lambda a, b: a is not None and a != b,
-    "<": lambda a, b: a is not None and a < b,
-    "<=": lambda a, b: a is not None and a <= b,
-    ">": lambda a, b: a is not None and a > b,
-    ">=": lambda a, b: a is not None and a >= b,
+    "!=": lambda a, b: a is not None and b is not None and a != b,
+    "<": lambda a, b: a is not None and b is not None and a < b,
+    "<=": lambda a, b: a is not None and b is not None and a <= b,
+    ">": lambda a, b: a is not None and b is not None and a > b,
+    ">=": lambda a, b: a is not None and b is not None and a >= b,
     "equals": lambda a, b: a == b,
-    "not_equal": lambda a, b: a is not None and a != b,
-    # Membership operators: reject non-iterable specs (a string spec would
-    # otherwise fall through to substring match — "ab" in "abc" is True,
-    # which surprises corpus authors writing {"in": "abc"} thinking "exactly
-    # one of these three chars").
+    "not_equal": lambda a, b: a is not None and b is not None and a != b,
+    # Membership operators: None-safe on the asymmetric one (``not_in``)
+    # so unset fields don't trip the rule. ``in`` against a missing field
+    # naturally yields False without an explicit guard. Reject non-iterable
+    # specs (a string spec would otherwise fall through to substring match —
+    # "ab" in "abc" is True, which surprises corpus authors writing
+    # {"in": "abc"} thinking "exactly one of these three chars").
     "in": lambda a, b: _require_iterable(b, "in") and a in b,
-    "not_in": lambda a, b: _require_iterable(b, "not_in") and a not in b,
+    "not_in": lambda a, b: a is not None and _require_iterable(b, "not_in") and a not in b,
     # Presence operators: no None-guard needed (they're the test for None).
     "present": lambda a, _: a is not None,
     "absent": lambda a, _: a is None,
@@ -289,7 +349,27 @@ _OPERATOR_HANDLERS: dict[str, Any] = {
     # for the type-name format and its known ambiguities.
     "type_is": lambda a, b: a is not None and _type_name(a) in _as_name_set(b),
     "type_is_not": lambda a, b: a is not None and _type_name(a) not in _as_name_set(b),
+    # Cross-field divisibility checks. Naming follows the existing
+    # positive/negative convention (``equals`` / ``not_equal``,
+    # ``in`` / ``not_in``). Both operands must be non-bool integers
+    # (``True``/``False`` would silently pass via ``bool`` < ``int``).
+    # ``not_divisible_by`` fires when ``a % b != 0`` — corpus authors
+    # write ``num_beams: {not_divisible_by: '@num_beam_groups'}`` to
+    # express "rule fires when num_beams isn't a multiple of
+    # num_beam_groups". A zero divisor yields False (no rule fires).
+    "divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b == 0,
+    "not_divisible_by": lambda a, b: _is_int_pair(a, b) and b != 0 and a % b != 0,
 }
+
+
+def _is_int_pair(a: Any, b: Any) -> bool:
+    """Return True iff both operands are non-bool integers."""
+    return (
+        isinstance(a, int)
+        and isinstance(b, int)
+        and not isinstance(a, bool)
+        and not isinstance(b, bool)
+    )
 
 
 def _type_name(value: Any) -> str:
@@ -451,6 +531,17 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
         raise UnknownAddedByError(
             f"Rule {rule_id!r} has added_by={added_by!r}; must be one of: {sorted(VALID_ADDED_BY)}"
         )
+    raw_cross = raw.get("cross_validated_by") or ()
+    if isinstance(raw_cross, str):
+        # A single string is a corpus-authoring slip; coerce to a one-tuple.
+        raw_cross = (raw_cross,)
+    cross_validated_by: tuple[str, ...] = tuple(str(s) for s in raw_cross)
+    for source in cross_validated_by:
+        if source not in VALID_ADDED_BY:
+            raise UnknownAddedByError(
+                f"Rule {rule_id!r} has cross_validated_by entry={source!r}; "
+                f"must be one of: {sorted(VALID_ADDED_BY)}"
+            )
     return Rule(
         id=str(rule_id),
         engine=str(raw["engine"]),
@@ -468,6 +559,7 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
         references=tuple(raw.get("references") or ()),
         added_by=added_by,
         added_at=str(raw.get("added_at", "")),
+        cross_validated_by=cross_validated_by,
     )
 
 
