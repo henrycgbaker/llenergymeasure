@@ -1056,6 +1056,13 @@ def _synthesise_kwargs(preds: list[FieldPredicate], *, sense: str) -> dict[str, 
     ``sense`` is purely informational — both positive and negative paths
     use the same logic (the predicates passed in are already prepared by
     ``negate_predicates``).
+
+    For ``absent`` predicates we still emit a key (rather than dropping it)
+    so the loader's "kwargs_negative is non-empty" invariant holds. We pick
+    the field-type's identity element (``False`` for bool flags etc.) so
+    the value satisfies "user passed but the rule shouldn't fire" in the
+    common case where the rule is gated on ``present True``. Vendor CI
+    will quarantine cases where the chosen value still trips the rule.
     """
     out: dict[str, Any] = {}
     # For cross-field (@ref) predicates, materialise both fields with values
@@ -1097,9 +1104,24 @@ def _value_satisfying(op: str, rhs: Any) -> Any:
     """Pick a Python value of the right type that satisfies the predicate."""
     # Predicates without an interesting RHS:
     if op == "present" and rhs is True:
-        return 1  # any non-None
+        # ``True`` is the canonical "user set the flag" value across the
+        # GenerationConfig / BitsAndBytesConfig surface. ``1`` would also
+        # be truthy but trips an extra type-check on bool-only fields
+        # (e.g. ``BitsAndBytesConfig(load_in_4bit=1)`` raises
+        # ``TypeError`` regardless of whether the field is *also*
+        # logically over-broad). Using ``True`` lets vendor validation
+        # observe the actual semantic — does the rule fire when the user
+        # legitimately enables this flag? — and quarantine the rule when
+        # it doesn't.
+        return True
     if op == "absent":
-        return None
+        # ``None`` is a poor sentinel here — many native types reject ``None``
+        # outright (e.g. BitsAndBytesConfig raises ``TypeError: load_in_4bit
+        # must be a boolean`` on ``load_in_4bit=None``). Use ``False``, which
+        # is the documented default for the BNB / GenerationConfig flag-style
+        # kwargs the AST walker actually emits. Vendor CI quarantines any
+        # rule where the chosen value still trips the predicate.
+        return False
     if op == "type_is":
         return _type_label_default(rhs)
     if op == "type_is_not":
@@ -1149,7 +1171,15 @@ def _value_satisfying(op: str, rhs: Any) -> Any:
 
 
 def _type_label_default(label: Any) -> Any:
-    """Default value with type-name matching ``label``."""
+    """Default value with type-name matching ``label``.
+
+    For non-primitive types we can't materialise without importing the
+    relevant runtime (e.g. ``torch.dtype``, custom dataclasses), the
+    walker returns ``None``. The caller treats ``None`` as "field is
+    absent / default" — many native types (BNB ``bnb_4bit_compute_dtype``,
+    GenerationConfig ``compile_config``) accept ``None`` as the no-op
+    value, so vendor validation observes the negative case correctly.
+    """
     label_str = label if isinstance(label, str) else (label[0] if label else "str")
     return {
         "bool": True,
@@ -1159,7 +1189,7 @@ def _type_label_default(label: Any) -> Any:
         "list": [],
         "dict": {},
         "tuple": (),
-    }.get(label_str, "x")
+    }.get(label_str)
 
 
 def _other_type_default(label: Any) -> Any:
@@ -1182,12 +1212,17 @@ def _force_distinct_negative(pos: dict[str, Any], preds: list[FieldPredicate]) -
         return pos
     last = preds[-1]
     out = dict(pos)
-    # For type-based predicates the negation is a value of the *correct* type.
-    # We can't materialise a real instance of a vendored class here; use None
-    # as a benign sentinel — the field passes ``type_is_not`` check (it's not
-    # the wrong type) at the Pydantic-level. Vendor CI will refine if needed.
+    # For type_is_not predicates the negation must be a value of the *expected*
+    # type (the type the rule says was violated). ``None`` is a poor sentinel
+    # here — many native types reject ``None`` outright (e.g. BNB raises
+    # ``TypeError: load_in_4bit must be a boolean``), so vendor validation
+    # observes the negative ALSO firing, fails ``negative_confirmed``, and
+    # the rule lands in quarantine. Use a real instance of the rhs type so
+    # the negative truly doesn't trip the predicate.
     if last.op == "type_is_not":
-        out[last.field] = None
+        rhs = last.rhs
+        rhs_str = rhs if isinstance(rhs, str) else (rhs[0] if rhs else "str")
+        out[last.field] = _type_label_default(rhs_str)
         return out
     cur = out.get(last.field)
     if isinstance(cur, bool):

@@ -7,7 +7,18 @@ single canonical entry point that runs them, merges their outputs into one
 :class:`~llenergymeasure.config.vendored_rules.loader.VendoredRules`-shaped
 document, and writes ``configs/validation_rules/{engine}.yaml``.
 
-Pipeline: extractors → staging → merge → write canonical corpus.
+Pipeline: extractors → staging → merge → **vendor-validate** → write canonical corpus.
+
+Vendor validation gate
+----------------------
+Between merge and canonical-write, every candidate's ``kwargs_positive`` and
+``kwargs_negative`` are replayed against the real engine library via
+:func:`scripts.vendor_rules.vendor_engine`. Rules whose declared
+``expected_outcome`` doesn't match observed library behaviour are quarantined
+to ``_staging/_failed_validation_{engine}.yaml`` instead of landing in the
+canonical corpus. The merger optimises for *recall*; vendor validation is the
+single architectural gate that turns the recall-first candidate list into the
+runtime-applied corpus.
 
 Why a merger at all
 -------------------
@@ -277,11 +288,19 @@ def discover_staging_files(engine: str, corpus_root: Path) -> list[Path]:
     The sort makes merger output deterministic when two staging files have
     the same fingerprint at the same priority rank — first-seen wins, and
     the alphabetical order makes "first-seen" predictable across machines.
+
+    The merger's own previous output (``{engine}_merged_candidates.yaml``)
+    is excluded explicitly: globbing the staging dir would otherwise feed
+    the merger's previous run back into itself, masking extractor-side
+    fixes (the previous merged file's stale kwargs would dominate the
+    re-merge under fingerprint dedup) and giving every successive run
+    monotonically older data.
     """
     staging = _staging_dir(corpus_root)
     if not staging.is_dir():
         return []
-    return sorted(staging.glob(f"{engine}_*.yaml"))
+    merged_self = _MERGED_CANDIDATES_BASENAME.format(engine=engine)
+    return sorted(p for p in staging.glob(f"{engine}_*.yaml") if p.name != merged_self)
 
 
 def _load_staging(path: Path) -> dict[str, Any]:
@@ -565,6 +584,154 @@ def _now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Vendor validation gate
+# ---------------------------------------------------------------------------
+
+
+_MERGED_CANDIDATES_BASENAME = "{engine}_merged_candidates.yaml"
+"""Staging filename for the unfiltered merger output. Vendor validation reads
+this back as a corpus-shaped YAML so :func:`scripts.vendor_rules.vendor_engine`
+can replay every candidate's positive/negative kwargs."""
+
+_FAILED_VALIDATION_BASENAME = "_failed_validation_{engine}.yaml"
+"""Staging filename for the divergent-rules quarantine.
+
+Schema::
+
+    schema_version: 1.0.0
+    engine: <engine>
+    engine_version: <version observed during validation>
+    generated_at: <ISO-8601 UTC>
+    quarantined_rules:
+      - rule: <full rule dict>
+        divergences:
+          - rule_id: <id>
+            field: <expected_outcome.* or positive_confirmed/negative_confirmed>
+            expected: <value>
+            observed: <value>
+"""
+
+
+def _write_merged_candidates(
+    corpus_root: Path,
+    engine: str,
+    rules: list[dict[str, Any]],
+    envelope: dict[str, Any],
+) -> Path:
+    """Write the merger output to ``_staging/{engine}_merged_candidates.yaml``.
+
+    Vendor validation needs a corpus-shaped YAML it can ingest; rather than
+    invent a separate transport (in-memory module imports etc.), reuse the
+    same on-disk shape :func:`emit_yaml` produces. The file lives under
+    ``_staging`` so it's never confused with the canonical corpus.
+    """
+    staging = _staging_dir(corpus_root)
+    staging.mkdir(parents=True, exist_ok=True)
+    path = staging / _MERGED_CANDIDATES_BASENAME.format(engine=engine)
+    path.write_text(emit_yaml(rules, envelope))
+    return path
+
+
+def _validate_candidates(
+    candidates: list[dict[str, Any]],
+    engine: str,
+    corpus_root: Path,
+    envelope: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Re-run each candidate through the real engine library; filter divergent rules.
+
+    Returns ``(kept, divergent)`` where ``kept`` is the subset whose declared
+    ``expected_outcome`` matched observed behaviour AND whose
+    ``kwargs_positive`` actually fired AND whose ``kwargs_negative`` actually
+    didn't, and ``divergent`` is the rest annotated with the per-field
+    diagnostic info from ``vendor_engine``.
+
+    The function writes the candidates to ``_staging/{engine}_merged_candidates.yaml``
+    as a side effect — that file is the input to :func:`vendor_engine`. The
+    JSON envelope ``vendor_engine`` writes goes to a sibling temp path
+    (``_staging/{engine}_vendor.json``) so the canonical
+    ``src/llenergymeasure/config/vendored_rules/{engine}.json`` (the
+    runtime-loaded sidecar) is never overwritten by this build step.
+    """
+    # Local import keeps the merger importable in environments that don't have
+    # the engine library installed (e.g. CI lint job): only --skip-validation
+    # callers need to load vendor_rules.
+    from scripts.vendor_rules import vendor_engine
+
+    candidates_path = _write_merged_candidates(corpus_root, engine, candidates, envelope)
+    vendor_json_path = _staging_dir(corpus_root) / f"{engine}_vendor.json"
+
+    # vendor_engine returns (envelope, divergences). Divergences carry rule_id,
+    # field, expected, observed — exactly the diagnostic we need to surface in
+    # the quarantine file.
+    _vendor_envelope, divergences = vendor_engine(
+        engine=engine,
+        corpus_path=candidates_path,
+        out_path=vendor_json_path,
+    )
+
+    divergence_by_id: dict[str, list[dict[str, Any]]] = {}
+    for d in divergences:
+        divergence_by_id.setdefault(d.rule_id, []).append(
+            {
+                "rule_id": d.rule_id,
+                "field": d.field,
+                "expected": d.expected,
+                "observed": d.observed,
+            }
+        )
+
+    kept: list[dict[str, Any]] = []
+    divergent: list[dict[str, Any]] = []
+    for rule in candidates:
+        rule_id = str(rule.get("id", ""))
+        if rule_id in divergence_by_id:
+            divergent.append(
+                {
+                    "rule": rule,
+                    "divergences": divergence_by_id[rule_id],
+                }
+            )
+        else:
+            kept.append(rule)
+
+    return kept, divergent
+
+
+def _emit_failed_validation_yaml(
+    corpus_root: Path,
+    engine: str,
+    divergent: list[dict[str, Any]],
+    envelope: dict[str, Any],
+) -> Path | None:
+    """Write the quarantine file for divergent rules.
+
+    Returns the path written, or ``None`` if there are no divergent rules
+    (in which case any stale quarantine file is removed so the next reviewer
+    isn't misled by leftover state from a previous run).
+    """
+    staging = _staging_dir(corpus_root)
+    path = staging / _FAILED_VALIDATION_BASENAME.format(engine=engine)
+    if not divergent:
+        if path.exists():
+            path.unlink()
+        return None
+    staging.mkdir(parents=True, exist_ok=True)
+    doc = {
+        "schema_version": str(envelope.get("schema_version", "1.0.0")),
+        "engine": str(envelope.get("engine", engine)),
+        "engine_version": str(envelope.get("engine_version", "")),
+        "generated_at": _now_iso(),
+        "quarantined_rules": [
+            {"rule": _ordered_rule(entry["rule"]), "divergences": entry["divergences"]}
+            for entry in divergent
+        ],
+    }
+    path.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
+    return path
+
+
+# ---------------------------------------------------------------------------
 # YAML emission (matches the existing transformers walker's key ordering)
 # ---------------------------------------------------------------------------
 
@@ -637,16 +804,23 @@ class _BuildResult:
     canonical_text: str
     rules_in_canonical: int
     candidates_merged: int
+    rules_quarantined: int = 0
+    quarantined_ids: tuple[str, ...] = ()
+    validation_skipped: bool = False
 
 
 def build_corpus_text_and_outcome(
     engine: str,
     corpus_root: Path,
+    *,
+    skip_validation: bool = False,
 ) -> _BuildResult:
-    """Discover staging files, merge, return canonical YAML.
+    """Discover staging files, merge, vendor-validate, return canonical YAML.
 
     Pure-ish modulo the staging-file read; callable in isolation by
-    pre-populating the staging directory.
+    pre-populating the staging directory. When ``skip_validation`` is true,
+    all merged candidates land in the canonical YAML regardless of vendor
+    outcomes — useful for fast local iteration but never appropriate in CI.
     """
     paths = discover_staging_files(engine, corpus_root)
     if not paths:
@@ -655,44 +829,95 @@ def build_corpus_text_and_outcome(
             f"Run extractors first (omit --skip-extract)."
         )
     envelopes = [_load_staging(p) for p in paths]
-    rules, envelope = merge_staging(envelopes)
-    text = emit_yaml(rules, envelope)
+    candidates, envelope = merge_staging(envelopes)
+    candidates_count = len(candidates)
+
+    if skip_validation:
+        # Still write the merged-candidates staging file so reviewers can
+        # inspect the recall-first list; just don't run the vendor gate.
+        _write_merged_candidates(corpus_root, engine, candidates, envelope)
+        # Drop any stale quarantine file — running --skip-validation with a
+        # leftover file from a previous validating run would be misleading.
+        stale = _staging_dir(corpus_root) / _FAILED_VALIDATION_BASENAME.format(engine=engine)
+        if stale.exists():
+            stale.unlink()
+        text = emit_yaml(candidates, envelope)
+        return _BuildResult(
+            canonical_text=text,
+            rules_in_canonical=candidates_count,
+            candidates_merged=candidates_count,
+            rules_quarantined=0,
+            quarantined_ids=(),
+            validation_skipped=True,
+        )
+
+    kept, divergent = _validate_candidates(candidates, engine, corpus_root, envelope)
+    _emit_failed_validation_yaml(corpus_root, engine, divergent, envelope)
+
+    quarantined_ids = tuple(sorted(str(entry["rule"].get("id", "")) for entry in divergent))
+    text = emit_yaml(kept, envelope)
     return _BuildResult(
         canonical_text=text,
-        rules_in_canonical=len(rules),
-        candidates_merged=len(rules),
+        rules_in_canonical=len(kept),
+        candidates_merged=candidates_count,
+        rules_quarantined=len(divergent),
+        quarantined_ids=quarantined_ids,
+        validation_skipped=False,
     )
 
 
-def build_corpus_text(engine: str, corpus_root: Path) -> str:
+def build_corpus_text(
+    engine: str,
+    corpus_root: Path,
+    *,
+    skip_validation: bool = False,
+) -> str:
     """Return the canonical YAML text for ``engine``."""
-    return build_corpus_text_and_outcome(engine, corpus_root).canonical_text
+    return build_corpus_text_and_outcome(
+        engine, corpus_root, skip_validation=skip_validation
+    ).canonical_text
 
 
-def write_corpus(engine: str, corpus_root: Path) -> _BuildResult:
+def write_corpus(
+    engine: str,
+    corpus_root: Path,
+    *,
+    skip_validation: bool = False,
+) -> _BuildResult:
     """Build and write the canonical corpus.
 
     Returns the :class:`_BuildResult` so the CLI can report counts.
     """
-    result = build_corpus_text_and_outcome(engine, corpus_root)
+    result = build_corpus_text_and_outcome(engine, corpus_root, skip_validation=skip_validation)
     out_path = _canonical_path(corpus_root, engine)
     out_path.write_text(result.canonical_text)
     return result
 
 
-def check_drift(engine: str, corpus_root: Path) -> tuple[int, str]:
-    """Re-run merger; compare against checked-in corpus.
+def check_drift(
+    engine: str,
+    corpus_root: Path,
+    *,
+    skip_validation: bool = False,
+) -> tuple[int, str]:
+    """Re-run merger (with vendor validation); compare against checked-in corpus.
 
     Returns ``(exit_code, diff_text)``. ``exit_code`` is ``0`` if the
     canonical corpus matches the merger's freshly-built output exactly; ``1``
     on any byte-level drift; ``2`` on missing staging or missing corpus
     (treated as fatal — CI must run the extractors before --check).
+
+    Drift detection compares the validated rebuild to the validated canonical
+    by default. Without re-running validation, drift would compare the
+    validated checked-in corpus against an unvalidated rebuild and surface
+    spurious "drift" for every quarantined candidate. ``skip_validation``
+    here exists for parity with the build path but should not be used in CI.
     """
     canonical_path = _canonical_path(corpus_root, engine)
     if not canonical_path.exists():
         return 2, f"Canonical corpus not found at {canonical_path}"
     try:
-        rebuilt = build_corpus_text(engine, corpus_root)
+        rebuilt = build_corpus_text(engine, corpus_root, skip_validation=skip_validation)
     except FileNotFoundError as exc:
         return 2, str(exc)
     actual = canonical_path.read_text()
@@ -736,6 +961,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Skip running the extractors; assume staging files already exist.",
     )
     parser.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help=(
+            "Skip the vendor-validation gate: write every merged candidate to "
+            "the canonical corpus regardless of whether its declared "
+            "expected_outcome matches observed library behaviour. Off by "
+            "default (CI must always validate); on for fast local iteration."
+        ),
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help=(
@@ -755,18 +990,42 @@ def main(argv: list[str] | None = None) -> int:
             return 3
 
     if args.check:
-        code, diff = check_drift(args.engine, corpus_root)
+        code, diff = check_drift(args.engine, corpus_root, skip_validation=args.skip_validation)
         if code != 0:
             print(diff, file=sys.stdout)
         return code
 
-    result = write_corpus(args.engine, corpus_root)
+    result = write_corpus(args.engine, corpus_root, skip_validation=args.skip_validation)
     out_path = _canonical_path(corpus_root, args.engine)
     print(f"[build_corpus] wrote {out_path}", file=sys.stderr)
-    print(
-        f"[build_corpus] {result.rules_in_canonical} rules merged and written.",
-        file=sys.stderr,
-    )
+    if result.validation_skipped:
+        print(
+            f"[build_corpus] {result.candidates_merged} candidates merged; "
+            f"vendor validation SKIPPED (use without --skip-validation in CI).",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"[build_corpus] {result.candidates_merged} candidates merged, "
+            f"{result.rules_in_canonical} validated and kept, "
+            f"{result.rules_quarantined} quarantined.",
+            file=sys.stderr,
+        )
+        if result.rules_quarantined:
+            quarantine_path = _staging_dir(corpus_root) / _FAILED_VALIDATION_BASENAME.format(
+                engine=args.engine
+            )
+            print(
+                f"[build_corpus] divergent rules written to {quarantine_path}",
+                file=sys.stderr,
+            )
+            for rule_id in result.quarantined_ids[:10]:
+                print(f"  - {rule_id}", file=sys.stderr)
+            if len(result.quarantined_ids) > 10:
+                print(
+                    f"  ... and {len(result.quarantined_ids) - 10} more.",
+                    file=sys.stderr,
+                )
     return 0
 
 
