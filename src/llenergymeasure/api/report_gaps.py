@@ -403,17 +403,13 @@ def _collision_proposals_for_study(
     if not gap_groups:
         return []
 
-    kwargs_by_hash, _ = _load_kwargs_by_hash(study_dir)
+    kwargs_by_hash, exp_id_to_config_hash, _ = _load_kwargs_by_hash(study_dir)
     if not kwargs_by_hash:
         logger.info(
             "No _resolution.json sidecars found under %s; cannot partition gap groups.",
             study_dir,
         )
         return []
-
-    # Build experiment_id → config_hash mapping from the manifest so we
-    # can resolve gap-group member ids back to declared kwargs.
-    exp_id_to_config_hash = _experiment_id_to_config_hash(study_dir)
 
     proposals: list[GapProposal] = []
     for group in gap_groups:
@@ -428,31 +424,6 @@ def _collision_proposals_for_study(
         if proposal is not None:
             proposals.append(proposal)
     return proposals
-
-
-def _experiment_id_to_config_hash(study_dir: Path) -> dict[str, str]:
-    """Map each ``experiment_id`` to its full ``config_hash`` via ``manifest.json``.
-
-    Falls back to an empty mapping when the manifest is absent — gap
-    proposals that would have used the prefix-scan path lose their
-    declared-kwargs context but still surface as evidence-only entries.
-    """
-    manifest_path = study_dir / "manifest.json"
-    if not manifest_path.exists():
-        return {}
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    out: dict[str, str] = {}
-    for entry in manifest.get("experiments") or []:
-        if not isinstance(entry, dict):
-            continue
-        exp_id = str(entry.get("experiment_id") or "")
-        config_hash = str(entry.get("config_hash") or "")
-        if exp_id and config_hash:
-            out[exp_id] = config_hash
-    return out
 
 
 def _proposal_from_collision_group(
@@ -560,7 +531,7 @@ def _load_study(
         logger.info("No %s in %s; skipping.", RUNTIME_OBSERVATIONS_FILENAME, study_dir)
         return [], 0
 
-    kwargs_by_hash, sidecar_failures = _load_kwargs_by_hash(study_dir)
+    kwargs_by_hash, _exp_id_to_hash, sidecar_failures = _load_kwargs_by_hash(study_dir)
 
     records: list[_Record] = []
     with open(jsonl_path, encoding="utf-8") as fh:
@@ -628,20 +599,29 @@ def _parse_record(
     )
 
 
-def _load_kwargs_by_hash(study_dir: Path) -> tuple[dict[str, dict[str, Any]], int]:
-    """Return ``({full_config_hash: flat_kwargs_dict}, sidecar_failure_count)``.
+def _load_kwargs_by_hash(
+    study_dir: Path,
+) -> tuple[dict[str, dict[str, Any]], dict[str, str], int]:
+    """Return ``(kwargs_by_hash, exp_id_to_config_hash, sidecar_failure_count)``.
 
     Preferred path: read ``manifest.json`` (written by
     :class:`llenergymeasure.study.manifest.ManifestWriter`) which keys
     entries by full ``config_hash`` and records the ``result_file``
     relative path — ``_resolution.json`` sits in the same directory.
+    The same single pass over ``manifest["experiments"]`` populates both
+    the kwargs lookup (consumed by ``find_runtime_gaps``) and the
+    experiment_id → config_hash mapping (consumed by
+    ``find_observed_collision_gaps``).
 
     Fallback path: scan experiment subdirs and key on the 8-char hex
-    suffix. Logged as a warning so operators know the preferred lookup
+    suffix. The experiment_id mapping is empty in this branch — the
+    prefix scan has no access to experiment_ids — so consumers that
+    need it silently degrade to "no proposals" when the manifest is
+    absent. Logged as a warning so operators know the preferred lookup
     is unavailable.
     """
     if not study_dir.exists() or not study_dir.is_dir():
-        return {}, 0
+        return {}, {}, 0
     manifest_path = study_dir / "manifest.json"
     if manifest_path.exists():
         return _load_kwargs_via_manifest(study_dir, manifest_path)
@@ -649,18 +629,20 @@ def _load_kwargs_by_hash(study_dir: Path) -> tuple[dict[str, dict[str, Any]], in
         "manifest.json not found in %s; falling back to prefix-scan (collision risk ~1e-9).",
         study_dir,
     )
-    return _load_kwargs_via_prefix_scan(study_dir)
+    by_hash, failures = _load_kwargs_via_prefix_scan(study_dir)
+    return by_hash, {}, failures
 
 
 def _load_kwargs_via_manifest(
     study_dir: Path, manifest_path: Path
-) -> tuple[dict[str, dict[str, Any]], int]:
+) -> tuple[dict[str, dict[str, Any]], dict[str, str], int]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("Failed to read manifest.json at %s: %s", manifest_path, exc)
-        return {}, 0
+        return {}, {}, 0
     by_hash: dict[str, dict[str, Any]] = {}
+    exp_id_to_hash: dict[str, str] = {}
     failures = 0
     for entry in manifest.get("experiments") or []:
         if not isinstance(entry, dict):
@@ -669,6 +651,11 @@ def _load_kwargs_via_manifest(
         result_file = entry.get("result_file")
         if not config_hash or not isinstance(result_file, str) or not result_file:
             continue
+        exp_id = str(entry.get("experiment_id") or "")
+        if exp_id:
+            # First entry wins on collision; cycle-repeated experiment_ids
+            # are an upstream invariant violation we don't try to recover.
+            exp_id_to_hash.setdefault(exp_id, config_hash)
         if config_hash in by_hash:
             # Same config can repeat across cycles; one flat dict suffices.
             continue
@@ -681,7 +668,7 @@ def _load_kwargs_via_manifest(
             continue
         if flat is not None:
             by_hash[config_hash] = flat
-    return by_hash, failures
+    return by_hash, exp_id_to_hash, failures
 
 
 def _load_kwargs_via_prefix_scan(
