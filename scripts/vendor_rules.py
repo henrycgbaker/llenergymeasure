@@ -174,8 +174,38 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
     return cls(**kwargs)
 
 
+def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool) -> CaptureBuffers:
+    """Execute one rule's kwargs through the vLLM library.
+
+    vLLM's SamplingParams performs validation in __post_init__, which
+    raises ValueError on constraint violations. The ``strict_validate``
+    flag is currently ignored (kept for API compatibility) since vLLM
+    always validates at construction time.
+    """
+    logger_names = ("vllm", "vllm.logger")
+    if native_type == "vllm.SamplingParams":
+        return run_case(
+            lambda: _construct_sampling_params(kwargs),
+            logger_names=logger_names,
+            private_allowlist=frozenset(),
+        )
+    # Fallback: treat native_type as a dotted import path
+    return run_case(
+        lambda: _construct_generic(native_type, kwargs),
+        logger_names=logger_names,
+        private_allowlist=frozenset(),
+    )
+
+
+def _construct_sampling_params(kwargs: dict[str, Any]) -> Any:
+    from vllm import SamplingParams
+
+    return SamplingParams(**kwargs)
+
+
 _ENGINE_RUNNERS = {
     "transformers": _run_transformers,
+    "vllm": _run_vllm,
 }
 
 
