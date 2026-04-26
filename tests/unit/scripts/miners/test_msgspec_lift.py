@@ -11,7 +11,9 @@ import sys
 from pathlib import Path
 from typing import Annotated, Literal
 
-import msgspec
+import pytest
+
+msgspec = pytest.importorskip("msgspec")
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
