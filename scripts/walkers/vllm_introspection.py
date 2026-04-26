@@ -35,7 +35,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import RuleCandidate, WalkerSource
+from scripts.walkers._base import RuleCandidate, WalkerSource, candidate_to_dict
 
 # ---------------------------------------------------------------------------
 # Configuration & Field Discovery
@@ -73,13 +73,13 @@ def _resolve_source_paths() -> tuple[str, str, str]:
 
         abs_path = inspect.getsourcefile(SamplingParams) or "<unknown>"
         version = vllm.__version__
-    except Exception:
+    except ImportError:
         # Fallback: read version from package metadata
         try:
             from importlib.metadata import version as get_version
 
             version = get_version("vllm")
-        except Exception:
+        except ImportError:
             version = "unknown"
         abs_path = "<unknown>"
 
@@ -141,7 +141,7 @@ def _enumerate_field_rules(
         from vllm import SamplingParams
 
         _field_info = _get_field_info(SamplingParams)
-    except Exception:
+    except ImportError:
         # vLLM not importable (likely missing msgspec); proceed with curated rules
         pass
 
@@ -364,35 +364,6 @@ def _enumerate_dormancy_rules(
     return candidates
 
 
-def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
-    """Render a RuleCandidate into the YAML corpus entry shape."""
-    return {
-        "id": c.id,
-        "engine": c.engine,
-        "library": c.library,
-        "rule_under_test": c.rule_under_test,
-        "severity": c.severity,
-        "native_type": c.native_type,
-        "walker_source": {
-            "path": c.walker_source.path,
-            "method": c.walker_source.method,
-            "line_at_scan": c.walker_source.line_at_scan,
-            "walker_confidence": c.walker_source.walker_confidence,
-        },
-        "match": {
-            "engine": c.engine,
-            "fields": c.match_fields,
-        },
-        "kwargs_positive": c.kwargs_positive,
-        "kwargs_negative": c.kwargs_negative,
-        "expected_outcome": c.expected_outcome,
-        "message_template": c.message_template,
-        "references": c.references,
-        "added_by": c.added_by,
-        "added_at": c.added_at,
-    }
-
-
 def main(argv: list[str] | None = None) -> int:
     """Run the introspection extractor end-to-end and write the staging YAML."""
     parser = argparse.ArgumentParser(description="vLLM introspection walker")
@@ -427,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
         "engine_version": version,
         "walked_at": walked_at,
         "extractor": "vllm_introspection",
-        "rules": [_candidate_to_dict(c) for c in candidates_sorted],
+        "rules": [candidate_to_dict(c) for c in candidates_sorted],
     }
     out_path.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))
 
