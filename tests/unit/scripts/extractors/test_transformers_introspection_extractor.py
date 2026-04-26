@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers.transformers_introspection`.
+"""Tests for :mod:`scripts.extractors.transformers_introspection_extractor`.
 
 Five tiers, each with a different dependency on live library behaviour:
 
@@ -35,8 +35,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers import transformers as tf_walker  # noqa: E402
-from scripts.walkers import transformers_introspection as intro  # noqa: E402
+from scripts.extractors import transformers as tf_walker  # noqa: E402
+from scripts.extractors import transformers_introspection as intro  # noqa: E402
 
 # Every test in this module needs transformers importable — the walker
 # observes the real library. Skip the whole module if it's not installed.

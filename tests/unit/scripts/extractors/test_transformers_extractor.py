@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers.transformers`.
+"""Tests for :mod:`scripts.extractors.transformers_extractor`.
 
 The walker depends on transformers being importable. Tests that actually
 invoke the walker use ``pytest.importorskip("transformers")`` so the suite
@@ -19,8 +19,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers import transformers as tf_walker  # noqa: E402
-from scripts.walkers._base import RuleCandidate, WalkerSource  # noqa: E402
+from scripts.extractors import transformers as tf_walker  # noqa: E402
+from scripts.extractors._base import RuleCandidate, WalkerSource  # noqa: E402
 
 # Pin guard: tests that actually invoke ``tf_walker.walk()`` depend on
 # transformers being inside ``TESTED_AGAINST_VERSIONS``. CI environments that
@@ -253,7 +253,7 @@ def test_walk_emits_version_mismatch_when_out_of_range(
     from packaging.specifiers import SpecifierSet
 
     monkeypatch.setattr(tf_walker, "TESTED_AGAINST_VERSIONS", SpecifierSet(">=99.0"))
-    from scripts.walkers._base import WalkerVersionMismatchError
+    from scripts.extractors._base import WalkerVersionMismatchError
 
     with pytest.raises(WalkerVersionMismatchError):
         tf_walker.walk()

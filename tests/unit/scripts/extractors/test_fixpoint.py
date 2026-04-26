@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers._fixpoint_test`.
+"""Tests for :mod:`scripts.extractors._fixpoint_test`.
 
 Covers:
 - Convergence on idempotent rules.
@@ -19,7 +19,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._fixpoint_test import (  # noqa: E402
+from scripts.extractors._fixpoint_test import (  # noqa: E402
     LibraryResolutionCycleError,
     NonIdempotentRuleError,
     OrderDependentRuleError,

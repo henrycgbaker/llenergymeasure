@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers._base`.
+"""Tests for :mod:`scripts.extractors._base`.
 
 Covers AST primitives, pattern detectors, filters, confidence scoring,
 class/method finders, and structured error types — all on synthetic AST
@@ -19,7 +19,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import (  # noqa: E402
+from scripts.extractors._base import (  # noqa: E402
     ConditionalLoggerWarningDetector,
     ConditionalRaiseDetector,
     ConditionalSelfAssignDetector,

@@ -21,7 +21,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts import _vendor_common, diff_rules, vendor_rules  # noqa: E402
 from scripts._vendor_common import run_case  # noqa: E402
-from scripts.walkers._fixpoint_test import fixpoint_test_corpus  # noqa: E402
+from scripts.extractors._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Synthetic corpus + runner

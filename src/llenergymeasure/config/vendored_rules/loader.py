@@ -204,7 +204,7 @@ class Rule:
     """Other extractor sources that produced the same fingerprint as this rule.
 
     Empty for single-source rules. Populated by the corpus merger
-    (``scripts/walkers/build_corpus.py``) when two or more extractors
+    (``scripts/extractors/build_corpus.py``) when two or more extractors
     independently emitted a rule with the same ``(engine, severity,
     match.fields)`` fingerprint. ``added_by`` remains the *primary*
     source (used for downstream filtering); ``cross_validated_by`` is
@@ -666,7 +666,7 @@ class VendoredRulesLoader:
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Vendored rules for engine {engine!r} not found at {yaml_path}. "
-                f"Run `python -m scripts.walkers.{engine} --out {yaml_path}` to generate."
+                f"Run `python -m scripts.extractors.{engine} --out {yaml_path}` to generate."
             ) from exc
 
         parsed = _parse_envelope(engine, yaml_text)

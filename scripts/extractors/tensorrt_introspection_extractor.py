@@ -32,7 +32,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import (  # noqa: E402
+from scripts.extractors._base import (  # noqa: E402
     RuleCandidate,
     WalkerSource,
     candidate_to_dict,
@@ -118,13 +118,8 @@ def walk_tensorrt_args_rules(
     candidates: list[RuleCandidate] = []
 
     try:
-        import tensorrt_llm  # type: ignore
-        from tensorrt_llm.llmapi import (  # type: ignore
-            KvCacheConfig,
-            LlmConfig,
-            SchedulerConfig,
-        )
-        from tensorrt_llm.quantization import QuantConfig  # type: ignore
+        import tensorrt_llm  # noqa: F401  # type: ignore
+        from tensorrt_llm.llmapi import LlmConfig  # type: ignore
     except ImportError as e:
         # Graceful degradation: if tensorrt_llm isn't installed, emit a warning
         # and return empty candidates. CI can still run (no rules to validate).

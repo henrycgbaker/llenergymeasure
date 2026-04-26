@@ -1,14 +1,13 @@
-"""Tests for :mod:`scripts.walkers.tensorrt_introspection`.
+"""Tests for :mod:`scripts.extractors.tensorrt_ast_extractor`.
 
-Unit tests for TensorRT-LLM schema introspection extractor.
-Validates RuleCandidate structure, field coverage, and confidence tagging.
+Unit tests for TensorRT-LLM AST walker.
+Validates pattern detection, rule candidate structure, and YAML output.
 """
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -16,39 +15,44 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers import tensorrt_introspection as intro  # noqa: E402
+from scripts.extractors import tensorrt_ast as ast_walker  # noqa: E402
 
 
-class TestIntrospectionBasics:
+class TestASTWalkerBasics:
     """Tier A: walker internal invariants."""
 
     def test_walker_is_deterministic(self) -> None:
-        """Walking twice with same inputs produces identical output."""
-        a = intro.walk_tensorrt_args_rules(
+        """Walking twice with same source produces identical output."""
+        source = "pass  # dummy source"
+        a = ast_walker.walk_llm_config_source(
+            source_text=source,
             rel_source_path="tensorrt_llm/llmapi.py",
             today="2026-04-25",
         )
-        b = intro.walk_tensorrt_args_rules(
+        b = ast_walker.walk_llm_config_source(
+            source_text=source,
             rel_source_path="tensorrt_llm/llmapi.py",
             today="2026-04-25",
         )
-        assert [(c.id, c.severity, c.message_template) for c in a] == [
-            (c.id, c.severity, c.message_template) for c in b
-        ]
+        assert [(c.id, c.severity) for c in a] == [(c.id, c.severity) for c in b]
 
-    def test_rules_are_tagged_introspection(self) -> None:
-        """All rules from introspection walker are tagged 'introspection'."""
-        candidates = intro.walk_tensorrt_args_rules(
+    def test_rules_are_tagged_ast_walker(self) -> None:
+        """All rules from AST walker are tagged 'ast_walker'."""
+        source = "pass  # dummy"
+        candidates = ast_walker.walk_llm_config_source(
+            source_text=source,
             rel_source_path="tensorrt_llm/llmapi.py",
             today="2026-04-25",
         )
-        if candidates:  # May be empty if tensorrt_llm not installed
+        if candidates:
             tags = {c.added_by for c in candidates}
-            assert tags <= {"introspection"}
+            assert tags <= {"ast_walker"}
 
     def test_rules_have_valid_severity(self) -> None:
         """All emitted rules have known severity."""
-        candidates = intro.walk_tensorrt_args_rules(
+        source = "pass  # dummy"
+        candidates = ast_walker.walk_llm_config_source(
+            source_text=source,
             rel_source_path="tensorrt_llm/llmapi.py",
             today="2026-04-25",
         )
@@ -57,7 +61,9 @@ class TestIntrospectionBasics:
 
     def test_rules_have_valid_confidence(self) -> None:
         """All rules carry valid walker_confidence."""
-        candidates = intro.walk_tensorrt_args_rules(
+        source = "pass  # dummy"
+        candidates = ast_walker.walk_llm_config_source(
+            source_text=source,
             rel_source_path="tensorrt_llm/llmapi.py",
             today="2026-04-25",
         )
@@ -66,12 +72,13 @@ class TestIntrospectionBasics:
 
     def test_rule_structure_valid(self) -> None:
         """Each rule has required fields."""
-        candidates = intro.walk_tensorrt_args_rules(
+        source = "pass  # dummy"
+        candidates = ast_walker.walk_llm_config_source(
+            source_text=source,
             rel_source_path="tensorrt_llm/llmapi.py",
             today="2026-04-25",
         )
         for c in candidates:
-            # Required fields per RuleCandidate schema
             assert c.id
             assert c.engine == "tensorrt"
             assert c.library == "tensorrt_llm"
@@ -81,7 +88,6 @@ class TestIntrospectionBasics:
             assert isinstance(c.kwargs_positive, dict)
             assert isinstance(c.kwargs_negative, dict)
             assert isinstance(c.expected_outcome, dict)
-            assert c.walker_source.method in {"__init__", "validate"}
             assert c.walker_source.walker_confidence in {"high", "medium", "low"}
 
 
@@ -90,12 +96,11 @@ class TestCorpusYAMLShape:
 
     def test_walker_main_produces_valid_yaml(self, tmp_path: Path) -> None:
         """main() writes a valid corpus YAML file."""
-        out_path = tmp_path / "test_tensorrt_introspection.yaml"
-        ret = intro.main(["--out", str(out_path)])
+        out_path = tmp_path / "test_tensorrt_ast.yaml"
+        ret = ast_walker.main(["--out", str(out_path)])
         assert ret == 0
         assert out_path.exists()
 
-        # Parse YAML to check structure
         doc = yaml.safe_load(out_path.read_text())
         assert doc["schema_version"] == "1.0.0"
         assert doc["engine"] == "tensorrt"
@@ -105,8 +110,8 @@ class TestCorpusYAMLShape:
 
     def test_each_rule_in_corpus_has_required_fields(self, tmp_path: Path) -> None:
         """Each rule entry in corpus YAML is well-formed."""
-        out_path = tmp_path / "test_tensorrt_introspection.yaml"
-        intro.main(["--out", str(out_path)])
+        out_path = tmp_path / "test_tensorrt_ast.yaml"
+        ast_walker.main(["--out", str(out_path)])
 
         doc = yaml.safe_load(out_path.read_text())
         required_fields = {
@@ -131,7 +136,6 @@ class TestCorpusYAMLShape:
             assert required_fields <= set(rule.keys()), (
                 f"Missing fields: {required_fields - set(rule.keys())}"
             )
-            # Validate nested structure
             assert isinstance(rule["walker_source"], dict)
             assert "path" in rule["walker_source"]
             assert "method" in rule["walker_source"]
@@ -143,8 +147,8 @@ class TestCorpusYAMLShape:
 
     def test_corpus_rules_are_queryable_by_engine(self, tmp_path: Path) -> None:
         """All rules in corpus correctly specify 'tensorrt' engine."""
-        out_path = tmp_path / "test_tensorrt_introspection.yaml"
-        intro.main(["--out", str(out_path)])
+        out_path = tmp_path / "test_tensorrt_ast.yaml"
+        ast_walker.main(["--out", str(out_path)])
 
         doc = yaml.safe_load(out_path.read_text())
         for rule in doc["rules"]:
@@ -152,32 +156,64 @@ class TestCorpusYAMLShape:
             assert rule["match"]["engine"] == "tensorrt"
 
 
-class TestEdgeCases:
-    """Tier C: graceful degradation and error handling."""
+class TestPatternDetection:
+    """Tier C: pattern extraction from dummy code."""
 
-    def test_walker_handles_missing_library(self, tmp_path: Path, capsys: Any) -> None:
+    def test_extract_field_names_from_simple_condition(self) -> None:
+        """_extract_field_names_from_condition finds self.<field> references."""
+        import ast
+
+        expr = ast.parse("self.max_seq_len >= self.max_input_len").body[0].value
+        assert isinstance(expr, ast.Compare)
+        fields = ast_walker._extract_field_names_from_condition(expr)
+        assert set(fields) == {"max_seq_len", "max_input_len"}
+
+    def test_body_has_raise_or_warn_detects_raise(self) -> None:
+        """_body_has_raise_or_warn detects raise statements."""
+        import ast
+
+        source = """
+if condition:
+    raise ValueError("message")
+"""
+        tree = ast.parse(source)
+        if_stmt = tree.body[0]
+        assert isinstance(if_stmt, ast.If)
+        assert ast_walker._body_has_raise_or_warn(if_stmt.body)
+
+    def test_walk_llm_config_source_handles_empty_source(self) -> None:
+        """Walker handles empty/dummy source gracefully."""
+        source = "pass  # empty"
+        candidates = ast_walker.walk_llm_config_source(
+            source_text=source,
+            rel_source_path="dummy.py",
+            today="2026-04-25",
+        )
+        # Should produce at least hardcoded rules even for empty source
+        assert isinstance(candidates, list)
+
+
+class TestEdgeCases:
+    """Tier D: graceful degradation."""
+
+    def test_walker_handles_missing_library(self, tmp_path: Path) -> None:
         """Walker degrades gracefully when tensorrt_llm is not installed."""
-        # We're in an environment where tensorrt_llm is likely not installed.
-        # The walker should handle this and emit 0 rules with a warning.
         out_path = tmp_path / "test_missing_lib.yaml"
-        ret = intro.main(["--out", str(out_path)])
+        ret = ast_walker.main(["--out", str(out_path)])
         assert ret == 0
         assert out_path.exists()
 
         doc = yaml.safe_load(out_path.read_text())
-        # Should have basic structure even with 0 rules
         assert doc["engine"] == "tensorrt"
         assert isinstance(doc["rules"], list)
 
-    def test_candidates_to_dict_roundtrip(self) -> None:
-        """_candidate_to_dict produces valid rule dicts."""
-        candidates = intro.walk_tensorrt_args_rules(
-            rel_source_path="tensorrt_llm/llmapi.py",
+    def test_malformed_source_does_not_crash(self) -> None:
+        """Walker handles syntactically invalid source code."""
+        source = "this is not valid python :: @#$"
+        candidates = ast_walker.walk_llm_config_source(
+            source_text=source,
+            rel_source_path="bad.py",
             today="2026-04-25",
         )
-        for c in candidates:
-            rule_dict = intro._candidate_to_dict(c)
-            assert rule_dict["id"] == c.id
-            assert rule_dict["engine"] == c.engine
-            assert rule_dict["severity"] == c.severity
-            assert rule_dict["match"]["engine"] == c.engine
+        # Should degrade gracefully, returning hardcoded or empty rules
+        assert isinstance(candidates, list)

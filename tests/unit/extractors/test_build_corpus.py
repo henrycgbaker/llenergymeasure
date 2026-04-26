@@ -1,4 +1,4 @@
-"""Unit tests for the canonical corpus merger (``scripts/walkers/build_corpus.py``).
+"""Unit tests for the canonical corpus merger (``scripts/extractors/build_corpus.py``).
 
 The merger orchestrates the per-engine staging extractors, dedups by
 fingerprint with cross-validation provenance, and emits the canonical
@@ -34,7 +34,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.vendored_rules import VendoredRulesLoader  # noqa: E402
-from scripts.walkers import build_corpus  # noqa: E402
+from scripts.extractors import build_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures: minimal staging-file rule shapes

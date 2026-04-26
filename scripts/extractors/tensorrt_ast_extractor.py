@@ -33,9 +33,9 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).resolve()]
 sys.path[:] = [p for p in sys.path if p != ""]
 
-import yaml
+import yaml  # noqa: E402
 
-from scripts.walkers._base import (  # noqa: E402
+from scripts.extractors._base import (  # noqa: E402
     RuleCandidate,
     WalkerSource,
     call_func_path,
@@ -94,9 +94,6 @@ def _walk_post_init_body(
             # Assertions typically constrain one or two fields
             fields = _extract_field_names_from_condition(node.test)
             cond_repr = ast.unparse(node.test)
-            msg = None
-            if isinstance(node.msg, ast.Constant) and isinstance(node.msg.value, str):
-                msg = node.msg.value
             results.append((node, fields, cond_repr))
             self.generic_visit(node)
 

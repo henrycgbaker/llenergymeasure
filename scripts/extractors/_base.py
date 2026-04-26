@@ -106,7 +106,7 @@ class WalkerVersionMismatchError(WalkerError):
     def __init__(self, library: str, installed: str, expected: SpecifierSet) -> None:
         super().__init__(
             f"Installed {library}=={installed} is outside walker-pinned range "
-            f"{expected!s}. Update scripts/walkers/{library}.py "
+            f"{expected!s}. Update scripts/extractors/{library}.py "
             f"(bump TESTED_AGAINST_VERSIONS and re-run against the new source)."
         )
         self.library = library

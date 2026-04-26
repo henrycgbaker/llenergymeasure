@@ -195,7 +195,7 @@ Phase 50.2b's vendor CI gate extends them.
 ### Via walker (preferred)
 
 1. Rerun the walker for the engine:
-   `python -m scripts.walkers.{engine} --out configs/validation_rules/{engine}.yaml`
+   `python -m scripts.extractors.{engine} --out configs/validation_rules/{engine}.yaml`
    (optionally with `LLENERGY_WALKER_FROZEN_AT=<iso-utc>` for reproducibility).
 2. Inspect the diff against the previous corpus file. Walker-marked `high`
    entries are usually safe; `medium`/`low` need explicit review.

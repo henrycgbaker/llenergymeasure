@@ -26,13 +26,13 @@ the surrounding rule and notes the dropped sub-clause in a YAML comment.
 Output
 ------
 Writes ``configs/validation_rules/_staging/transformers_ast.yaml`` —
-consumed downstream by ``scripts/walkers/build_corpus.py`` (other subagent's
+consumed downstream by ``scripts/extractors/build_corpus.py`` (other subagent's
 territory). Schema mirrors ``configs/validation_rules/transformers.yaml``
 exactly: ``schema_version``, ``engine``, ``engine_version``, ``rules: [...]``.
 
 Run::
 
-    PYTHONPATH=.:src python3.10 scripts/walkers/transformers_ast.py
+    PYTHONPATH=.:src python3.10 scripts/extractors/transformers_ast_extractor.py
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Defend against the script-directory shadowing site-packages. When run as
-# `python3 scripts/walkers/transformers_ast.py`, Python prepends
-# `scripts/walkers/` to sys.path, where a sibling `transformers.py` lives —
+# `python3 scripts/extractors/transformers_ast_extractor.py`, Python prepends
+# `scripts/extractors/` to sys.path, where a sibling `transformers.py` lives —
 # `import transformers` would resolve to that local stub instead of the real
 # installed package. Strip the script dir before any third-party imports.
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
@@ -62,7 +62,7 @@ sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).res
 # Also guard against the empty-string entry that means "current cwd".
 sys.path[:] = [p for p in sys.path if p != ""]
 
-from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
+from scripts.extractors._base import (  # noqa: E402  (late import after sys.path)
     call_func_path,
     find_class,
     find_method,

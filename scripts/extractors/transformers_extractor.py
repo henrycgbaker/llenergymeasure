@@ -3,7 +3,7 @@
 Composes two extraction paths to emit a deterministic rules corpus:
 
 1. **GenerationConfig rules via library-API introspection** — delegated to
-   :mod:`scripts.walkers.transformers_introspection`. Every dormancy rule is
+   :mod:`scripts.extractors.transformers_introspection_extractor`. Every dormancy rule is
    discovered by probing ``GenerationConfig.validate(strict=True)`` against a
    synthesised per-type probe value; every error-class rule's message is
    lifted from the library's own ``ValueError``. Rules emitted:
@@ -31,7 +31,7 @@ not reachable via this walker's landmarks. Stays hand-written in
 
 Usage::
 
-    python -m scripts.walkers.transformers --out configs/validation_rules/transformers.yaml
+    python -m scripts.extractors.transformers_extractor --out configs/validation_rules/transformers.yaml
 
 With ``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
 """
@@ -50,19 +50,19 @@ from typing import Any
 from packaging.specifiers import SpecifierSet
 
 # NOTE: the walkers package is a sibling; when run via ``python -m
-# scripts.walkers.transformers`` the implicit ``scripts`` package makes this
+# scripts.extractors.transformers_extractor`` the implicit ``scripts`` package makes this
 # work. When run as a script directly, we need the project root on sys.path.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
+from scripts.extractors._base import (  # noqa: E402  (late import after sys.path)
     RuleCandidate,
     WalkerLandmarkMissingError,
     WalkerSource,
     check_installed_version,
 )
-from scripts.walkers.transformers_introspection import (  # noqa: E402
+from scripts.extractors.transformers_introspection_extractor import (  # noqa: E402
     walk_generation_config_rules,
 )
 

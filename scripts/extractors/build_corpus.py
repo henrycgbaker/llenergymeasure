@@ -92,13 +92,13 @@ CLI
 ---
 ::
 
-    python scripts/walkers/build_corpus.py --engine transformers
+    python scripts/extractors/build_corpus.py --engine transformers
     # Run extractors -> staging -> merge -> write canonical corpus
 
-    python scripts/walkers/build_corpus.py --engine transformers --check
+    python scripts/extractors/build_corpus.py --engine transformers --check
     # Re-run; diff against checked-in corpus; exit 1 on drift.
 
-    python scripts/walkers/build_corpus.py --engine transformers --skip-extract
+    python scripts/extractors/build_corpus.py --engine transformers --skip-extract
     # Assume staging files already exist; merge + write.
 
 The ``--engine`` flag defaults to ``transformers`` since that's the only
@@ -121,13 +121,13 @@ from typing import Any
 import yaml
 
 # Project root on sys.path so this script works both as ``python -m
-# scripts.walkers.build_corpus`` and as a direct ``python scripts/walkers/build_corpus.py``.
+# scripts.extractors.build_corpus`` and as a direct ``python scripts/extractors/build_corpus.py``.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-# When this file is run directly (``python scripts/walkers/build_corpus.py``),
-# Python prepends ``scripts/walkers/`` to sys.path. That directory contains a
+# When this file is run directly (``python scripts/extractors/build_corpus.py``),
+# Python prepends ``scripts/extractors/`` to sys.path. That directory contains a
 # ``transformers.py`` walker module which would shadow the real ``transformers``
 # library on import — vendor validation would then crash with
 # ``module 'transformers' has no attribute '__version__'``. Drop the script's
@@ -168,31 +168,31 @@ class _Extractor:
 _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
     "transformers": (
         _Extractor(
-            module="scripts.walkers.transformers_ast",
+            module="scripts.extractors.transformers_ast_extractor",
             staging_basename="transformers_ast.yaml",
         ),
         _Extractor(
-            module="scripts.walkers.transformers_introspection",
+            module="scripts.extractors.transformers_introspection_extractor",
             staging_basename="transformers_introspection.yaml",
         ),
     ),
     "vllm": (
         _Extractor(
-            module="scripts.walkers.vllm_ast",
+            module="scripts.extractors.vllm_ast_extractor",
             staging_basename="vllm_ast.yaml",
         ),
         _Extractor(
-            module="scripts.walkers.vllm_introspection",
+            module="scripts.extractors.vllm_introspection_extractor",
             staging_basename="vllm_introspection.yaml",
         ),
     ),
     "tensorrt": (
         _Extractor(
-            module="scripts.walkers.tensorrt_ast",
+            module="scripts.extractors.tensorrt_ast_extractor",
             staging_basename="tensorrt_ast.yaml",
         ),
         _Extractor(
-            module="scripts.walkers.tensorrt_introspection",
+            module="scripts.extractors.tensorrt_introspection_extractor",
             staging_basename="tensorrt_introspection.yaml",
         ),
     ),

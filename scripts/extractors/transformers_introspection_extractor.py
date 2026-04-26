@@ -54,10 +54,10 @@ BitsAndBytesConfig coverage gap
 This extractor is scoped to ``GenerationConfig`` (and its depth-1
 ``WatermarkingConfig`` / ``SynthIDTextWatermarkingConfig`` helpers). BNB
 ``post_init`` type-check raises are NOT emitted here. The pre-pipeline
-walker (:mod:`scripts.walkers.transformers`, deregistered) hand-curated
+walker (:mod:`scripts.extractors.transformers_extractor`, deregistered) hand-curated
 nine BNB rules; that path was lost in the refactor.
 
-Coverage is restored structurally by :mod:`scripts.walkers.transformers_ast`,
+Coverage is restored structurally by :mod:`scripts.extractors.transformers_ast_extractor`,
 which AST-walks ``BitsAndBytesConfig.post_init`` directly — the
 ``if not isinstance(self.X, T): raise`` pattern is exactly what its
 ``type_is_not`` predicate path already handles. The AST walker reads
@@ -105,17 +105,17 @@ _WALKERS_DIR = Path(__file__).resolve().parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-# When run as a script (``python scripts/walkers/transformers_introspection.py``),
+# When run as a script (``python scripts/extractors/transformers_introspection_extractor.py``),
 # Python prepends the script's directory to ``sys.path`` — that directory contains
 # ``transformers.py`` (the sibling walker module), which shadows the third-party
 # ``transformers`` package import. Drop the walkers dir so HF's ``transformers``
 # resolves correctly. Module-style invocation
-# (``python -m scripts.walkers.transformers_introspection``) avoids this trap
+# (``python -m scripts.extractors.transformers_introspection_extractor``) avoids this trap
 # but the verification command in the task brief uses script-style.
 if str(_WALKERS_DIR) in sys.path:
     sys.path.remove(str(_WALKERS_DIR))
 
-from scripts.walkers._base import RuleCandidate, WalkerSource  # noqa: E402
+from scripts.extractors._base import RuleCandidate, WalkerSource  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Trigger classes (dormancy auto-enumeration — unchanged from prior impl)

@@ -1,7 +1,7 @@
 """Tests for the sweep library-resolution mechanism — fixpoint iteration + dedup.
 
 Idempotence + shuffle-stability are enforced by
-``scripts/walkers/_fixpoint_test.py`` (CI-time contract — any corpus PR that
+``scripts/extractors/_fixpoint_test.py`` (CI-time contract — any corpus PR that
 violates them is rejected before this module runs). These tests focus on
 the *runtime* behaviour: does the library-resolution mechanism reach fixpoint, does it
 collapse measurement-equivalent configs, does it detect cycles, does it

@@ -16,7 +16,7 @@ Two extraction paths:
    combinations raise / normalise / pass.
 
 Output schema: ``configs/validation_rules/_staging/vllm_introspection.yaml``
-consumed downstream by ``scripts/walkers/build_corpus.py``.
+consumed downstream by ``scripts/extractors/build_corpus.py``.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ _SCRIPT_DIR = str(Path(__file__).resolve().parent)
 sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).resolve()]
 sys.path[:] = [p for p in sys.path if p != ""]
 
-from scripts.walkers._base import RuleCandidate, WalkerSource, candidate_to_dict  # noqa: E402
+from scripts.extractors._base import RuleCandidate, WalkerSource, candidate_to_dict  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Configuration & Field Discovery

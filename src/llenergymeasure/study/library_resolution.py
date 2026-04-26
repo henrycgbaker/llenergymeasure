@@ -6,7 +6,7 @@ The library-resolution mechanism is the host-side, pre-dispatch layer that norma
 field the vendored corpus marks as ``dormant``. Each rule's fired-state
 projection is taken from its match predicate's "not_equal" / "present"
 operand (the sentinel value the predicate is *deviating from*) — that same
-projection is what :mod:`scripts.walkers._fixpoint_test` enforces in CI, so
+projection is what :mod:`scripts.extractors._fixpoint_test` enforces in CI, so
 runtime canonicalisation and CI correctness tests apply an identical
 normalisation.
 

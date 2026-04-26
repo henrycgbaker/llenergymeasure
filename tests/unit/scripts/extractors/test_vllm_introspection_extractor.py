@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers.vllm_introspection` and :mod:`scripts.walkers.vllm_ast`.
+"""Tests for :mod:`scripts.extractors.vllm_introspection_extractor` and :mod:`scripts.extractors.vllm_ast_extractor`.
 
 vLLM walker tests follow the same structure as transformers, but with reduced
 scope due to vLLM's optional import-time dependencies (msgspec, optional CUDA libs).
@@ -21,7 +21,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import RuleCandidate, WalkerSource  # noqa: E402
+from scripts.extractors._base import RuleCandidate, WalkerSource  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tier A — Walker internal invariants
@@ -171,7 +171,7 @@ class TestBuildCorpusIntegration:
 
     def test_introspection_walker_writes_valid_yaml(self, tmp_path):
         """Running the introspection walker writes a well-formed staging YAML."""
-        from scripts.walkers import vllm_introspection
+        from scripts.extractors import vllm_introspection
 
         out = tmp_path / "vllm_introspection.yaml"
         vllm_introspection.main(["--out", str(out)])
