@@ -1,0 +1,868 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: 0.21.0
+walker_pinned_range: <0.22.0,>=0.21.0
+mined_at: '2026-04-26T00:00:00Z'
+rules:
+- id: tensorrt_basellmargs_load_format_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.load_format must be one of ['auto', 'dummy']
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 838
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.load_format:
+        in:
+        - auto
+        - dummy
+  kwargs_positive:
+    load_format: <invalid_static_miner_probe>
+  kwargs_negative:
+    load_format: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`load_format` must be one of [''auto'', ''dummy'']'
+  references:
+  - llmapi/llm_args.py:838 (tensorrt_llm.BaseLlmArgs.load_format Literal annotation)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_basellmargs_tokenizer_mode_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.tokenizer_mode must be one of ['auto', 'slow']
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 782
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.tokenizer_mode:
+        in:
+        - auto
+        - slow
+  kwargs_positive:
+    tokenizer_mode: <invalid_static_miner_probe>
+  kwargs_negative:
+    tokenizer_mode: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`tokenizer_mode` must be one of [''auto'', ''slow'']'
+  references:
+  - llmapi/llm_args.py:782 (tensorrt_llm.BaseLlmArgs.tokenizer_mode Literal annotation)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_batching_type_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: TrtLlmArgs.batching_type must be one of BatchingType members ['STATIC', 'INFLIGHT']
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <strenum>
+    line_at_scan: 411
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.batching_type:
+        in:
+        - STATIC
+        - INFLIGHT
+  kwargs_positive:
+    batching_type: <invalid_static_miner_probe>
+  kwargs_negative:
+    batching_type: STATIC
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`batching_type` must be one of BatchingType members: [''STATIC'', ''INFLIGHT'']'
+  references:
+  - llmapi/llm_args.py:411 (BatchingType StrEnum)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_calibconfig_device_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: CalibConfig.device must be one of ['cuda', 'cpu']
+  severity: error
+  native_type: tensorrt_llm.CalibConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <literal_field>
+    line_at_scan: 148
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.device:
+        in:
+        - cuda
+        - cpu
+  kwargs_positive:
+    device: <invalid_static_miner_probe>
+  kwargs_negative:
+    device: cuda
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`device` must be one of [''cuda'', ''cpu'']'
+  references:
+  - llmapi/llm_args.py:148 (tensorrt_llm.CalibConfig.device Literal annotation)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_capacity_scheduler_policy_in_3_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: TrtLlmArgs.capacity_scheduler_policy must be one of CapacitySchedulerPolicy members
+    ['MAX_UTILIZATION', 'GUARANTEED_NO_EVICT', 'STATIC_BATCH']
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <strenum>
+    line_at_scan: 420
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.capacity_scheduler_policy:
+        in:
+        - MAX_UTILIZATION
+        - GUARANTEED_NO_EVICT
+        - STATIC_BATCH
+  kwargs_positive:
+    capacity_scheduler_policy: <invalid_static_miner_probe>
+  kwargs_negative:
+    capacity_scheduler_policy: MAX_UTILIZATION
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`capacity_scheduler_policy` must be one of CapacitySchedulerPolicy members: [''MAX_UTILIZATION'',
+    ''GUARANTEED_NO_EVICT'', ''STATIC_BATCH'']'
+  references:
+  - llmapi/llm_args.py:420 (CapacitySchedulerPolicy StrEnum)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_context_chunking_policy_in_2_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: TrtLlmArgs.context_chunking_policy must be one of ContextChunkingPolicy members ['FIRST_COME_FIRST_SERVED',
+    'EQUAL_PROGRESS']
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: <strenum>
+    line_at_scan: 430
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.context_chunking_policy:
+        in:
+        - FIRST_COME_FIRST_SERVED
+        - EQUAL_PROGRESS
+  kwargs_positive:
+    context_chunking_policy: <invalid_static_miner_probe>
+  kwargs_negative:
+    context_chunking_policy: FIRST_COME_FIRST_SERVED
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: '`context_chunking_policy` must be one of ContextChunkingPolicy members: [''FIRST_COME_FIRST_SERVED'',
+    ''EQUAL_PROGRESS'']'
+  references:
+  - llmapi/llm_args.py:430 (ContextChunkingPolicy StrEnum)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_dtype_eq_bfloat16_dtype
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_dtype raises when dtype == bfloat16 (via raise RuntimeError)
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_dtype
+    line_at_scan: 1057
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.dtype: bfloat16
+  kwargs_positive:
+    dtype: bfloat16
+  kwargs_negative:
+    dtype: bfloat16_x
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: Pre SM 80 GPUs do not support bfloat16
+  references:
+  - llmapi/llm_args.py:1057 (tensorrt_llm.BaseLlmArgs.validate_dtype)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: TrtLlmArgs.validate_enable_build_cache raises when enable_build_cache type_is_not BuildCacheConfig
+    (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.TrtLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_enable_build_cache
+    line_at_scan: 1589
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_build_cache:
+        type_is_not: BuildCacheConfig
+  kwargs_positive:
+    enable_build_cache: x
+  kwargs_negative:
+    enable_build_cache: x_neg
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'f''Invalid build_cache_config: {self.enable_build_cache}'''
+  references:
+  - llmapi/llm_args.py:1589 (tensorrt_llm.TrtLlmArgs.validate_enable_build_cache)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_max_batch_size_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_build_config_with_runtime_params raises when max_batch_size present
+    True (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 1218
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_batch_size:
+        present: true
+  kwargs_positive:
+    max_batch_size: x
+  kwargs_negative:
+    max_batch_size: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'max_batch_size [{self.max_batch_size}] is greater than build_config.max_batch_size
+    [{self.build_config.max_batch_size}] in build_config'
+  references:
+  - llmapi/llm_args.py:1218 (tensorrt_llm.BaseLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_max_ngram_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_ngram_size <= 0 (via
+    raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 577
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_ngram_size:
+        <=: 0
+  kwargs_positive:
+    max_ngram_size: 0
+  kwargs_negative:
+    max_ngram_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'Value must be positive, got {v}'
+  references:
+  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_max_num_tokens_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_build_config_with_runtime_params raises when max_num_tokens present
+    True (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 1223
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_num_tokens:
+        present: true
+  kwargs_positive:
+    max_num_tokens: x
+  kwargs_negative:
+    max_num_tokens: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'max_num_tokens [{self.max_num_tokens}] is greater than build_config.max_num_tokens
+    [{self.build_config.max_num_tokens}] in build_config'
+  references:
+  - llmapi/llm_args.py:1223 (tensorrt_llm.BaseLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_max_verification_set_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_verification_set_size
+    <= 0 (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 577
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_verification_set_size:
+        <=: 0
+  kwargs_positive:
+    max_verification_set_size: 0
+  kwargs_negative:
+    max_verification_set_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'Value must be positive, got {v}'
+  references:
+  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_max_window_size_le_0_positive_values
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: LookaheadDecodingConfig.validate_positive_values raises when max_window_size <= 0 (via
+    raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.LookaheadDecodingConfig
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_positive_values
+    line_at_scan: 577
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_window_size:
+        <=: 0
+  kwargs_positive:
+    max_window_size: 0
+  kwargs_negative:
+    max_window_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'Value must be positive, got {v}'
+  references:
+  - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_model_not_type_model
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_model raises when model type_is_not ['str', 'Path'] (via raise
+    ValueError)
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model
+    line_at_scan: 1080
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.model:
+        type_is_not:
+        - str
+        - Path
+  kwargs_positive:
+    model: 1
+  kwargs_negative:
+    model: x
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'f''Invalid model: {v}'''
+  references:
+  - llmapi/llm_args.py:1080 (tensorrt_llm.BaseLlmArgs.validate_model)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_raises_speculative_config_set_True_speculative_config
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_speculative_config raises when speculative_config present True
+    (via raise ValueError)
+  severity: error
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_speculative_config
+    line_at_scan: 1356
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.speculative_config:
+        present: true
+  kwargs_positive:
+    speculative_config: x
+  kwargs_negative:
+    speculative_config: null
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'f''Speculative config type not recognized: {self.speculative_config}'''
+  references:
+  - llmapi/llm_args.py:1356 (tensorrt_llm.BaseLlmArgs.validate_speculative_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_backend_in_lora_config_consistency
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_lora_config_consistency warns when enable_lora present True AND
+    lora_config present True AND backend in ['pytorch', '_autodeploy'] (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 1394
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.enable_lora:
+        present: true
+      tensorrt.lora_config:
+        present: true
+      tensorrt.backend:
+        in:
+        - pytorch
+        - _autodeploy
+  kwargs_positive:
+    enable_lora: x
+    lora_config: x
+    backend: pytorch
+  kwargs_negative:
+    enable_lora: x
+    lora_config: x
+    backend: __static_miner_synth__
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'enable_lora is ignored when lora_config is provided for {self.backend} backend.'
+  references:
+  - llmapi/llm_args.py:1394 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_build_config_set_True_model_format_misc
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_model_format_misc warns when backend not_in ['pytorch', '_autodeploy']
+    AND build_config present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_model_format_misc
+    line_at_scan: 1142
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend:
+        not_in:
+        - pytorch
+        - _autodeploy
+      tensorrt.build_config:
+        present: true
+  kwargs_positive:
+    backend: __static_miner_synth__
+    build_config: x
+  kwargs_negative:
+    backend: __static_miner_synth__
+    build_config: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: The build_config is ignored for model format of TLLM_ENGINE.
+  references:
+  - llmapi/llm_args.py:1142 (tensorrt_llm.BaseLlmArgs.validate_model_format_misc)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_lora_config_set_True_lora_config_consistency
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_lora_config_consistency warns when lora_config present True (via
+    logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 1401
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config:
+        present: true
+  kwargs_positive:
+    lora_config: x
+  kwargs_negative:
+    lora_config: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_loras is ignored when lora_config is provided.
+  references:
+  - llmapi/llm_args.py:1379 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  - llmapi/llm_args.py:1382 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  - llmapi/llm_args.py:1387 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  - llmapi/llm_args.py:1401 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  added_by: static_miner
+  added_at: '2026-04-26'
+  conflict_note: 'id: static_miner -> ''tensorrt_warns_lora_config_set_True_lora_config_consistency'';
+    static_miner -> ''tensorrt_warns_lora_config_set_True_lora_config_consistency__2''; id: static_miner
+    -> ''tensorrt_warns_lora_config_set_True_lora_config_consistency''; static_miner -> ''tensorrt_warns_lora_config_set_True_lora_config_consistency__3'';
+    id: static_miner -> ''tensorrt_warns_lora_config_set_True_lora_config_consistency''; static_miner
+    -> ''tensorrt_warns_lora_config_set_True_lora_config_consistency__4'''
+- id: tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.set_runtime_knobs_from_build_config warns when backend == pytorch AND build_config
+    present True AND max_batch_size present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: set_runtime_knobs_from_build_config
+    line_at_scan: 1200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend: pytorch
+      tensorrt.build_config:
+        present: true
+      tensorrt.max_batch_size:
+        present: true
+  kwargs_positive:
+    backend: pytorch
+    build_config: x
+    max_batch_size: x
+  kwargs_negative:
+    backend: pytorch
+    build_config: x
+    max_batch_size: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'overriding {key} from build_config'
+  references:
+  - llmapi/llm_args.py:1200 (tensorrt_llm.BaseLlmArgs.set_runtime_knobs_from_build_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_build_config_with_runtime_params warns when max_beam_width present
+    True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 1233
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_beam_width:
+        present: true
+  kwargs_positive:
+    max_beam_width: x
+  kwargs_negative:
+    max_beam_width: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'max_beam_width [{self.max_beam_width}] is overridden by build_config.max_beam_width
+    [{self.build_config.max_beam_width}] in build_config'
+  references:
+  - llmapi/llm_args.py:1233 (tensorrt_llm.BaseLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.set_runtime_knobs_from_build_config warns when backend == pytorch AND build_config
+    present True AND max_beam_width present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: set_runtime_knobs_from_build_config
+    line_at_scan: 1200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend: pytorch
+      tensorrt.build_config:
+        present: true
+      tensorrt.max_beam_width:
+        present: true
+  kwargs_positive:
+    backend: pytorch
+    build_config: x
+    max_beam_width: x
+  kwargs_negative:
+    backend: pytorch
+    build_config: x
+    max_beam_width: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'overriding {key} from build_config'
+  references:
+  - llmapi/llm_args.py:1200 (tensorrt_llm.BaseLlmArgs.set_runtime_knobs_from_build_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_build_config_with_runtime_params warns when max_input_len present
+    True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 1238
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_input_len:
+        present: true
+  kwargs_positive:
+    max_input_len: x
+  kwargs_negative:
+    max_input_len: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'max_input_len [{self.max_input_len}] is overridden by build_config.max_input_len
+    [{self.build_config.max_input_len}] in build_config'
+  references:
+  - llmapi/llm_args.py:1238 (tensorrt_llm.BaseLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.set_runtime_knobs_from_build_config warns when backend == pytorch AND build_config
+    present True AND max_input_len present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: set_runtime_knobs_from_build_config
+    line_at_scan: 1200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend: pytorch
+      tensorrt.build_config:
+        present: true
+      tensorrt.max_input_len:
+        present: true
+  kwargs_positive:
+    backend: pytorch
+    build_config: x
+    max_input_len: x
+  kwargs_negative:
+    backend: pytorch
+    build_config: x
+    max_input_len: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'overriding {key} from build_config'
+  references:
+  - llmapi/llm_args.py:1200 (tensorrt_llm.BaseLlmArgs.set_runtime_knobs_from_build_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_lora_rank_set_True_lora_config_consistency
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_lora_config_consistency warns when lora_config present True AND
+    max_lora_rank present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_lora_config_consistency
+    line_at_scan: 1376
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.lora_config:
+        present: true
+      tensorrt.max_lora_rank:
+        present: true
+  kwargs_positive:
+    lora_config: x
+    max_lora_rank: x
+  kwargs_negative:
+    lora_config: x
+    max_lora_rank: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: max_lora_rank is ignored when lora_config is provided.
+  references:
+  - llmapi/llm_args.py:1376 (tensorrt_llm.BaseLlmArgs.validate_lora_config_consistency)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.set_runtime_knobs_from_build_config warns when backend == pytorch AND build_config
+    present True AND max_num_tokens present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: set_runtime_knobs_from_build_config
+    line_at_scan: 1200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend: pytorch
+      tensorrt.build_config:
+        present: true
+      tensorrt.max_num_tokens:
+        present: true
+  kwargs_positive:
+    backend: pytorch
+    build_config: x
+    max_num_tokens: x
+  kwargs_negative:
+    backend: pytorch
+    build_config: x
+    max_num_tokens: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'overriding {key} from build_config'
+  references:
+  - llmapi/llm_args.py:1200 (tensorrt_llm.BaseLlmArgs.set_runtime_knobs_from_build_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.validate_build_config_with_runtime_params warns when max_seq_len present
+    True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: validate_build_config_with_runtime_params
+    line_at_scan: 1228
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.max_seq_len:
+        present: true
+  kwargs_positive:
+    max_seq_len: x
+  kwargs_negative:
+    max_seq_len: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'max_seq_len [{self.max_seq_len}] is overridden by build_config.max_seq_len [{self.build_config.max_seq_len}]
+    in build_config'
+  references:
+  - llmapi/llm_args.py:1228 (tensorrt_llm.BaseLlmArgs.validate_build_config_with_runtime_params)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: BaseLlmArgs.set_runtime_knobs_from_build_config warns when backend == pytorch AND build_config
+    present True AND max_seq_len present True (via logger.warning)
+  severity: warn
+  native_type: tensorrt_llm.BaseLlmArgs
+  miner_source:
+    path: llmapi/llm_args.py
+    method: set_runtime_knobs_from_build_config
+    line_at_scan: 1200
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.backend: pytorch
+      tensorrt.build_config:
+        present: true
+      tensorrt.max_seq_len:
+        present: true
+  kwargs_positive:
+    backend: pytorch
+    build_config: x
+    max_seq_len: x
+  kwargs_negative:
+    backend: pytorch
+    build_config: x
+    max_seq_len: null
+  expected_outcome:
+    outcome: warn
+    emission_channel: logger_warning
+    normalised_fields: []
+  message_template: f'overriding {key} from build_config'
+  references:
+  - llmapi/llm_args.py:1200 (tensorrt_llm.BaseLlmArgs.set_runtime_knobs_from_build_config)
+  added_by: static_miner
+  added_at: '2026-04-26'

@@ -175,6 +175,16 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
             staging_basename="transformers_dynamic_miner.yaml",
         ),
     ),
+    # TRT-LLM is static-only by adversarial-review decision #8 — the dynamic
+    # constructor probe yields zero raises (TRT-LLM defers all real validation
+    # to engine build, opaque from Python). The static miner reads the 0.21.0
+    # source tree extracted to /tmp/trt-llm-0.21.0/.
+    "tensorrt": (
+        _Extractor(
+            module="scripts.miners.tensorrt_static_miner",
+            staging_basename="tensorrt_static_miner.yaml",
+        ),
+    ),
 }
 
 
