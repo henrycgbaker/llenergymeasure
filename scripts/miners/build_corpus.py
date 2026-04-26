@@ -185,6 +185,16 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
             staging_basename="tensorrt_static_miner.yaml",
         ),
     ),
+    "vllm": (
+        _Extractor(
+            module="scripts.miners.vllm_static_miner",
+            staging_basename="vllm_static_miner.yaml",
+        ),
+        _Extractor(
+            module="scripts.miners.vllm_dynamic_miner",
+            staging_basename="vllm_dynamic_miner.yaml",
+        ),
+    ),
 }
 
 

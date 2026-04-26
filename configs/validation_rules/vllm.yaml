@@ -1,0 +1,1585 @@
+schema_version: 1.0.0
+engine: vllm
+engine_version: 0.17.1
+walker_pinned_range: <0.18,>=0.17
+mined_at: '2026-04-26'
+rules:
+- id: vllm_cacheconfig_cache_dtype_in_7_values
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.cache_dtype must be one of ['auto', 'bfloat16', 'fp8', 'fp8_e4m3', 'fp8_e5m2',
+    'fp8_inc', 'fp8_ds_mla']
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cache_dtype:
+        not_in:
+        - auto
+        - bfloat16
+        - fp8
+        - fp8_e4m3
+        - fp8_e5m2
+        - fp8_inc
+        - fp8_ds_mla
+  kwargs_positive:
+    cache_dtype: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    cache_dtype: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_cpu_offload_gb_ge_0
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.cpu_offload_gb requires >= 0
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.cpu_offload_gb:
+        <: 0
+  kwargs_positive:
+    cpu_offload_gb: -1
+  kwargs_negative:
+    cpu_offload_gb: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_gpu_memory_utilization_gt_0
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.gpu_memory_utilization requires > 0
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.gpu_memory_utilization:
+        <=: 0
+  kwargs_positive:
+    gpu_memory_utilization: 0
+  kwargs_negative:
+    gpu_memory_utilization: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_gpu_memory_utilization_le_1
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.gpu_memory_utilization requires <= 1
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.gpu_memory_utilization:
+        '>': 1
+  kwargs_positive:
+    gpu_memory_utilization: 2
+  kwargs_negative:
+    gpu_memory_utilization: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_kv_offloading_backend_in_2_values
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.kv_offloading_backend must be one of ['native', 'lmcache']
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.kv_offloading_backend:
+        not_in:
+        - native
+        - lmcache
+  kwargs_positive:
+    kv_offloading_backend: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    kv_offloading_backend: native
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_mamba_block_size_gt_0
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.mamba_block_size requires > 0
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_block_size:
+        <=: 0
+  kwargs_positive:
+    mamba_block_size: 0
+  kwargs_negative:
+    mamba_block_size: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_mamba_cache_dtype_in_3_values
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.mamba_cache_dtype must be one of ['auto', 'float32', 'float16']
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_cache_dtype:
+        not_in:
+        - auto
+        - float32
+        - float16
+  kwargs_positive:
+    mamba_cache_dtype: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    mamba_cache_dtype: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_mamba_cache_mode_in_3_values
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.mamba_cache_mode must be one of ['all', 'align', 'none']
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_cache_mode:
+        not_in:
+        - all
+        - align
+        - none
+  kwargs_positive:
+    mamba_cache_mode: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    mamba_cache_mode: all
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_mamba_ssm_cache_dtype_in_3_values
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.mamba_ssm_cache_dtype must be one of ['auto', 'float32', 'float16']
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mamba_ssm_cache_dtype:
+        not_in:
+        - auto
+        - float32
+        - float16
+  kwargs_positive:
+    mamba_ssm_cache_dtype: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    mamba_ssm_cache_dtype: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_prefix_caching_hash_algo_in_4_values
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.prefix_caching_hash_algo must be one of ['sha256', 'sha256_cbor', 'xxhash',
+    'xxhash_cbor']
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.prefix_caching_hash_algo:
+        not_in:
+        - sha256
+        - sha256_cbor
+        - xxhash
+        - xxhash_cbor
+  kwargs_positive:
+    prefix_caching_hash_algo: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    prefix_caching_hash_algo: sha256
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_cacheconfig_swap_space_ge_0
+  engine: vllm
+  library: vllm
+  rule_under_test: CacheConfig.swap_space requires >= 0
+  severity: error
+  native_type: vllm.config.CacheConfig
+  miner_source:
+    path: vllm/config/cache.py
+    method: <pydantic_lift>
+    line_at_scan: 38
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.swap_space:
+        <: 0
+  kwargs_positive:
+    swap_space: -1
+  kwargs_negative:
+    swap_space: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CacheConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_compilationconfig_compile_cache_save_format_in_2_values
+  engine: vllm
+  library: vllm
+  rule_under_test: CompilationConfig.compile_cache_save_format must be one of ['binary', 'unpacked']
+  severity: error
+  native_type: vllm.config.CompilationConfig
+  miner_source:
+    path: vllm/config/compilation.py
+    method: <pydantic_lift>
+    line_at_scan: 336
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.compile_cache_save_format:
+        not_in:
+        - binary
+        - unpacked
+  kwargs_positive:
+    compile_cache_save_format: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    compile_cache_save_format: binary
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.CompilationConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_compilationconfig_dormant_backend_eq
+  engine: vllm
+  library: vllm
+  rule_under_test: 'CompilationConfig.__post_init__: marks dormant when backend == '
+  severity: dormant
+  native_type: vllm.config.CompilationConfig
+  miner_source:
+    path: vllm/config/compilation.py
+    method: __post_init__
+    line_at_scan: 905
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.backend: ''
+  kwargs_positive:
+    backend: ''
+  kwargs_negative:
+    backend: _x
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - backend
+  message_template: null
+  references:
+  - vllm/config/compilation.py:905 (vllm.config.CompilationConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_eplbconfig_num_redundant_experts_ge_0
+  engine: vllm
+  library: vllm
+  rule_under_test: EPLBConfig.num_redundant_experts requires >= 0
+  severity: error
+  native_type: vllm.config.EPLBConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: <pydantic_lift>
+    line_at_scan: 50
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.num_redundant_experts:
+        <: 0
+  kwargs_positive:
+    num_redundant_experts: -1
+  kwargs_negative:
+    num_redundant_experts: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.EPLBConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_eplbconfig_policy_in_1_values
+  engine: vllm
+  library: vllm
+  rule_under_test: EPLBConfig.policy must be one of ['default']
+  severity: error
+  native_type: vllm.config.EPLBConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: <pydantic_lift>
+    line_at_scan: 50
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.policy:
+        not_in:
+        - default
+  kwargs_positive:
+    policy: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    policy: default
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.EPLBConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_eplbconfig_raises_log_balancedness_interval_le_0
+  engine: vllm
+  library: vllm
+  rule_under_test: 'EPLBConfig._validate_eplb_config: raises when log_balancedness present True AND log_balancedness_interval
+    <= 0'
+  severity: error
+  native_type: vllm.config.EPLBConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: _validate_eplb_config
+    line_at_scan: 89
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.log_balancedness:
+        present: true
+      vllm.engine.log_balancedness_interval:
+        <=: 0
+  kwargs_positive:
+    log_balancedness: 1
+    log_balancedness_interval: 0
+  kwargs_negative:
+    log_balancedness: 1
+    log_balancedness_interval: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: log_balancedness_interval must be greater than 0.
+  references:
+  - vllm/config/parallel.py:89 (vllm.config.EPLBConfig._validate_eplb_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_loraconfig_dormant_max_cpu_loras_unset_true
+  engine: vllm
+  library: vllm
+  rule_under_test: 'LoRAConfig._validate_lora_config: marks dormant when max_cpu_loras absent True'
+  severity: dormant
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: vllm/config/lora.py
+    method: _validate_lora_config
+    line_at_scan: 94
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_cpu_loras:
+        absent: true
+  kwargs_positive:
+    max_cpu_loras: null
+  kwargs_negative:
+    max_cpu_loras: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - max_cpu_loras
+  message_template: null
+  references:
+  - vllm/config/lora.py:94 (vllm.config.LoRAConfig._validate_lora_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_loraconfig_lora_dtype_in_3_values
+  engine: vllm
+  library: vllm
+  rule_under_test: LoRAConfig.lora_dtype must be one of ['auto', 'float16', 'bfloat16']
+  severity: error
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: vllm/config/lora.py
+    method: <pydantic_lift>
+    line_at_scan: 28
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.lora_dtype:
+        not_in:
+        - auto
+        - float16
+        - bfloat16
+  kwargs_positive:
+    lora_dtype: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    lora_dtype: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.LoRAConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_loraconfig_max_lora_rank_in_9_values
+  engine: vllm
+  library: vllm
+  rule_under_test: LoRAConfig.max_lora_rank must be one of [1, 8, 16, 32, 64, 128, 256, 320, 512]
+  severity: error
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: vllm/config/lora.py
+    method: <pydantic_lift>
+    line_at_scan: 28
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_lora_rank:
+        not_in:
+        - 1
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 320
+        - 512
+  kwargs_positive:
+    max_lora_rank: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    max_lora_rank: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.LoRAConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_loraconfig_max_loras_ge_1
+  engine: vllm
+  library: vllm
+  rule_under_test: LoRAConfig.max_loras requires >= 1
+  severity: error
+  native_type: vllm.config.LoRAConfig
+  miner_source:
+    path: vllm/config/lora.py
+    method: <pydantic_lift>
+    line_at_scan: 28
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.max_loras:
+        <: 1
+  kwargs_positive:
+    max_loras: 0
+  kwargs_negative:
+    max_loras: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.LoRAConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_modelconfig_convert_in_4_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ModelConfig.convert must be one of ['auto', 'none', 'embed', 'classify']
+  severity: error
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: vllm/config/model.py
+    method: <pydantic_lift>
+    line_at_scan: 99
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.convert:
+        not_in:
+        - auto
+        - none
+        - embed
+        - classify
+  kwargs_positive:
+    convert: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    convert: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ModelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_modelconfig_logprobs_mode_in_4_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ModelConfig.logprobs_mode must be one of ['raw_logits', 'raw_logprobs', 'processed_logits',
+    'processed_logprobs']
+  severity: error
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: vllm/config/model.py
+    method: <pydantic_lift>
+    line_at_scan: 99
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.logprobs_mode:
+        not_in:
+        - raw_logits
+        - raw_logprobs
+        - processed_logits
+        - processed_logprobs
+  kwargs_positive:
+    logprobs_mode: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    logprobs_mode: raw_logits
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ModelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_modelconfig_mm_encoder_tp_mode_in_2_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ModelConfig.mm_encoder_tp_mode must be one of ['weights', 'data']
+  severity: error
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: vllm/config/model.py
+    method: <pydantic_lift>
+    line_at_scan: 99
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_encoder_tp_mode:
+        not_in:
+        - weights
+        - data
+  kwargs_positive:
+    mm_encoder_tp_mode: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    mm_encoder_tp_mode: weights
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ModelConfig \u2014 Pydantic FieldInfo metadata"
+  - "vllm.MultiModalConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+  conflict_note: 'id: pydantic_lift -> ''vllm_modelconfig_mm_encoder_tp_mode_in_2_values''; pydantic_lift
+    -> ''vllm_multimodalconfig_mm_encoder_tp_mode_in_2_values'''
+- id: vllm_modelconfig_mm_processor_cache_type_in_2_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ModelConfig.mm_processor_cache_type must be one of ['shm', 'lru']
+  severity: error
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: vllm/config/model.py
+    method: <pydantic_lift>
+    line_at_scan: 99
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_processor_cache_type:
+        not_in:
+        - shm
+        - lru
+  kwargs_positive:
+    mm_processor_cache_type: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    mm_processor_cache_type: shm
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ModelConfig \u2014 Pydantic FieldInfo metadata"
+  - "vllm.MultiModalConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+  conflict_note: 'id: pydantic_lift -> ''vllm_modelconfig_mm_processor_cache_type_in_2_values''; pydantic_lift
+    -> ''vllm_multimodalconfig_mm_processor_cache_type_in_2_values'''
+- id: vllm_modelconfig_runner_in_4_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ModelConfig.runner must be one of ['auto', 'generate', 'pooling', 'draft']
+  severity: error
+  native_type: vllm.config.ModelConfig
+  miner_source:
+    path: vllm/config/model.py
+    method: <pydantic_lift>
+    line_at_scan: 99
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.runner:
+        not_in:
+        - auto
+        - generate
+        - pooling
+        - draft
+  kwargs_positive:
+    runner: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    runner: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ModelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_multimodalconfig_mm_processor_cache_gb_ge_0
+  engine: vllm
+  library: vllm
+  rule_under_test: MultiModalConfig.mm_processor_cache_gb requires >= 0
+  severity: error
+  native_type: vllm.config.MultiModalConfig
+  miner_source:
+    path: vllm/config/multimodal.py
+    method: <pydantic_lift>
+    line_at_scan: 71
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.mm_processor_cache_gb:
+        <: 0
+  kwargs_positive:
+    mm_processor_cache_gb: -1
+  kwargs_negative:
+    mm_processor_cache_gb: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.MultiModalConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_multimodalconfig_video_pruning_rate_ge_0p0
+  engine: vllm
+  library: vllm
+  rule_under_test: MultiModalConfig.video_pruning_rate requires >= 0.0
+  severity: error
+  native_type: vllm.config.MultiModalConfig
+  miner_source:
+    path: vllm/config/multimodal.py
+    method: <pydantic_lift>
+    line_at_scan: 71
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.video_pruning_rate:
+        <: 0.0
+  kwargs_positive:
+    video_pruning_rate: -1.0
+  kwargs_negative:
+    video_pruning_rate: 0.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.MultiModalConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_multimodalconfig_video_pruning_rate_lt_1p0
+  engine: vllm
+  library: vllm
+  rule_under_test: MultiModalConfig.video_pruning_rate requires < 1.0
+  severity: error
+  native_type: vllm.config.MultiModalConfig
+  miner_source:
+    path: vllm/config/multimodal.py
+    method: <pydantic_lift>
+    line_at_scan: 71
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.video_pruning_rate:
+        '>=': 1.0
+  kwargs_positive:
+    video_pruning_rate: 1.0
+  kwargs_negative:
+    video_pruning_rate: 0.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.MultiModalConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig__api_process_count_gt_0
+  engine: vllm
+  library: vllm
+  rule_under_test: ParallelConfig._api_process_count requires > 0
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: <pydantic_lift>
+    line_at_scan: 93
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._api_process_count:
+        <=: 0
+  kwargs_positive:
+    _api_process_count: 0
+  kwargs_negative:
+    _api_process_count: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ParallelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig__api_process_rank_ge_neg1
+  engine: vllm
+  library: vllm
+  rule_under_test: ParallelConfig._api_process_rank requires >= -1
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: <pydantic_lift>
+    line_at_scan: 93
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._api_process_rank:
+        <: -1
+  kwargs_positive:
+    _api_process_rank: -2
+  kwargs_negative:
+    _api_process_rank: -1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ParallelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig_all2all_backend_in_7_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ParallelConfig.all2all_backend must be one of ['naive', 'pplx', 'deepep_high_throughput',
+    'deepep_low_latency', 'mori', 'allgather_reducescatter', 'flashinfer_all2allv']
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: <pydantic_lift>
+    line_at_scan: 93
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.all2all_backend:
+        not_in:
+        - naive
+        - pplx
+        - deepep_high_throughput
+        - deepep_low_latency
+        - mori
+        - allgather_reducescatter
+        - flashinfer_all2allv
+  kwargs_positive:
+    all2all_backend: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    all2all_backend: naive
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ParallelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig_data_parallel_backend_in_2_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ParallelConfig.data_parallel_backend must be one of ['ray', 'mp']
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: <pydantic_lift>
+    line_at_scan: 93
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_backend:
+        not_in:
+        - ray
+        - mp
+  kwargs_positive:
+    data_parallel_backend: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    data_parallel_backend: ray
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ParallelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig_dormant_all2all_backend_eq_pplx
+  engine: vllm
+  library: vllm
+  rule_under_test: 'ParallelConfig._validate_parallel_config: marks dormant when all2all_backend == pplx'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 348
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.all2all_backend: pplx
+  kwargs_positive:
+    all2all_backend: pplx
+  kwargs_negative:
+    all2all_backend: allgather_reducescatter
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - all2all_backend
+  message_template: null
+  references:
+  - vllm/config/parallel.py:348 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig_dormant_data_parallel_rank_set_true
+  engine: vllm
+  library: vllm
+  rule_under_test: 'ParallelConfig.__post_init__: marks dormant when distributed_executor_backend == external_launcher
+    AND data_parallel_rank present True'
+  severity: dormant
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: __post_init__
+    line_at_scan: 676
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.distributed_executor_backend: external_launcher
+      vllm.engine.data_parallel_rank:
+        present: true
+  kwargs_positive:
+    distributed_executor_backend: external_launcher
+    data_parallel_rank: 1
+  kwargs_negative:
+    distributed_executor_backend: external_launcher
+    data_parallel_rank: 0
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - data_parallel_rank
+  message_template: null
+  references:
+  - vllm/config/parallel.py:676 (vllm.config.ParallelConfig.__post_init__)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig_expert_placement_strategy_in_2_values
+  engine: vllm
+  library: vllm
+  rule_under_test: ParallelConfig.expert_placement_strategy must be one of ['linear', 'round_robin']
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: <pydantic_lift>
+    line_at_scan: 93
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.expert_placement_strategy:
+        not_in:
+        - linear
+        - round_robin
+  kwargs_positive:
+    expert_placement_strategy: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    expert_placement_strategy: linear
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.ParallelConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig_raises_api_process_rank_ge_ref_api_process_count
+  engine: vllm
+  library: vllm
+  rule_under_test: 'ParallelConfig._validate_parallel_config: raises when _api_process_rank >= @_api_process_count'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 337
+  match:
+    engine: vllm
+    fields:
+      vllm.engine._api_process_rank:
+        '>=': '@_api_process_count'
+  kwargs_positive:
+    _api_process_count: 2
+    _api_process_rank: 2
+  kwargs_negative:
+    _api_process_count: 2
+    _api_process_rank: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: 'f''Invalid value of `_api_process_rank`. Expected to be `-1` or `[0, {self._api_process_count})`,
+    but found: {self._api_process_rank}'''
+  references:
+  - vllm/config/parallel.py:337 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_parallelconfig_raises_data_parallel_external_lb_set_true
+  engine: vllm
+  library: vllm
+  rule_under_test: 'ParallelConfig._validate_parallel_config: raises when data_parallel_size <= 1 AND
+    data_parallel_external_lb present True'
+  severity: error
+  native_type: vllm.config.ParallelConfig
+  miner_source:
+    path: vllm/config/parallel.py
+    method: _validate_parallel_config
+    line_at_scan: 357
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.data_parallel_size:
+        <=: 1
+      vllm.engine.data_parallel_external_lb:
+        present: true
+  kwargs_positive:
+    data_parallel_size: 1
+    data_parallel_external_lb: 1
+  kwargs_negative:
+    data_parallel_size: 1
+    data_parallel_external_lb: false
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: data_parallel_external_lb can only be set when data_parallel_size > 1
+  references:
+  - vllm/config/parallel.py:357 (vllm.config.ParallelConfig._validate_parallel_config)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_poolerconfig_seq_pooling_type_in_3_values
+  engine: vllm
+  library: vllm
+  rule_under_test: PoolerConfig.seq_pooling_type must be one of ['CLS', 'LAST', 'MEAN']
+  severity: error
+  native_type: vllm.config.PoolerConfig
+  miner_source:
+    path: vllm/config/pooler.py
+    method: <pydantic_lift>
+    line_at_scan: 19
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.seq_pooling_type:
+        not_in:
+        - CLS
+        - LAST
+        - MEAN
+  kwargs_positive:
+    seq_pooling_type: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    seq_pooling_type: CLS
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.PoolerConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_poolerconfig_tok_pooling_type_in_2_values
+  engine: vllm
+  library: vllm
+  rule_under_test: PoolerConfig.tok_pooling_type must be one of ['ALL', 'STEP']
+  severity: error
+  native_type: vllm.config.PoolerConfig
+  miner_source:
+    path: vllm/config/pooler.py
+    method: <pydantic_lift>
+    line_at_scan: 19
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.tok_pooling_type:
+        not_in:
+        - ALL
+        - STEP
+  kwargs_positive:
+    tok_pooling_type: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    tok_pooling_type: ALL
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.PoolerConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'
+- id: vllm_sampling_penalties_repetition_penalty_le_zero
+  engine: vllm
+  library: vllm
+  rule_under_test: 'sampling_penalties: error when repetition_penalty <= 0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: <probe>
+    line_at_scan: 0
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <=: 0
+  kwargs_positive:
+    presence_penalty: -2.0
+    frequency_penalty: -2.0
+    repetition_penalty: -1.0
+  kwargs_negative:
+    presence_penalty: -2.0
+    frequency_penalty: -2.0
+    repetition_penalty: 0.5
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: repetition_penalty must be greater than zero, got -1.0.
+  references:
+  - "vllm.SamplingParams \u2014 observed via combinatorial probing"
+  added_by: dynamic_miner
+  added_at: '2026-04-26'
+- id: vllm_sampling_token_counts_max_tokens_lt_min_tokens
+  engine: vllm
+  library: vllm
+  rule_under_test: 'sampling_token_counts: error when max_tokens < min_tokens'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: <probe>
+    line_at_scan: 0
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        <: '@min_tokens'
+  kwargs_positive:
+    max_tokens: 1
+    min_tokens: 5
+  kwargs_negative:
+    max_tokens: null
+    min_tokens: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: min_tokens must be less than or equal to max_tokens=1, got 5.
+  references:
+  - "vllm.SamplingParams \u2014 observed via combinatorial probing"
+  added_by: dynamic_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_dormant_bad_words_unset_true
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams.__post_init__: marks dormant when bad_words absent True'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: __post_init__
+    line_at_scan: 389
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.bad_words:
+        absent: true
+  kwargs_positive:
+    bad_words: null
+  kwargs_negative:
+    bad_words: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - bad_words
+  message_template: null
+  references:
+  - vllm/sampling_params.py:389 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_dormant_seed_eq_neg1
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams.__post_init__: marks dormant when seed == -1'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: __post_init__
+    line_at_scan: 378
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.seed: -1
+  kwargs_positive:
+    seed: -1
+  kwargs_negative:
+    seed: 0
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - seed
+  message_template: null
+  references:
+  - vllm/sampling_params.py:378 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams.__post_init__: marks dormant when skip_reading_prefix_cache absent
+    True'
+  severity: dormant
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: __post_init__
+    line_at_scan: 418
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.skip_reading_prefix_cache:
+        absent: true
+  kwargs_positive:
+    skip_reading_prefix_cache: null
+  kwargs_negative:
+    skip_reading_prefix_cache: 1
+  expected_outcome:
+    outcome: dormant_silent
+    emission_channel: none
+    normalised_fields:
+    - skip_reading_prefix_cache
+  message_template: null
+  references:
+  - vllm/sampling_params.py:418 (vllm.SamplingParams.__post_init__)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams._verify_args: raises when max_tokens present True AND min_tokens >
+    @max_tokens'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: _verify_args
+    line_at_scan: 472
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.max_tokens:
+        present: true
+      vllm.sampling.min_tokens:
+        '>': '@max_tokens'
+  kwargs_positive:
+    max_tokens: 1
+    min_tokens: 2
+  kwargs_negative:
+    max_tokens: 1
+    min_tokens: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'min_tokens must be less than or equal to max_tokens={self.max_tokens}, got {self.min_tokens}.'
+  references:
+  - vllm/sampling_params.py:472 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_raises_min_tokens_lt_0
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams._verify_args: raises when min_tokens < 0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: _verify_args
+    line_at_scan: 468
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.min_tokens:
+        <: 0
+  kwargs_positive:
+    min_tokens: -1
+  kwargs_negative:
+    min_tokens: 0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: min_tokens must be greater than or equal to 0, got -1.
+  references:
+  - vllm/sampling_params.py:468 (vllm.SamplingParams._verify_args)
+  - "vllm.SamplingParams \u2014 observed via combinatorial probing"
+  added_by: static_miner
+  cross_validated_by:
+  - dynamic_miner
+  added_at: '2026-04-26'
+  conflict_note: 'message_template: dynamic miner text overrode static_miner''s template; id: static_miner
+    -> ''vllm_samplingparams_raises_min_tokens_lt_0''; dynamic_miner -> ''vllm_sampling_token_counts_min_tokens_lt_zero'''
+- id: vllm_samplingparams_raises_n_lt_1
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams._verify_args: raises when n < 1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: _verify_args
+    line_at_scan: 424
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        <: 1
+  kwargs_positive:
+    n: 0
+  kwargs_negative:
+    n: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'n must be at least 1, got {self.n}.'
+  references:
+  - vllm/sampling_params.py:424 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_raises_n_not_type_int
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams._verify_args: raises when n type_is_not int'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: _verify_args
+    line_at_scan: 422
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.n:
+        type_is_not: int
+  kwargs_positive:
+    n: x
+  kwargs_negative:
+    n: 1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'n must be an int, but is of type {type(self.n)}'
+  references:
+  - vllm/sampling_params.py:422 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_raises_repetition_penalty_le_0p0
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams._verify_args: raises when repetition_penalty <= 0.0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: _verify_args
+    line_at_scan: 434
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.repetition_penalty:
+        <=: 0.0
+  kwargs_positive:
+    repetition_penalty: 0.0
+  kwargs_negative:
+    repetition_penalty: 1.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'repetition_penalty must be greater than zero, got {self.repetition_penalty}.'
+  references:
+  - vllm/sampling_params.py:434 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_raises_temperature_lt_0p0
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams._verify_args: raises when temperature < 0.0'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: _verify_args
+    line_at_scan: 439
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.temperature:
+        <: 0.0
+  kwargs_positive:
+    temperature: -1.0
+  kwargs_negative:
+    temperature: 0.0
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'temperature must be non-negative, got {self.temperature}.'
+  references:
+  - vllm/sampling_params.py:439 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_samplingparams_raises_top_k_lt_neg1
+  engine: vllm
+  library: vllm
+  rule_under_test: 'SamplingParams._verify_args: raises when top_k < -1'
+  severity: error
+  native_type: vllm.SamplingParams
+  miner_source:
+    path: vllm/sampling_params.py
+    method: _verify_args
+    line_at_scan: 452
+  match:
+    engine: vllm
+    fields:
+      vllm.sampling.top_k:
+        <: -1
+  kwargs_positive:
+    top_k: -2
+  kwargs_negative:
+    top_k: -1
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: f'top_k must be 0 (disable), or at least 1, got {self.top_k}.'
+  references:
+  - vllm/sampling_params.py:452 (vllm.SamplingParams._verify_args)
+  added_by: static_miner
+  added_at: '2026-04-26'
+- id: vllm_structuredoutputsconfig_backend_in_5_values
+  engine: vllm
+  library: vllm
+  rule_under_test: StructuredOutputsConfig.backend must be one of ['auto', 'xgrammar', 'guidance', 'outlines',
+    'lm-format-enforcer']
+  severity: error
+  native_type: vllm.config.StructuredOutputsConfig
+  miner_source:
+    path: vllm/config/structured_outputs.py
+    method: <pydantic_lift>
+    line_at_scan: 17
+  match:
+    engine: vllm
+    fields:
+      vllm.engine.backend:
+        not_in:
+        - auto
+        - xgrammar
+        - guidance
+        - outlines
+        - lm-format-enforcer
+  kwargs_positive:
+    backend: <invalid_pydantic_lift_probe>
+  kwargs_negative:
+    backend: auto
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: null
+  references:
+  - "vllm.StructuredOutputsConfig \u2014 Pydantic FieldInfo metadata"
+  added_by: pydantic_lift
+  added_at: '2026-04-26'

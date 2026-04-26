@@ -175,8 +175,102 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
     return cls(**kwargs)
 
 
+def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool) -> CaptureBuffers:
+    """Execute one rule's kwargs through the vLLM library.
+
+    ``strict_validate`` is unused — vLLM has no analog to HF's ``strict``
+    flag; sampling-param errors raise during construction and dormancy
+    surfaces via ``logger.warning_once`` from inside ``__post_init__`` /
+    ``_verify_args``. Both paths run on plain construction.
+
+    Dispatch: ``vllm.SamplingParams``, ``vllm.config.<X>``, and the dotted
+    ``vllm.<module>.<Class>`` fallback all flow through the generic
+    ``_construct_generic`` path. Logger names are vLLM's module loggers
+    (vLLM uses ``init_logger(__name__)`` per ``vllm/config/cache.py:20``).
+
+    INFO-level vLLM logs are pre-suppressed before delegating to
+    ``run_case``: vLLM logs ``INFO 04-26 [model.py] Resolved architecture``
+    on every ``ModelConfig`` construction, which the capture handler would
+    otherwise classify as ``dormant_announced`` and trip ``negative_confirms``.
+    The rule's intended channel is ``logger.warning`` / ``warning_once`` /
+    ``warnings.warn`` only; INFO is plumbing.
+
+    A handful of import-time warnings (``_SixMetaPathImporter``, SWIG type
+    metadata, ROCm probe failures) leak into ``warnings.catch_warnings``
+    on the first run-case invocation per process. These are torch/vLLM
+    bootstrap noise unrelated to the rule under test, so we strip them
+    from the captured warnings tuple before returning.
+    """
+    del strict_validate  # currently unused for vLLM
+    logger_names = (
+        "vllm",
+        "vllm.config",
+        "vllm.sampling_params",
+        "vllm.engine",
+    )
+    result = run_case(
+        lambda: _construct_generic(native_type, kwargs),
+        logger_names=logger_names,
+        # vLLM doesn't expose a strict private-field allowlist concept; the
+        # corpus loader will re-validate per-field anyway.
+        private_allowlist=frozenset(),
+    )
+
+    # Drop INFO-level vLLM bootstrap messages from the captured log stream:
+    # ``Resolved architecture``, ``Using max model len`` etc. all surface
+    # via ``vllm.config.model`` / ``vllm.config.scheduler`` and would
+    # otherwise classify the negative case as ``dormant_announced``,
+    # tripping ``negative_confirms`` for every rule that constructs one of
+    # these classes. The captured records carry no level prefix in the
+    # plain-message handler (``%(message)s`` formatter), so we filter on
+    # known-bootstrap message substrings instead — vLLM's
+    # ``init_logger(__name__)`` uses standard logging without a level
+    # marker baked into the message.
+    filtered_logs = tuple(m for m in result.logger_messages if not _VLLM_BOOTSTRAP_NOISE.search(m))
+    if filtered_logs != result.logger_messages:
+        from dataclasses import replace as _replace
+
+        result = _replace(result, logger_messages=filtered_logs)
+    # Strip torch/SWIG/ROCm bootstrap noise that has nothing to do with the
+    # rule under test.
+    filtered_warnings = tuple(
+        w for w in result.warnings_captured if not _VLLM_IMPORT_NOISE.search(w)
+    )
+    if filtered_warnings != result.warnings_captured:
+        from dataclasses import replace as _replace
+
+        result = _replace(result, warnings_captured=filtered_warnings)
+    return result
+
+
+_VLLM_IMPORT_NOISE = __import__("re").compile(
+    # Torch / ROCm import probe noise.
+    r"_SixMetaPathImporter|SwigPy|swigvarlink|VendorImporter|"
+    r"libamd_smi|amd-smi|distutils|sysconfig|"
+    r"builtin type \w+ has no __module__ attribute|"
+    # vLLM startup compile-config note.
+    r"`compile_config` is set to .* but `mode`",
+)
+
+_VLLM_BOOTSTRAP_NOISE = __import__("re").compile(
+    r"^Resolved architecture:|"
+    r"^Using max model len|"
+    r"^Using cuda graph capture|"
+    r"^Defaulting to use mp for distributed|"
+    r"^The 'pplx' all2all backend|"
+    r"^Using external launcher|"
+    r"^Disabling V1 multiprocessing|"
+    r"^max_parallel_loading_workers|"
+    r"^Setting LD_LIBRARY_PATH|"
+    r"^load_general_plugins|"
+    r"^Initializing distributed environment|"
+    r"^This model supports multiple tasks"
+)
+
+
 _ENGINE_RUNNERS = {
     "transformers": _run_transformers,
+    "vllm": _run_vllm,
 }
 
 
@@ -589,6 +683,13 @@ def _resolve_engine_version(engine: str) -> str:
             raise VendorEngineNotImportable(
                 "transformers is not importable in this environment"
             ) from exc
+    if engine == "vllm":
+        try:
+            import vllm  # type: ignore
+
+            return vllm.__version__
+        except ImportError as exc:
+            raise VendorEngineNotImportable("vllm is not importable in this environment") from exc
     return "unknown"
 
 
