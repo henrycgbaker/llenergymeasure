@@ -20,16 +20,25 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.miners._fixpoint_test import (  # noqa: E402
+    GateSoundnessRegressionError,
     LibraryResolutionCycleError,
     NonIdempotentRuleError,
     OrderDependentRuleError,
     _ProjectedRule,
     apply_to_fixpoint,
+    assert_gate_soundness_fixpoint,
     assert_idempotent,
     assert_shuffle_stable,
     construct_seed_states,
     fixpoint_test_corpus,
     load_dormant_rules,
+    synthesise_malformed_rule_cases,
+)
+from scripts.vendor_rules import (  # noqa: E402
+    CHECK_MESSAGE_TEMPLATE_MATCH,
+    CHECK_NEGATIVE_DOES_NOT_RAISE,
+    CHECK_POSITIVE_RAISES,
+    compute_gate_soundness_divergences,
 )
 
 
@@ -234,3 +243,71 @@ class TestCorpusIntegration:
         assert seeds[0]["do_sample"] is False
         # The generated sentinel must not equal 1.0 (so the predicate fires).
         assert seeds[0]["temperature"] != 1.0
+
+
+# ---------------------------------------------------------------------------
+# Gate-soundness fixpoint
+# ---------------------------------------------------------------------------
+
+
+class TestGateSoundnessFixpoint:
+    """Pin Decision #12 of the invariant-miner adversarial review.
+
+    Three malformed rules (one per gate-soundness check) feed
+    :func:`compute_gate_soundness_divergences`; each must surface its
+    matching ``check_failed`` divergence. If a future refactor drops a
+    check, the corresponding parameter case fails.
+    """
+
+    @pytest.mark.parametrize(
+        "expected_check",
+        [
+            CHECK_POSITIVE_RAISES,
+            CHECK_MESSAGE_TEMPLATE_MATCH,
+            CHECK_NEGATIVE_DOES_NOT_RAISE,
+        ],
+    )
+    def test_each_check_surfaces_its_divergence(self, expected_check: str) -> None:
+        cases = {c["check_name"]: c for c in synthesise_malformed_rule_cases()}
+        case = cases[expected_check]
+
+        divergences = compute_gate_soundness_divergences(case["rule"], case["pos"], case["neg"])
+
+        check_names = [d.check_failed for d in divergences]
+        rule_id = case["rule"]["id"]
+        assert expected_check in check_names, (
+            f"Expected gate to record check_failed={expected_check!r} for "
+            f"rule {rule_id!r}; got {check_names!r}"
+        )
+
+    def test_assert_gate_soundness_fixpoint_passes_on_real_gate(self) -> None:
+        """The single entry-point used by CI integration runs cleanly."""
+        # Should not raise - all three checks are wired in vendor_rules.py.
+        assert_gate_soundness_fixpoint()
+
+    def test_regression_error_fires_when_check_is_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If a check is removed, ``assert_gate_soundness_fixpoint`` must fail-loud."""
+        from scripts import vendor_rules as vr
+        from scripts.miners import _fixpoint_test as fpm
+
+        # Snapshot the real gate before patching so the stub doesn't
+        # recurse into the patched name.
+        real_gate = vr.compute_gate_soundness_divergences
+
+        def stripped_gate(rule: Any, pos: Any, neg: Any) -> list[Any]:
+            return [
+                d
+                for d in real_gate(rule, pos, neg)
+                if d.check_failed != CHECK_NEGATIVE_DOES_NOT_RAISE
+            ]
+
+        # The fixpoint function imports ``compute_gate_soundness_divergences``
+        # lazily from ``scripts.vendor_rules``, so patching the module
+        # attribute is sufficient.
+        monkeypatch.setattr(vr, "compute_gate_soundness_divergences", stripped_gate)
+
+        with pytest.raises(GateSoundnessRegressionError) as excinfo:
+            fpm.assert_gate_soundness_fixpoint()
+        assert excinfo.value.check_name == CHECK_NEGATIVE_DOES_NOT_RAISE

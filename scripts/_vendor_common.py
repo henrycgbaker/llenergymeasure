@@ -18,6 +18,7 @@ from __future__ import annotations
 import dataclasses
 import io
 import logging
+import re
 import time
 import warnings
 from collections.abc import Callable, Iterable
@@ -88,20 +89,32 @@ class CaseResult:
 
 @dataclass
 class Divergence:
-    """One observed-vs-expected mismatch."""
+    """One observed-vs-expected mismatch.
+
+    ``check_failed`` names the gate-soundness check that surfaced this
+    divergence (one of ``positive_raises``, ``negative_does_not_raise``,
+    ``message_template_match``, ``message_template_too_dynamic``) when the
+    divergence came from the soundness checks added per Decision #12 of the
+    invariant-miner adversarial review (`.product/designs/adversarial-review-invariant-miner-2026-04-26.md`).
+    Pre-existing expected-vs-observed comparisons leave this ``None``.
+    """
 
     rule_id: str
     field: str
     expected: Any
     observed: Any
+    check_failed: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "rule_id": self.rule_id,
             "field": self.field,
             "expected": self.expected,
             "observed": self.observed,
         }
+        if self.check_failed is not None:
+            out["check_failed"] = self.check_failed
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -450,3 +463,96 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, type):
         return value.__name__
     return str(value)
+
+
+# ---------------------------------------------------------------------------
+# Gate-soundness helpers (Decision #12 of the invariant-miner adversarial review)
+# ---------------------------------------------------------------------------
+
+
+_PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
+"""Matches a single format-string placeholder like ``{declared_value}`` or ``{}``.
+
+We deliberately do NOT match nested braces - Python's format-string grammar
+permits them but the corpus's ``message_template`` strings do not use them
+(verified by inspection of ``configs/validation_rules/transformers.yaml``).
+A non-greedy non-recursive regex is sufficient and simpler to reason about.
+"""
+
+_MIN_STATIC_FRAGMENT_LEN = 4
+"""Minimum length for a static fragment to be useful for substring matching.
+
+Below this we treat the template as ``too_dynamic`` - a 3-character substring
+like "is " or " a " has too high a coincidental-match rate to be load-bearing.
+"""
+
+
+def message_template_to_substring(template: str) -> str:
+    """Extract the longest static fragment from a ``message_template``.
+
+    The corpus's ``message_template`` field is a Python format-string with
+    placeholders like ``{declared_value}`` filled in at raise time. To
+    compare it against a raised exception's ``str()``, we drop placeholders
+    and pick the longest contiguous static run as the substring to match.
+
+    The miner sometimes records the AST literal verbatim, so the template
+    may arrive wrapped in ``f'...'`` / ``f"..."`` quoting. We strip the
+    f-string prefix + trailing quote before extracting fragments so the
+    longest-static-run heuristic doesn't pick up the leading ``f'``.
+
+    Returns the empty string if the template has no static content
+    longer than :data:`_MIN_STATIC_FRAGMENT_LEN` characters - the caller
+    should treat this as ``message_template_too_dynamic`` and skip the
+    substring check (recording a divergence so the rule's author knows
+    the template is too placeholder-heavy to verify).
+
+    Examples
+    --------
+    >>> message_template_to_substring("`{flag}` is set to `{value}` but ...")
+    '` is set to `'
+    >>> message_template_to_substring("Invalid `cache_implementation` ({val}). Choose one of: ...")
+    'Invalid `cache_implementation` ('
+    >>> message_template_to_substring("{a}{b}")
+    ''
+    >>> message_template_to_substring("f'Greedy methods do not support {x}.'")
+    'Greedy methods do not support '
+    """
+    if not template:
+        return ""
+    normalised = _strip_fstring_quoting(template)
+    fragments = _PLACEHOLDER_RE.split(normalised)
+    longest = max(fragments, key=len, default="")
+    if len(longest.strip()) < _MIN_STATIC_FRAGMENT_LEN:
+        return ""
+    return longest
+
+
+def _strip_fstring_quoting(template: str) -> str:
+    """Strip a leading ``f'`` / ``f"`` and matching trailing quote, if present.
+
+    Some corpus rules record the AST source literal rather than the
+    runtime format-string. ``"f'Greedy methods do not support {x}.'"``
+    becomes ``"Greedy methods do not support {x}."`` so the placeholder
+    splitter can do its job.
+    """
+    stripped = template.strip()
+    if len(stripped) >= 3 and stripped[:2] in ('f"', "f'") and stripped[-1] == stripped[1]:
+        return stripped[2:-1]
+    return template
+
+
+def message_matches_template(observed_message: str, template: str) -> tuple[bool, str]:
+    """Check whether ``observed_message`` contains the static fragment of ``template``.
+
+    Returns ``(matched, fragment)``. When the template is too dynamic to
+    extract a useful fragment, returns ``(False, "")`` and the caller
+    should record a ``message_template_too_dynamic`` divergence rather
+    than a substring-mismatch one.
+
+    Comparison is case-insensitive - corpus templates and runtime exception
+    messages occasionally differ in capitalisation of opening words.
+    """
+    fragment = message_template_to_substring(template)
+    if not fragment:
+        return False, ""
+    return fragment.lower() in (observed_message or "").lower(), fragment
