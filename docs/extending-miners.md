@@ -77,18 +77,26 @@ if _cls is None:
 
 Based on your Step 0 research, apply one or more lift modules to extract constraints directly from type metadata.
 
+All three lift modules expose a single function named `lift` with the same signature: `lift(target_type, *, namespace, today, source_path) -> list[RuleCandidate]`. The engine/library is derived automatically from `target_type.__module__`. Import each lift under an alias to keep call sites readable.
+
 ### If the engine uses Pydantic v2
 
 ```python
-from scripts.miners._pydantic_lift import lift_pydantic_model
+from datetime import date
+from scripts.miners._pydantic_lift import lift as lift_pydantic
 from enginelib.config import CacheConfig, SchedulerConfig
 
-ENGINE = "myengine"
+TODAY = date.today().isoformat()
 
 def mine_pydantic_rules():
     rules = []
     for cls in [CacheConfig, SchedulerConfig]:
-        rules.extend(lift_pydantic_model(cls, engine=ENGINE, namespace="myengine.config"))
+        rules.extend(lift_pydantic(
+            cls,
+            namespace="myengine.config",
+            today=TODAY,
+            source_path="enginelib/config.py",
+        ))
     return rules
 ```
 
@@ -97,11 +105,16 @@ The lift emits one rule per `Gt`, `Ge`, `Lt`, `Le`, `MultipleOf`, `MinLen`, `Max
 ### If the engine uses msgspec
 
 ```python
-from scripts.miners._msgspec_lift import lift_msgspec_struct
+from scripts.miners._msgspec_lift import lift as lift_msgspec
 from enginelib.config import SamplingParams
 
 def mine_msgspec_rules():
-    return lift_msgspec_struct(SamplingParams, engine=ENGINE, namespace="myengine.sampling")
+    return lift_msgspec(
+        SamplingParams,
+        namespace="myengine.sampling",
+        today=TODAY,
+        source_path="enginelib/sampling.py",
+    )
 ```
 
 Note: if the class ships zero `Meta(ge=...)` annotations (common for msgspec classes), the lift returns `[]` - that is expected and not an error.
@@ -109,11 +122,16 @@ Note: if the class ships zero `Meta(ge=...)` annotations (common for msgspec cla
 ### If the engine uses stdlib dataclasses
 
 ```python
-from scripts.miners._dataclass_lift import lift_dataclass
+from scripts.miners._dataclass_lift import lift as lift_dataclass
 from enginelib.config import EngineArgs
 
 def mine_dataclass_rules():
-    return lift_dataclass(EngineArgs, engine=ENGINE, namespace="myengine.args")
+    return lift_dataclass(
+        EngineArgs,
+        namespace="myengine.args",
+        today=TODAY,
+        source_path="enginelib/args.py",
+    )
 ```
 
 The dataclass lift is limited to `Literal[...]` value-allowlist rules (no numeric bounds; stdlib dataclasses carry no bound metadata by default).
@@ -333,7 +351,7 @@ if __name__ == "__main__":
 Each per-engine miner ships with parametrised tests:
 
 ```python
-# tests/miners/test_myengine_miner.py
+# tests/unit/scripts/miners/test_myengine_miner.py
 
 import pytest
 from scripts.miners.myengine_miner import CLUSTERS, TESTED_AGAINST_VERSIONS

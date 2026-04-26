@@ -172,7 +172,7 @@ The nearest citation cluster: Daikon (inference), Houdini (guess-and-check archi
 | Flanagan & Leino (2001), Houdini FME | Recall-first emit + checker-prune architecture |
 | Luo et al. (2023), NeuRI FSE | ML-library framing; valid+invalid trace pairing |
 | Xie et al. (2022), DocTer ISSTA | Documentation-guided constraint mining (contrast point) |
-| Dwarakanath et al. (2018), PreInfer DSN | Quantified precondition inference (adjacent; we don't need this yet) |
+| Astorga et al. (2018), PreInfer DSN | Quantified precondition inference (adjacent; we don't need this yet) |
 | DeepConstr (ISSTA 2024) | LLM-assisted constraint hypothesiser (contrast point: we don't use LLMs) |
 | PyTea (PLDI 2022) | Static tensor-shape analysis with Z3 (contrast point: different domain) |
 
@@ -183,5 +183,8 @@ The nearest citation cluster: Daikon (inference), Houdini (guess-and-check archi
 - [architecture-overview.md](architecture-overview.md) - system overview
 - [miner-pipeline.md](miner-pipeline.md) - implementation details
 - [validation-rule-corpus.md](validation-rule-corpus.md) - corpus format
-- `.product/research/miners-redo/research-prior-art-miners-2026-04-26.md` - full prior-art survey (internal)
-- `.product/designs/invariant-miner-design-2026-04-26.md` - locked design (internal)
+
+Internal-only design artefacts (not in the public package):
+
+- `.product/research/miners-redo/research-prior-art-miners-2026-04-26.md` - full prior-art survey
+- `.product/designs/invariant-miner-design-2026-04-26.md` - locked design

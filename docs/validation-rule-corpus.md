@@ -114,7 +114,7 @@ Below is a complete rule from the transformers corpus with every field annotated
 
   message_template: >
     `num_beams` has to be divisible by `num_beam_groups`, but got
-    `num_beams`={val} and `num_beam_groups`={val}.
+    `num_beams`={declared_value} and `num_beam_groups`={declared_value}.
   # The static fragment of the library's error message.
   # Used by the vendor-CI gate's message_template_match check:
   # the gate asserts this fragment appears in the live library's exception message.
@@ -126,7 +126,7 @@ Below is a complete rule from the transformers corpus with every field annotated
   # Human-readable provenance citations. Free-form strings.
   # Useful for tracking down the library source line that motivated the rule.
 
-  added_by: static_miner
+  added_by: dynamic_miner
   # Provenance: which pipeline component produced this rule.
   # See AddedBy values below.
 
@@ -160,7 +160,7 @@ Examples:
 
 | Value | When it fires | User sees |
 |-------|--------------|-----------|
-| `error` | Engine would raise at construction / validate time | `ConfigurationError` before initialisation |
+| `error` | Engine would raise at construction / validate time | `ValueError` (surfaced as Pydantic `ValidationError`) before initialisation |
 | `warn` | Engine announces a suboptimal setting but proceeds | Warning message |
 | `dormant` | Engine silently normalises or ignores the field | Annotation: "field X will be coerced to Y" |
 

@@ -27,8 +27,8 @@ llem evaluates each submitted `ExperimentConfig` against a pre-computed corpus o
   parsed and validated by Pydantic
                │
                ▼
-  @model_validator in config/models.py
-  calls load_rules_for_engine(engine)
+  _apply_vendored_rules in config/models.py
+  calls VendoredRulesLoader().load_rules(engine)
                │
                ▼
   loader.py: parse vendored JSON
@@ -48,7 +48,8 @@ llem evaluates each submitted `ExperimentConfig` against a pre-computed corpus o
                └── RuleMatch (predicate fired)
                        │
                        ├── severity: "error"
-                       │   → raise ConfigurationError with message
+                       │   → raise ValueError (Pydantic surfaces it
+                       │     as ValidationError) with message
                        │
                        ├── severity: "warn"
                        │   → emit warning to user
@@ -172,7 +173,8 @@ Each rule has a severity that determines how the loader responds when the predic
 ```
   severity: "error"
   ├── The engine raises if the config is submitted as-is.
-  └── Loader raises ConfigurationError before engine initialisation.
+  └── Loader raises ValueError before engine initialisation.
+      Pydantic surfaces it to the user as a ValidationError.
       Message template is rendered with declared_value substituted.
       Example: "num_beams (2) is not divisible by num_beam_groups (3)"
 
@@ -210,7 +212,7 @@ Template substitution variables:
 Example error message from the corpus:
 
 ```
-ConfigurationError: `diversity_penalty` is not 0.0 or `num_beam_groups` is
+ValidationError: `diversity_penalty` is not 0.0 or `num_beam_groups` is
 not 1, triggering group beam search. In this generation mode,
 `diversity_penalty` should be greater than `0.0`, otherwise your groups will
 be identical.
@@ -267,14 +269,14 @@ The loader is in `src/llenergymeasure/config/vendored_rules/loader.py`.
 ```python
 from llenergymeasure.config.vendored_rules.loader import (
     VendoredRules,
+    VendoredRulesLoader,
     Rule,
     RuleMatch,
-    load_rules_for_engine,   # → VendoredRules
-    evaluate_predicate,       # → bool
 )
 
 # Load corpus for an engine
-rules = load_rules_for_engine("transformers")
+loader = VendoredRulesLoader()
+rules = loader.load_rules("transformers")
 
 # Match against a config
 for rule in rules.rules:
@@ -283,19 +285,19 @@ for rule in rules.rules:
         print(rule.severity, rule.render_message(match))
 ```
 
-Per-instance caching in `load_rules_for_engine` ensures the corpus JSON is parsed once per engine per process. Tests can disable caching for isolation.
+For higher-level use cases, see `llenergymeasure.api.report_gaps.load_rules_corpus`, which loads all configured engines via a shared loader. Per-instance caching in `VendoredRulesLoader` ensures the corpus JSON is parsed once per engine per process; tests can construct a fresh loader for isolation.
 
 ---
 
 ## Troubleshooting: common error messages
 
-### "ConfigurationError: `num_beams` is not divisible by `num_beam_groups`"
+### "ValidationError: `num_beams` is not divisible by `num_beam_groups`"
 
 Rule: `transformers_beam_search_num_beams_not_divisible_by_num_beam_groups`
 
 The transformers engine requires `num_beams` to be an exact multiple of `num_beam_groups` for group beam search. Set both to compatible values: e.g. `num_beams=4, num_beam_groups=2`.
 
-### "ConfigurationError: `diversity_penalty` is not 0.0 or `num_beam_groups` is not 1..."
+### "ValidationError: `diversity_penalty` is not 0.0 or `num_beam_groups` is not 1..."
 
 Rule: `transformers_beam_search_diversity_penalty_eq_0p0`
 

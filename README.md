@@ -66,7 +66,7 @@ See [Installation](docs/installation.md) for system requirements, Docker setup, 
 
 | Guide | Description |
 |-------|-------------|
-| [Architecture Overview](docs/architecture-overview.md) | System diagram, pipeline overview, key concepts |
+| **Start here:** [Architecture Overview](docs/architecture-overview.md) | System diagram, pipeline overview, key concepts (entry point to the suite) |
 | [Invariant Miner Pipeline](docs/miner-pipeline.md) | How validation rules are extracted from engine library source |
 | [Config Validation Pipeline](docs/parameter-discovery.md) | How configs are validated before engine initialisation |
 | [Validation Rule Corpus Format](docs/validation-rule-corpus.md) | YAML schema reference for corpus rules |

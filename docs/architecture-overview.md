@@ -108,7 +108,7 @@ Deep-dive: [miner-pipeline.md](miner-pipeline.md)
 
 **Key components:**
 - `loader.py` - parses the corpus and exposes `Rule.try_match()`.
-- Loader grammar - the predicate DSL (`type_in`, `@field_ref`, `not_divisible_by`, etc.).
+- Loader grammar - the predicate DSL (`type_is`, `@field_ref`, `not_divisible_by`, etc.).
 - Gap reporting - flags when a config combination the corpus has no rule for is encountered.
 
 Deep-dive: [parameter-discovery.md](parameter-discovery.md)
@@ -128,7 +128,7 @@ Both pipelines sit inside the larger LLenergyMeasure architecture. The config-va
                │
   Layer 3  harness/        MeasurementHarness, energy sampling
                │
-  Layer 2  backends/       PyTorch, vLLM, TensorRT-LLM plugins
+  Layer 2  engines/        PyTorch, vLLM, TensorRT-LLM plugins
                │
   Layer 1  infra/          Docker runner, container entrypoint
                │
@@ -225,7 +225,7 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 | **Vendored JSON** | The CI-observed version of the corpus that ships with the package |
 | **Vendor-CI gate** | The step that replays every rule against the live library; divergences fail CI |
 | **Fixpoint contract** | `_fixpoint_test.py` - asserts dormant rules converge to a stable state under repeated application |
-| **AddedBy** | Provenance field on each rule: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed` |
+| **AddedBy** | Provenance field on each rule: `static_miner`, `dynamic_miner`, `pydantic_lift`, `msgspec_lift`, `dataclass_lift`, `manual_seed`, `runtime_warning`, `observed_collision` (full reference in [validation-rule-corpus.md](validation-rule-corpus.md#added_by)) |
 | **MinerSource** | The `{path, method, line_at_scan}` record pointing back to the library source line that produced a rule |
 | **Loader grammar** | The predicate DSL used in `match.fields`: `in`, `not_in`, `@field_ref`, `not_divisible_by`, `type_is`, etc. |
 

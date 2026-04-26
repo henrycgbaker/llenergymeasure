@@ -1,6 +1,6 @@
 # Parameter Curation
 
-> **Note:** This document covers the programmatic parameter-discovery pipeline for engine API parameters (what fields each engine accepts, type information, drift detection). For the config **validation** pipeline (how invalid parameter combinations are caught before engine initialisation), see [parameter-discovery.md](parameter-discovery.md).
+> **Note:** This document covers engine-API-parameter introspection and Pydantic-model curation (what fields each engine accepts, type information, drift detection). For the runtime validation of parameter *values* (how invalid combinations are caught before engine initialisation), see [parameter-discovery.md](parameter-discovery.md).
 
 ---
 
