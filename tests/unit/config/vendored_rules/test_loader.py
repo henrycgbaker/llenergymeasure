@@ -32,11 +32,10 @@ rules:
     rule_under_test: "Test rule"
     severity: dormant
     native_type: transformers.GenerationConfig
-    walker_source:
+    miner_source:
       path: transformers/generation/configuration_utils.py
       method: validate
       line_at_scan: 42
-      walker_confidence: high
     match:
       engine: transformers
       fields:
@@ -52,7 +51,7 @@ rules:
     message_template: "Dormant {declared_value}"
     references:
       - "ref"
-    added_by: ast_walker
+    added_by: static_miner
     added_at: "2026-04-23"
 """
 
@@ -163,7 +162,13 @@ def test_default_corpus_root_resolves_to_configs(tmp_path: Path) -> None:
 def test_valid_added_by_set_has_all_five_provenance_classes() -> None:
     assert (
         frozenset(
-            {"ast_walker", "introspection", "manual_seed", "runtime_warning", "observed_collision"}
+            {
+                "static_miner",
+                "dynamic_miner",
+                "manual_seed",
+                "runtime_warning",
+                "observed_collision",
+            }
         )
         == VALID_ADDED_BY
     )
@@ -171,10 +176,10 @@ def test_valid_added_by_set_has_all_five_provenance_classes() -> None:
 
 @pytest.mark.parametrize(
     "provenance",
-    ["ast_walker", "introspection", "manual_seed", "runtime_warning", "observed_collision"],
+    ["static_miner", "dynamic_miner", "manual_seed", "runtime_warning", "observed_collision"],
 )
 def test_all_added_by_values_round_trip(tmp_path: Path, provenance: str) -> None:
-    corpus = _CORPUS_MINIMAL.replace("added_by: ast_walker", f"added_by: {provenance}")
+    corpus = _CORPUS_MINIMAL.replace("added_by: static_miner", f"added_by: {provenance}")
     _write_corpus(tmp_path, "transformers", corpus)
     loader = VendoredRulesLoader(corpus_root=tmp_path)
     rules = loader.load_rules("transformers").rules
@@ -182,7 +187,9 @@ def test_all_added_by_values_round_trip(tmp_path: Path, provenance: str) -> None
 
 
 def test_unknown_added_by_value_raises(tmp_path: Path) -> None:
-    bad_corpus = _CORPUS_MINIMAL.replace("added_by: ast_walker", "added_by: chatgpt_hallucination")
+    bad_corpus = _CORPUS_MINIMAL.replace(
+        "added_by: static_miner", "added_by: chatgpt_hallucination"
+    )
     _write_corpus(tmp_path, "transformers", bad_corpus)
     loader = VendoredRulesLoader(corpus_root=tmp_path)
     with pytest.raises(UnknownAddedByError, match="chatgpt_hallucination"):
@@ -192,7 +199,7 @@ def test_unknown_added_by_value_raises(tmp_path: Path) -> None:
 def test_missing_added_by_defaults_to_manual_seed(tmp_path: Path) -> None:
     # Omitting added_by is not a corpus authoring error — unknown provenance
     # falls back to manual_seed (the conservative default).
-    corpus = _CORPUS_MINIMAL.replace("    added_by: ast_walker\n", "")
+    corpus = _CORPUS_MINIMAL.replace("    added_by: static_miner\n", "")
     _write_corpus(tmp_path, "transformers", corpus)
     loader = VendoredRulesLoader(corpus_root=tmp_path)
     rules = loader.load_rules("transformers").rules

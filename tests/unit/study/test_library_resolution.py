@@ -1,7 +1,7 @@
 """Tests for the sweep library-resolution mechanism — fixpoint iteration + dedup.
 
 Idempotence + shuffle-stability are enforced by
-``scripts/walkers/_fixpoint_test.py`` (CI-time contract — any corpus PR that
+``scripts/miners/_fixpoint_test.py`` (CI-time contract — any corpus PR that
 violates them is rejected before this module runs). These tests focus on
 the *runtime* behaviour: does the library-resolution mechanism reach fixpoint, does it
 collapse measurement-equivalent configs, does it detect cycles, does it
@@ -43,7 +43,7 @@ def _mk_rule(
         kwargs_negative={},
         expected_outcome={"normalised_fields": normalised_fields or []},
         message_template=None,
-        walker_source={},
+        miner_source={},
         references=(),
         added_by="test",
         added_at="2026-04-23",

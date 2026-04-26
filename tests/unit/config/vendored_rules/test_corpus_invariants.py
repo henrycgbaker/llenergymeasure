@@ -25,10 +25,6 @@ from llenergymeasure.config.vendored_rules import (
     VendoredRulesLoader,
 )
 
-_VALID_CONFIDENCE = frozenset({"high", "medium", "low"})
-# SSOT: scripts/walkers/_base.py::Confidence / VALID_CONFIDENCE. Duplicated
-# here to avoid a cross-layer (engines → scripts) test import.
-
 
 @pytest.fixture(scope="module")
 def transformers_corpus():
@@ -52,7 +48,7 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
 
     # Single-field invariants — at least one rule must touch each path.
     # Scope reflects the regenerated canonical corpus produced by
-    # ``scripts/walkers/build_corpus.py`` with the vendor-validation gate.
+    # ``scripts/miners/build_corpus.py`` with the vendor-validation gate.
     # Adding a path here means: a rule for that field must survive vendor
     # validation against the pinned engine library (see ``engine_version``
     # in the corpus envelope). If a path drops out, investigate WHY (real
@@ -129,11 +125,11 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # the build_corpus.py + vendor-validation gate and would silently drift
     # on the next library bump. This PR's regeneration drops the legacy
     # hand-curated BNB type-check entries; the AST walker now emits them
-    # under ``added_by: ast_walker``.
+    # under ``added_by: static_miner``.
     manual = [rule.id for rule in rules if rule.added_by == "manual_seed"]
     assert not manual, (
         f"corpus contains {len(manual)} hand-seeded rules; corpus must be "
-        f"machine-extracted (run scripts/walkers/build_corpus.py): {manual}"
+        f"machine-extracted (run scripts/miners/build_corpus.py): {manual}"
     )
 
 
@@ -192,13 +188,6 @@ def test_corpus_dormant_silent_has_normalised_fields(transformers_corpus) -> Non
         if rule.expected_outcome.get("outcome") == "dormant_silent":
             normalised = rule.expected_outcome.get("normalised_fields")
             assert normalised, f"{rule.id}: dormant_silent but no normalised_fields"
-
-
-def test_corpus_walker_confidence_values_valid(transformers_corpus) -> None:
-    for rule in transformers_corpus.rules:
-        confidence = rule.walker_source.get("walker_confidence")
-        if confidence is not None:
-            assert confidence in _VALID_CONFIDENCE, f"{rule.id}: {confidence!r}"
 
 
 def test_corpus_added_by_values_valid(transformers_corpus) -> None:

@@ -12,7 +12,7 @@ Design:
   live ``configs/validation_rules/{engine}.yaml`` is never touched.
 - **Severity is mechanical.** ``warn`` for log-channel emissions;
   ``error`` when ``include_exceptions=True`` and the record is an
-  exception. ``walker_confidence`` is always ``low``.
+  exception. Rule fragments are always ``added_by: runtime_warning``.
 - **Round-trip safe.** Fragments parse through
   :func:`llenergymeasure.config.vendored_rules.loader._parse_rule`;
   placeholders carry ``# TODO: human`` markers.
@@ -654,7 +654,7 @@ _BANNER = (
     "# Rule fragment proposed by 'llem report-gaps'. Review and APPEND to\n"
     "# configs/validation_rules/{engine}.yaml under the 'rules:' key.\n"
     "# ----------------------------------------------------------------------\n"
-    "# walker_confidence: low — always, for runtime-derived rules.\n"
+    "# added_by: runtime_warning — always, for runtime-derived rules.\n"
     "# needs_generalisation_review: set when the predicate is narrow or\n"
     "# missing. Reviewers must confirm severity, native_type, and predicate\n"
     "# generalisation before merging.\n"
@@ -683,11 +683,10 @@ def render_yaml_fragment(proposal: GapProposal) -> str:
         ),
         "severity": proposal.severity,
         "native_type": f"{engine_str}.<TODO: human — set concrete native type>",
-        "walker_source": {
+        "miner_source": {
             "path": "<TODO: human — runtime-derived; no AST source>",
             "method": "<TODO: human — no AST source>",
             "line_at_scan": 0,
-            "walker_confidence": "low",
         },
         "match": {"engine": engine_str, "fields": match_fields},
         "kwargs_positive": dict(proposal.representative_kwargs),

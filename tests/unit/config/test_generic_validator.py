@@ -48,7 +48,7 @@ def _make_rule(
         kwargs_negative={},
         expected_outcome={"outcome": outcome, "emission_channel": "none"},
         message_template=message_template,
-        walker_source={},
+        miner_source={},
         references=(),
         added_by="manual_seed",
         added_at="2026-04-23",

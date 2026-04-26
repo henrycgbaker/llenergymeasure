@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers.transformers_introspection`.
+"""Tests for :mod:`scripts.miners.transformers_dynamic_miner`.
 
 Five tiers, each with a different dependency on live library behaviour:
 
@@ -35,8 +35,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers import transformers as tf_walker  # noqa: E402
-from scripts.walkers import transformers_introspection as intro  # noqa: E402
+from scripts.miners import transformers_dynamic_miner as intro  # noqa: E402
+from scripts.miners import transformers_miner as tf_walker  # noqa: E402
 
 # Every test in this module needs transformers importable — the walker
 # observes the real library. Skip the whole module if it's not installed.
@@ -115,7 +115,7 @@ def test_every_introspection_rule_is_tagged_introspection(walker_candidates) -> 
     # No rule from this walker should ever leak through as manual_seed
     # — that tag belongs to BNB rules only, which live in the parent walker.
     tags = {c.added_by for c in walker_candidates}
-    assert tags == {"introspection"}
+    assert tags == {"dynamic_miner"}
 
 
 def test_walker_emits_expected_severity_partition(walker_candidates) -> None:
@@ -277,7 +277,7 @@ def _pick_introspection_rule(corpus: dict[str, Any]) -> dict[str, Any]:
         if rule["id"] == "transformers_greedy_strips_temperature":
             return rule
     for rule in corpus["rules"]:
-        if rule.get("added_by") == "introspection":
+        if rule.get("added_by") == "dynamic_miner":
             return rule
     raise AssertionError("Corpus has no introspection-tagged rule.")
 
@@ -330,7 +330,7 @@ def test_walker_corrects_wrong_predicate_default(committed_corpus, walker_candid
 def test_walker_flags_missing_rule(committed_corpus, walker_candidates) -> None:
     """A rule removed from a corpus copy is still present in walker output."""
     mutant = copy.deepcopy(committed_corpus)
-    introspection_rules = [r for r in mutant["rules"] if r.get("added_by") == "introspection"]
+    introspection_rules = [r for r in mutant["rules"] if r.get("added_by") == "dynamic_miner"]
     removed = introspection_rules[0]
     mutant["rules"] = [r for r in mutant["rules"] if r["id"] != removed["id"]]
 
@@ -345,7 +345,7 @@ def test_walker_rejects_drift_in_added_by(committed_corpus, walker_candidates) -
     target["added_by"] = "manual_seed"
 
     walker_rule = _find_walker_rule(walker_candidates, target["id"])
-    assert walker_rule.added_by == "introspection"
+    assert walker_rule.added_by == "dynamic_miner"
 
 
 # ---------------------------------------------------------------------------

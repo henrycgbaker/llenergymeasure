@@ -1,7 +1,7 @@
 schema_version: 1.0.0
 engine: transformers
 engine_version: 4.56.0
-walked_at: '2026-04-25T18:01:18Z'
+mined_at: '2026-04-25T18:01:18Z'
 rules:
 - id: transformers_beam_search_diversity_penalty_eq_0p0
   engine: transformers
@@ -9,11 +9,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `diversity_penalty` (diversity penalty eq 0p0)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 380
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -41,7 +40,7 @@ rules:
     groups will be identical.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
@@ -49,11 +48,10 @@ rules:
   rule_under_test: GenerationConfig.validate flags `num_beams` (num beams eq 1)
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 361
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -76,20 +74,19 @@ rules:
     is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
-  conflict_note: 'id: introspection -> ''transformers_beam_search_num_beams_eq_1''; introspection -> ''transformers_early_stopping_type_num_beams_eq_1'''
+  conflict_note: 'id: dynamic_miner -> ''transformers_beam_search_num_beams_eq_1''; dynamic_miner -> ''transformers_early_stopping_type_num_beams_eq_1'''
 - id: transformers_beam_search_num_beams_not_divisible_by_num_beam_groups
   engine: transformers
   library: transformers
   rule_under_test: GenerationConfig.__init__ flags `num_beams` (num beams not divisible by num beam groups)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 361
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -110,7 +107,7 @@ rules:
     search. In this generation mode, `num_beams` should be divisible by `num_beam_groups`'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_cache_choice_cache_implementation_not_in_allowlist
   engine: transformers
@@ -119,11 +116,10 @@ rules:
     allowlist)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 366
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -144,7 +140,7 @@ rules:
     ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'')'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_cache_choice_use_cache_eq_false
   engine: transformers
@@ -152,11 +148,10 @@ rules:
   rule_under_test: GenerationConfig.validate flags `use_cache` (use cache eq false)
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 365
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -175,7 +170,7 @@ rules:
     will have no effect.
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_compile_config_type_compile_config_exceeds_zero
   engine: transformers
@@ -183,11 +178,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `compile_config` (compile config exceeds zero)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 437
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -202,7 +196,7 @@ rules:
     of `CompileConfig`.
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_compile_config_type_compile_config_type_not_in_CompileConfig
   engine: transformers
@@ -210,11 +204,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `compile_config` (compile config type not in CompileConfig)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 437
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -231,7 +224,7 @@ rules:
     of `CompileConfig`.
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_dormant_diversity_penalty_ne_0_0
   engine: transformers
@@ -240,11 +233,10 @@ rules:
     present True AND diversity_penalty != 0.0'
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 636
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -265,7 +257,7 @@ rules:
   message_template: single_beam_wrong_parameter_msg.format(flag_name='diversity_penalty', flag_value=self.diversity_penalty)
   references:
   - transformers/generation/configuration_utils.py:636 (transformers.GenerationConfig.validate)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_dormant_early_stopping_set_true
   engine: transformers
@@ -274,11 +266,10 @@ rules:
     present True (dropped: self.early_stopping is not False)'
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 628
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -298,7 +289,7 @@ rules:
   message_template: single_beam_wrong_parameter_msg.format(flag_name='early_stopping', flag_value=self.early_stopping)
   references:
   - transformers/generation/configuration_utils.py:628 (transformers.GenerationConfig.validate)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
   - 'dropped sub-clauses: self.early_stopping is not False'
@@ -309,11 +300,10 @@ rules:
     True AND epsilon_cutoff != 0.0 (dropped: self.do_sample is False)'
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 613
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -331,7 +321,7 @@ rules:
   message_template: greedy_wrong_parameter_msg.format(flag_name='epsilon_cutoff', flag_value=self.epsilon_cutoff)
   references:
   - transformers/generation/configuration_utils.py:613 (transformers.GenerationConfig.validate)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
   - 'dropped sub-clauses: self.do_sample is False'
@@ -342,11 +332,10 @@ rules:
     AND eta_cutoff != 0.0 (dropped: self.do_sample is False)'
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 617
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -364,7 +353,7 @@ rules:
   message_template: greedy_wrong_parameter_msg.format(flag_name='eta_cutoff', flag_value=self.eta_cutoff)
   references:
   - transformers/generation/configuration_utils.py:617 (transformers.GenerationConfig.validate)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
   - 'dropped sub-clauses: self.do_sample is False'
@@ -374,11 +363,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `early_stopping` (early stopping exceeds zero)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 355
-    walker_confidence: low
   match:
     engine: transformers
     fields:
@@ -394,7 +382,7 @@ rules:
   message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_early_stopping_type_early_stopping_not_in_allowlist
   engine: transformers
@@ -402,11 +390,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `early_stopping` (early stopping not in allowlist)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 355
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -426,7 +413,7 @@ rules:
   message_template: '`early_stopping` must be a boolean or ''never'', but is sometimes.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
   engine: transformers
@@ -435,11 +422,10 @@ rules:
     int or str)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 355
-    walker_confidence: low
   match:
     engine: transformers
     fields:
@@ -459,7 +445,7 @@ rules:
   message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
@@ -468,11 +454,10 @@ rules:
     `epsilon_cutoff` is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 378
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -495,7 +480,7 @@ rules:
     `epsilon_cutoff`.'
   references:
   - transformers.GenerationConfig.validate() (line ~378)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_greedy_strips_eta_cutoff
   engine: transformers
@@ -504,11 +489,10 @@ rules:
     is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 379
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -531,7 +515,7 @@ rules:
     `eta_cutoff`.'
   references:
   - transformers.GenerationConfig.validate() (line ~379)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_greedy_strips_min_p
   engine: transformers
@@ -540,11 +524,10 @@ rules:
     is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 376
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -565,7 +548,7 @@ rules:
     flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`.'
   references:
   - transformers.GenerationConfig.validate() (line ~376)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_greedy_strips_temperature
   engine: transformers
@@ -574,11 +557,10 @@ rules:
     `temperature` is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 373
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -601,7 +583,7 @@ rules:
     `temperature`.'
   references:
   - transformers.GenerationConfig.validate() (line ~373)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_greedy_strips_top_k
   engine: transformers
@@ -610,11 +592,10 @@ rules:
     is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 374
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -636,7 +617,7 @@ rules:
     flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.'
   references:
   - transformers.GenerationConfig.validate() (line ~374)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_greedy_strips_top_p
   engine: transformers
@@ -645,11 +626,10 @@ rules:
     is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 375
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -671,7 +651,7 @@ rules:
     flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.'
   references:
   - transformers.GenerationConfig.validate() (line ~375)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_greedy_strips_typical_p
   engine: transformers
@@ -680,11 +660,10 @@ rules:
     is set to a non-default value
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 377
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -707,7 +686,7 @@ rules:
     `typical_p`.'
   references:
   - transformers.GenerationConfig.validate() (line ~377)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_negative_pad_token_id
   engine: transformers
@@ -715,11 +694,10 @@ rules:
   rule_under_test: GenerationConfig.validate() records dormant pad_token_id < 0
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 416
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -738,9 +716,9 @@ rules:
     to avoid errors in generation'
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
-  conflict_note: 'id: introspection -> ''transformers_negative_pad_token_id''; introspection -> ''transformers_output_token_ids_pad_token_id_lt_zero'''
+  conflict_note: 'id: dynamic_miner -> ''transformers_negative_pad_token_id''; dynamic_miner -> ''transformers_output_token_ids_pad_token_id_lt_zero'''
 - id: transformers_no_return_dict_strips_output_attentions
   engine: transformers
   library: transformers
@@ -748,11 +726,10 @@ rules:
     and `output_attentions` is set
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 409
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -774,7 +751,7 @@ rules:
     `return_dict_in_generate` is not `True`, `output_attentions` is ignored.'
   references:
   - transformers.GenerationConfig.validate() (line ~409)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_no_return_dict_strips_output_hidden_states
   engine: transformers
@@ -783,11 +760,10 @@ rules:
     and `output_hidden_states` is set
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 410
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -809,7 +785,7 @@ rules:
     `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored.'
   references:
   - transformers.GenerationConfig.validate() (line ~410)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_no_return_dict_strips_output_scores
   engine: transformers
@@ -818,11 +794,10 @@ rules:
     and `output_scores` is set
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 411
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -844,7 +819,7 @@ rules:
     is not `True`, `output_scores` is ignored.'
   references:
   - transformers.GenerationConfig.validate() (line ~411)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
   engine: transformers
@@ -852,11 +827,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `num_beams` (do sample eq false and num beams eq 1)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 360
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -877,7 +851,7 @@ rules:
     than 1 (got 2).
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
   engine: transformers
@@ -885,11 +859,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `num_beams` (num beams lt num return sequences)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 361
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -907,7 +880,7 @@ rules:
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
   engine: transformers
@@ -916,11 +889,10 @@ rules:
     sequences)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 361
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -938,7 +910,7 @@ rules:
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_output_token_ids_max_new_tokens_le_zero
   engine: transformers
@@ -946,11 +918,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `max_new_tokens` (max new tokens le zero)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 351
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -968,7 +939,7 @@ rules:
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
   engine: transformers
@@ -976,11 +947,10 @@ rules:
   rule_under_test: GenerationConfig.__init__ flags `max_new_tokens` (max new tokens not in allowlist)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 351
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -1001,7 +971,7 @@ rules:
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_output_token_ids_pad_token_id_not_in_allowlist
   engine: transformers
@@ -1009,11 +979,10 @@ rules:
   rule_under_test: GenerationConfig.validate flags `pad_token_id` (pad token id not in allowlist)
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 416
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -1036,7 +1005,7 @@ rules:
     to avoid errors in generation'
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_raises_bnb_4bit_compute_dtype_not_type_dtype
   engine: transformers
@@ -1045,11 +1014,10 @@ rules:
     AND bnb_4bit_compute_dtype type_is_not dtype'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 560
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1067,7 +1035,7 @@ rules:
   message_template: bnb_4bit_compute_dtype must be torch.dtype
   references:
   - transformers/utils/quantization_config.py:560 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_bnb_4bit_quant_type_not_type_str
   engine: transformers
@@ -1075,11 +1043,10 @@ rules:
   rule_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when bnb_4bit_quant_type type_is_not str'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 563
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1096,7 +1063,7 @@ rules:
   message_template: bnb_4bit_quant_type must be a string
   references:
   - transformers/utils/quantization_config.py:563 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_bnb_4bit_use_double_quant_not_type_bool
   engine: transformers
@@ -1105,11 +1072,10 @@ rules:
     bool'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 566
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1126,7 +1092,7 @@ rules:
   message_template: bnb_4bit_use_double_quant must be a boolean
   references:
   - transformers/utils/quantization_config.py:566 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_compile_config_not_type_compileconfig
   engine: transformers
@@ -1135,11 +1101,10 @@ rules:
     type_is_not CompileConfig'
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 577
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1158,7 +1123,7 @@ rules:
     it must be an instance of `CompileConfig`.'
   references:
   - transformers/generation/configuration_utils.py:577 (transformers.GenerationConfig.validate)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool
   engine: transformers
@@ -1167,11 +1132,10 @@ rules:
     bool'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 554
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1188,7 +1152,7 @@ rules:
   message_template: llm_int8_enable_fp32_cpu_offload must be a boolean
   references:
   - transformers/utils/quantization_config.py:554 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_llm_int8_has_fp16_weight_not_type_bool
   engine: transformers
@@ -1197,11 +1161,10 @@ rules:
     bool'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 557
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1218,7 +1181,7 @@ rules:
   message_template: llm_int8_has_fp16_weight must be a boolean
   references:
   - transformers/utils/quantization_config.py:557 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_llm_int8_skip_modules_not_type_list
   engine: transformers
@@ -1227,11 +1190,10 @@ rules:
     AND llm_int8_skip_modules type_is_not list'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 552
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1249,7 +1211,7 @@ rules:
   message_template: llm_int8_skip_modules must be a list of strings
   references:
   - transformers/utils/quantization_config.py:552 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_llm_int8_threshold_not_type_float
   engine: transformers
@@ -1257,11 +1219,10 @@ rules:
   rule_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when llm_int8_threshold type_is_not float'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 549
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1278,7 +1239,7 @@ rules:
   message_template: llm_int8_threshold must be a float
   references:
   - transformers/utils/quantization_config.py:549 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_load_in_4bit_not_type_bool
   engine: transformers
@@ -1286,11 +1247,10 @@ rules:
   rule_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when load_in_4bit type_is_not bool'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 543
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1307,7 +1267,7 @@ rules:
   message_template: load_in_4bit must be a boolean
   references:
   - transformers/utils/quantization_config.py:543 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_load_in_8bit_not_type_bool
   engine: transformers
@@ -1315,11 +1275,10 @@ rules:
   rule_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when load_in_8bit type_is_not bool'
   severity: error
   native_type: transformers.BitsAndBytesConfig
-  walker_source:
+  miner_source:
     path: transformers/utils/quantization_config.py
     method: post_init
     line_at_scan: 546
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1336,7 +1295,7 @@ rules:
   message_template: load_in_8bit must be a boolean
   references:
   - transformers/utils/quantization_config.py:546 (transformers.BitsAndBytesConfig.post_init)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_num_beams_eq_1
   engine: transformers
@@ -1345,11 +1304,10 @@ rules:
     == 1 (dropped: self.do_sample is False)'
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 687
-    walker_confidence: medium
   match:
     engine: transformers
     fields:
@@ -1370,7 +1328,7 @@ rules:
     than 1 (got {self.num_return_sequences}).'
   references:
   - transformers/generation/configuration_utils.py:687 (transformers.GenerationConfig.validate)
-  added_by: ast_walker
+  added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
   - 'dropped sub-clauses: self.do_sample is False'
@@ -1381,11 +1339,10 @@ rules:
     `diversity_penalty` is set
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 380
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1407,7 +1364,7 @@ rules:
     -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `diversity_penalty`.'
   references:
   - transformers.GenerationConfig.validate() (line ~380)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_single_beam_strips_early_stopping
   engine: transformers
@@ -1416,11 +1373,10 @@ rules:
     is set
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 355
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1442,7 +1398,7 @@ rules:
     this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   references:
   - transformers.GenerationConfig.validate() (line ~355)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
@@ -1451,11 +1407,10 @@ rules:
     is set
   severity: dormant
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 383
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1477,7 +1432,7 @@ rules:
     this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`.'
   references:
   - transformers.GenerationConfig.validate() (line ~383)
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'
 - id: transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig
   engine: transformers
@@ -1486,11 +1441,10 @@ rules:
     in WatermarkingConfig)
   severity: error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
     line_at_scan: 401
-    walker_confidence: high
   match:
     engine: transformers
     fields:
@@ -1507,5 +1461,5 @@ rules:
     must be a mapping, not int
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: introspection
+  added_by: dynamic_miner
   added_at: '2026-04-25'

@@ -3,11 +3,11 @@
 Composes two extraction paths to emit a deterministic rules corpus:
 
 1. **GenerationConfig rules via library-API introspection** — delegated to
-   :mod:`scripts.walkers.transformers_introspection`. Every dormancy rule is
+   :mod:`scripts.miners.transformers_dynamic_miner`. Every dormancy rule is
    discovered by probing ``GenerationConfig.validate(strict=True)`` against a
    synthesised per-type probe value; every error-class rule's message is
    lifted from the library's own ``ValueError``. Rules emitted:
-   ``added_by: introspection``.
+   ``added_by: dynamic_miner``.
 
 2. **BitsAndBytesConfig type-check rules** — hand-curated here. BNB import
    triggers a CUDA context on GPU-bearing hosts, which would make the walker
@@ -17,9 +17,9 @@ Composes two extraction paths to emit a deterministic rules corpus:
 
 Landmark verification: imports ``transformers`` and confirms
 ``GenerationConfig``, ``BitsAndBytesConfig``, ``validate`` and ``post_init``
-exist. Missing landmark → :class:`WalkerLandmarkMissingError`. Version
+exist. Missing landmark → :class:`MinerLandmarkMissingError`. Version
 envelope: :data:`TESTED_AGAINST_VERSIONS` pins the walker to a known range;
-a mismatch raises :class:`WalkerVersionMismatchError` at CI time. Source
+a mismatch raises :class:`MinerVersionMismatchError` at CI time. Source
 paths and line numbers are derived via :func:`inspect.getsourcefile` and a
 text grep — informational only, not used for rule matching.
 
@@ -31,7 +31,7 @@ not reachable via this walker's landmarks. Stays hand-written in
 
 Usage::
 
-    python -m scripts.walkers.transformers --out configs/validation_rules/transformers.yaml
+    python -m scripts.miners.transformers --out configs/validation_rules/transformers.yaml
 
 With ``LLENERGY_WALKER_FROZEN_AT`` set for byte-stable reproducibility.
 """
@@ -50,19 +50,19 @@ from typing import Any
 from packaging.specifiers import SpecifierSet
 
 # NOTE: the walkers package is a sibling; when run via ``python -m
-# scripts.walkers.transformers`` the implicit ``scripts`` package makes this
+# scripts.miners.transformers`` the implicit ``scripts`` package makes this
 # work. When run as a script directly, we need the project root on sys.path.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
+from scripts.miners._base import (  # noqa: E402  (late import after sys.path)
     RuleCandidate,
-    WalkerLandmarkMissingError,
-    WalkerSource,
+    MinerLandmarkMissingError,
+    MinerSource,
     check_installed_version,
 )
-from scripts.walkers.transformers_introspection import (  # noqa: E402
+from scripts.miners.transformers_dynamic_miner import (  # noqa: E402
     walk_generation_config_rules,
 )
 
@@ -80,7 +80,7 @@ differently-shaped ``minor_issues`` output. 4.57 restructured
 dormancies) and the watermarking auto-coercion.
 
 On mismatch, :func:`check_installed_version` raises
-:class:`WalkerVersionMismatchError` and CI fails.
+:class:`MinerVersionMismatchError` and CI fails.
 
 Note: the project's own ``transformers`` extra in ``pyproject.toml``
 still floors at ``>=4.49`` for user runtime compatibility. The walker is
@@ -136,29 +136,29 @@ def _check_landmarks() -> tuple[str, str]:
     try:
         import transformers  # type: ignore
     except ImportError as exc:
-        raise WalkerLandmarkMissingError(
+        raise MinerLandmarkMissingError(
             "transformers.__init__", detail="transformers not importable"
         ) from exc
 
     try:
         from transformers import GenerationConfig  # type: ignore
     except ImportError as exc:
-        raise WalkerLandmarkMissingError(
+        raise MinerLandmarkMissingError(
             "transformers.GenerationConfig", detail="symbol not importable"
         ) from exc
 
     if not hasattr(GenerationConfig, "validate"):
-        raise WalkerLandmarkMissingError("GenerationConfig.validate")
+        raise MinerLandmarkMissingError("GenerationConfig.validate")
 
     try:
         from transformers import BitsAndBytesConfig  # type: ignore
     except ImportError as exc:
-        raise WalkerLandmarkMissingError(
+        raise MinerLandmarkMissingError(
             "transformers.BitsAndBytesConfig", detail="symbol not importable"
         ) from exc
 
     if not hasattr(BitsAndBytesConfig, "post_init"):
-        raise WalkerLandmarkMissingError("BitsAndBytesConfig.post_init")
+        raise MinerLandmarkMissingError("BitsAndBytesConfig.post_init")
 
     source_path = inspect.getsourcefile(GenerationConfig) or "<unknown>"
     return transformers.__version__, source_path
@@ -204,11 +204,10 @@ def _make_bnb_type_rule(
         ),
         severity="error",
         native_type="transformers.BitsAndBytesConfig",
-        walker_source=WalkerSource(
+        miner_source=MinerSource(
             path=source_path,
             method="post_init",
             line_at_scan=0,
-            walker_confidence="high",
         ),
         match_fields={
             f"transformers.quant.{field}": {
@@ -247,7 +246,7 @@ def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
         "rule_under_test": c.rule_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
-        "walker_source": asdict(c.walker_source),
+        "miner_source": asdict(c.miner_source),
         "match": {
             "engine": c.engine,
             "fields": c.match_fields,
@@ -303,7 +302,7 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
 
     # Allow tests / reproducibility checks to pin the timestamp.
     frozen = os.environ.get("LLENERGY_WALKER_FROZEN_AT")
-    walked_at = (
+    mined_at = (
         frozen
         if frozen
         else (dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"))
@@ -313,7 +312,7 @@ def walk() -> tuple[list[RuleCandidate], dict[str, Any]]:
         "engine": "transformers",
         "engine_version": installed_version,
         "walker_pinned_range": str(TESTED_AGAINST_VERSIONS),
-        "walked_at": walked_at,
+        "mined_at": mined_at,
     }
     return candidates, envelope
 
@@ -322,17 +321,17 @@ def emit_yaml(candidates: list[RuleCandidate], envelope: dict[str, Any]) -> str:
     """Serialise candidates + envelope to a deterministic YAML string.
 
     Key order is fixed (not alphabetical) for readability: envelope first,
-    then candidates sorted by ``(walker_source.method, id)``.
+    then candidates sorted by ``(miner_source.method, id)``.
     """
     import yaml
 
-    sorted_candidates = sorted(candidates, key=lambda c: (c.walker_source.method, c.id))
+    sorted_candidates = sorted(candidates, key=lambda c: (c.miner_source.method, c.id))
     doc = {
         "schema_version": envelope["schema_version"],
         "engine": envelope["engine"],
         "engine_version": envelope["engine_version"],
         "walker_pinned_range": envelope["walker_pinned_range"],
-        "walked_at": envelope["walked_at"],
+        "mined_at": envelope["mined_at"],
         "rules": [_candidate_to_dict(c) for c in sorted_candidates],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)

@@ -7,7 +7,7 @@ raises, warns, silently normalises, or populates ``minor_issues``.
 
 Why source-AST walking instead of pure introspection
 ----------------------------------------------------
-``transformers_introspection.py`` exercises ``GenerationConfig.validate(strict=True)``
+``transformers_dynamic_miner.py`` exercises ``GenerationConfig.validate(strict=True)``
 against probe values and lifts ``minor_issues`` / ``ValueError`` messages.
 That works for one-axis rules but loses the **shape** of cross-field
 predicates: the introspection layer sees the message
@@ -19,20 +19,20 @@ Recall over precision
 ---------------------
 Vendor CI runs every emitted rule against the real library; divergent rules
 fail there. So this walker errs toward emitting candidates with
-``walker_confidence: low`` rather than dropping them. A predicate the walker
+low confidence rather than dropping them. A predicate the static miner
 can't fully translate (opaque function call, complex method chain) emits
 the surrounding rule and notes the dropped sub-clause in a YAML comment.
 
 Output
 ------
-Writes ``configs/validation_rules/_staging/transformers_ast.yaml`` —
-consumed downstream by ``scripts/walkers/build_corpus.py`` (other subagent's
+Writes ``configs/validation_rules/_staging/transformers_static_miner.yaml`` —
+consumed downstream by ``scripts/miners/build_corpus.py`` (other subagent's
 territory). Schema mirrors ``configs/validation_rules/transformers.yaml``
 exactly: ``schema_version``, ``engine``, ``engine_version``, ``rules: [...]``.
 
 Run::
 
-    PYTHONPATH=.:src python3.10 scripts/walkers/transformers_ast.py
+    PYTHONPATH=.:src python3.10 scripts/miners/transformers_static_miner.py
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Defend against the script-directory shadowing site-packages. When run as
-# `python3 scripts/walkers/transformers_ast.py`, Python prepends
-# `scripts/walkers/` to sys.path, where a sibling `transformers.py` lives —
+# `python3 scripts/miners/transformers_static_miner.py`, Python prepends
+# `scripts/miners/` to sys.path, where a sibling `transformers.py` lives —
 # `import transformers` would resolve to that local stub instead of the real
 # installed package. Strip the script dir before any third-party imports.
 _SCRIPT_DIR = str(Path(__file__).resolve().parent)
@@ -62,7 +62,7 @@ sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).res
 # Also guard against the empty-string entry that means "current cwd".
 sys.path[:] = [p for p in sys.path if p != ""]
 
-from scripts.walkers._base import (  # noqa: E402  (late import after sys.path)
+from scripts.miners._base import (  # noqa: E402  (late import after sys.path)
     call_func_path,
     find_class,
     find_method,
@@ -1372,11 +1372,10 @@ def _candidate_to_dict(rule: RuleCandidate, rel_path: str) -> dict[str, Any]:
         "rule_under_test": rule.rule_under_test,
         "severity": rule.severity,
         "native_type": rule.native_type,
-        "walker_source": {
+        "miner_source": {
             "path": rule.source_path or rel_path,
             "method": rule.method,
             "line_at_scan": rule.line,
-            "walker_confidence": rule.confidence,
         },
         "match": {
             "engine": ENGINE,
@@ -1387,7 +1386,7 @@ def _candidate_to_dict(rule: RuleCandidate, rel_path: str) -> dict[str, Any]:
         "expected_outcome": expected_outcome,
         "message_template": rule.message_template,
         "references": rule.references,
-        "added_by": "ast_walker",
+        "added_by": "static_miner",
         "added_at": dt.date(2026, 4, 25).isoformat(),
         # Notes (e.g. dropped clauses) are emitted as a non-required field.
         # The corpus loader ignores unknown keys; vendor CI surfaces them.
@@ -1409,8 +1408,8 @@ def emit_yaml(
         "schema_version": "1.0.0",
         "engine": ENGINE,
         "engine_version": engine_version,
-        "walker": "transformers_ast",
-        "walked_at": dt.date(2026, 4, 25).isoformat(),
+        "walker": "transformers_static_miner",
+        "mined_at": dt.date(2026, 4, 25).isoformat(),
         "rules": [_candidate_to_dict(r, rel_path) for r in candidates_sorted],
     }
     return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
@@ -1544,8 +1543,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("configs/validation_rules/_staging/transformers_ast.yaml"),
-        help="Where to write the staging YAML (default: configs/validation_rules/_staging/transformers_ast.yaml)",
+        default=Path("configs/validation_rules/_staging/transformers_static_miner.yaml"),
+        help="Where to write the staging YAML (default: configs/validation_rules/_staging/transformers_static_miner.yaml)",
     )
     args = parser.parse_args(argv)
 

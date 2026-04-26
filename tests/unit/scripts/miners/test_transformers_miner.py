@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers.transformers`.
+"""Tests for :mod:`scripts.miners.transformers`.
 
 The walker depends on transformers being importable. Tests that actually
 invoke the walker use ``pytest.importorskip("transformers")`` so the suite
@@ -19,8 +19,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers import transformers as tf_walker  # noqa: E402
-from scripts.walkers._base import RuleCandidate, WalkerSource  # noqa: E402
+from scripts.miners import transformers_miner as tf_walker  # noqa: E402
+from scripts.miners._base import MinerSource, RuleCandidate  # noqa: E402
 
 # Pin guard: tests that actually invoke ``tf_walker.walk()`` depend on
 # transformers being inside ``TESTED_AGAINST_VERSIONS``. CI environments that
@@ -55,11 +55,10 @@ def _sample_candidate() -> RuleCandidate:
         rule_under_test="Sample rule",
         severity="dormant",
         native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
+        miner_source=MinerSource(
             path="transformers/generation/configuration_utils.py",
             method="validate",
             line_at_scan=42,
-            walker_confidence="high",
         ),
         match_fields={"transformers.sampling.temperature": 0.5},
         kwargs_positive={"temperature": 0.5},
@@ -71,7 +70,7 @@ def _sample_candidate() -> RuleCandidate:
         },
         message_template="Test message",
         references=["ref"],
-        added_by="ast_walker",
+        added_by="static_miner",
         added_at="2026-04-23",
     )
 
@@ -98,7 +97,7 @@ def test_emit_yaml_deterministic_ordering() -> None:
         "engine": "transformers",
         "engine_version": "4.56.0",
         "walker_pinned_range": ">=4.50,<5.0",
-        "walked_at": "2026-04-23T00:00:00Z",
+        "mined_at": "2026-04-23T00:00:00Z",
     }
     yaml_a = tf_walker.emit_yaml(candidates, envelope)
     yaml_b = tf_walker.emit_yaml(candidates, envelope)
@@ -112,7 +111,7 @@ def test_emit_yaml_roundtrip_preserves_fields() -> None:
         "engine": "transformers",
         "engine_version": "4.56.0",
         "walker_pinned_range": ">=4.50,<5.0",
-        "walked_at": "2026-04-23T00:00:00Z",
+        "mined_at": "2026-04-23T00:00:00Z",
     }
     text = tf_walker.emit_yaml(candidates, envelope)
     doc = yaml.safe_load(text)
@@ -121,7 +120,7 @@ def test_emit_yaml_roundtrip_preserves_fields() -> None:
     rule = doc["rules"][0]
     assert rule["id"] == "transformers_test_sample"
     assert rule["match"]["fields"] == {"transformers.sampling.temperature": 0.5}
-    assert rule["walker_source"]["walker_confidence"] == "high"
+    assert "path" in rule["miner_source"]
 
 
 # ---------------------------------------------------------------------------
@@ -225,24 +224,17 @@ def test_walk_deterministic_with_frozen_timestamp(
     c2, e2 = tf_walker.walk()
     # Envelope agrees AND carries the frozen value.
     assert e1 == e2
-    assert e1["walked_at"] == frozen
+    assert e1["mined_at"] == frozen
     # Byte-for-byte identical YAML output.
     assert tf_walker.emit_yaml(c1, e1) == tf_walker.emit_yaml(c2, e2)
 
 
 @requires_pinned_transformers
 def test_walk_confidence_distribution() -> None:
-    """At least 60% of candidates should be ``high`` confidence.
-
-    Per runtime-config-validation.md OQ2. The transformers walker's
-    introspection path hand-picks known-good rules, so in practice every
-    candidate it emits is ``high`` — but the test fixes a lower floor in
-    case future rules are added with downgraded confidence.
-    """
+    """At least one candidate should be emitted by the miner."""
     pytest.importorskip("transformers")
     candidates, _ = tf_walker.walk()
-    high = sum(1 for c in candidates if c.walker_source.walker_confidence == "high")
-    assert high / len(candidates) >= 0.6
+    assert len(candidates) > 0
 
 
 def test_walk_emits_version_mismatch_when_out_of_range(
@@ -253,7 +245,7 @@ def test_walk_emits_version_mismatch_when_out_of_range(
     from packaging.specifiers import SpecifierSet
 
     monkeypatch.setattr(tf_walker, "TESTED_AGAINST_VERSIONS", SpecifierSet(">=99.0"))
-    from scripts.walkers._base import WalkerVersionMismatchError
+    from scripts.miners._base import MinerVersionMismatchError
 
-    with pytest.raises(WalkerVersionMismatchError):
+    with pytest.raises(MinerVersionMismatchError):
         tf_walker.walk()
