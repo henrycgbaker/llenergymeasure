@@ -20,7 +20,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts.miners import transformers_miner as tf_walker  # noqa: E402
-from scripts.miners._base import RuleCandidate, MinerSource  # noqa: E402
+from scripts.miners._base import MinerSource, RuleCandidate  # noqa: E402
 
 # Pin guard: tests that actually invoke ``tf_walker.walk()`` depend on
 # transformers being inside ``TESTED_AGAINST_VERSIONS``. CI environments that

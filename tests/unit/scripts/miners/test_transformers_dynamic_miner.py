@@ -35,8 +35,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.miners import transformers_miner as tf_walker  # noqa: E402
 from scripts.miners import transformers_dynamic_miner as intro  # noqa: E402
+from scripts.miners import transformers_miner as tf_walker  # noqa: E402
 
 # Every test in this module needs transformers importable — the walker
 # observes the real library. Skip the whole module if it's not installed.
