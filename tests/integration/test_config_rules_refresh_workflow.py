@@ -52,7 +52,7 @@ rules:
       outcome: error
       emission_channel: none
       normalised_fields: []
-    message_template: 'x must not be set'
+    message_template: 'x must not be {x}'
     references: []
     added_by: manual_seed
     added_at: '2026-04-23'

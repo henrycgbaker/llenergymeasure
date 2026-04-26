@@ -348,6 +348,144 @@ def fixpoint_test_corpus(
 
 
 # ---------------------------------------------------------------------------
+# Gate-soundness structural fixpoint
+# ---------------------------------------------------------------------------
+#
+# Decision #12 of the invariant-miner adversarial review
+# (`.product/designs/adversarial-review-invariant-miner-2026-04-26.md`)
+# requires the vendor-CI gate to perform three checks on every rule:
+#
+#   positive_raises          - kwargs_positive must raise (or emit, if dormant)
+#   message_template_match   - raised message contains the template's static fragment
+#   negative_does_not_raise  - kwargs_negative must construct without raising
+#
+# Without these checks, a typo in a corpus rule's ``expected_outcome``
+# silently passes - the existing per-field comparison treats missing keys
+# as "no constraint". The structural fixpoint below pins those checks in
+# place: it synthesises one malformed rule per check and asserts the gate
+# records exactly the matching divergence. If any of the three checks is
+# removed from ``vendor_rules.compute_gate_soundness_divergences``, the
+# corresponding fixpoint case fails loudly.
+
+
+class GateSoundnessRegressionError(FixpointError):
+    """One of the three vendor-gate-soundness checks failed to fire.
+
+    Carries the check name + the divergences the gate actually produced
+    so the failure message points directly at the missing check.
+    """
+
+    def __init__(self, check_name: str, observed_divergences: list[Any]) -> None:
+        super().__init__(
+            f"Vendor gate-soundness regression: check {check_name!r} did not "
+            f"surface a divergence on a malformed rule designed to trip it. "
+            f"Observed divergences: {observed_divergences!r}. "
+            f"This indicates the gate has been weakened - restore the check "
+            f"in scripts/vendor_rules.compute_gate_soundness_divergences."
+        )
+        self.check_name = check_name
+        self.observed_divergences = observed_divergences
+
+
+def synthesise_malformed_rule_cases() -> list[dict[str, Any]]:
+    """Return one malformed-rule scenario per gate-soundness check.
+
+    Each scenario is ``{check_name, rule, pos_capture, neg_capture}`` -
+    feed ``rule, pos_capture, neg_capture`` to the gate and assert a
+    divergence with ``check_failed == check_name`` comes out.
+    """
+    # Imported here to avoid a circular path dependency:
+    # ``_fixpoint_test`` is loaded eagerly by ``tests/integration/...``, and
+    # ``scripts._vendor_common`` is heavy. The deferred import keeps the
+    # module load cheap for the corpus-shuffle path.
+    from scripts._vendor_common import CaptureBuffers
+    from scripts.vendor_rules import (
+        CHECK_MESSAGE_TEMPLATE_MATCH,
+        CHECK_NEGATIVE_DOES_NOT_RAISE,
+        CHECK_POSITIVE_RAISES,
+    )
+
+    no_exception = CaptureBuffers(
+        exception_type=None,
+        exception_message=None,
+        warnings_captured=(),
+        logger_messages=(),
+        observed_state={},
+        duration_ms=0,
+    )
+    raised_matching = CaptureBuffers(
+        exception_type="ValueError",
+        exception_message="Invalid `cache_implementation` (got 'nonsense'). Choose one of: ...",
+        warnings_captured=(),
+        logger_messages=(),
+        observed_state=None,
+        duration_ms=0,
+    )
+    raised_mismatching = CaptureBuffers(
+        exception_type="ValueError",
+        exception_message="Some completely unrelated runtime message.",
+        warnings_captured=(),
+        logger_messages=(),
+        observed_state=None,
+        duration_ms=0,
+    )
+
+    base_rule = {
+        "id": "synth_rule",
+        "severity": "error",
+        "native_type": "synthetic.NativeType",
+        "kwargs_positive": {"cache_implementation": "nonsense"},
+        "kwargs_negative": {"cache_implementation": "static"},
+        "message_template": "Invalid `cache_implementation` ({val}). Choose one of: ...",
+    }
+
+    # 1. positive_raises - positive did not raise (no exception captured).
+    pos_no_raise = {
+        "check_name": CHECK_POSITIVE_RAISES,
+        "rule": dict(base_rule, id="synth_positive_did_not_raise"),
+        "pos": no_exception,
+        "neg": no_exception,
+    }
+
+    # 2. message_template_match - positive raised but message doesn't match.
+    msg_mismatch = {
+        "check_name": CHECK_MESSAGE_TEMPLATE_MATCH,
+        "rule": dict(base_rule, id="synth_message_did_not_match"),
+        "pos": raised_mismatching,
+        "neg": no_exception,
+    }
+
+    # 3. negative_does_not_raise - negative raised when it shouldn't have.
+    neg_raised = {
+        "check_name": CHECK_NEGATIVE_DOES_NOT_RAISE,
+        "rule": dict(base_rule, id="synth_negative_raised_unexpectedly"),
+        "pos": raised_matching,
+        "neg": raised_matching,
+    }
+
+    return [pos_no_raise, msg_mismatch, neg_raised]
+
+
+def assert_gate_soundness_fixpoint() -> None:
+    """Assert the vendor-CI gate's three soundness checks are all wired.
+
+    Synthesises one malformed rule per check, runs each through
+    :func:`scripts.vendor_rules.compute_gate_soundness_divergences`, and
+    raises :class:`GateSoundnessRegressionError` if any check's divergence
+    is missing.
+    """
+    from scripts.vendor_rules import compute_gate_soundness_divergences
+
+    for case in synthesise_malformed_rule_cases():
+        divergences = compute_gate_soundness_divergences(case["rule"], case["pos"], case["neg"])
+        check_names_observed = {d.check_failed for d in divergences}
+        if case["check_name"] not in check_names_observed:
+            raise GateSoundnessRegressionError(
+                case["check_name"], [d.as_dict() for d in divergences]
+            )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

@@ -4,8 +4,8 @@
   "engine_version": "4.51.0",
   "image_ref": "llenergymeasure:transformers",
   "base_image_ref": "llenergymeasure:transformers",
-  "vendored_at": "2026-04-26T12:51:53+02:00",
-  "vendor_commit": "3879926e2444dbed106d7e1657f22c361fa464ce",
+  "vendored_at": "2026-04-26T13:17:46+02:00",
+  "vendor_commit": "b47447f3a76897fa6fef2163dbb1ab70ea84b3de",
   "cases": [
     {
       "id": "transformers_beam_search_diversity_penalty_eq_0p0",
@@ -669,6 +669,16 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_beam_search_diversity_penalty_eq_0p0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_beam_search_num_beams_eq_1",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -691,6 +701,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_beam_search_num_beams_eq_1",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_beam_search_num_beams_eq_1",
+      "field": "message_template",
+      "expected": "`num_beams` is set to 1. However, `early_stopping` is set to `True` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_beam_search_num_beams_eq_1",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_beam_search_num_beams_not_divisible_by_num_beam_groups",
@@ -699,10 +733,37 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_beam_search_num_beams_not_divisible_by_num_beam_groups",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_cache_choice_cache_implementation_not_in_allowlist",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_cache_choice_cache_implementation_not_in_allowlist",
+      "field": "message_template",
+      "expected": "Invalid `cache_implementation` (nonsense). Choose one of: ('static', 'offloaded_static', 'sliding_window', 'hybrid', 'hybrid_chunked', 'offloaded_hybrid', 'offloaded_hybrid_chunked', 'dynamic', 'dynamic_full', 'offloaded', 'quantized')",
+      "observed": "Invalid `cache_implementation` (nonsense). Choose one of: ['static', 'offloaded_static', 'sliding_window', 'hybrid', 'hybrid_chunked', 'mamba', 'quantized', 'static', 'offloaded', 'dynamic']",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_cache_choice_cache_implementation_not_in_allowlist",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_cache_choice_use_cache_eq_false",
@@ -727,6 +788,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_cache_choice_use_cache_eq_false",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_cache_choice_use_cache_eq_false",
+      "field": "message_template",
+      "expected": "You have set `use_cache` to `False`, but cache_implementation is set to static. cache_implementation will have no effect.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_cache_choice_use_cache_eq_false",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_compile_config_type_compile_config_exceeds_zero",
@@ -735,12 +820,32 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_compile_config_type_compile_config_exceeds_zero",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValueError",
+        "message": "You provided `compile_config` as an instance of <class 'NoneType'>, but it must be an instance of `CompileConfig`."
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_compile_config_type_compile_config_type_not_in_CompileConfig",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
     },
     {
+      "rule_id": "transformers_compile_config_type_compile_config_type_not_in_CompileConfig",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValueError",
+        "message": "You provided `compile_config` as an instance of <class 'NoneType'>, but it must be an instance of `CompileConfig`."
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_dormant_diversity_penalty_ne_0_0",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -763,6 +868,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_dormant_diversity_penalty_ne_0_0",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_dormant_diversity_penalty_ne_0_0",
+      "field": "message_template",
+      "expected": "single_beam_wrong_parameter_msg.format(flag_name='diversity_penalty', flag_value=self.diversity_penalty)",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_dormant_diversity_penalty_ne_0_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_dormant_early_stopping_set_true",
@@ -789,6 +918,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_dormant_early_stopping_set_true",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_dormant_early_stopping_set_true",
+      "field": "message_template",
+      "expected": "single_beam_wrong_parameter_msg.format(flag_name='early_stopping', flag_value=self.early_stopping)",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_dormant_early_stopping_set_true",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_dormant_epsilon_cutoff_ne_0_0",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -813,6 +966,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_dormant_epsilon_cutoff_ne_0_0",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_dormant_epsilon_cutoff_ne_0_0",
+      "field": "message_template",
+      "expected": "greedy_wrong_parameter_msg.format(flag_name='epsilon_cutoff', flag_value=self.epsilon_cutoff)",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_dormant_epsilon_cutoff_ne_0_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_dormant_eta_cutoff_ne_0_0",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -835,6 +1012,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_dormant_eta_cutoff_ne_0_0",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_dormant_eta_cutoff_ne_0_0",
+      "field": "message_template",
+      "expected": "greedy_wrong_parameter_msg.format(flag_name='eta_cutoff', flag_value=self.eta_cutoff)",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_dormant_eta_cutoff_ne_0_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_early_stopping_type_early_stopping_exceeds_zero",
@@ -843,10 +1044,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_early_stopping_type_early_stopping_exceeds_zero",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_early_stopping_type_early_stopping_not_in_allowlist",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_early_stopping_type_early_stopping_not_in_allowlist",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str",
@@ -855,6 +1076,16 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_greedy_strips_epsilon_cutoff",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -877,6 +1108,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_epsilon_cutoff",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_epsilon_cutoff",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `epsilon_cutoff`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_epsilon_cutoff",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_greedy_strips_eta_cutoff",
@@ -903,6 +1158,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_greedy_strips_eta_cutoff",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_eta_cutoff",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `eta_cutoff`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_eta_cutoff",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_greedy_strips_min_p",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -925,6 +1204,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_min_p",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_min_p",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_min_p",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_greedy_strips_temperature",
@@ -951,6 +1254,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_greedy_strips_temperature",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_temperature",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_temperature",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_greedy_strips_top_k",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -973,6 +1300,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_k",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_k",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_k",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_greedy_strips_top_p",
@@ -999,6 +1350,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_greedy_strips_top_p",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_p",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_top_p",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_greedy_strips_typical_p",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1021,6 +1396,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_greedy_strips_typical_p",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_typical_p",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `typical_p`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_greedy_strips_typical_p",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_negative_pad_token_id",
@@ -1047,6 +1446,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_negative_pad_token_id",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_negative_pad_token_id",
+      "field": "message_template",
+      "expected": "`pad_token_id` should be positive but got -1. This will cause errors when batch generating, if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_negative_pad_token_id",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_no_return_dict_strips_output_attentions",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1071,6 +1494,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_no_return_dict_strips_output_attentions",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_attentions",
+      "field": "message_template",
+      "expected": "`return_dict_in_generate` is NOT set to `True`, but `output_attentions` is. When `return_dict_in_generate` is not `True`, `output_attentions` is ignored.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_attentions",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1095,6 +1542,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
+      "field": "message_template",
+      "expected": "`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states` is. When `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_hidden_states",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_no_return_dict_strips_output_scores",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1117,6 +1588,30 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_scores",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_scores",
+      "field": "message_template",
+      "expected": "`return_dict_in_generate` is NOT set to `True`, but `output_scores` is. When `return_dict_in_generate` is not `True`, `output_scores` is ignored.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_no_return_dict_strips_output_scores",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1",
@@ -1125,10 +1620,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_num_return_vs_beams_num_beams_lt_num_return_sequences",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences",
@@ -1137,10 +1652,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_output_token_ids_max_new_tokens_le_zero",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_output_token_ids_max_new_tokens_le_zero",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_output_token_ids_max_new_tokens_not_in_allowlist",
@@ -1149,6 +1684,16 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_output_token_ids_max_new_tokens_not_in_allowlist",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_output_token_ids_pad_token_id_not_in_allowlist",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1171,6 +1716,37 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_output_token_ids_pad_token_id_not_in_allowlist",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_output_token_ids_pad_token_id_not_in_allowlist",
+      "field": "message_template",
+      "expected": "`pad_token_id` should be positive but got -1. This will cause errors when batch generating, if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_output_token_ids_pad_token_id_not_in_allowlist",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "transformers_raises_bnb_4bit_compute_dtype_not_type_dtype",
+      "field": "message_template",
+      "expected": "bnb_4bit_compute_dtype must be torch.dtype",
+      "observed": "bnb_4bit_compute_dtype must be a string or a torch.dtype",
+      "check_failed": "message_template_match"
     },
     {
       "rule_id": "transformers_raises_compile_config_not_type_compileconfig",
@@ -1179,12 +1755,32 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_raises_compile_config_not_type_compileconfig",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValueError",
+        "message": "You provided `compile_config` as an instance of <class 'NoneType'>, but it must be an instance of `CompileConfig`."
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_raises_num_beams_eq_1",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
     },
     {
+      "rule_id": "transformers_raises_num_beams_eq_1",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_single_beam_strips_diversity_penalty",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1209,6 +1805,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_single_beam_strips_diversity_penalty",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_diversity_penalty",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `diversity_penalty`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_diversity_penalty",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_single_beam_strips_early_stopping",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1233,6 +1853,30 @@
       "observed": false
     },
     {
+      "rule_id": "transformers_single_beam_strips_early_stopping",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_early_stopping",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_early_stopping",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
       "rule_id": "transformers_single_beam_strips_length_penalty",
       "field": "outcome",
       "expected": "dormant_announced",
@@ -1255,12 +1899,46 @@
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_length_penalty",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_length_penalty",
+      "field": "message_template",
+      "expected": "` -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`.",
+      "observed": "GenerationConfig.validate() got an unexpected keyword argument 'strict'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "transformers_single_beam_strips_length_penalty",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     },
     {
       "rule_id": "transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig",
       "field": "negative_confirmed",
       "expected": true,
       "observed": false
+    },
+    {
+      "rule_id": "transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "GenerationConfig.validate() got an unexpected keyword argument 'strict'"
+      },
+      "check_failed": "negative_does_not_raise"
     }
   ]
 }

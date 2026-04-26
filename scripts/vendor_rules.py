@@ -51,6 +51,7 @@ from scripts._vendor_common import (  # noqa: E402  (late import after sys.path)
     classify_outcome,
     compare_expected_vs_observed,
     diff_input_vs_state,
+    message_matches_template,
     run_case,
     strip_warning_once_sentinel,
 )
@@ -201,23 +202,51 @@ def vendor_rule(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResu
     ``gpu_mode`` is ``"all" | "skip" | "only"`` — hardware-dependent rules
     are skipped unless ``gpu_mode`` permits them.
     """
+    case, _pos, _neg = _vendor_rule_with_captures(engine, rule, gpu_mode=gpu_mode)
+    return case
+
+
+def _vendor_rule_with_captures(
+    engine: str, rule: dict[str, Any], *, gpu_mode: str
+) -> tuple[CaseResult, CaptureBuffers | None, CaptureBuffers | None]:
+    """Run one rule and return the case plus the raw positive/negative captures.
+
+    The captures are needed by the gate-soundness checks added per
+    Decision #12 of the invariant-miner adversarial review - they look at
+    severity-specific behaviour (positive must raise for ``severity=error``)
+    and the raised exception's message text, neither of which fit the
+    public ``CaseResult`` shape. ``vendor_rule`` keeps its existing return
+    type for backward compatibility with downstream tests; this internal
+    helper exposes what the gate needs.
+
+    Returns ``(case, pos, neg)``. ``pos`` / ``neg`` are ``None`` when the
+    rule was skipped.
+    """
     rule_id = rule["id"]
     requires_gpu = bool(rule.get("requires_gpu", False))
     hardware_dependent = bool(rule.get("hardware_dependent", False))
 
     if gpu_mode == "skip" and (requires_gpu or hardware_dependent):
-        return CaseResult(
-            id=rule_id,
-            outcome="skipped_hardware_dependent",
-            emission_channel="none",
-            skipped_reason="requires_gpu_and_gpu_mode_skip",
+        return (
+            CaseResult(
+                id=rule_id,
+                outcome="skipped_hardware_dependent",
+                emission_channel="none",
+                skipped_reason="requires_gpu_and_gpu_mode_skip",
+            ),
+            None,
+            None,
         )
     if gpu_mode == "only" and not requires_gpu:
-        return CaseResult(
-            id=rule_id,
-            outcome="skipped_hardware_dependent",
-            emission_channel="none",
-            skipped_reason="cpu_rule_and_gpu_mode_only",
+        return (
+            CaseResult(
+                id=rule_id,
+                outcome="skipped_hardware_dependent",
+                emission_channel="none",
+                skipped_reason="cpu_rule_and_gpu_mode_only",
+            ),
+            None,
+            None,
         )
 
     native_type = rule["native_type"]
@@ -261,7 +290,7 @@ def vendor_rule(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResu
             "message": pos.exception_message or "",
         }
 
-    return CaseResult(
+    case = CaseResult(
         id=rule_id,
         outcome=outcome,
         emission_channel=emission,
@@ -272,9 +301,119 @@ def vendor_rule(engine: str, rule: dict[str, Any], *, gpu_mode: str) -> CaseResu
         negative_confirmed=negative_confirmed,
         duration_ms=pos.duration_ms + neg.duration_ms,
     )
+    return case, pos, neg
 
 
 _FIRING_OUTCOMES = frozenset({"error", "warn", "dormant_announced", "dormant_silent"})
+
+# Gate-soundness check names - exposed as constants so tests + downstream
+# tooling can reference them by symbol rather than string-literal.
+CHECK_POSITIVE_RAISES = "positive_raises"
+CHECK_NEGATIVE_DOES_NOT_RAISE = "negative_does_not_raise"
+CHECK_MESSAGE_TEMPLATE_MATCH = "message_template_match"
+CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC = "message_template_too_dynamic"
+
+
+def compute_gate_soundness_divergences(
+    rule: dict[str, Any], pos: CaptureBuffers, neg: CaptureBuffers
+) -> list[Divergence]:
+    """Return divergences from the three gate-soundness checks.
+
+    Decision #12 of the invariant-miner adversarial review
+    (`.product/designs/adversarial-review-invariant-miner-2026-04-26.md`)
+    surfaced a soundness gap: the existing ``compare_expected_vs_observed``
+    only checks fields *present* in ``expected_outcome``, so a typo in the
+    corpus YAML silently passes. These three checks bind the rule's
+    declared shape to the live library's behaviour:
+
+    1. ``positive_raises`` - for ``severity=error`` rules, ``kwargs_positive``
+       MUST raise. For ``severity=dormant`` rules, it MUST emit (warn or
+       dormant-announce) - i.e., not be a no-op and not raise unexpectedly.
+    2. ``message_template_match`` - when the positive raised, the exception's
+       ``str()`` must contain the static fragment of ``message_template``
+       (case-insensitive). When the template has no useful static fragment
+       (almost all placeholders), record ``message_template_too_dynamic``
+       so the rule's author knows to add a more specific template.
+    3. ``negative_does_not_raise`` - ``kwargs_negative`` MUST construct
+       successfully (i.e., not raise).
+
+    Each divergence carries ``check_failed`` so downstream tooling can
+    filter by check type.
+    """
+    rule_id = rule["id"]
+    severity = str(rule.get("severity", "")).lower()
+    divergences: list[Divergence] = []
+
+    # 1. Positive must fire (raise for severity=error, emit for severity=dormant).
+    pos_silent = (
+        diff_input_vs_state(dict(rule.get("kwargs_positive") or {}), pos.observed_state)
+        if pos.observed_state
+        else {}
+    )
+    pos_outcome = classify_outcome(pos, pos_silent)
+    if severity == "error":
+        if pos.exception_type is None:
+            divergences.append(
+                Divergence(
+                    rule_id=rule_id,
+                    field="kwargs_positive",
+                    expected="raises",
+                    observed=pos_outcome,
+                    check_failed=CHECK_POSITIVE_RAISES,
+                )
+            )
+    else:
+        # dormant rules emit but don't raise - anything other than no_op or error.
+        if pos_outcome in {"no_op", "error"}:
+            divergences.append(
+                Divergence(
+                    rule_id=rule_id,
+                    field="kwargs_positive",
+                    expected="emits_warning_or_announce",
+                    observed=pos_outcome,
+                    check_failed=CHECK_POSITIVE_RAISES,
+                )
+            )
+
+    # 2. Message-template substring match (only when positive raised, since
+    #    the message_template specifically describes the raised string).
+    template = str(rule.get("message_template") or "")
+    if pos.exception_type is not None and template:
+        matched, fragment = message_matches_template(pos.exception_message or "", template)
+        if not fragment:
+            divergences.append(
+                Divergence(
+                    rule_id=rule_id,
+                    field="message_template",
+                    expected="contains_static_fragment",
+                    observed=template,
+                    check_failed=CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC,
+                )
+            )
+        elif not matched:
+            divergences.append(
+                Divergence(
+                    rule_id=rule_id,
+                    field="message_template",
+                    expected=fragment,
+                    observed=pos.exception_message or "",
+                    check_failed=CHECK_MESSAGE_TEMPLATE_MATCH,
+                )
+            )
+
+    # 3. Negative must not raise.
+    if neg.exception_type is not None:
+        divergences.append(
+            Divergence(
+                rule_id=rule_id,
+                field="kwargs_negative",
+                expected="does_not_raise",
+                observed={"type": neg.exception_type, "message": neg.exception_message or ""},
+                check_failed=CHECK_NEGATIVE_DOES_NOT_RAISE,
+            )
+        )
+
+    return divergences
 
 
 def _positive_confirms(expected: dict[str, Any], observed_outcome: str) -> bool:
@@ -374,8 +513,10 @@ def vendor_engine(
         # VendorError (and subclasses) propagate — they indicate misconfig, not
         # a library behaviour finding. Any other Exception gets recorded as a
         # per-rule error so one bad rule doesn't abort the full vendor run.
+        pos: CaptureBuffers | None = None
+        neg: CaptureBuffers | None = None
         try:
-            case = vendor_rule(engine, rule, gpu_mode=gpu_mode)
+            case, pos, neg = _vendor_rule_with_captures(engine, rule, gpu_mode=gpu_mode)
         except VendorError:
             raise
         except Exception as exc:  # pragma: no cover - defensive
@@ -415,6 +556,10 @@ def vendor_engine(
                     observed=False,
                 )
             )
+        # Gate-soundness checks (Decision #12). Only run when both captures
+        # are available - defensive guard for the bare-except fallback above.
+        if pos is not None and neg is not None:
+            rule_divergences.extend(compute_gate_soundness_divergences(rule, pos, neg))
         divergences.extend(rule_divergences)
 
     envelope = assemble_envelope(
