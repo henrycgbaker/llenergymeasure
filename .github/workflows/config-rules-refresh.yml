@@ -271,6 +271,26 @@ jobs:
             echo '{"cases":[],"divergences":[]}' > /tmp/rules-diff/vllm.old.json
           fi
 
+      - name: Debug sys.path and scripts/ visibility
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          uv run python -c "
+          import sys, os
+          print('CWD:', os.getcwd())
+          print('PYTHONPATH env:', os.environ.get('PYTHONPATH'))
+          print('sys.path:')
+          for p in sys.path:
+              print('  ', p)
+          import importlib.util
+          spec = importlib.util.find_spec('scripts')
+          print('scripts spec:', spec)
+          spec_w = importlib.util.find_spec('scripts.walkers')
+          print('scripts.walkers spec:', spec_w)
+          print('ls of cwd scripts/:', os.listdir('scripts') if os.path.exists('scripts') else 'no scripts/')
+          print('ls of cwd scripts/walkers/:', os.listdir('scripts/walkers') if os.path.exists('scripts/walkers') else 'no scripts/walkers/')
+          "
+
       - name: Run fixpoint test against corpus
         env:
           PYTHONPATH: ${{ github.workspace }}
