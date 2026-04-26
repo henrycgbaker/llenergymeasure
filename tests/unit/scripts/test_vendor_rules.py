@@ -23,11 +23,14 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts import _vendor_common, vendor_rules  # noqa: E402
 from scripts._vendor_common import (  # noqa: E402
+    CaptureBuffers,
     classify_emission_channel,
     classify_outcome,
     compare_expected_vs_observed,
     diff_input_vs_state,
     extract_state,
+    message_matches_template,
+    message_template_to_substring,
     run_case,
 )
 
@@ -475,3 +478,217 @@ def test_main_exits_0_on_no_divergence(tmp_path: Path, monkeypatch: pytest.Monke
         ]
     )
     assert exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# message_template_to_substring + message_matches_template
+# ---------------------------------------------------------------------------
+
+
+class TestMessageTemplateSubstring:
+    def test_simple_placeholder_drop(self) -> None:
+        assert (
+            message_template_to_substring("`{flag}` is set to `{value}` but ...") == "` is set to `"
+        )
+
+    def test_picks_longest_static_run(self) -> None:
+        assert (
+            message_template_to_substring("Invalid `cache_implementation` ({val}). Choose one of:")
+            == "Invalid `cache_implementation` ("
+        )
+
+    def test_only_placeholders_returns_empty(self) -> None:
+        assert message_template_to_substring("{a}{b}") == ""
+
+    def test_below_min_length_returns_empty(self) -> None:
+        # "is" has only 2 non-whitespace chars - below the floor.
+        assert message_template_to_substring("{a} is {b}") == ""
+
+    def test_empty_template_returns_empty(self) -> None:
+        assert message_template_to_substring("") == ""
+
+    def test_strips_fstring_quoting_single_quote(self) -> None:
+        assert (
+            message_template_to_substring("f'Greedy methods do not support {x}.'")
+            == "Greedy methods do not support "
+        )
+
+    def test_strips_fstring_quoting_double_quote(self) -> None:
+        assert (
+            message_template_to_substring('f"Greedy methods do not support {x}."')
+            == "Greedy methods do not support "
+        )
+
+    def test_no_placeholders_returns_full_template(self) -> None:
+        assert (
+            message_template_to_substring("bnb_4bit_compute_dtype must be torch.dtype")
+            == "bnb_4bit_compute_dtype must be torch.dtype"
+        )
+
+
+class TestMessageMatchesTemplate:
+    def test_substring_match_case_insensitive(self) -> None:
+        matched, fragment = message_matches_template(
+            "INVALID `cache_implementation` (got 'foo'). Choose one of: ...",
+            "Invalid `cache_implementation` ({val}). Choose one of: ...",
+        )
+        assert matched is True
+        assert "cache_implementation" in fragment
+
+    def test_no_match(self) -> None:
+        matched, fragment = message_matches_template(
+            "Some unrelated runtime message.",
+            "Invalid `cache_implementation` ({val}). Choose one of: ...",
+        )
+        assert matched is False
+        assert fragment != ""
+
+    def test_too_dynamic_template(self) -> None:
+        matched, fragment = message_matches_template("anything", "{a}{b}")
+        assert matched is False
+        assert fragment == ""
+
+    def test_empty_observed_message(self) -> None:
+        matched, _ = message_matches_template("", "expected fragment here")
+        assert matched is False
+
+
+# ---------------------------------------------------------------------------
+# compute_gate_soundness_divergences
+# ---------------------------------------------------------------------------
+
+
+def _capture(
+    *,
+    exception_type: str | None = None,
+    exception_message: str | None = None,
+    warnings_captured: tuple[str, ...] = (),
+    logger_messages: tuple[str, ...] = (),
+    observed_state: dict[str, Any] | None = None,
+) -> CaptureBuffers:
+    """Convenience constructor for synthetic capture buffers."""
+    return CaptureBuffers(
+        exception_type=exception_type,
+        exception_message=exception_message,
+        warnings_captured=warnings_captured,
+        logger_messages=logger_messages,
+        observed_state=observed_state,
+        duration_ms=0,
+    )
+
+
+class TestComputeGateSoundnessDivergences:
+    """Decision #12 of the invariant-miner adversarial review."""
+
+    def test_clean_error_rule_no_divergence(self) -> None:
+        rule = {
+            "id": "r1",
+            "severity": "error",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "field `a` must be non-zero",
+        }
+        pos = _capture(exception_type="ValueError", exception_message="field `a` must be non-zero")
+        neg = _capture(observed_state={"a": 0})
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        assert divergences == []
+
+    def test_positive_did_not_raise_for_error_severity(self) -> None:
+        rule = {
+            "id": "r2",
+            "severity": "error",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "irrelevant",
+        }
+        pos = _capture(observed_state={"a": 1})  # construction succeeded
+        neg = _capture(observed_state={"a": 0})
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        assert any(d.check_failed == vendor_rules.CHECK_POSITIVE_RAISES for d in divergences)
+
+    def test_dormant_severity_accepts_warning(self) -> None:
+        rule = {
+            "id": "r3",
+            "severity": "dormant",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "use `a=0` for stability",
+        }
+        pos = _capture(logger_messages=("use `a=0` for stability",))
+        neg = _capture(observed_state={"a": 0})
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        # Dormant rule fired (logger.warning) - no positive_raises divergence.
+        assert all(d.check_failed != vendor_rules.CHECK_POSITIVE_RAISES for d in divergences)
+
+    def test_dormant_severity_no_op_is_divergence(self) -> None:
+        rule = {
+            "id": "r4",
+            "severity": "dormant",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "use `a=0` for stability",
+        }
+        pos = _capture(observed_state={"a": 1})  # nothing fired
+        neg = _capture(observed_state={"a": 0})
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        assert any(d.check_failed == vendor_rules.CHECK_POSITIVE_RAISES for d in divergences)
+
+    def test_message_template_match_failure(self) -> None:
+        rule = {
+            "id": "r5",
+            "severity": "error",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "field `a` must be non-zero",
+        }
+        pos = _capture(exception_type="ValueError", exception_message="totally different message")
+        neg = _capture(observed_state={"a": 0})
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        assert any(d.check_failed == vendor_rules.CHECK_MESSAGE_TEMPLATE_MATCH for d in divergences)
+
+    def test_message_template_too_dynamic(self) -> None:
+        rule = {
+            "id": "r6",
+            "severity": "error",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "{a}{b}",
+        }
+        pos = _capture(exception_type="ValueError", exception_message="anything")
+        neg = _capture(observed_state={"a": 0})
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        assert any(
+            d.check_failed == vendor_rules.CHECK_MESSAGE_TEMPLATE_TOO_DYNAMIC for d in divergences
+        )
+
+    def test_negative_raised_unexpectedly(self) -> None:
+        rule = {
+            "id": "r7",
+            "severity": "error",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "field `a` must be non-zero",
+        }
+        pos = _capture(exception_type="ValueError", exception_message="field `a` must be non-zero")
+        neg = _capture(exception_type="TypeError", exception_message="oops")
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        assert any(
+            d.check_failed == vendor_rules.CHECK_NEGATIVE_DOES_NOT_RAISE for d in divergences
+        )
+
+    def test_divergence_dict_includes_check_failed_field(self) -> None:
+        rule = {
+            "id": "r8",
+            "severity": "error",
+            "kwargs_positive": {"a": 1},
+            "kwargs_negative": {"a": 0},
+            "message_template": "field `a` must be non-zero",
+        }
+        pos = _capture(observed_state={"a": 1})  # no raise - should trip positive_raises
+        neg = _capture(observed_state={"a": 0})
+        divergences = vendor_rules.compute_gate_soundness_divergences(rule, pos, neg)
+        d = divergences[0].as_dict()
+        assert "check_failed" in d
+        assert d["check_failed"] == vendor_rules.CHECK_POSITIVE_RAISES
+        assert d["rule_id"] == "r8"
+        assert d["field"] == "kwargs_positive"
