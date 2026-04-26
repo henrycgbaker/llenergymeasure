@@ -137,7 +137,7 @@ class TestSourceExtraction:
             c for c in candidates if c.miner_source.method == "validate_positive_values"
         ]
         assert len(lookahead_rules) == 3
-        fields = sorted(list(rule.match_fields.keys())[0] for rule in lookahead_rules)
+        fields = sorted(next(iter(rule.match_fields.keys())) for rule in lookahead_rules)
         assert fields == [
             "tensorrt.max_ngram_size",
             "tensorrt.max_verification_set_size",
@@ -147,7 +147,7 @@ class TestSourceExtraction:
         # raise: ``if v <= 0: raise ValueError("Value must be positive, got {v}")``.
         for rule in lookahead_rules:
             assert rule.severity == "error"
-            spec = list(rule.match_fields.values())[0]
+            spec = next(iter(rule.match_fields.values()))
             assert spec == {"<=": 0}, f"Unexpected spec: {spec!r}"
 
     def test_validate_model_emits_type_allowlist_rule(self) -> None:
