@@ -23,10 +23,19 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# Guard against script-directory shadowing (e.g. avoid local stub imports).
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).resolve()]
+sys.path[:] = [p for p in sys.path if p != ""]
+
 from scripts.walkers._base import (  # noqa: E402
     RuleCandidate,
     WalkerSource,
+    call_func_path,
     candidate_to_dict,
+    extract_assign_target,
+    extract_condition_fields,
+    first_string_arg,
 )
 
 # ---------------------------------------------------------------------------
@@ -91,7 +100,6 @@ def _extract_ast_rules_from_source(
     except SyntaxError:
         return candidates
 
-    # Find the function definition (should be __post_init__)
     func_def = None
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "__post_init__":
@@ -101,25 +109,21 @@ def _extract_ast_rules_from_source(
     if func_def is None:
         return candidates
 
-    # Walk the function body for detected patterns
-    line_offset = func_def.lineno  # Line number of the function definition
+    line_offset = func_def.lineno
 
     for stmt in func_def.body:
         if isinstance(stmt, ast.If):
-            # Extract condition fields
-            condition_fields = _extract_condition_fields(stmt.test)
+            condition_fields = extract_condition_fields(stmt.test)
 
-            # Check for patterns in the if body
             for body_stmt in stmt.body:
-                # Pattern 1: logger.warning(...) inside if condition
+                # Pattern 1: logger.{warning,warning_once,error}(...) — announced dormancy.
                 if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.Call):
                     call = body_stmt.value
-                    func_path = _call_func_path(call)
+                    func_path = call_func_path(call)
                     if func_path and len(func_path) == 2 and func_path[0] == "logger":
                         method = func_path[1]
                         if method in {"warning", "warning_once", "error"}:
-                            msg = _first_string_arg(call)
-                            # Extract the affected field from condition
+                            msg = first_string_arg(call)
                             for field in condition_fields:
                                 candidate = RuleCandidate(
                                     id=f"vllm_ast_warn_{field}",
@@ -149,98 +153,42 @@ def _extract_ast_rules_from_source(
                                 )
                                 candidates.append(candidate)
 
-                # Pattern 2: self.field = value inside if condition (silent normalization)
+                # Pattern 2: self.field = value inside if condition (silent normalization).
+                # Emit one rule per assign so multi-statement greedy blocks like
+                # vLLM's `if temperature < eps: top_p = 1.0; top_k = -1; min_p = 0.0`
+                # produce three rules, not one.
                 elif isinstance(body_stmt, ast.Assign):
-                    attr = _extract_assign_target(body_stmt)
-                    if attr and not attr.startswith("_"):
-                        # Only emit if the condition actually references self fields
-                        if condition_fields:
-                            candidate = RuleCandidate(
-                                id=f"vllm_ast_silent_{attr}",
-                                engine=ENGINE,
-                                library=LIBRARY,
-                                rule_under_test=f"SamplingParams.__post_init__ silently normalises {attr}",
-                                severity="dormant",
-                                native_type=NATIVE_TYPE,
-                                walker_source=WalkerSource(
-                                    path=rel_source_path,
-                                    method="__post_init__",
-                                    line_at_scan=body_stmt.lineno + line_offset,
-                                    walker_confidence="medium",
-                                ),
-                                match_fields={},
-                                kwargs_positive={},
-                                kwargs_negative={},
-                                expected_outcome={
-                                    "outcome": "dormant_silent",
-                                    "emission_channel": "none",
-                                    "normalised_fields": [attr],
-                                },
-                                message_template=None,
-                                references=["vllm.SamplingParams.__post_init__()"],
-                                added_by="ast_walker",
-                                added_at=today,
-                            )
-                            candidates.append(candidate)
-                        break
+                    attr = extract_assign_target(body_stmt)
+                    if attr and not attr.startswith("_") and condition_fields:
+                        candidate = RuleCandidate(
+                            id=f"vllm_ast_silent_{attr}",
+                            engine=ENGINE,
+                            library=LIBRARY,
+                            rule_under_test=f"SamplingParams.__post_init__ silently normalises {attr}",
+                            severity="dormant",
+                            native_type=NATIVE_TYPE,
+                            walker_source=WalkerSource(
+                                path=rel_source_path,
+                                method="__post_init__",
+                                line_at_scan=body_stmt.lineno + line_offset,
+                                walker_confidence="medium",
+                            ),
+                            match_fields={},
+                            kwargs_positive={},
+                            kwargs_negative={},
+                            expected_outcome={
+                                "outcome": "dormant_silent",
+                                "emission_channel": "none",
+                                "normalised_fields": [attr],
+                            },
+                            message_template=None,
+                            references=["vllm.SamplingParams.__post_init__()"],
+                            added_by="ast_walker",
+                            added_at=today,
+                        )
+                        candidates.append(candidate)
 
     return candidates
-
-
-def _extract_condition_fields(condition: ast.expr) -> set[str]:
-    """Return the set of ``self.<field>`` attribute names referenced in condition."""
-    fields: set[str] = set()
-    for node in ast.walk(condition):
-        if (
-            isinstance(node, ast.Attribute)
-            and isinstance(node.value, ast.Name)
-            and node.value.id == "self"
-        ):
-            fields.add(node.attr)
-    return fields
-
-
-def _extract_assign_target(stmt: ast.Assign) -> str | None:
-    """Return ``<attr>`` for ``self.<attr> = ...``, or None."""
-    if len(stmt.targets) != 1:
-        return None
-    target = stmt.targets[0]
-    if (
-        isinstance(target, ast.Attribute)
-        and isinstance(target.value, ast.Name)
-        and target.value.id == "self"
-    ):
-        return target.attr
-    return None
-
-
-def _call_func_path(call: ast.Call) -> list[str] | None:
-    """Return dotted path for a Call node's func, or None if opaque."""
-    parts: list[str] = []
-    node: ast.expr = call.func
-    while isinstance(node, ast.Attribute):
-        parts.append(node.attr)
-        node = node.value
-    if isinstance(node, ast.Name):
-        parts.append(node.id)
-        return list(reversed(parts))
-    return None
-
-
-def _first_string_arg(call: ast.Call) -> str | None:
-    """First string-like positional argument of a Call, or None."""
-    for arg in call.args:
-        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-            return arg.value
-        if isinstance(arg, ast.JoinedStr):
-            return ast.unparse(arg)
-        if (
-            isinstance(arg, ast.Call)
-            and isinstance(arg.func, ast.Attribute)
-            and arg.func.attr == "format"
-        ):
-            return ast.unparse(arg)
-    return None
 
 
 def main(argv: list[str] | None = None) -> int:
