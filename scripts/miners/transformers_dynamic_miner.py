@@ -115,7 +115,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 if str(_WALKERS_DIR) in sys.path:
     sys.path.remove(str(_WALKERS_DIR))
 
-from scripts.miners._base import RuleCandidate, MinerSource  # noqa: E402
+from scripts.miners._base import MinerSource, RuleCandidate  # noqa: E402
+from scripts.miners._dataclass_lift import lift as _dataclass_lift  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Trigger classes (dormancy auto-enumeration — unchanged from prior impl)
@@ -1641,6 +1642,24 @@ def walk_generation_config_rules(
     hf_logger.setLevel(logging.ERROR)
 
     candidates: list[RuleCandidate] = []
+
+    # Path 0: sub-library type-system lift (locked design §1 REVISED).
+    # Composes the generic stdlib-dataclass lift over GenerationConfig and
+    # surfaces any Literal[...] allowlist rules. GenerationConfig is not a
+    # dataclass on transformers 4.x (its fields live in ``__init__`` as
+    # ``**kwargs``-stuffed self-assigns), so this returns ``[]`` today —
+    # the call is wired to validate the abstraction's plumbing on the gold
+    # standard before vLLM and TRT-LLM consume it. If a future transformers
+    # release rebases ``GenerationConfig`` onto dataclasses, this picks up
+    # the field-level Literal rules for free.
+    candidates.extend(
+        _dataclass_lift(
+            GenerationConfig,
+            namespace="transformers.generation",
+            today=today,
+            source_path=rel_source_path,
+        )
+    )
 
     # Path 1: dormancy auto-enumeration (preserved unchanged).
     for trigger, field_name, default, probe, lib_message in _enumerate_dormancy_candidates():
