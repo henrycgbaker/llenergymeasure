@@ -176,3 +176,5 @@ via path-based triggers (`docker/Dockerfile.*`).
 
 - [Docker Setup](docker-setup.md) - building engine images locally
 - [Engine Configuration](engines.md) - configuring engine parameters
+- [Miner Pipeline](miner-pipeline.md) - how the validation-rule corpus is regenerated alongside parameter schemas on library bumps
+- [Architecture Overview](architecture-overview.md) - full system context
