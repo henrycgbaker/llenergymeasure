@@ -1,0 +1,90 @@
+# Simplified PyTorch vs vLLM Study
+# Focus: Comparing standard framework flexibility with high-throughput engines
+study_name: pytorch-vs-vllm-baseline
+
+# =====================================================================
+# Runner configuration
+# =====================================================================
+runners:
+  pytorch: local
+  vllm: docker  # Recommended for vLLM to manage CUDA kernels/dependencies cleanly
+
+# =====================================================================
+# Global Execution Controls
+# =====================================================================
+study_execution:
+  n_cycles: 2
+  experiment_order: shuffle
+  experiment_gap_seconds: 10.0   # Thermal cooldown is still important for energy data!
+  experiment_timeout_seconds: 600.0
+
+# =====================================================================
+# Shared Experiment Defaults
+# =====================================================================
+model: Qwen/Qwen2.5-0.5B
+energy_sampler: auto
+
+dataset:
+  source: aienergyscore
+  n_prompts: 40
+  order: interleaved
+
+max_input_tokens: 256
+max_output_tokens: 256
+
+# Standard warmup to stabilize clocks before measurement
+warmup:
+  enabled: true
+  n_warmup: 3
+  thermal_floor_seconds: 30.0
+
+# =====================================================================
+# Sweep Axes
+# =====================================================================
+sweep:
+  # Cross-backend Precision Axis
+  dtype: [float16, bfloat16]
+
+  # --- PyTorch Parameter Space ---
+  # Focus on Batching and Compilation (The big PyTorch levers)
+  pytorch.batch_size: [1, 4, 16]
+  pytorch.attn_implementation: [sdpa, flash_attention_2]
+  pytorch.torch_compile: [true, false]
+
+  # --- vLLM Parameter Space ---
+  # Focus on Throughput and Memory Management
+  vllm.engine.gpu_memory_utilization: [0.8, 0.95]
+  vllm.engine.enable_chunked_prefill: [true, false]
+  vllm.engine.max_num_seqs: [32, 128]
+
+# =====================================================================
+# Explicit Experiments (Specific Architectural Features)
+# =====================================================================
+experiments:
+
+  # -----------------------------------------------------------------
+  # PYTORCH: Speculative Decoding (Drafting)
+  # -----------------------------------------------------------------
+  - backend: pytorch
+    pytorch:
+      batch_size: 1  # Speculative decoding usually shines at low batch sizes
+      prompt_lookup_num_tokens: 3
+      torch_compile: true
+
+  # -----------------------------------------------------------------
+  # VLLM: KV Cache Offloading (CPU Swap)
+  # -----------------------------------------------------------------
+  - backend: vllm
+    vllm:
+      engine:
+        swap_space: 4  # 4GB swap space for KV cache
+        gpu_memory_utilization: 0.7
+
+  # -----------------------------------------------------------------
+  # VLLM: Tensor Parallel (Multi-GPU setup)
+  # -----------------------------------------------------------------
+  # Uncomment if you have 2+ GPUs available
+  # - backend: vllm
+  #   vllm:
+  #     engine:
+  #       tensor_parallel_size: 2

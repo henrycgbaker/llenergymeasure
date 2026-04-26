@@ -545,6 +545,39 @@ def score_confidence(pass_count: int) -> Confidence:
     return "low"
 
 
+def candidate_to_dict(candidate: RuleCandidate) -> dict[str, Any]:
+    """Serialize a RuleCandidate to the YAML corpus dict shape.
+
+    Used by all per-engine walkers (introspection + AST) to emit staging files.
+    Ensures consistent schema across all extractors.
+    """
+    return {
+        "id": candidate.id,
+        "engine": candidate.engine,
+        "library": candidate.library,
+        "rule_under_test": candidate.rule_under_test,
+        "severity": candidate.severity,
+        "native_type": candidate.native_type,
+        "walker_source": {
+            "path": candidate.walker_source.path,
+            "method": candidate.walker_source.method,
+            "line_at_scan": candidate.walker_source.line_at_scan,
+            "walker_confidence": candidate.walker_source.walker_confidence,
+        },
+        "match": {
+            "engine": candidate.engine,
+            "fields": candidate.match_fields,
+        },
+        "kwargs_positive": candidate.kwargs_positive,
+        "kwargs_negative": candidate.kwargs_negative,
+        "expected_outcome": candidate.expected_outcome,
+        "message_template": candidate.message_template,
+        "references": candidate.references,
+        "added_by": candidate.added_by,
+        "added_at": candidate.added_at,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Class helpers
 # ---------------------------------------------------------------------------

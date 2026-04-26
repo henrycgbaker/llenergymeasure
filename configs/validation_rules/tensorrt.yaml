@@ -1,0 +1,71 @@
+schema_version: 1.0.0
+engine: tensorrt
+engine_version: unknown
+walked_at: '2026-04-25T23:52:41Z'
+rules:
+- id: tensorrt_ast_max_seq_len_>=_max_input_len
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: max_seq_len must be >= max_input_len
+  severity: error
+  native_type: tensorrt_llm.llmapi.LlmConfig
+  walker_source:
+    path: tensorrt_llm/llmapi.py
+    method: __post_init__
+    line_at_scan: 0
+    walker_confidence: medium
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.engine_params.max_seq_len:
+        present: true
+      tensorrt.engine_params.max_input_len:
+        present: true
+  kwargs_positive:
+    max_seq_len: 512
+    max_input_len: 1024
+  kwargs_negative:
+    max_seq_len: 1024
+    max_input_len: 512
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: max_seq_len must be >= max_input_len
+  references:
+  - tensorrt_llm.llmapi.LlmConfig
+  added_by: ast_walker
+  added_at: '2026-04-26'
+- id: tensorrt_ast_tensor_parallel_size_*_context_parallel_size
+  engine: tensorrt
+  library: tensorrt_llm
+  rule_under_test: product of tensor_parallel_size and context_parallel_size must not exceed GPU count
+  severity: error
+  native_type: tensorrt_llm.llmapi.LlmConfig
+  walker_source:
+    path: tensorrt_llm/llmapi.py
+    method: __post_init__
+    line_at_scan: 0
+    walker_confidence: medium
+  match:
+    engine: tensorrt
+    fields:
+      tensorrt.engine_params.tensor_parallel_size:
+        present: true
+      tensorrt.engine_params.context_parallel_size:
+        present: true
+  kwargs_positive:
+    tensor_parallel_size: 512
+    context_parallel_size: 1024
+  kwargs_negative:
+    tensor_parallel_size: 1024
+    context_parallel_size: 512
+  expected_outcome:
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
+  message_template: tensor_parallel_size must be * context_parallel_size
+  references:
+  - tensorrt_llm.llmapi.LlmConfig
+  added_by: ast_walker
+  added_at: '2026-04-26'

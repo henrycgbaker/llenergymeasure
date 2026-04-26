@@ -176,6 +176,26 @@ _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
             staging_basename="transformers_introspection.yaml",
         ),
     ),
+    "vllm": (
+        _Extractor(
+            module="scripts.walkers.vllm_ast",
+            staging_basename="vllm_ast.yaml",
+        ),
+        _Extractor(
+            module="scripts.walkers.vllm_introspection",
+            staging_basename="vllm_introspection.yaml",
+        ),
+    ),
+    "tensorrt": (
+        _Extractor(
+            module="scripts.walkers.tensorrt_ast",
+            staging_basename="tensorrt_ast.yaml",
+        ),
+        _Extractor(
+            module="scripts.walkers.tensorrt_introspection",
+            staging_basename="tensorrt_introspection.yaml",
+        ),
+    ),
 }
 
 
