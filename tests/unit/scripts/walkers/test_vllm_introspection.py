@@ -169,33 +169,22 @@ class TestVllmAstRuleSchema:
 class TestBuildCorpusIntegration:
     """Verify that the corpus pipeline can run with vLLM extractors."""
 
-    def test_staging_files_created(self):
-        """staging/{engine}_*.yaml files should exist after extraction."""
-        staging_dir = _PROJECT_ROOT / "configs" / "validation_rules" / "_staging"
-        ast_staging = staging_dir / "vllm_ast.yaml"
-        intro_staging = staging_dir / "vllm_introspection.yaml"
+    def test_introspection_walker_writes_valid_yaml(self, tmp_path):
+        """Running the introspection walker writes a well-formed staging YAML."""
+        from scripts.walkers import vllm_introspection
 
-        # These files may be empty if vLLM isn't properly importable, but they
-        # should exist and be valid YAML after build_corpus runs
-        if ast_staging.exists():
-            doc = yaml.safe_load(ast_staging.read_text())
-            assert isinstance(doc, dict)
-            assert "rules" in doc
-            assert isinstance(doc["rules"], list)
+        out = tmp_path / "vllm_introspection.yaml"
+        vllm_introspection.main(["--out", str(out)])
 
-        if intro_staging.exists():
-            doc = yaml.safe_load(intro_staging.read_text())
-            assert isinstance(doc, dict)
-            assert "rules" in doc
-            assert isinstance(doc["rules"], list)
+        doc = yaml.safe_load(out.read_text())
+        assert isinstance(doc, dict)
+        assert doc["engine"] == "vllm"
+        assert isinstance(doc["rules"], list)
+        assert len(doc["rules"]) >= 15, f"expected >=15 rules, got {len(doc['rules'])}"
 
-    def test_canonical_corpus_exists(self):
-        """Canonical vllm.yaml should exist after build_corpus runs."""
+    def test_canonical_corpus_yaml_is_valid(self):
+        """The committed vllm.yaml stub must parse and declare engine=vllm."""
         corpus_path = _PROJECT_ROOT / "configs" / "validation_rules" / "vllm.yaml"
-        # The corpus may be empty if vLLM environment is incomplete, but structure
-        # should be valid
-        if corpus_path.exists():
-            doc = yaml.safe_load(corpus_path.read_text())
-            assert isinstance(doc, dict)
-            assert doc.get("engine") == "vllm"
-            assert "rules" in doc
+        doc = yaml.safe_load(corpus_path.read_text())
+        assert doc["engine"] == "vllm"
+        assert isinstance(doc["rules"], list)
