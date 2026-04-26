@@ -70,8 +70,8 @@ CORPUS_REL="configs/validation_rules/${ENGINE}.yaml"
 OUTPUT_REL="src/llenergymeasure/config/vendored_rules/${ENGINE}.json"
 
 if [[ ! -f "$REPO_ROOT/$CORPUS_REL" ]]; then
-    echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the walker first:" >&2
-    echo "    python -m scripts.walkers.${ENGINE} --out $CORPUS_REL" >&2
+    echo "[$ENGINE] Corpus $CORPUS_REL not found. Run the miner first:" >&2
+    echo "    python -m scripts.miners.${ENGINE}_miner --out $CORPUS_REL" >&2
     exit 1
 fi
 

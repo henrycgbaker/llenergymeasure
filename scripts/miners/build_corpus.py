@@ -1,13 +1,13 @@
-"""Canonical corpus builder — orchestrate extractors, merge staging, emit corpus.
+"""Canonical corpus builder — orchestrate miners, merge staging, emit corpus.
 
-The validation-rules pipeline is split into independent extractors (introspection,
-AST walker, future runtime-warning miner) that each write to a staging file under
-``configs/validation_rules/_staging/{engine}_{name}.yaml``. This module is the
-single canonical entry point that runs them, merges their outputs into one
-:class:`~llenergymeasure.config.vendored_rules.loader.VendoredRules`-shaped
+The validation-rules pipeline is split into independent miners (dynamic miner,
+static miner, future runtime-warning miner) that each write to a staging file
+under ``configs/validation_rules/_staging/{engine}_{name}.yaml``. This module
+is the single canonical entry point that runs them, merges their outputs into
+one :class:`~llenergymeasure.config.vendored_rules.loader.VendoredRules`-shaped
 document, and writes ``configs/validation_rules/{engine}.yaml``.
 
-Pipeline: extractors → staging → merge → **vendor-validate** → write canonical corpus.
+Pipeline: miners → staging → merge → **vendor-validate** → write canonical corpus.
 
 Vendor validation gate
 ----------------------
@@ -22,7 +22,7 @@ runtime-applied corpus.
 
 Why a merger at all
 -------------------
-Today the corpus is single-writer (introspection only). With the AST walker
+Today the corpus is single-writer (dynamic miner only). With the static miner
 landing in parallel, we need a deterministic reconciliation step — same rule
 discovered by two independent paths becomes evidence of cross-validation, not
 two duplicates. Different fingerprints across paths stay as two rules; the
@@ -71,19 +71,18 @@ Per-field merge precedence
 =================================== =================================
 Field                               Wins from
 =================================== =================================
-``match.fields`` predicate          AST walker (more specific operators)
-``message_template``                introspection (real library text)
-``observed_messages*``              introspection (real captured emissions)
-``kwargs_positive`` / ``negative``  AST walker (derived from conditional)
-``walker_source.line_at_scan``      AST walker (real source line)
-``walker_confidence``               min of all sources
+``match.fields`` predicate          static miner (more specific operators)
+``message_template``                dynamic miner (real library text)
+``observed_messages*``              dynamic miner (real captured emissions)
+``kwargs_positive`` / ``negative``  static miner (derived from conditional)
+``miner_source.line_at_scan``       static miner (real source line)
 ``references``                      union (let reviewer see all evidence)
 ``id``                              first source's id is canonical
 ``added_by``                        primary source (priority order)
 ``cross_validated_by``              all other sources, sorted
 =================================== =================================
 
-If precedence is ambiguous (e.g. both sources are introspection-derived but
+If precedence is ambiguous (e.g. both sources are dynamic-miner-derived but
 disagree on a field), the merger keeps the rule from the higher-priority
 source and emits a ``conflict_note`` annotation in the YAML for reviewer
 attention.
@@ -92,13 +91,13 @@ CLI
 ---
 ::
 
-    python scripts/walkers/build_corpus.py --engine transformers
+    python scripts/miners/build_corpus.py --engine transformers
     # Run extractors -> staging -> merge -> write canonical corpus
 
-    python scripts/walkers/build_corpus.py --engine transformers --check
+    python scripts/miners/build_corpus.py --engine transformers --check
     # Re-run; diff against checked-in corpus; exit 1 on drift.
 
-    python scripts/walkers/build_corpus.py --engine transformers --skip-extract
+    python scripts/miners/build_corpus.py --engine transformers --skip-extract
     # Assume staging files already exist; merge + write.
 
 The ``--engine`` flag defaults to ``transformers`` since that's the only
@@ -121,14 +120,14 @@ from typing import Any
 import yaml
 
 # Project root on sys.path so this script works both as ``python -m
-# scripts.walkers.build_corpus`` and as a direct ``python scripts/walkers/build_corpus.py``.
+# scripts.miners.build_corpus`` and as a direct ``python scripts/miners/build_corpus.py``.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-# When this file is run directly (``python scripts/walkers/build_corpus.py``),
-# Python prepends ``scripts/walkers/`` to sys.path. That directory contains a
-# ``transformers.py`` walker module which would shadow the real ``transformers``
+# When this file is run directly (``python scripts/miners/build_corpus.py``),
+# Python prepends ``scripts/miners/`` to sys.path. That directory contains a
+# ``transformers_miner.py`` miner module which would shadow the real ``transformers``
 # library on import — vendor validation would then crash with
 # ``module 'transformers' has no attribute '__version__'``. Drop the script's
 # own directory from sys.path so the upstream library wins. ``-m`` invocation
@@ -164,16 +163,16 @@ class _Extractor:
 
 
 # Registry of which extractors produce staging files for each engine.
-# Add new (engine, [extractors]) entries to wire vLLM / TRT-LLM walkers in.
+# Add new (engine, [extractors]) entries to wire vLLM / TRT-LLM miners in.
 _ENGINE_EXTRACTORS: dict[str, tuple[_Extractor, ...]] = {
     "transformers": (
         _Extractor(
-            module="scripts.walkers.transformers_ast",
-            staging_basename="transformers_ast.yaml",
+            module="scripts.miners.transformers_static_miner",
+            staging_basename="transformers_static_miner.yaml",
         ),
         _Extractor(
-            module="scripts.walkers.transformers_introspection",
-            staging_basename="transformers_introspection.yaml",
+            module="scripts.miners.transformers_dynamic_miner",
+            staging_basename="transformers_dynamic_miner.yaml",
         ),
     ),
 }
@@ -196,15 +195,15 @@ def _canonical_path(corpus_root: Path, engine: str) -> Path:
 # fingerprint appears in multiple staging files. The remaining sources go into
 # ``cross_validated_by`` (sorted alphabetically for stability).
 #
-# AST walker beats introspection because the AST walker derives match.fields
-# and kwargs from structural source — the introspection walker probes the
-# real library and trusts the resulting raise/no-raise pattern, which is more
-# noise-prone for kwargs-positive synthesis than reading the conditional
-# directly. message_template precedence is handled separately (introspection
-# wins there because it observes the literal library text).
+# Static miner beats dynamic miner because the static miner derives match.fields
+# and kwargs from structural source — the dynamic miner probes the real library
+# and trusts the resulting raise/no-raise pattern, which is more noise-prone for
+# kwargs-positive synthesis than reading the conditional directly.
+# message_template precedence is handled separately (dynamic miner wins there
+# because it observes the literal library text).
 _PROVENANCE_PRIORITY: tuple[str, ...] = (
-    "ast_walker",
-    "introspection",
+    "static_miner",
+    "dynamic_miner",
     "manual_seed",
     "runtime_warning",
     "observed_collision",
@@ -236,7 +235,7 @@ def fingerprint_rule(rule: dict[str, Any]) -> bytes:
     agree on deterministic ids, but a one-character drift shouldn't break
     cross-validation), ``message_template`` (the real library text differs
     from a structural reconstruction even when the rule is the same), and
-    ``walker_source`` (path / line moves on every library bump).
+    ``miner_source`` (path / line moves on every library bump).
     """
     match = rule.get("match") or {}
     fields = match.get("fields") if isinstance(match, dict) else None
@@ -259,7 +258,7 @@ def run_extractors(engine: str, corpus_root: Path) -> None:
 
     Each extractor must accept ``--out <path>`` and write a corpus-shaped
     YAML document. Extractor failures bubble up as :class:`subprocess.CalledProcessError`
-    so CI sees them as fatal, matching the walker-landmark contract.
+    so CI sees them as fatal, matching the miner-landmark contract.
     """
     extractors = _ENGINE_EXTRACTORS.get(engine)
     if not extractors:
@@ -321,21 +320,6 @@ def _load_staging(path: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Merge
 # ---------------------------------------------------------------------------
-
-
-def _walker_confidence_min(*confidences: str | None) -> str | None:
-    """Return the lowest walker_confidence among the given values.
-
-    ``low`` < ``medium`` < ``high``. Cross-validation semantically
-    *increases* confidence, but if any source flagged the candidate as
-    low / medium we keep that flag visible — the reviewer should still
-    eyeball it.
-    """
-    order = ("low", "medium", "high")
-    seen = [c for c in confidences if c in order]
-    if not seen:
-        return None
-    return min(seen, key=order.index)
 
 
 def _union_preserving_order(*lists: list[Any] | tuple[Any, ...] | None) -> list[Any]:
@@ -402,31 +386,31 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
     # Pull contributors by source-type so the per-field rules can reach for
     # them by name without re-walking the list.
     by_source = {str(r.get("added_by", "")): dict(r) for r in sorted_rules}
-    ast_rule = by_source.get("ast_walker")
-    introspect_rule = by_source.get("introspection")
+    ast_rule = by_source.get("static_miner")
+    introspect_rule = by_source.get("dynamic_miner")
 
     conflicts: list[str] = []
 
-    # match.fields: AST walker wins if present (more specific operators).
+    # match.fields: static miner wins if present (more specific operators).
     if ast_rule is not None and ast_rule is not sorted_rules[0]:
         ast_fields = (ast_rule.get("match") or {}).get("fields")
         primary_fields = (primary.get("match") or {}).get("fields")
         if ast_fields and ast_fields != primary_fields:
             primary["match"] = {**(primary.get("match") or {}), "fields": ast_fields}
 
-    # message_template: introspection wins (real library text).
+    # message_template: dynamic miner wins (real library text).
     if introspect_rule is not None and introspect_rule is not sorted_rules[0]:
         intro_msg = introspect_rule.get("message_template")
         primary_msg = primary.get("message_template")
         if intro_msg and intro_msg != primary_msg:
             if primary_msg:
                 conflicts.append(
-                    f"message_template: introspection text overrode "
+                    f"message_template: dynamic miner text overrode "
                     f"{primary.get('added_by')}'s template"
                 )
             primary["message_template"] = intro_msg
 
-    # expected_outcome: introspection's observed_messages / observed_messages_regex
+    # expected_outcome: dynamic miner's observed_messages / observed_messages_regex
     # win when present; the structural fields (outcome, emission_channel,
     # normalised_fields) are taken from the primary source.
     primary_eo = dict(primary.get("expected_outcome") or {})
@@ -438,7 +422,7 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
                 primary_eo[key] = value
     primary["expected_outcome"] = primary_eo
 
-    # kwargs_positive / kwargs_negative: AST walker wins.
+    # kwargs_positive / kwargs_negative: static miner wins.
     if ast_rule is not None and ast_rule is not sorted_rules[0]:
         for key in ("kwargs_positive", "kwargs_negative"):
             ast_value = ast_rule.get(key)
@@ -446,28 +430,16 @@ def _merge_bucket(rules: list[dict[str, Any]]) -> _MergeResult:
             if ast_value and ast_value != primary_value:
                 primary[key] = ast_value
 
-    # walker_source: AST walker has the real source line.
+    # miner_source: static miner has the real source line.
     if ast_rule is not None and ast_rule is not sorted_rules[0]:
-        ast_source = ast_rule.get("walker_source")
+        ast_source = ast_rule.get("miner_source")
         if isinstance(ast_source, dict):
-            # Compose: prefer AST line_at_scan / path; keep min walker_confidence.
-            current = dict(primary.get("walker_source") or {})
+            # Compose: prefer static-miner line_at_scan / path / method.
+            current = dict(primary.get("miner_source") or {})
             for key in ("path", "method", "line_at_scan"):
                 if ast_source.get(key) is not None:
                     current[key] = ast_source[key]
-            current["walker_confidence"] = _walker_confidence_min(
-                *(str(r.get("walker_source", {}).get("walker_confidence")) for r in sorted_rules)
-            )
-            primary["walker_source"] = current
-    else:
-        # Even single-AST or single-introspection: take the min confidence
-        # across all source rules (cross-validation does not raise confidence;
-        # any low-confidence source surfaces).
-        current = dict(primary.get("walker_source") or {})
-        current["walker_confidence"] = _walker_confidence_min(
-            *(str(r.get("walker_source", {}).get("walker_confidence")) for r in sorted_rules)
-        )
-        primary["walker_source"] = current
+            primary["miner_source"] = current
 
     # references: union, preserving first-seen order across all sources.
     all_refs: list[Any] = []
@@ -540,7 +512,7 @@ def merge_staging(
     # Build the envelope. schema_version + engine come from the first
     # staging file (extractors all target one schema major). engine_version
     # is taken from the highest staging-reported version — if extractors
-    # disagree (one walker pinned to an older release than another), the
+    # disagree (one miner pinned to an older release than another), the
     # canonical corpus reflects the newest observed.
     first = staging_envelopes[0]
     engine_versions = sorted({str(s.get("engine_version", "")) for s in staging_envelopes})
@@ -552,7 +524,7 @@ def merge_staging(
         "engine_version": engine_versions[-1] if engine_versions else "",
     }
 
-    # Surface walker version pin, if any staging file declared one.
+    # Surface miner version pin, if any staging file declared one.
     pinned_ranges = sorted(
         {
             str(s.get("walker_pinned_range", ""))
@@ -563,15 +535,15 @@ def merge_staging(
     if pinned_ranges:
         envelope["walker_pinned_range"] = pinned_ranges[-1]
 
-    # walked_at: max across staging (or env override for reproducibility tests).
-    frozen = os.environ.get("LLENERGY_WALKER_FROZEN_AT")
+    # mined_at: max across staging (or env override for reproducibility tests).
+    frozen = os.environ.get("LLENERGY_MINER_FROZEN_AT")
     if frozen:
-        envelope["walked_at"] = frozen
+        envelope["mined_at"] = frozen
     else:
-        walked_ats = sorted(
-            {str(s.get("walked_at", "")) for s in staging_envelopes if s.get("walked_at")}
+        mined_ats = sorted(
+            {str(s.get("mined_at", "")) for s in staging_envelopes if s.get("mined_at")}
         )
-        envelope["walked_at"] = walked_ats[-1] if walked_ats else _now_iso()
+        envelope["mined_at"] = mined_ats[-1] if mined_ats else _now_iso()
 
     if len(engine_versions) > 1:
         envelope["staging_engine_versions"] = engine_versions
@@ -732,7 +704,7 @@ def _emit_failed_validation_yaml(
 
 
 # ---------------------------------------------------------------------------
-# YAML emission (matches the existing transformers walker's key ordering)
+# YAML emission (matches the existing transformers miner's key ordering)
 # ---------------------------------------------------------------------------
 
 
@@ -750,7 +722,7 @@ def _ordered_rule(rule: dict[str, Any]) -> dict[str, Any]:
         "rule_under_test",
         "severity",
         "native_type",
-        "walker_source",
+        "miner_source",
         "match",
         "kwargs_positive",
         "kwargs_negative",
@@ -781,7 +753,7 @@ def emit_yaml(rules: list[dict[str, Any]], envelope: dict[str, Any]) -> str:
     }
     if "walker_pinned_range" in envelope:
         doc["walker_pinned_range"] = envelope["walker_pinned_range"]
-    doc["walked_at"] = envelope.get("walked_at", "")
+    doc["mined_at"] = envelope.get("mined_at", "")
     if "staging_engine_versions" in envelope:
         doc["staging_engine_versions"] = envelope["staging_engine_versions"]
     doc["rules"] = [_ordered_rule(r) for r in rules]

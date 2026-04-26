@@ -67,7 +67,7 @@ def _make_rule(*, match_fields: dict[str, Any]) -> Rule:
             "normalised_fields": [],
         },
         message_template="msg {declared_value}",
-        walker_source={},
+        miner_source={},
         references=(),
         added_by="manual_seed",
         added_at="2026-04-25",

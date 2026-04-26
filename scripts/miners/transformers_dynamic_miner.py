@@ -42,22 +42,22 @@ Predicate inference (cluster path) covers, in order of preference:
   one specific value.
 
 Recall over precision: when multiple predicates fit, the inferrer emits
-ALL plausible candidates with ``walker_confidence: low``. The vendor CI
+ALL plausible candidates. The vendor CI
 pipeline downstream re-runs each emitted rule's ``kwargs_positive`` /
 ``kwargs_negative`` against the live library; rules that misfire fail CI
 and are pruned. False positives are cheap; missed invariants are not.
 
-Every rule this walker emits carries ``added_by="introspection"``.
+Every rule this walker emits carries ``added_by="dynamic_miner"``.
 
 BitsAndBytesConfig coverage gap
 -------------------------------
 This extractor is scoped to ``GenerationConfig`` (and its depth-1
 ``WatermarkingConfig`` / ``SynthIDTextWatermarkingConfig`` helpers). BNB
 ``post_init`` type-check raises are NOT emitted here. The pre-pipeline
-walker (:mod:`scripts.walkers.transformers`, deregistered) hand-curated
+walker (:mod:`scripts.miners.transformers`, deregistered) hand-curated
 nine BNB rules; that path was lost in the refactor.
 
-Coverage is restored structurally by :mod:`scripts.walkers.transformers_ast`,
+Coverage is restored structurally by :mod:`scripts.miners.transformers_static_miner`,
 which AST-walks ``BitsAndBytesConfig.post_init`` directly — the
 ``if not isinstance(self.X, T): raise`` pattern is exactly what its
 ``type_is_not`` predicate path already handles. The AST walker reads
@@ -105,17 +105,17 @@ _WALKERS_DIR = Path(__file__).resolve().parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-# When run as a script (``python scripts/walkers/transformers_introspection.py``),
+# When run as a script (``python scripts/miners/transformers_dynamic_miner.py``),
 # Python prepends the script's directory to ``sys.path`` — that directory contains
 # ``transformers.py`` (the sibling walker module), which shadows the third-party
 # ``transformers`` package import. Drop the walkers dir so HF's ``transformers``
 # resolves correctly. Module-style invocation
-# (``python -m scripts.walkers.transformers_introspection``) avoids this trap
+# (``python -m scripts.miners.transformers_dynamic_miner``) avoids this trap
 # but the verification command in the task brief uses script-style.
 if str(_WALKERS_DIR) in sys.path:
     sys.path.remove(str(_WALKERS_DIR))
 
-from scripts.walkers._base import RuleCandidate, WalkerSource  # noqa: E402
+from scripts.miners._base import RuleCandidate, MinerSource  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Trigger classes (dormancy auto-enumeration — unchanged from prior impl)
@@ -1463,11 +1463,10 @@ def _make_dormancy_candidate(
         rule_under_test=trigger.rule_under_test_template.format(field=field_name),
         severity="dormant",
         native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
+        miner_source=MinerSource(
             path=rel_source_path,
             method="validate",
             line_at_scan=line,
-            walker_confidence="high",
         ),
         match_fields={
             f"transformers.sampling.{trigger.trigger_field}": trigger.trigger_positive,
@@ -1482,7 +1481,7 @@ def _make_dormancy_candidate(
         },
         message_template=template,
         references=[f"transformers.GenerationConfig.validate() (line ~{line})"],
-        added_by="introspection",
+        added_by="dynamic_miner",
         added_at=today,
     )
 
@@ -1523,11 +1522,10 @@ def _make_inferred_candidate(
         rule_under_test=rule.rule_under_test,
         severity=rule.severity,
         native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
+        miner_source=MinerSource(
             path=rel_source_path,
             method="validate" if rule.method == "validate" else "__init__",
             line_at_scan=line,
-            walker_confidence=rule.confidence,
         ),
         match_fields=rule.match_fields,
         kwargs_positive=rule.kwargs_positive,
@@ -1535,7 +1533,7 @@ def _make_inferred_candidate(
         expected_outcome=_OUTCOME_BY_SEVERITY[rule.severity],
         message_template=rule.message_template,
         references=[_REFERENCE_BY_METHOD[rule.method]],
-        added_by="introspection",
+        added_by="dynamic_miner",
         added_at=today,
     )
 
@@ -1564,11 +1562,10 @@ def _make_dormant_probe_candidate(
         rule_under_test=probe.rule_under_test,
         severity="dormant",
         native_type="transformers.GenerationConfig",
-        walker_source=WalkerSource(
+        miner_source=MinerSource(
             path=rel_source_path,
             method="validate",
             line_at_scan=line,
-            walker_confidence="high",
         ),
         match_fields=probe.match_fields,
         kwargs_positive=probe.kwargs_positive,
@@ -1578,7 +1575,7 @@ def _make_dormant_probe_candidate(
         references=[
             "transformers.GenerationConfig.validate() — observed via validate(strict=True)"
         ],
-        added_by="introspection",
+        added_by="dynamic_miner",
         added_at=today,
     )
 
@@ -1725,11 +1722,10 @@ def _candidate_to_dict(c: RuleCandidate) -> dict[str, Any]:
         "rule_under_test": c.rule_under_test,
         "severity": c.severity,
         "native_type": c.native_type,
-        "walker_source": {
-            "path": c.walker_source.path,
-            "method": c.walker_source.method,
-            "line_at_scan": c.walker_source.line_at_scan,
-            "walker_confidence": c.walker_source.walker_confidence,
+        "miner_source": {
+            "path": c.miner_source.path,
+            "method": c.miner_source.method,
+            "line_at_scan": c.miner_source.line_at_scan,
         },
         "match": {
             "engine": c.engine,
@@ -1768,7 +1764,7 @@ def main(argv: list[str] | None = None) -> int:
         / "configs"
         / "validation_rules"
         / "_staging"
-        / "transformers_introspection.yaml"
+        / "transformers_dynamic_miner.yaml"
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1781,10 +1777,10 @@ def main(argv: list[str] | None = None) -> int:
         today=today,
     )
 
-    # Stable order: by walker_source.method, then by id.
-    candidates_sorted = sorted(candidates, key=lambda c: (c.walker_source.method, c.id))
+    # Stable order: by miner_source.method, then by id.
+    candidates_sorted = sorted(candidates, key=lambda c: (c.miner_source.method, c.id))
 
-    walked_at = os.environ.get(
+    mined_at = os.environ.get(
         "LLENERGY_WALKER_FROZEN_AT",
         dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     )
@@ -1793,8 +1789,8 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": "1.0.0",
         "engine": "transformers",
         "engine_version": version,
-        "walked_at": walked_at,
-        "extractor": "transformers_introspection",
+        "mined_at": mined_at,
+        "extractor": "transformers_dynamic_miner",
         "rules": [_candidate_to_dict(c) for c in candidates_sorted],
     }
     out_path.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100))

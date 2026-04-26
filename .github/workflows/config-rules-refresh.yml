@@ -12,7 +12,7 @@ name: Config Rules Refresh
 #   - docker/Dockerfile.{engine}        (Renovate-driven image bumps)
 #   - configs/validation_rules/{engine}.yaml
 #   - scripts/vendor_rules.py
-#   - scripts/walkers/{engine}.py
+#   - scripts/miners/{engine}_miner.py
 #   - scripts/_vendor_common.py
 #
 # Trigger (manual): workflow_dispatch with explicit engine choice.
@@ -25,7 +25,7 @@ on:
       - "configs/validation_rules/*.yaml"
       - "scripts/vendor_rules.py"
       - "scripts/_vendor_common.py"
-      - "scripts/walkers/*.py"
+      - "scripts/miners/*.py"
       - "scripts/update_engine_rules.sh"
   workflow_dispatch:
     inputs:
@@ -108,7 +108,7 @@ jobs:
         run: |
           uv run python -c "
           import yaml
-          from scripts.walkers._fixpoint_test import fixpoint_test_corpus
+          from scripts.miners._fixpoint_test import fixpoint_test_corpus
           corpus = yaml.safe_load(open('${CORPUS_DIR}/transformers.yaml'))
           fixpoint_test_corpus(corpus)
           print('fixpoint test passed')
@@ -129,10 +129,10 @@ jobs:
             "configs/validation_rules/transformers.yaml"
             "scripts/vendor_rules.py"
             "scripts/_vendor_common.py"
-            "scripts/walkers/transformers.py"
-            "scripts/walkers/transformers_introspection.py"
-            "scripts/walkers/_fixpoint_test.py"
-            "scripts/walkers/_base.py"
+            "scripts/miners/transformers_miner.py"
+            "scripts/miners/transformers_dynamic_miner.py"
+            "scripts/miners/_fixpoint_test.py"
+            "scripts/miners/_base.py"
             "scripts/update_engine_rules.sh"
           )
           SHA=$(git log -1 --format=%H -- "${PATHS[@]}")

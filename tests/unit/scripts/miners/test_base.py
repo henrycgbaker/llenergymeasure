@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.walkers._base`.
+"""Tests for :mod:`scripts.miners._base`.
 
 Covers AST primitives, pattern detectors, filters, confidence scoring,
 class/method finders, and structured error types — all on synthetic AST
@@ -19,15 +19,15 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.walkers._base import (  # noqa: E402
+from scripts.miners._base import (  # noqa: E402
     ConditionalLoggerWarningDetector,
     ConditionalRaiseDetector,
     ConditionalSelfAssignDetector,
     ConditionalWarningsWarnDetector,
     DetectedPattern,
     MinorIssuesDictAssignDetector,
-    WalkerLandmarkMissingError,
-    WalkerVersionMismatchError,
+    MinerLandmarkMissingError,
+    MinerVersionMismatchError,
     call_func_path,
     check_installed_version,
     default_detectors,
@@ -41,7 +41,6 @@ from scripts.walkers._base import (  # noqa: E402
     find_method,
     first_string_arg,
     resolve_local_assign,
-    score_confidence,
 )
 
 
@@ -336,13 +335,6 @@ def test_filter_kwargs_positive_derivable_accepts_isinstance() -> None:
     assert filter_kwargs_positive_derivable(expr) is True
 
 
-def test_score_confidence_levels() -> None:
-    assert score_confidence(3) == "high"
-    assert score_confidence(2) == "medium"
-    assert score_confidence(1) == "low"
-    assert score_confidence(0) == "low"
-
-
 # ---------------------------------------------------------------------------
 # Error types
 # ---------------------------------------------------------------------------
@@ -353,19 +345,19 @@ def test_check_installed_version_in_range() -> None:
 
 
 def test_check_installed_version_out_of_range() -> None:
-    with pytest.raises(WalkerVersionMismatchError) as exc_info:
+    with pytest.raises(MinerVersionMismatchError) as exc_info:
         check_installed_version("transformers", "5.0.0", SpecifierSet(">=4.50,<5.0"))
     assert "transformers" in str(exc_info.value)
     assert "5.0.0" in str(exc_info.value)
 
 
 def test_check_installed_version_invalid_version_string() -> None:
-    with pytest.raises(WalkerVersionMismatchError):
+    with pytest.raises(MinerVersionMismatchError):
         check_installed_version("transformers", "not-a-version", SpecifierSet(">=4.50,<5.0"))
 
 
 def test_walker_landmark_missing_error_carries_detail() -> None:
-    exc = WalkerLandmarkMissingError("GenerationConfig.validate", "method removed")
+    exc = MinerLandmarkMissingError("GenerationConfig.validate", "method removed")
     assert exc.landmark == "GenerationConfig.validate"
     assert "method removed" in str(exc)
 

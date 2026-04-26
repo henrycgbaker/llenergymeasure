@@ -1,4 +1,4 @@
-"""Unit tests for the canonical corpus merger (``scripts/walkers/build_corpus.py``).
+"""Unit tests for the canonical corpus merger (``scripts/miners/build_corpus.py``).
 
 The merger orchestrates the per-engine staging extractors, dedups by
 fingerprint with cross-validation provenance, and emits the canonical
@@ -34,7 +34,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from llenergymeasure.config.vendored_rules import VendoredRulesLoader  # noqa: E402
-from scripts.walkers import build_corpus  # noqa: E402
+from scripts.miners import build_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures: minimal staging-file rule shapes
@@ -47,7 +47,6 @@ def _ast_rule(
     severity: str = "error",
     fields: dict[str, Any] | None = None,
     message: str = "max_new_tokens must be > 0 (AST-derived).",
-    confidence: str = "high",
     line: int = 352,
     kwargs_positive: dict[str, Any] | None = None,
     kwargs_negative: dict[str, Any] | None = None,
@@ -60,11 +59,10 @@ def _ast_rule(
         "rule_under_test": "max_new_tokens > 0",
         "severity": severity,
         "native_type": "transformers.GenerationConfig",
-        "walker_source": {
+        "miner_source": {
             "path": "transformers/generation/configuration_utils.py",
             "method": "validate",
             "line_at_scan": line,
-            "walker_confidence": confidence,
         },
         "match": {
             "engine": "transformers",
@@ -79,7 +77,7 @@ def _ast_rule(
         },
         "message_template": message,
         "references": references or ["AST-walker reference"],
-        "added_by": "ast_walker",
+        "added_by": "static_miner",
         "added_at": "2026-04-25",
     }
 
@@ -90,7 +88,6 @@ def _introspection_rule(
     severity: str = "error",
     fields: dict[str, Any] | None = None,
     message: str = "`max_new_tokens` must be greater than 0, but is -1.",
-    confidence: str = "high",
     observed_messages: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
@@ -100,11 +97,10 @@ def _introspection_rule(
         "rule_under_test": "max_new_tokens > 0",
         "severity": severity,
         "native_type": "transformers.GenerationConfig",
-        "walker_source": {
+        "miner_source": {
             "path": "transformers/generation/configuration_utils.py",
             "method": "validate",
-            "line_at_scan": 0,  # introspection doesn't carry line numbers
-            "walker_confidence": confidence,
+            "line_at_scan": 0,
         },
         "match": {
             "engine": "transformers",
@@ -120,7 +116,7 @@ def _introspection_rule(
         },
         "message_template": message,
         "references": ["transformers.GenerationConfig — observed via construction-time ValueError"],
-        "added_by": "introspection",
+        "added_by": "dynamic_miner",
         "added_at": "2026-04-25",
     }
 
@@ -131,7 +127,7 @@ def _envelope(rules: list[dict[str, Any]], engine_version: str = "4.56.0") -> di
         "engine": "transformers",
         "engine_version": engine_version,
         "walker_pinned_range": ">=4.56,<4.57",
-        "walked_at": "2026-04-25T00:00:00Z",
+        "mined_at": "2026-04-25T00:00:00Z",
         "rules": rules,
     }
 
@@ -198,9 +194,9 @@ class TestFingerprint:
 class TestCrossValidation:
     def test_two_sources_one_fingerprint_merged_to_one_rule(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
-        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
-            staging, "transformers_introspection.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
         )
 
         rules, _envelope_out = build_corpus.merge_staging(
@@ -208,8 +204,8 @@ class TestCrossValidation:
         )
         assert len(rules) == 1
         merged = rules[0]
-        assert merged["added_by"] == "ast_walker"
-        assert merged["cross_validated_by"] == ["introspection"]
+        assert merged["added_by"] == "static_miner"
+        assert merged["cross_validated_by"] == ["dynamic_miner"]
 
     def test_introspection_message_overrides_ast_message(self, tmp_path: Path) -> None:
         # Per the precedence table, introspection's message_template wins
@@ -217,12 +213,12 @@ class TestCrossValidation:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope([_ast_rule(message="AST-derived placeholder.")]),
         )
         _write_staging(
             staging,
-            "transformers_introspection.yaml",
+            "transformers_dynamic_miner.yaml",
             _envelope([_introspection_rule(message="`max_new_tokens` must be > 0, but is -1.")]),
         )
 
@@ -239,7 +235,7 @@ class TestCrossValidation:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope(
                 [
                     _ast_rule(
@@ -252,7 +248,7 @@ class TestCrossValidation:
         intro = _introspection_rule()
         intro["kwargs_positive"] = {"max_new_tokens": -1}
         intro["kwargs_negative"] = {"max_new_tokens": 16}
-        _write_staging(staging, "transformers_introspection.yaml", _envelope([intro]))
+        _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
 
         rules, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
@@ -263,10 +259,10 @@ class TestCrossValidation:
 
     def test_observed_messages_carry_over_from_introspection(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
-        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
             staging,
-            "transformers_introspection.yaml",
+            "transformers_dynamic_miner.yaml",
             _envelope(
                 [
                     _introspection_rule(
@@ -283,36 +279,16 @@ class TestCrossValidation:
         observed = rules[0]["expected_outcome"].get("observed_messages")
         assert observed == ["`max_new_tokens` must be greater than 0, but is -1."]
 
-    def test_walker_confidence_takes_min_across_sources(self, tmp_path: Path) -> None:
-        # Even if both sources fingerprint the same, a "low" flag from any
-        # source must surface — cross-validation does not auto-promote.
-        staging = tmp_path / "_staging"
-        _write_staging(
-            staging,
-            "transformers_ast.yaml",
-            _envelope([_ast_rule(confidence="medium")]),
-        )
-        _write_staging(
-            staging,
-            "transformers_introspection.yaml",
-            _envelope([_introspection_rule(confidence="low")]),
-        )
-
-        rules, _ = build_corpus.merge_staging(
-            [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
-        )
-        assert rules[0]["walker_source"]["walker_confidence"] == "low"
-
     def test_references_unioned_across_sources(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope([_ast_rule(references=["AST ref 1"])]),
         )
         intro = _introspection_rule()
         intro["references"] = ["Introspection ref 2"]
-        _write_staging(staging, "transformers_introspection.yaml", _envelope([intro]))
+        _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
 
         rules, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
@@ -338,8 +314,8 @@ class TestDistinctFingerprints:
         intro = _introspection_rule(
             fields={"transformers.sampling.max_new_tokens": {"<": 0}},
         )
-        _write_staging(staging, "transformers_ast.yaml", _envelope([ast]))
-        _write_staging(staging, "transformers_introspection.yaml", _envelope([intro]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([ast]))
+        _write_staging(staging, "transformers_dynamic_miner.yaml", _envelope([intro]))
 
         rules, _ = build_corpus.merge_staging(
             [build_corpus._load_staging(p) for p in sorted(staging.glob("transformers_*.yaml"))]
@@ -347,7 +323,7 @@ class TestDistinctFingerprints:
         assert len(rules) == 2
         # Both keep their original added_by; neither has cross_validated_by.
         sources = {r["added_by"] for r in rules}
-        assert sources == {"ast_walker", "introspection"}
+        assert sources == {"static_miner", "dynamic_miner"}
         for r in rules:
             assert "cross_validated_by" not in r
 
@@ -362,7 +338,7 @@ class TestStability:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope(
                 [
                     _ast_rule(rule_id="rule_b", fields={"transformers.sampling.top_k": 51}),
@@ -371,7 +347,7 @@ class TestStability:
             ),
         )
         _write_staging(
-            staging, "transformers_introspection.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
         )
 
         first = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
@@ -382,7 +358,7 @@ class TestStability:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope(
                 [
                     _ast_rule(rule_id="zzz_late", fields={"f1": 1}),
@@ -404,9 +380,9 @@ class TestStability:
 class TestCheckMode:
     def test_check_passes_when_corpus_matches_staging(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
-        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
-            staging, "transformers_introspection.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
         )
 
         # Build then immediately check -> should pass.
@@ -416,14 +392,14 @@ class TestCheckMode:
 
     def test_check_fails_with_diff_on_drift(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
-        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
 
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
 
         # Mutate staging to introduce drift.
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope([_ast_rule(message="Different message — drift!")]),
         )
         code, diff = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
@@ -432,7 +408,7 @@ class TestCheckMode:
 
     def test_check_returns_2_when_canonical_corpus_missing(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
-        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         # No write_corpus call — canonical YAML missing.
         code, msg = build_corpus.check_drift("transformers", tmp_path, skip_validation=True)
         assert code == 2
@@ -469,9 +445,9 @@ class TestEmptyStaging:
 class TestLoaderRoundTrip:
     def test_merger_output_loads_via_vendoredrulesloader(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
-        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
         _write_staging(
-            staging, "transformers_introspection.yaml", _envelope([_introspection_rule()])
+            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
         )
 
         build_corpus.write_corpus("transformers", tmp_path, skip_validation=True)
@@ -480,8 +456,8 @@ class TestLoaderRoundTrip:
         parsed = loader.load_rules("transformers")
         assert len(parsed.rules) == 1
         rule = parsed.rules[0]
-        assert rule.added_by == "ast_walker"
-        assert rule.cross_validated_by == ("introspection",)
+        assert rule.added_by == "static_miner"
+        assert rule.cross_validated_by == ("dynamic_miner",)
 
     def test_loader_rejects_unknown_cross_validated_by_value(self, tmp_path: Path) -> None:
         # Bypass the merger's single-source normalisation by writing a
@@ -555,7 +531,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope([_ast_rule(rule_id="rule_kept")]),
         )
 
@@ -582,7 +558,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope(
                 [
                     _ast_rule(rule_id="rule_bad", fields={"f1": 1}),
@@ -617,7 +593,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope(
                 [
                     _ast_rule(rule_id="rule_a", fields={"f1": 1}),
@@ -655,7 +631,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope([_ast_rule(rule_id="rule_bad")]),
         )
 
@@ -694,7 +670,7 @@ class TestVendorValidationGate:
         stale.write_text("schema_version: 1.0.0\nengine: transformers\nquarantined_rules: []\n")
 
         monkeypatch.setattr(vr, "vendor_engine", _stub_vendor_engine())
-        _write_staging(staging, "transformers_ast.yaml", _envelope([_ast_rule()]))
+        _write_staging(staging, "transformers_static_miner.yaml", _envelope([_ast_rule()]))
 
         build_corpus.write_corpus("transformers", tmp_path)
         assert not stale.exists(), (
@@ -716,7 +692,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope(
                 [
                     _ast_rule(rule_id="rule_bad", fields={"f1": 1}),
@@ -754,7 +730,7 @@ class TestVendorValidationGate:
         staging = tmp_path / "_staging"
         _write_staging(
             staging,
-            "transformers_ast.yaml",
+            "transformers_static_miner.yaml",
             _envelope([_ast_rule(rule_id="rule_real")]),
         )
 
@@ -765,4 +741,4 @@ class TestVendorValidationGate:
 
         discovered = build_corpus.discover_staging_files("transformers", tmp_path)
         assert merged_candidates not in discovered
-        assert (staging / "transformers_ast.yaml") in discovered
+        assert (staging / "transformers_static_miner.yaml") in discovered

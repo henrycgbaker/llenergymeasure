@@ -23,7 +23,7 @@ schema_version: "1.0.0"
 engine: transformers
 engine_version: "4.56.0"
 walker_pinned_range: ">=4.50,<5.0"
-walked_at: "2026-04-23T00:00:00Z"
+mined_at: "2026-04-23T00:00:00Z"
 rules:
   - id: ...
   - id: ...
@@ -35,10 +35,10 @@ rules:
 - `engine_version` — the library version the corpus was seeded against.
   Informational; the vendor CI pipeline (50.2b) will revalidate against each
   Dockerfile-pinned version.
-- `walker_pinned_range` — echoes the walker module's `TESTED_AGAINST_VERSIONS`
+- `walker_pinned_range` — echoes the miner module's `TESTED_AGAINST_VERSIONS`
   constant. CI fails if the installed library is outside range.
-- `walked_at` — ISO-8601 UTC timestamp of the walker run. Byte-reproducibility
-  via `LLENERGY_WALKER_FROZEN_AT=<timestamp>` env variable.
+- `mined_at` — ISO-8601 UTC timestamp of the miner run. Byte-reproducibility
+  via `LLENERGY_MINER_FROZEN_AT=<timestamp>` env variable.
 
 ## Rule schema
 
@@ -53,11 +53,10 @@ Every entry under `rules:` must populate the following fields.
     do_sample=False and `temperature` is set to a non-default value
   severity: dormant                      # dormant | warn | error
   native_type: transformers.GenerationConfig
-  walker_source:
+  miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
     line_at_scan: 598
-    walker_confidence: high              # high | medium | low
   match:
     engine: transformers
     fields:
@@ -82,7 +81,7 @@ Every entry under `rules:` must populate the following fields.
     Remove it or set do_sample=True.
   references:
     - "transformers.GenerationConfig.validate() (line ~598)"
-  added_by: ast_walker                   # ast_walker | manual_seed | runtime_warning_pr | observed_collision_pr
+  added_by: static_miner                 # static_miner | dynamic_miner | manual_seed | runtime_warning | observed_collision
   added_at: "2026-04-23"
 ```
 
@@ -172,7 +171,7 @@ predicate rather than raising.
 
 ### ID convention
 
-`{engine}_{rule_summary_snake}` — unique within engine. Walker-authored IDs
+`{engine}_{rule_summary_snake}` — unique within engine. Miner-authored IDs
 encode the pattern (`greedy_strips_X`, `single_beam_strips_X`,
 `bnb_X_type`); manual seeds use a descriptive snake-case tail.
 
@@ -192,19 +191,19 @@ Phase 50.2b's vendor CI gate extends them.
 
 ## Adding a rule
 
-### Via walker (preferred)
+### Via miner (preferred)
 
-1. Rerun the walker for the engine:
-   `python -m scripts.walkers.{engine} --out configs/validation_rules/{engine}.yaml`
-   (optionally with `LLENERGY_WALKER_FROZEN_AT=<iso-utc>` for reproducibility).
-2. Inspect the diff against the previous corpus file. Walker-marked `high`
-   entries are usually safe; `medium`/`low` need explicit review.
+1. Rerun the miner for the engine:
+   `python -m scripts.miners.{engine}_miner --out configs/validation_rules/{engine}.yaml`
+   (optionally with `LLENERGY_MINER_FROZEN_AT=<iso-utc>` for reproducibility).
+2. Inspect the diff against the previous corpus file. Review the predicate
+   shape and verify it matches the library source before merging.
 3. Open a draft PR. Phase 50.2b's CI gate will verify each rule fires on
    `kwargs_positive` and doesn't fire on `kwargs_negative`.
 
 ### Via manual seed
 
-Some rules live outside walker scope (e.g., vLLM's greedy-strip in
+Some rules live outside miner scope (e.g., vLLM's greedy-strip in
 `EngineArgs.create_engine_config()` rather than `__post_init__`). Author the
 YAML entry directly:
 
@@ -217,7 +216,7 @@ YAML entry directly:
 ### Via feedback loop
 
 Phase 50.3 introduces two automated discovery channels: runtime warning
-capture (`runtime_warning_pr`) and observed-collision detection (`observed_collision_pr`).
+capture (`runtime_warning`) and observed-collision detection (`observed_collision`).
 Both open draft PRs with `added_by` set accordingly.
 
 ## PR review checklist
@@ -228,8 +227,7 @@ When reviewing a corpus PR:
 - [ ] Each new rule's `message_template` reads correctly when substituted.
 - [ ] `kwargs_positive` genuinely triggers the rule in the target library.
 - [ ] `kwargs_negative` genuinely does NOT trigger it.
-- [ ] `walker_source.path` is a stable relative path (site-packages-rooted).
-- [ ] Confidence downgrades (`high` → `medium`/`low`) carry a justifying comment.
+- [ ] `miner_source.path` is a stable relative path (site-packages-rooted).
 
 ## Non-goals
 

@@ -95,8 +95,8 @@ record what users see, not the internal staging buffer.
 """
 
 AddedBy = Literal[
-    "ast_walker",
-    "introspection",
+    "static_miner",
+    "dynamic_miner",
     "manual_seed",
     "runtime_warning",
     "observed_collision",
@@ -105,12 +105,12 @@ AddedBy = Literal[
 
 Five discovery paths with distinct trust/verifiability profiles:
 
-- ``ast_walker`` — rule extracted by parsing Python source AST
-  (used by vLLM / TRT-LLM walkers; CI can re-derive on library bump).
-- ``introspection`` — rule extracted via library-API introspection
+- ``static_miner`` — rule extracted by parsing Python source AST
+  (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
+- ``dynamic_miner`` — rule extracted via library-API introspection
   (transformers' ``GenerationConfig.validate(strict=True)`` returning
   structured ``minor_issues`` dict; CI can re-derive on library bump).
-- ``manual_seed`` — hand-written by a maintainer for cases the walkers
+- ``manual_seed`` — hand-written by a maintainer for cases the miners
   can't reach (e.g. BNB type rules; not auto-regenerable).
 - ``runtime_warning`` — proposed by the feedback loop from captured
   ``logger.warning_once`` emissions (needs human generalisation before
@@ -196,15 +196,15 @@ class Rule:
     kwargs_negative: dict[str, Any]
     expected_outcome: dict[str, Any]
     message_template: str | None
-    walker_source: dict[str, Any]
+    miner_source: dict[str, Any]
     references: tuple[str, ...]
     added_by: str
     added_at: str
     cross_validated_by: tuple[str, ...] = ()
-    """Other extractor sources that produced the same fingerprint as this rule.
+    """Other miner sources that produced the same fingerprint as this rule.
 
     Empty for single-source rules. Populated by the corpus merger
-    (``scripts/walkers/build_corpus.py``) when two or more extractors
+    (``scripts/miners/build_corpus.py``) when two or more miners
     independently emitted a rule with the same ``(engine, severity,
     match.fields)`` fingerprint. ``added_by`` remains the *primary*
     source (used for downstream filtering); ``cross_validated_by`` is
@@ -585,7 +585,7 @@ def _parse_rule(raw: dict[str, Any]) -> Rule:
         kwargs_negative=dict(raw["kwargs_negative"]),
         expected_outcome=expected_outcome,
         message_template=raw.get("message_template"),
-        walker_source=dict(raw.get("walker_source") or {}),
+        miner_source=dict(raw.get("miner_source") or raw.get("walker_source") or {}),
         references=tuple(raw.get("references") or ()),
         added_by=added_by,
         added_at=str(raw.get("added_at", "")),
@@ -666,7 +666,7 @@ class VendoredRulesLoader:
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Vendored rules for engine {engine!r} not found at {yaml_path}. "
-                f"Run `python -m scripts.walkers.{engine} --out {yaml_path}` to generate."
+                f"Run `python -m scripts.miners.{engine}_miner --out {yaml_path}` to generate."
             ) from exc
 
         parsed = _parse_envelope(engine, yaml_text)

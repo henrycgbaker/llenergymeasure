@@ -21,7 +21,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts import _vendor_common, diff_rules, vendor_rules  # noqa: E402
 from scripts._vendor_common import run_case  # noqa: E402
-from scripts.walkers._fixpoint_test import fixpoint_test_corpus  # noqa: E402
+from scripts.miners._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Synthetic corpus + runner
@@ -33,7 +33,7 @@ schema_version: 1.0.0
 engine: transformers
 engine_version: test-1.0.0
 walker_pinned_range: test-range
-walked_at: 2026-04-23T00:00:00Z
+mined_at: 2026-04-23T00:00:00Z
 rules:
   - id: synthetic_error
     engine: transformers
@@ -41,7 +41,7 @@ rules:
     rule_under_test: Synthetic raises on bad input
     severity: error
     native_type: fixture.raises
-    walker_source: {path: fixture.py, method: __init__, line_at_scan: 0, walker_confidence: high}
+    miner_source: {path: fixture.py, method: __init__, line_at_scan: 0}
     match:
       engine: transformers
       fields:
@@ -62,7 +62,7 @@ rules:
     rule_under_test: Synthetic silent strip
     severity: dormant
     native_type: fixture.normalises
-    walker_source: {path: fixture.py, method: __init__, line_at_scan: 0, walker_confidence: high}
+    miner_source: {path: fixture.py, method: __init__, line_at_scan: 0}
     match:
       engine: transformers
       fields:

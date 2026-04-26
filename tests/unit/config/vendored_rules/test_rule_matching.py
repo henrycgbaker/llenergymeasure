@@ -61,9 +61,9 @@ def _make_rule(
             "normalised_fields": [],
         },
         message_template=message,
-        walker_source={},
+        miner_source={},
         references=(),
-        added_by="ast_walker",
+        added_by="static_miner",
         added_at="2026-04-23",
     )
 

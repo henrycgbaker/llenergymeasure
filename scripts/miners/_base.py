@@ -1,22 +1,22 @@
-"""Shared infrastructure for per-engine validation-rule walkers.
+"""Shared infrastructure for per-engine validation-rule miners.
 
-Walker depth is fixed at 1 (same module, no helper-call tracing). This
+Miner depth is fixed at 1 (same module, no helper-call tracing). This
 module ships the AST primitives and pattern detectors that future
-per-engine walkers will compose to extract validation rules from pinned
-library source. No concrete walker ships today; they land as independent
+per-engine miners will compose to extract validation rules from pinned
+library source. No concrete miner ships today; they land as independent
 PRs per engine.
 
-- :class:`RuleCandidate` — the walker output type, serialised to the YAML
+- :class:`RuleCandidate` — the miner output type, serialised to the YAML
   corpus entry shape in :mod:`llenergymeasure.config.vendored_rules.loader`.
-- :class:`WalkerVersionMismatchError`, :class:`WalkerLandmarkMissingError` —
+- :class:`MinerVersionMismatchError`, :class:`MinerLandmarkMissingError` —
   fail-loud exceptions CI treats as fatal.
-- :func:`check_installed_version` — version-envelope guard for each walker.
+- :func:`check_installed_version` — version-envelope guard for each miner.
 - AST helpers (:func:`extract_condition_fields`, :func:`resolve_local_assign`,
-  etc.) — deterministic, stateless primitives for AST-based walkers.
+  etc.) — deterministic, stateless primitives for AST-based miners.
 - Pattern detectors (``ConditionalRaiseDetector``, etc.) — one class per
   known library rule shape; each fires on one ``ast.If`` body at a time.
 
-Tests cover each primitive on synthetic AST fixtures; the per-engine walkers
+Tests cover each primitive on synthetic AST fixtures; the per-engine miners
 run against pinned real libraries.
 """
 
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
-from typing import Any, Literal, get_args
+from typing import Any, Literal
 
 from packaging import version as pkg_version
 from packaging.specifiers import SpecifierSet
@@ -42,21 +42,13 @@ EmissionChannel = Literal[
     "runtime_exception",
     "none",
 ]
-Confidence = Literal["high", "medium", "low"]
-
-VALID_CONFIDENCE: frozenset[str] = frozenset(get_args(Confidence))
-"""Closed enum for :attr:`WalkerSource.walker_confidence` — tests defer
-to this constant rather than duplicating the literal set."""
-
-
 @dataclass
-class WalkerSource:
-    """Provenance for a walker-extracted rule candidate."""
+class MinerSource:
+    """Provenance for a miner-extracted rule candidate."""
 
     path: str
     method: str
     line_at_scan: int
-    walker_confidence: Confidence
 
 
 @dataclass
@@ -74,14 +66,14 @@ class RuleCandidate:
     rule_under_test: str
     severity: Severity
     native_type: str
-    walker_source: WalkerSource
+    miner_source: MinerSource
     match_fields: dict[str, Any]
     kwargs_positive: dict[str, Any]
     kwargs_negative: dict[str, Any]
     expected_outcome: dict[str, Any]
     message_template: str | None
     references: list[str] = field(default_factory=list)
-    added_by: str = "ast_walker"
+    added_by: str = "static_miner"
     added_at: str = ""
 
 
@@ -91,22 +83,22 @@ class RuleCandidate:
 # ---------------------------------------------------------------------------
 
 
-class WalkerError(Exception):
-    """Base class for structured walker failures."""
+class MinerError(Exception):
+    """Base class for structured miner failures."""
 
 
-class WalkerVersionMismatchError(WalkerError):
-    """Raised when the installed library version is outside the walker's pin.
+class MinerVersionMismatchError(MinerError):
+    """Raised when the installed library version is outside the miner's pin.
 
-    The walker is pinned to the library version it was authored against; on
+    The miner is pinned to the library version it was authored against; on
     library-bump PRs, Renovate will trip this error and the maintainer updates
-    the walker. See runtime-config-validation.md §4.2.
+    the miner. See runtime-config-validation.md §4.2.
     """
 
     def __init__(self, library: str, installed: str, expected: SpecifierSet) -> None:
         super().__init__(
-            f"Installed {library}=={installed} is outside walker-pinned range "
-            f"{expected!s}. Update scripts/walkers/{library}.py "
+            f"Installed {library}=={installed} is outside miner-pinned range "
+            f"{expected!s}. Update scripts/miners/{library}.py "
             f"(bump TESTED_AGAINST_VERSIONS and re-run against the new source)."
         )
         self.library = library
@@ -114,16 +106,16 @@ class WalkerVersionMismatchError(WalkerError):
         self.expected = expected
 
 
-class WalkerLandmarkMissingError(WalkerError):
+class MinerLandmarkMissingError(MinerError):
     """Raised when an expected source landmark (class/method/file) is missing.
 
     Library refactors (class renamed, method split, file relocated) trip this
-    error and the walker refuses to emit partial output. This is load-bearing
+    error and the miner refuses to emit partial output. This is load-bearing
     for the "silent coverage loss becomes a visible CI failure" contract.
     """
 
     def __init__(self, landmark: str, detail: str = "") -> None:
-        msg = f"Walker landmark missing: {landmark}"
+        msg = f"Miner landmark missing: {landmark}"
         if detail:
             msg = f"{msg} ({detail})"
         super().__init__(msg)
@@ -137,7 +129,7 @@ class WalkerLandmarkMissingError(WalkerError):
 
 
 def check_installed_version(library: str, installed: str, expected: SpecifierSet) -> None:
-    """Raise :class:`WalkerVersionMismatchError` if ``installed`` isn't in ``expected``.
+    """Raise :class:`MinerVersionMismatchError` if ``installed`` isn't in ``expected``.
 
     ``SpecifierSet.contains(..., prereleases=True)`` allows rc / beta tags,
     which is what we want for Renovate-opened PRs that bump to a prerelease
@@ -146,9 +138,9 @@ def check_installed_version(library: str, installed: str, expected: SpecifierSet
     try:
         parsed = pkg_version.Version(installed)
     except pkg_version.InvalidVersion as exc:
-        raise WalkerVersionMismatchError(library, installed, expected) from exc
+        raise MinerVersionMismatchError(library, installed, expected) from exc
     if not expected.contains(parsed, prereleases=True):
-        raise WalkerVersionMismatchError(library, installed, expected)
+        raise MinerVersionMismatchError(library, installed, expected)
 
 
 # ---------------------------------------------------------------------------
@@ -527,29 +519,11 @@ def filter_kwargs_positive_derivable(condition: ast.expr) -> bool:
     return True
 
 
-def score_confidence(pass_count: int) -> Confidence:
-    """Map 0-3 filter-pass count to a confidence tier.
-
-    3 passes → ``high``. 2 → ``medium``. 0-1 → ``low``.
-
-    The tier thresholds are deliberately simple: three-hot = high, two-hot =
-    medium, else low. No target distribution is enforced — the design's
-    earlier 60/25/15 target was descoped pending empirical calibration
-    against real walker output. Callers should treat ``medium`` / ``low``
-    as "needs human review before landing", not as a quality score.
-    """
-    if pass_count >= 3:
-        return "high"
-    if pass_count == 2:
-        return "medium"
-    return "low"
-
-
 def candidate_to_dict(candidate: RuleCandidate) -> dict[str, Any]:
     """Serialize a RuleCandidate to the YAML corpus dict shape.
 
-    Used by all per-engine walkers (introspection + AST) to emit staging files.
-    Ensures consistent schema across all extractors.
+    Used by all per-engine miners (dynamic + static) to emit staging files.
+    Ensures consistent schema across all miners.
     """
     return {
         "id": candidate.id,
@@ -558,11 +532,10 @@ def candidate_to_dict(candidate: RuleCandidate) -> dict[str, Any]:
         "rule_under_test": candidate.rule_under_test,
         "severity": candidate.severity,
         "native_type": candidate.native_type,
-        "walker_source": {
-            "path": candidate.walker_source.path,
-            "method": candidate.walker_source.method,
-            "line_at_scan": candidate.walker_source.line_at_scan,
-            "walker_confidence": candidate.walker_source.walker_confidence,
+        "miner_source": {
+            "path": candidate.miner_source.path,
+            "method": candidate.miner_source.method,
+            "line_at_scan": candidate.miner_source.line_at_scan,
         },
         "match": {
             "engine": candidate.engine,
