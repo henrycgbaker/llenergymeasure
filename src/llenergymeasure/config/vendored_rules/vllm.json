@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "vllm",
+  "engine_version": "unknown",
+  "image_ref": "llenergymeasure:vllm",
+  "base_image_ref": "llenergymeasure:vllm",
+  "vendored_at": "2026-04-26T10:46:57+02:00",
+  "vendor_commit": "54c14c8d795058706501ffaa172c15c10f77f6bd",
+  "cases": [],
+  "divergences": []
+}
