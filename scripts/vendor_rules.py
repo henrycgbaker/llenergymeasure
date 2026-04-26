@@ -174,22 +174,8 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
     return cls(**kwargs)
 
 
-def _run_vllm(native_type: str, kwargs: dict[str, Any], *, strict_validate: bool) -> CaptureBuffers:
-    """Execute one rule's kwargs through the vLLM library.
-
-    vLLM validates in ``__post_init__`` at construction time, so
-    ``strict_validate`` has no effect (kept for protocol compatibility).
-    """
-    return run_case(
-        lambda: _construct_generic(native_type, kwargs),
-        logger_names=("vllm", "vllm.logger"),
-        private_allowlist=frozenset(),
-    )
-
-
 _ENGINE_RUNNERS = {
     "transformers": _run_transformers,
-    "vllm": _run_vllm,
 }
 
 
