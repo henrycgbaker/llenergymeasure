@@ -25,15 +25,18 @@ import argparse
 import datetime as dt
 import os
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Guard against script-directory shadowing (e.g. avoid local stub imports).
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+sys.path[:] = [p for p in sys.path if Path(p).resolve() != Path(_SCRIPT_DIR).resolve()]
+sys.path[:] = [p for p in sys.path if p != ""]
 
 from scripts.walkers._base import RuleCandidate, WalkerSource, candidate_to_dict  # noqa: E402
 
@@ -47,16 +50,6 @@ NATIVE_TYPE_SAMPLING = "vllm.SamplingParams"
 
 # vLLM's SamplingParams namespace (where fields are exposed in config model)
 SAMPLINGPARAMS_NAMESPACE = "vllm.sampling"
-
-
-@dataclass(frozen=True)
-class _ProbeRow:
-    """One trial row from the probe matrix."""
-
-    kwargs: dict[str, Any]
-    construct_error: str | None
-    construct_message_class: str | None
-    validate_error: str | None
 
 
 def _resolve_source_paths() -> tuple[str, str, str]:
@@ -91,38 +84,6 @@ def _resolve_source_paths() -> tuple[str, str, str]:
     return version, abs_path, rel_path
 
 
-def _get_field_info(cls: Any) -> dict[str, tuple[Any, Any]]:
-    """Extract {field_name: (default, type_hint)} from a dataclass or msgspec struct.
-
-    For msgspec Struct classes, use ``__struct_fields__`` if available.
-    For dataclasses, use ``dataclasses.fields()``.
-    """
-    import dataclasses
-
-    result: dict[str, tuple[Any, Any]] = {}
-
-    # Try msgspec Struct first (vLLM uses msgspec for SamplingParams)
-    if hasattr(cls, "__struct_fields__"):
-        for field_name in cls.__struct_fields__:
-            if not field_name.startswith("_"):
-                try:
-                    # Create a minimal instance to get defaults
-                    default = getattr(cls(), field_name, None)
-                    type_hint = cls.__annotations__.get(field_name, type(None))
-                    result[field_name] = (default, type_hint)
-                except Exception:
-                    # Skip fields we can't introspect
-                    pass
-    # Fallback to dataclasses
-    elif dataclasses.is_dataclass(cls):
-        for f in dataclasses.fields(cls):
-            if not f.name.startswith("_"):
-                default = f.default if f.default is not dataclasses.MISSING else None
-                result[f.name] = (default, f.type)
-
-    return result
-
-
 def _enumerate_field_rules(
     abs_source_path: str,
     rel_source_path: str,
@@ -135,17 +96,9 @@ def _enumerate_field_rules(
     """
     candidates: list[RuleCandidate] = []
 
-    # Try to import SamplingParams for live introspection; if that fails,
-    # we still emit the hand-curated rules based on source code analysis.
-    try:
-        from vllm import SamplingParams
-
-        _field_info = _get_field_info(SamplingParams)
-    except ImportError:
-        # vLLM not importable (likely missing msgspec); proceed with curated rules
-        pass
-
-    # Hand-curated rules for known constraints in vLLM (from reading __post_init__)
+    # Hand-curated rules transcribed from vLLM's __post_init__ source. TODO:
+    # replace with msgspec.inspect-based introspection of SamplingParams once
+    # the bounds-extraction helper lands. Tracked in follow-up issue.
     rules = [
         {
             "id": "vllm_n_must_be_positive",
@@ -336,34 +289,6 @@ def _enumerate_field_rules(
     return candidates
 
 
-def _enumerate_dormancy_rules(
-    abs_source_path: str,
-    rel_source_path: str,
-    today: str,
-) -> list[RuleCandidate]:
-    """Enumerate silence assignments in vLLM's __post_init__.
-
-    vLLM performs several silent assignments:
-    - temperature < _SAMPLING_EPS (1e-5) → top_p=1.0, top_k=-1, min_p=0.0 (greedy)
-    - best_of set → n=best_of, _real_n=original_n
-    - stop converted to list if string
-    - stop_token_ids converted to list
-    - bad_words converted to list
-
-    Note: As of vLLM 0.6.5, many of these are silent normalizations that
-    happen after validation, so they may not trigger dormancy warnings in
-    the expected_outcome sense. The rules below capture what actually happens.
-    """
-    candidates: list[RuleCandidate] = []
-
-    # For now, we skip dormancy rules since vLLM's implementation differs from
-    # transformers. The error rules above capture the validation constraints.
-    # Dormancy rules would need empirical probing with actual SamplingParams
-    # to determine the true behaviour (silent vs warned vs error).
-
-    return candidates
-
-
 def main(argv: list[str] | None = None) -> int:
     """Run the introspection extractor end-to-end and write the staging YAML."""
     parser = argparse.ArgumentParser(description="vLLM introspection walker")
@@ -378,11 +303,7 @@ def main(argv: list[str] | None = None) -> int:
 
     candidates: list[RuleCandidate] = []
 
-    # Enumerate field constraint rules
     candidates.extend(_enumerate_field_rules(abs_source_path, rel_source_path, today))
-
-    # Enumerate silent normalisation rules
-    candidates.extend(_enumerate_dormancy_rules(abs_source_path, rel_source_path, today))
 
     # Stable order: by walker_source.method, then by id
     candidates_sorted = sorted(candidates, key=lambda c: (c.walker_source.method, c.id))
