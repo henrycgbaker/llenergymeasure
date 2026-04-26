@@ -97,19 +97,29 @@ record what users see, not the internal staging buffer.
 AddedBy = Literal[
     "static_miner",
     "dynamic_miner",
+    "pydantic_lift",
+    "msgspec_lift",
+    "dataclass_lift",
     "manual_seed",
     "runtime_warning",
     "observed_collision",
 ]
 """Provenance of a rule in the corpus.
 
-Five discovery paths with distinct trust/verifiability profiles:
+Eight discovery paths with distinct trust/verifiability profiles:
 
 - ``static_miner`` — rule extracted by parsing Python source AST
   (used by vLLM / TRT-LLM miners; CI can re-derive on library bump).
 - ``dynamic_miner`` — rule extracted via library-API introspection
   (transformers' ``GenerationConfig.validate(strict=True)`` returning
   structured ``minor_issues`` dict; CI can re-derive on library bump).
+- ``pydantic_lift`` — rule extracted from a ``pydantic.BaseModel`` (or
+  ``pydantic.dataclasses.dataclass``) via ``model_json_schema()`` plus
+  ``FieldInfo.metadata`` (annotated-types constraints + Literal allowlists).
+- ``msgspec_lift`` — rule extracted from a ``msgspec.Struct`` via
+  ``msgspec.inspect.type_info`` (``Meta(ge=, le=, ...)`` constraints).
+- ``dataclass_lift`` — rule extracted from a ``@dataclasses.dataclass``
+  via ``dataclasses.fields()`` plus ``Literal[...]`` annotation parsing.
 - ``manual_seed`` — hand-written by a maintainer for cases the miners
   can't reach (e.g. BNB type rules; not auto-regenerable).
 - ``runtime_warning`` — proposed by the feedback loop from captured

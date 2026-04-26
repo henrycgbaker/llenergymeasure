@@ -159,12 +159,15 @@ def test_default_corpus_root_resolves_to_configs(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_valid_added_by_set_has_all_five_provenance_classes() -> None:
+def test_valid_added_by_set_has_all_provenance_classes() -> None:
     assert (
         frozenset(
             {
                 "static_miner",
                 "dynamic_miner",
+                "pydantic_lift",
+                "msgspec_lift",
+                "dataclass_lift",
                 "manual_seed",
                 "runtime_warning",
                 "observed_collision",
@@ -176,7 +179,16 @@ def test_valid_added_by_set_has_all_five_provenance_classes() -> None:
 
 @pytest.mark.parametrize(
     "provenance",
-    ["static_miner", "dynamic_miner", "manual_seed", "runtime_warning", "observed_collision"],
+    [
+        "static_miner",
+        "dynamic_miner",
+        "pydantic_lift",
+        "msgspec_lift",
+        "dataclass_lift",
+        "manual_seed",
+        "runtime_warning",
+        "observed_collision",
+    ],
 )
 def test_all_added_by_values_round_trip(tmp_path: Path, provenance: str) -> None:
     corpus = _CORPUS_MINIMAL.replace("added_by: static_miner", f"added_by: {provenance}")

@@ -204,6 +204,9 @@ def _canonical_path(corpus_root: Path, engine: str) -> Path:
 _PROVENANCE_PRIORITY: tuple[str, ...] = (
     "static_miner",
     "dynamic_miner",
+    "pydantic_lift",
+    "msgspec_lift",
+    "dataclass_lift",
     "manual_seed",
     "runtime_warning",
     "observed_collision",
