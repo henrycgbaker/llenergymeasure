@@ -62,6 +62,18 @@ See [Installation](docs/installation.md) for system requirements, Docker setup, 
 | [Getting Started (Policy Maker)](docs/guide-getting-started.md) | Minimal path to running a measurement |
 | [Comparison with Other Benchmarks](docs/guide-comparison-context.md) | MLPerf, AI Energy Score, CodeCarbon, Zeus context |
 
+### Architecture and Internals
+
+| Guide | Description |
+|-------|-------------|
+| [Architecture Overview](docs/architecture-overview.md) | System diagram, pipeline overview, key concepts |
+| [Invariant Miner Pipeline](docs/miner-pipeline.md) | How validation rules are extracted from engine library source |
+| [Config Validation Pipeline](docs/parameter-discovery.md) | How configs are validated before engine initialisation |
+| [Validation Rule Corpus Format](docs/validation-rule-corpus.md) | YAML schema reference for corpus rules |
+| [Extending the Miner](docs/extending-miners.md) | How to add a new engine to the invariant miner |
+| [Research Context](docs/research-context.md) | Academic positioning: Daikon, Houdini, NeuRI, and what is novel |
+| [Schema Refresh Pipeline](docs/schema-refresh.md) | Renovate-driven engine schema refresh |
+
 ---
 
 ## Contributing
