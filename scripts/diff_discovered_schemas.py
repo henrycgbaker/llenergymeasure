@@ -4,7 +4,7 @@
 Classifies changes between two schema versions as safe or breaking.
 
 Usage:
-    python scripts/diff_schemas.py old.json new.json
+    python scripts/diff_discovered_schemas.py old.json new.json
 
 Exit codes:
     0 = identical or safe changes only
@@ -177,7 +177,7 @@ def _change_to_dict(c: Change) -> dict:
 
 def main() -> int:
     if len(sys.argv) != 3:
-        print("Usage: diff_schemas.py <old.json> <new.json>", file=sys.stderr)
+        print("Usage: diff_discovered_schemas.py <old.json> <new.json>", file=sys.stderr)
         return 2
 
     old_path = Path(sys.argv[1])

@@ -23,7 +23,7 @@ Renovate opens PR bumping ARG in Dockerfile
 e.g. ARG VLLM_VERSION=v0.7.3 -> v0.8.0
                       |
                       v
-schema-refresh.yml auto-fires
+parameter-discovery.yml auto-fires
 (guarded: only for renovate[bot] PRs touching Dockerfiles)
                       |
                       v
@@ -33,7 +33,7 @@ schema-refresh.yml auto-fires
 |  2. Runs discover_engine_schemas.py      |
 |     inside the container                 |
 |  3. Compares old vs new schema           |
-|     (scripts/diff_schemas.py)            |
+|     (scripts/diff_discovered_schemas.py)            |
 |  4. Commits updated schema to PR         |
 |  5. Posts diff summary as PR comment     |
 |  6. Labels: schema-safe / schema-breaking|
@@ -55,11 +55,11 @@ Maintainer reviews PR:
    Docker Hub image tags (vLLM), NGC image tags (TensorRT-LLM), and PyPI
    package versions via `customManagers` regex (transformers). Weekly schedule,
    3-day stability window before opening a PR.
-2. When Renovate opens a PR, **schema-refresh.yml** auto-fires on the
+2. When Renovate opens a PR, **parameter-discovery.yml** auto-fires on the
    self-hosted GPU runner.
 3. The workflow determines which engine(s) changed by inspecting the modified
-   Dockerfile paths, then runs `./scripts/update_engine_schema.sh <engine>`.
-4. After discovery, `scripts/diff_schemas.py` classifies changes as safe or
+   Dockerfile paths, then runs `./scripts/refresh_discovered_schemas.sh <engine>`.
+4. After discovery, `scripts/diff_discovered_schemas.py` classifies changes as safe or
    breaking, commits the updated schema to the PR branch, posts a diff comment,
    and applies a label (`schema-safe` or `schema-breaking`).
 
@@ -82,15 +82,15 @@ Compares ARG version in Dockerfile vs engine_version in schema JSON
 ```
 
 On failure, the developer can either:
-- Run locally: `./scripts/update_engine_schema.sh <engine>`
-- Trigger remotely: `gh workflow run schema-refresh.yml --field engine=<engine> --field pr_number=<N>`
+- Run locally: `./scripts/refresh_discovered_schemas.sh <engine>`
+- Trigger remotely: `gh workflow run parameter-discovery.yml --field engine=<engine> --field pr_number=<N>`
 
 ### Manual Refresh (workflow_dispatch)
 
 For ad-hoc refreshes outside the Renovate flow:
 
 ```bash
-gh workflow run schema-refresh.yml \
+gh workflow run parameter-discovery.yml \
   --field engine=vllm \
   --field pr_number=123
 ```
@@ -99,7 +99,7 @@ gh workflow run schema-refresh.yml \
 
 ## Change Classification
 
-`scripts/diff_schemas.py` classifies parameter changes by comparing old and new
+`scripts/diff_discovered_schemas.py` classifies parameter changes by comparing old and new
 schema JSONs:
 
 | Change type         | Classification | Example                              |
@@ -119,7 +119,7 @@ Metadata fields (`discovered_at`, `engine_commit_sha`, `image_ref`,
 
 ## Handling Breaking Changes
 
-When schema-refresh labels a PR `schema-breaking`:
+When parameter-discovery labels a PR `schema-breaking`:
 
 1. Check which fields were removed/narrowed (see the PR comment diff)
 2. Update Pydantic models in `src/llenergymeasure/config/engine_configs.py`
@@ -133,11 +133,11 @@ When schema-refresh labels a PR `schema-breaking`:
 
 1. Create `docker/Dockerfile.<engine>` with an `ARG` version pin
 2. Add a discovery function in `scripts/discover_engine_schemas.py`
-3. Add a case to `scripts/update_engine_schema.sh`
-4. Run discovery: `./scripts/update_engine_schema.sh <engine>`
+3. Add a case to `scripts/refresh_discovered_schemas.sh`
+4. Run discovery: `./scripts/refresh_discovered_schemas.sh <engine>`
 5. Add a Renovate `packageRule` in `renovate.json`
 6. If the Dockerfile ARG maps directly to the engine version, add an entry to
-   `_ENGINE_SPECS` in `scripts/check_schema_versions.py`
+   `_ENGINE_SPECS` in `scripts/check_discovered_schema_versions.py`
 
 For engines pre-installed in their upstream Docker image (vLLM, TensorRT-LLM),
 the `dockerfile` manager monitors image tag bumps automatically. For engines
@@ -145,7 +145,7 @@ installed via pip on top of a base image (transformers), add a `customManagers`
 regex entry with `datasourceTemplate: "pypi"` to monitor PyPI releases against
 the Dockerfile `ARG` pin.
 
-The schema-refresh workflow and version guard automatically cover new engines
+The parameter-discovery workflow and version guard automatically cover new engines
 via path-based triggers (`docker/Dockerfile.*`).
 
 ---
@@ -154,7 +154,7 @@ via path-based triggers (`docker/Dockerfile.*`).
 
 - [Mend Renovate](https://github.com/apps/renovate) GitHub App installed on the
   repo (free for open-source)
-- Self-hosted GPU runner available for schema-refresh jobs
+- Self-hosted GPU runner available for parameter-discovery jobs
 - Docker + NVIDIA Container Toolkit on the runner
 
 ---
@@ -165,8 +165,8 @@ via path-based triggers (`docker/Dockerfile.*`).
 |---------|-------|-----|
 | Renovate not detecting bumps | `fileMatch` pattern doesn't cover the Dockerfile | Check Renovate dashboard, verify `docker/Dockerfile\\..*` matches |
 | Renovate not detecting transformers bumps | `customManagers` regex not matching | Verify `ARG TRANSFORMERS_VERSION=X.Y.Z` format in Dockerfile.transformers |
-| schema-refresh fails to import engine | Needs `--gpus all` | Verify GPU runner has NVIDIA drivers + Container Toolkit |
-| Version guard fails on non-version change | Won't happen - guard only compares version ARGs | If it does, check `_parse_arg` regex in `check_schema_versions.py` |
+| parameter-discovery fails to import engine | Needs `--gpus all` | Verify GPU runner has NVIDIA drivers + Container Toolkit |
+| Version guard fails on non-version change | Won't happen - guard only compares version ARGs | If it does, check `_parse_arg` regex in `check_discovered_schema_versions.py` |
 | NGC registry auth failure | Private image or rate-limited | Add `hostRules` to `renovate.json` |
 | Schema unchanged after discovery | Engine version didn't change params | Expected - workflow commits nothing and exits cleanly |
 

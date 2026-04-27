@@ -83,7 +83,7 @@ def main(repo_root: Path | None = None) -> int:
             mismatches.append(
                 f"MISMATCH: {dockerfile.name} pins {arg_name}={dockerfile_version} "
                 f"but schema was discovered against {schema_version}\n"
-                f"  Run: ./scripts/update_engine_schema.sh {engine}"
+                f"  Run: ./scripts/refresh_discovered_schemas.sh {engine}"
             )
 
     if errors:

@@ -1,4 +1,4 @@
-"""Tests for :mod:`scripts.vendor_rules` and :mod:`scripts._vendor_common`.
+"""Tests for :mod:`scripts.vendor_rules` and :mod:`scripts._invariant_vendor_common`.
 
 The test strategy: exercise the vendor script via synthetic native types —
 we construct small Pydantic / dataclass / ``__slots__`` fixtures and point
@@ -21,8 +21,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts import _vendor_common, vendor_rules  # noqa: E402
-from scripts._vendor_common import (  # noqa: E402
+from scripts import _invariant_vendor_common, vendor_rules  # noqa: E402
+from scripts._invariant_vendor_common import (  # noqa: E402
     CaptureBuffers,
     classify_emission_channel,
     classify_outcome,
@@ -197,7 +197,7 @@ class TestRunCase:
 
 class TestClassify:
     def test_error_on_exception(self) -> None:
-        buf = _vendor_common.CaptureBuffers(
+        buf = _invariant_vendor_common.CaptureBuffers(
             exception_type="ValueError",
             exception_message="x",
             warnings_captured=(),
@@ -209,7 +209,7 @@ class TestClassify:
         assert classify_emission_channel(buf) == "none"
 
     def test_warn_on_captured_warning(self) -> None:
-        buf = _vendor_common.CaptureBuffers(
+        buf = _invariant_vendor_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=("heads up",),
@@ -221,7 +221,7 @@ class TestClassify:
         assert classify_emission_channel(buf) == "warnings_warn"
 
     def test_dormant_announced_on_logger_only(self) -> None:
-        buf = _vendor_common.CaptureBuffers(
+        buf = _invariant_vendor_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -236,8 +236,8 @@ class TestClassify:
         # Any sentinel-tagged line upgrades the classification from
         # logger_warning to logger_warning_once — the dedup-wrapped form is
         # the stricter claim on user visibility.
-        sentinel = _vendor_common._WARNING_ONCE_SENTINEL
-        buf = _vendor_common.CaptureBuffers(
+        sentinel = _invariant_vendor_common._WARNING_ONCE_SENTINEL
+        buf = _invariant_vendor_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -248,14 +248,14 @@ class TestClassify:
         assert classify_emission_channel(buf) == "logger_warning_once"
 
     def test_strip_warning_once_sentinel_cleans_messages(self) -> None:
-        sentinel = _vendor_common._WARNING_ONCE_SENTINEL
+        sentinel = _invariant_vendor_common._WARNING_ONCE_SENTINEL
         messages = (f"{sentinel}deprecated kwarg", "plain log")
-        cleaned = _vendor_common.strip_warning_once_sentinel(messages)
+        cleaned = _invariant_vendor_common.strip_warning_once_sentinel(messages)
         assert cleaned == ("deprecated kwarg", "plain log")
         assert all(sentinel not in m for m in cleaned)
 
     def test_dormant_silent_on_state_change_only(self) -> None:
-        buf = _vendor_common.CaptureBuffers(
+        buf = _invariant_vendor_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -266,7 +266,7 @@ class TestClassify:
         assert classify_outcome(buf, {"a": {"declared": 2, "observed": 1}}) == "dormant_silent"
 
     def test_no_op_when_nothing_observed(self) -> None:
-        buf = _vendor_common.CaptureBuffers(
+        buf = _invariant_vendor_common.CaptureBuffers(
             exception_type=None,
             exception_message=None,
             warnings_captured=(),
@@ -331,7 +331,7 @@ class TestVendorRuleSynthetic:
     def patched_runner(self, monkeypatch: pytest.MonkeyPatch):
         def synthetic_runner(
             native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
-        ) -> _vendor_common.CaptureBuffers:
+        ) -> _invariant_vendor_common.CaptureBuffers:
             if native_type == "test.raises":
                 return run_case(lambda: (_ for _ in ()).throw(ValueError("expected")))
             if native_type == "test.normalises":

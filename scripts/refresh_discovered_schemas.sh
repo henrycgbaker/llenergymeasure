@@ -2,7 +2,7 @@
 # Rediscover a vendored engine schema by running discovery inside the
 # appropriate Docker image.
 #
-# Usage: ./scripts/update_engine_schema.sh {vllm|tensorrt|transformers}
+# Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 #
 # Always writes to src/llenergymeasure/config/discovered_schemas/<engine>.json
 # and prints the resulting `git diff`. Does NOT commit. The vendored JSON
@@ -25,7 +25,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/update_engine_schema.sh {vllm|tensorrt|transformers}
+Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 
 Builds or pulls the engine's discovery image, runs discovery inside it,
 writes src/llenergymeasure/config/discovered_schemas/<engine>.json, and

@@ -284,7 +284,7 @@ def test_enum_value_errors_share_common_base_class() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Vendored JSON overlay (config-rules-refresh CI)
+# Vendored JSON overlay (invariant-miner CI)
 # ---------------------------------------------------------------------------
 
 

@@ -1,4 +1,4 @@
-"""Smoke test for the config-rules-refresh workflow glue.
+"""Smoke test for the invariant-miner (vendor gate) workflow glue.
 
 Runs the vendor + diff + fixpoint pipeline end-to-end on a fixture corpus.
 Does NOT spin up Docker or require transformers — the vendor step is driven
@@ -19,8 +19,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts import _vendor_common, diff_rules, vendor_rules  # noqa: E402
-from scripts._vendor_common import run_case  # noqa: E402
+from scripts import _invariant_vendor_common, vendor_rules  # noqa: E402
+from scripts import diff_validation_rules as diff_rules  # noqa: E402
+from scripts._invariant_vendor_common import run_case  # noqa: E402
 from scripts.miners._fixpoint_test import fixpoint_test_corpus  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -91,7 +92,7 @@ class _Normaliser:
 
 def _synthetic_runner(
     native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
-) -> _vendor_common.CaptureBuffers:
+) -> _invariant_vendor_common.CaptureBuffers:
     if native_type == "fixture.raises":
         if kwargs.get("x", 0) > 0:
 

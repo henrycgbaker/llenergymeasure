@@ -14,7 +14,7 @@ per-instance caching for test isolation, same lazy load pattern.
 
 Corpus vs vendored JSON:
   The YAML corpus carries each rule's declared ``expected_outcome``. The
-  ``config-rules-refresh`` CI pipeline (see ``scripts/vendor_rules.py``)
+  ``invariant-miner`` (vendor gate) CI pipeline (see ``scripts/vendor_rules.py``)
   runs every rule through the real library and emits ``{engine}.json``
   alongside the package — this JSON captures observed outcomes. When
   present, the loader overlays the vendored observations onto the corpus
@@ -651,7 +651,7 @@ class VendoredRulesLoader:
       2. **Vendored JSON** shipped beside this module
          (``{engine}.json``) — CI-validated observed behaviour, overlaid
          onto the corpus's rules when present. Written by
-         ``scripts/vendor_rules.py`` under the config-rules-refresh CI.
+         ``scripts/vendor_rules.py`` under the invariant-miner CI.
     """
 
     def __init__(self, corpus_root: Path | None = None) -> None:
@@ -697,7 +697,7 @@ class VendoredRulesLoader:
 
 
 # ---------------------------------------------------------------------------
-# Vendored JSON overlay (config-rules-refresh CI)
+# Vendored JSON overlay (invariant-miner CI)
 # ---------------------------------------------------------------------------
 
 
@@ -747,7 +747,7 @@ def _overlay_vendored_observations(
     consumers (the generic ``@model_validator``) can act on CI-validated
     truth. The declared fields are left untouched — strict validation in
     :func:`_parse_rule` is not re-exercised against the observed vocabulary
-    (which is deliberately wider; see ``scripts/_vendor_common.py``).
+    (which is deliberately wider; see ``scripts/_invariant_vendor_common.py``).
     """
     cases = {c["id"]: c for c in vendored.get("cases", []) if isinstance(c, dict) and "id" in c}
     overlaid = tuple(_overlay_rule(rule, cases.get(rule.id)) for rule in parsed.rules)

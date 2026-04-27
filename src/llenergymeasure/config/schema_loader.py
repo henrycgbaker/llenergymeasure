@@ -107,7 +107,7 @@ class SchemaLoader:
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Vendored schema for engine {engine!r} not found. "
-                f"Run `./scripts/update_engine_schema.sh {engine}` to generate it."
+                f"Run `./scripts/refresh_discovered_schemas.sh {engine}` to generate it."
             ) from exc
 
         parsed = _parse_envelope(engine=engine, raw_text=raw_text)

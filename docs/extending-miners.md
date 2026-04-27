@@ -385,7 +385,7 @@ def test_landmark_checks_raise_on_missing():
 
 ## Step 7: Add to CI
 
-1. Add the engine to `config-rules-refresh.yml`:
+1. Add the engine to `invariant-miner.yml`:
 
 ```yaml
 - name: Run myengine miners
@@ -399,7 +399,7 @@ def test_landmark_checks_raise_on_missing():
 
 3. Add the engine's Dockerfile to the vendor-rules step so `vendor_rules.py` can replay rules inside the engine's container.
 
-4. Add a Renovate `packageRule` so library bumps trigger `config-rules-refresh.yml`.
+4. Add a Renovate `packageRule` so library bumps trigger `invariant-miner.yml`.
 
 ---
 

@@ -414,7 +414,7 @@ Library version bumps trigger corpus regeneration automatically.
   │  or PyPI version pin in requirements file                         │
   │               │                                                   │
   │               ▼                                                   │
-  │  config-rules-refresh.yml fires                                   │
+  │  invariant-miner.yml fires                                        │
   │  (guarded: only Renovate PRs touching engine version files)       │
   │               │                                                   │
   │         ┌─────┴─────────────────────────────┐                    │
