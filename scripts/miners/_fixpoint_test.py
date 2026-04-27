@@ -396,9 +396,9 @@ def synthesise_malformed_rule_cases() -> list[dict[str, Any]]:
     """
     # Imported here to avoid a circular path dependency:
     # ``_fixpoint_test`` is loaded eagerly by ``tests/integration/...``, and
-    # ``scripts._vendor_common`` is heavy. The deferred import keeps the
-    # module load cheap for the corpus-shuffle path.
-    from scripts._vendor_common import CaptureBuffers
+    # ``scripts._invariant_vendor_common`` is heavy. The deferred import keeps
+    # the module load cheap for the corpus-shuffle path.
+    from scripts._invariant_vendor_common import CaptureBuffers
     from scripts.vendor_rules import (
         CHECK_MESSAGE_TEMPLATE_MATCH,
         CHECK_NEGATIVE_DOES_NOT_RAISE,

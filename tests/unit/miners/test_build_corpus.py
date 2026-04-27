@@ -508,7 +508,7 @@ def _stub_vendor_engine(
     onto this stub so the merger's vendor wiring runs without needing the
     transformers package available in the test environment.
     """
-    from scripts._vendor_common import Divergence
+    from scripts._invariant_vendor_common import Divergence
 
     def _stub(*, engine: str, corpus_path: Path, out_path: Path, **kwargs: Any):
         out_path.parent.mkdir(parents=True, exist_ok=True)

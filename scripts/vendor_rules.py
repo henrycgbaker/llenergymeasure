@@ -44,7 +44,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts._vendor_common import (  # noqa: E402  (late import after sys.path)
+from scripts._invariant_vendor_common import (  # noqa: E402  (late import after sys.path)
     TENSORRT_PRIVATE_FIELD_ALLOWLIST,
     TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST,
     CaptureBuffers,
@@ -185,7 +185,7 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
 # Runs inside the ``llenergymeasure:tensorrt`` Docker image on the self-hosted
 # GPU runner — TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA
 # bindings on import), so this codepath is only exercised in CI by the
-# ``vendor-tensorrt`` job in ``.github/workflows/config-rules-refresh.yml``.
+# ``vendor-tensorrt`` job in ``.github/workflows/invariant-miner.yml``.
 #
 # The static miner emits short-form ``native_type`` values (``tensorrt_llm.X``)
 # matching the AST symbol it walked. Map those to the deep import paths inside

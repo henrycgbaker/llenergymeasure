@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Semantic differ for vendored rules JSON envelopes.
 
-Sibling of :mod:`scripts.diff_schemas` — same contract (safe vs breaking
-classification, JSON-on-stdout + Markdown summary), different artifact kind
-(rule cases instead of parameter schemas).
+Sibling of :mod:`scripts.diff_discovered_schemas` — same contract (safe vs
+breaking classification, JSON-on-stdout + Markdown summary), different artifact
+kind (rule cases instead of parameter schemas).
 
 Usage::
 
-    python scripts/diff_rules.py <old.json> <new.json> [--out pr-comment.md]
+    python scripts/diff_validation_rules.py <old.json> <new.json> [--out pr-comment.md]
 
 Exit codes:
     0 - identical or rules-safe changes only
     1 - rules-breaking changes detected
     2 - malformed input (missing file, not JSON, etc.)
 
-stdout : JSON with structured diff (mirrors diff_schemas.py shape)
+stdout : JSON with structured diff (mirrors diff_discovered_schemas.py shape)
 stderr : human-readable summary
 --out  : Markdown summary suitable for a PR comment (optional)
 """

@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0.0",
   "engine": "transformers",
-  "engine_version": "5.5.4",
+  "engine_version": "4.57.3",
   "engine_commit_sha": null,
-  "image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime+transformers-pipinstall",
+  "image_ref": "llenergymeasure:transformers-4.57.3",
   "base_image_ref": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
-  "discovered_at": "2026-04-13T22:06:41.228246+00:00",
+  "discovered_at": "2026-04-27T23:17:45+02:00",
   "discovery_method": "inspect.signature(from_pretrained) + GenerationConfig().to_dict()",
   "discovery_limitations": [
     {
@@ -21,81 +21,44 @@
     {
       "section": "sampling_params",
       "fields": [
-        "max_length",
         "max_new_tokens",
-        "min_length",
         "min_new_tokens",
-        "early_stopping",
         "max_time",
         "stop_strings",
-        "do_sample",
-        "num_beams",
-        "use_cache",
         "cache_implementation",
         "cache_config",
-        "temperature",
-        "top_k",
-        "top_p",
+        "return_legacy_cache",
+        "prefill_chunk_size",
         "min_p",
-        "top_h",
-        "typical_p",
-        "epsilon_cutoff",
-        "eta_cutoff",
-        "repetition_penalty",
-        "encoder_repetition_penalty",
-        "length_penalty",
-        "no_repeat_ngram_size",
         "bad_words_ids",
-        "renormalize_logits",
         "forced_bos_token_id",
         "forced_eos_token_id",
-        "remove_invalid_values",
         "exponential_decay_length_penalty",
         "suppress_tokens",
         "begin_suppress_tokens",
         "sequence_bias",
-        "token_healing",
         "guidance_scale",
         "watermarking_config",
-        "num_return_sequences",
-        "output_attentions",
-        "output_hidden_states",
-        "output_scores",
         "output_logits",
-        "return_dict_in_generate",
         "pad_token_id",
         "bos_token_id",
         "eos_token_id",
-        "encoder_no_repeat_ngram_size",
         "decoder_start_token_id",
-        "is_assistant",
-        "num_assistant_tokens",
-        "num_assistant_tokens_schedule",
-        "assistant_confidence_threshold",
         "prompt_lookup_num_tokens",
         "max_matching_ngram_size",
         "assistant_early_exit",
-        "assistant_lookbehind",
-        "target_lookbehind",
-        "compile_config",
-        "disable_compile",
-        "continuous_batching_config",
         "low_memory",
         "penalty_alpha",
         "dola_layers",
-        "diversity_penalty",
-        "num_beam_groups",
         "constraints",
-        "force_words_ids",
-        "prefill_chunk_size",
-        "_from_model_config"
+        "force_words_ids"
       ],
       "reason": "GenerationConfig has no type annotations; None defaults yield type='unknown'"
     }
   ],
   "engine_params": {
     "config": {
-      "type": "PreTrainedConfig | str | PathLike | None",
+      "type": "PretrainedConfig | str | PathLike | None",
       "default": null
     },
     "cache_dir": {
@@ -133,24 +96,24 @@
   },
   "sampling_params": {
     "max_length": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 20
     },
     "max_new_tokens": {
       "type": "unknown",
       "default": null
     },
     "min_length": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 0
     },
     "min_new_tokens": {
       "type": "unknown",
       "default": null
     },
     "early_stopping": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "max_time": {
       "type": "unknown",
@@ -161,16 +124,16 @@
       "default": null
     },
     "do_sample": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "num_beams": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 1
     },
     "use_cache": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": true
     },
     "cache_implementation": {
       "type": "unknown",
@@ -180,61 +143,65 @@
       "type": "unknown",
       "default": null
     },
-    "temperature": {
+    "return_legacy_cache": {
       "type": "unknown",
       "default": null
+    },
+    "prefill_chunk_size": {
+      "type": "unknown",
+      "default": null
+    },
+    "temperature": {
+      "type": "float",
+      "default": 1.0
     },
     "top_k": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 50
     },
     "top_p": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 1.0
     },
     "min_p": {
       "type": "unknown",
       "default": null
     },
-    "top_h": {
-      "type": "unknown",
-      "default": null
-    },
     "typical_p": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 1.0
     },
     "epsilon_cutoff": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 0.0
     },
     "eta_cutoff": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 0.0
     },
     "repetition_penalty": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 1.0
     },
     "encoder_repetition_penalty": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 1.0
     },
     "length_penalty": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 1.0
     },
     "no_repeat_ngram_size": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 0
     },
     "bad_words_ids": {
       "type": "unknown",
       "default": null
     },
     "renormalize_logits": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "forced_bos_token_id": {
       "type": "unknown",
@@ -245,8 +212,8 @@
       "default": null
     },
     "remove_invalid_values": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "exponential_decay_length_penalty": {
       "type": "unknown",
@@ -265,8 +232,8 @@
       "default": null
     },
     "token_healing": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "guidance_scale": {
       "type": "unknown",
@@ -277,28 +244,28 @@
       "default": null
     },
     "num_return_sequences": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 1
     },
     "output_attentions": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "output_hidden_states": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "output_scores": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "output_logits": {
       "type": "unknown",
       "default": null
     },
     "return_dict_in_generate": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "pad_token_id": {
       "type": "unknown",
@@ -313,28 +280,28 @@
       "default": null
     },
     "encoder_no_repeat_ngram_size": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 0
     },
     "decoder_start_token_id": {
       "type": "unknown",
       "default": null
     },
     "is_assistant": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "num_assistant_tokens": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 20
     },
     "num_assistant_tokens_schedule": {
-      "type": "unknown",
-      "default": null
+      "type": "str",
+      "default": "constant"
     },
     "assistant_confidence_threshold": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 0.4
     },
     "prompt_lookup_num_tokens": {
       "type": "unknown",
@@ -349,24 +316,16 @@
       "default": null
     },
     "assistant_lookbehind": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 10
     },
     "target_lookbehind": {
-      "type": "unknown",
-      "default": null
-    },
-    "compile_config": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 10
     },
     "disable_compile": {
-      "type": "unknown",
-      "default": null
-    },
-    "continuous_batching_config": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "low_memory": {
       "type": "unknown",
@@ -381,12 +340,12 @@
       "default": null
     },
     "diversity_penalty": {
-      "type": "unknown",
-      "default": null
+      "type": "float",
+      "default": 0.0
     },
     "num_beam_groups": {
-      "type": "unknown",
-      "default": null
+      "type": "int",
+      "default": 1
     },
     "constraints": {
       "type": "unknown",
@@ -396,17 +355,13 @@
       "type": "unknown",
       "default": null
     },
-    "prefill_chunk_size": {
-      "type": "unknown",
-      "default": null
-    },
     "_from_model_config": {
-      "type": "unknown",
-      "default": null
+      "type": "bool",
+      "default": false
     },
     "transformers_version": {
       "type": "str",
-      "default": "5.5.4"
+      "default": "4.57.3"
     }
   }
 }

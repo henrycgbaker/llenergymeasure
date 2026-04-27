@@ -2,7 +2,7 @@
 # Rediscover a vendored engine schema by running discovery inside the
 # appropriate Docker image.
 #
-# Usage: ./scripts/update_engine_schema.sh {vllm|tensorrt|transformers}
+# Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 #
 # Always writes to src/llenergymeasure/config/discovered_schemas/<engine>.json
 # and prints the resulting `git diff`. Does NOT commit. The vendored JSON
@@ -25,7 +25,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/update_engine_schema.sh {vllm|tensorrt|transformers}
+Usage: ./scripts/refresh_discovered_schemas.sh {vllm|tensorrt|transformers}
 
 Builds or pulls the engine's discovery image, runs discovery inside it,
 writes src/llenergymeasure/config/discovered_schemas/<engine>.json, and
@@ -78,9 +78,13 @@ fi
 OUTPUT_REL="src/llenergymeasure/config/discovered_schemas/${ENGINE}.json"
 
 echo "[$ENGINE] Running discovery inside $IMAGE..." >&2
+# Forward LLENERGY_DISCOVERY_FROZEN_AT into the container if the caller (CI)
+# set it. discover_engine_schemas.py uses it to pin `discovered_at` to a
+# stable anchor, breaking the writeback->resync loop on unchanged source.
 docker run --rm --gpus all \
     --user "$(id -u):$(id -g)" \
     --entrypoint python3 \
+    -e LLENERGY_DISCOVERY_FROZEN_AT="${LLENERGY_DISCOVERY_FROZEN_AT:-}" \
     -v "$REPO_ROOT:/repo" \
     -w /repo \
     "$IMAGE" \

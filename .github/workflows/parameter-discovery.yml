@@ -1,0 +1,269 @@
+name: Parameter Discovery Refresh
+
+# Automatically refreshes vendored engine schemas (discovered parameter
+# spaces) when Renovate bumps a Dockerfile version. Also supports manual
+# dispatch for ad-hoc refreshes.
+#
+# Sibling of invariant-miner.yml. Same App-token + commit-back + comment +
+# label pattern; different artifact kind (introspected schemas vs mined
+# validation rules).
+#
+# Justified asymmetry — single-job loop, not per-engine matrix:
+#   Invariant-miner has three sibling jobs (vendor-transformers, vendor-vllm,
+#   vendor-tensorrt) because each engine's mining + vendor pipeline differs
+#   (different miner modules, different runner type, transformers/vllm on
+#   ubuntu-latest vs tensorrt on self-hosted GPU). Parameter discovery is
+#   generic — refresh_discovered_schemas.sh dispatches per-engine internally
+#   and the runner type is uniform (self-hosted, since vLLM and TRT-LLM may
+#   require CUDA at import time). One job iterating over engines is simpler
+#   here without losing observability.
+#
+# Runs on self-hosted GPU runner (same as gpu-ci.yml) because vLLM and
+# TensorRT-LLM may require CUDA device access at import time.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "docker/Dockerfile.*"
+      - "scripts/discover_engine_schemas.py"
+      - "scripts/refresh_discovered_schemas.sh"
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: "Engine to refresh"
+        required: true
+        type: choice
+        options:
+          - vllm
+          - tensorrt
+          - transformers
+          - all
+      pr_number:
+        description: "PR number to comment on and label (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: parameter-discovery-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    # Skip runs triggered by the bot's own commit-back. Belt-and-braces with
+    # the deterministic LLENERGY_DISCOVERY_FROZEN_AT anchor below: even if a
+    # diff sneaks through, the workflow won't re-fire on its own push.
+    if: github.actor != 'llem-ci-bot[bot]'
+    runs-on: self-hosted
+    timeout-minutes: 90
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Short-lived (~1 hour) GitHub App token. Events it produces
+        # (commits, PR comments, label edits) are NOT subject to the
+        # default GITHUB_TOKEN recursive-workflow-protection gate, so
+        # the commit-back below can legitimately trigger subsequent
+        # CI runs. Skipped on fork PRs (secrets are not exposed there)
+        # so the workflow still runs read-only for external contributors.
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Determine engines to refresh
+        id: engines
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENGINES="${{ inputs.engine }}"
+          else
+            # Parse changed Dockerfile paths to determine engines.
+            CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD -- 'docker/Dockerfile.*')
+            ENGINES=""
+            for f in $CHANGED; do
+              engine=$(basename "$f" | sed 's/Dockerfile\.//')
+              ENGINES="${ENGINES:+$ENGINES }$engine"
+            done
+            ENGINES="${ENGINES:-all}"
+          fi
+
+          # Normalise "all" once; downstream steps use the expanded list.
+          if [[ "$ENGINES" == "all" ]]; then
+            ENGINES="vllm tensorrt transformers"
+          fi
+          echo "engines=$ENGINES" >> "$GITHUB_OUTPUT"
+
+      - name: Compute stable discovery anchor
+        id: anchor
+        # Pin the discovered_at field to the author date of the most recent
+        # commit touching any INPUT path (Dockerfiles, the discovery script,
+        # the orchestrator). Stable across the workflow's own commit-back
+        # (which only touches the output JSON), so re-runs on unchanged
+        # source emit byte-identical envelopes. Without this, every re-run
+        # emits a fresh wallclock timestamp, git diff picks it up, the
+        # commit-back fires, and the synchronize loops. Mirrors
+        # invariant-miner.yml's vendor anchor pattern.
+        run: |
+          PATHS=(
+            "docker/Dockerfile.vllm"
+            "docker/Dockerfile.tensorrt"
+            "docker/Dockerfile.transformers"
+            "scripts/discover_engine_schemas.py"
+            "scripts/refresh_discovered_schemas.sh"
+          )
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Run schema refresh
+        env:
+          LLENERGY_DISCOVERY_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+        # Behaviour: discover_engine_schemas.py prints "[engine] SKIPPED (not
+        # importable): ..." to stderr when a library import fails on the
+        # current host (e.g. tensorrt's libnvinfer.so.10 missing on a runner
+        # without GPU bindings). The Python script treats SKIPPED as
+        # informational; the bash orchestrator must mirror that — historically
+        # this loop unconditionally exited 1 on non-zero, breaking developer
+        # PRs that run on hosts where one engine isn't importable. Track
+        # succeeded vs skipped vs failed; only error if every engine failed
+        # outright (no successes, no skips).
+        run: |
+          set +e
+          declare -a SUCCEEDED=()
+          declare -a SKIPPED=()
+          declare -a FAILED=()
+          for engine in ${{ steps.engines.outputs.engines }}; do
+            echo "::group::Refreshing $engine schema"
+
+            # Save old schema for diffing.
+            OLD_SCHEMA="src/llenergymeasure/config/discovered_schemas/${engine}.json"
+            if [[ -f "$OLD_SCHEMA" ]]; then
+              cp "$OLD_SCHEMA" "/tmp/${engine}_old.json"
+            else
+              echo '{}' > "/tmp/${engine}_old.json"
+            fi
+
+            # Capture combined output so we can distinguish skip from failure.
+            OUTPUT=$(./scripts/refresh_discovered_schemas.sh "$engine" 2>&1)
+            RC=$?
+            echo "$OUTPUT"
+            if [[ $RC -eq 0 ]]; then
+              SUCCEEDED+=("$engine")
+            elif echo "$OUTPUT" | grep -q "SKIPPED (not importable)"; then
+              echo "::warning::Discovery skipped for $engine (not importable on this host)"
+              SKIPPED+=("$engine")
+            else
+              echo "::error::Discovery failed for $engine"
+              FAILED+=("$engine")
+            fi
+
+            echo "::endgroup::"
+          done
+          set -e
+
+          echo "Schema refresh summary: succeeded=${SUCCEEDED[*]:-none} skipped=${SKIPPED[*]:-none} failed=${FAILED[*]:-none}"
+
+          # Genuine failures always block.
+          if [[ ${#FAILED[@]} -gt 0 ]]; then
+            echo "::error::One or more engines failed outright: ${FAILED[*]}"
+            exit 1
+          fi
+          # All-skipped, no successes => block too (something is structurally
+          # wrong with the runner; nothing got refreshed).
+          if [[ ${#SUCCEEDED[@]} -eq 0 ]]; then
+            echo "::error::No engines succeeded — all skipped: ${SKIPPED[*]}"
+            exit 1
+          fi
+
+      - name: Diff and classify changes
+        id: diff
+        run: |
+          IS_BREAKING=false
+          DIFF_BODY=""
+
+          for engine in ${{ steps.engines.outputs.engines }}; do
+            SCHEMA="src/llenergymeasure/config/discovered_schemas/${engine}.json"
+            OLD="/tmp/${engine}_old.json"
+
+            if [[ ! -f "$SCHEMA" ]]; then
+              continue
+            fi
+
+            OUTPUT=$(python3 scripts/diff_discovered_schemas.py "$OLD" "$SCHEMA" 2>/dev/null) || true
+            read -r BREAKING SUMMARY < <(echo "$OUTPUT" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          print(d.get('is_breaking', False), d.get('summary', 'unknown'))
+          " 2>/dev/null || echo "False unknown")
+
+            if [[ "$BREAKING" == "True" ]]; then
+              IS_BREAKING=true
+            fi
+
+            DIFF_BODY="${DIFF_BODY}### ${engine}\n${SUMMARY}\n\n"
+          done
+
+          echo "is_breaking=$IS_BREAKING" >> "$GITHUB_OUTPUT"
+          printf '%b' "$DIFF_BODY" > /tmp/diff_body.md
+
+      - name: Commit schema updates
+        # Skipped for forks (App token isn't minted there) and when no App
+        # token was provided.
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add src/llenergymeasure/config/discovered_schemas/*.json
+
+          if git diff --cached --quiet; then
+            echo "No schema changes to commit."
+            exit 0
+          fi
+
+          ENGINES="${{ steps.engines.outputs.engines }}"
+          git commit -m "chore(config): refresh ${ENGINES} schema(s)"
+          # --force-with-lease guards against clobbering a concurrent push
+          # from the PR author. On stale-ref failure the workflow exits
+          # non-zero and a rerun picks up the latest state.
+          git push --force-with-lease
+
+      - name: Post diff comment
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number available, skipping comment."
+            exit 0
+          fi
+
+          BODY="## Schema Diff\n\n$(cat /tmp/diff_body.md)"
+          printf '%b' "$BODY" | gh pr comment "$PR_NUMBER" --body-file -
+
+      - name: Apply label
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+
+          if [[ "${{ steps.diff.outputs.is_breaking }}" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "schema-breaking" --remove-label "schema-safe" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --add-label "schema-safe" --remove-label "schema-breaking" 2>/dev/null || true
+          fi

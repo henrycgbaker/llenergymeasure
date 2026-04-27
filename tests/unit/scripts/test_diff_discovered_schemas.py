@@ -1,4 +1,4 @@
-"""Tests for scripts/diff_schemas.py."""
+"""Tests for scripts/diff_discovered_schemas.py."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "diff_schemas.py"
+SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "diff_discovered_schemas.py"
 
 
 def _make_schema(

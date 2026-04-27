@@ -3,9 +3,9 @@
   "engine": "vllm",
   "engine_version": "0.7.3",
   "engine_commit_sha": null,
-  "image_ref": "llenergymeasure:vllm",
+  "image_ref": "vllm/vllm-openai:v0.7.3",
   "base_image_ref": "vllm/vllm-openai:v0.7.3",
-  "discovered_at": "2026-04-13T22:05:56.672752+00:00",
+  "discovered_at": "2026-04-27T23:17:45+02:00",
   "discovery_method": "dataclasses.fields(EngineArgs) + msgspec.json.schema(SamplingParams)",
   "discovery_limitations": [
     {

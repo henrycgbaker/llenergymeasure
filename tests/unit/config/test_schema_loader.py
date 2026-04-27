@@ -75,7 +75,7 @@ def test_load_schema_missing_file_raises_with_hint(tmp_path: Path) -> None:
     # Patch _KNOWN_ENGINES to include 'ghost' but no file exists for it
     with (
         patch("llenergymeasure.config.schema_loader._KNOWN_ENGINES", ("vllm", "ghost")),
-        pytest.raises(FileNotFoundError, match=r"update_engine_schema\.sh ghost"),
+        pytest.raises(FileNotFoundError, match=r"refresh_discovered_schemas\.sh ghost"),
     ):
         loader = SchemaLoader()
         loader.load_schema("ghost")

@@ -29,6 +29,7 @@ import argparse
 import dataclasses
 import inspect
 import json
+import os
 import re
 import sys
 import types
@@ -199,6 +200,16 @@ def _make_envelope(
     engine_params: dict[str, Any],
     sampling_params: dict[str, Any],
 ) -> dict[str, Any]:
+    # Honour LLENERGY_DISCOVERY_FROZEN_AT when the caller (CI) wants the
+    # envelope pinned to a stable anchor — typically the author date of the
+    # most recent commit touching any input path. Without this override every
+    # CI run produces a fresh wallclock timestamp, which the workflow's
+    # commit-back picks up as a 2-line diff, re-firing the path filter and
+    # creating a synchronize loop. Mirrors LLENERGY_VENDOR_FROZEN_AT in
+    # scripts/vendor_rules.py.
+    discovered_at = (
+        os.environ.get("LLENERGY_DISCOVERY_FROZEN_AT") or datetime.now(timezone.utc).isoformat()
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "engine": engine,
@@ -206,7 +217,7 @@ def _make_envelope(
         "engine_commit_sha": engine_commit_sha,
         "image_ref": image_ref,
         "base_image_ref": base_image_ref,
-        "discovered_at": datetime.now(timezone.utc).isoformat(),
+        "discovered_at": discovered_at,
         "discovery_method": discovery_method,
         "discovery_limitations": discovery_limitations,
         "engine_params": engine_params,

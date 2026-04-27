@@ -1,4 +1,4 @@
-"""Tests for scripts/check_schema_versions.py."""
+"""Tests for scripts/check_discovered_schema_versions.py."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 # Import the script's main function directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-from check_schema_versions import main
+from check_discovered_schema_versions import main
 
 
 def _setup_repo(
@@ -66,7 +66,7 @@ class TestMismatch:
         assert code == 1
         captured = capsys.readouterr()
         assert "MISMATCH" in captured.err
-        assert "update_engine_schema.sh" in captured.err
+        assert "refresh_discovered_schemas.sh" in captured.err
 
     def test_transformers_mismatch(self, tmp_path: Path, capsys):
         repo = _setup_repo(

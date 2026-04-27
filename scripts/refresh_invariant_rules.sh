@@ -2,9 +2,9 @@
 # Re-vendor a vendored-rules JSON by running scripts/vendor_rules.py inside the
 # appropriate Docker image.
 #
-# Usage: ./scripts/update_engine_rules.sh {transformers|vllm|tensorrt}
+# Usage: ./scripts/refresh_invariant_rules.sh {transformers|vllm|tensorrt}
 #
-# Mirror of scripts/update_engine_schema.sh — same idioms (Dockerfile ARG
+# Mirror of scripts/refresh_discovered_schemas.sh — same idioms (Dockerfile ARG
 # lookup, image build fallback, diff-only-no-commit output) — different
 # artifact. Run this locally to re-vendor against the pinned image before
 # opening a PR; CI will re-run inside the same image on the PR branch.
@@ -21,7 +21,7 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/update_engine_rules.sh {transformers|vllm|tensorrt}
+Usage: ./scripts/refresh_invariant_rules.sh {transformers|vllm|tensorrt}
 
 Builds or pulls the engine's Docker image, runs scripts/vendor_rules.py inside
 it against the tracked corpus, writes the JSON envelope, and prints the git

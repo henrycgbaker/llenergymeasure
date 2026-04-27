@@ -151,7 +151,7 @@ The invariant miner pipeline lives in `scripts/miners/` - it is a build-time too
   Renovate opens PR bumping Dockerfile ARG
                │
                ▼
-  CI fires config-rules-refresh.yml
+  CI fires invariant-miner.yml
                │
                ├──► static miner runs (GH-hosted runner, CPU only)
                │
@@ -252,7 +252,7 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 
   scripts/
   ├── vendor_rules.py             Replay rules against live library; write vendored JSON
-  └── _vendor_common.py           Shared capture + comparison utilities
+  └── _invariant_vendor_common.py Shared capture + comparison utilities
 
   configs/
   └── validation_rules/
