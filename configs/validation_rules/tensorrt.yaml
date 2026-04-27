@@ -189,33 +189,6 @@ rules:
   - llmapi/llm_args.py:430 (ContextChunkingPolicy StrEnum)
   added_by: static_miner
   added_at: '2026-04-26'
-- id: tensorrt_raises_dtype_eq_bfloat16_dtype
-  engine: tensorrt
-  library: tensorrt_llm
-  rule_under_test: BaseLlmArgs.validate_dtype raises when dtype == bfloat16 (via raise RuntimeError)
-  severity: error
-  native_type: tensorrt_llm.BaseLlmArgs
-  miner_source:
-    path: llmapi/llm_args.py
-    method: validate_dtype
-    line_at_scan: 1057
-  match:
-    engine: tensorrt
-    fields:
-      tensorrt.dtype: bfloat16
-  kwargs_positive:
-    dtype: bfloat16
-  kwargs_negative:
-    dtype: bfloat16_x
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: Pre SM 80 GPUs do not support bfloat16
-  references:
-  - llmapi/llm_args.py:1057 (tensorrt_llm.BaseLlmArgs.validate_dtype)
-  added_by: static_miner
-  added_at: '2026-04-26'
 - id: tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache
   engine: tensorrt
   library: tensorrt_llm
@@ -245,36 +218,6 @@ rules:
   - llmapi/llm_args.py:1589 (tensorrt_llm.TrtLlmArgs.validate_enable_build_cache)
   added_by: static_miner
   added_at: '2026-04-26'
-- id: tensorrt_raises_max_batch_size_set_True_build_config_with_runtime_params
-  engine: tensorrt
-  library: tensorrt_llm
-  rule_under_test: BaseLlmArgs.validate_build_config_with_runtime_params raises when max_batch_size present
-    True (via raise ValueError)
-  severity: error
-  native_type: tensorrt_llm.BaseLlmArgs
-  miner_source:
-    path: llmapi/llm_args.py
-    method: validate_build_config_with_runtime_params
-    line_at_scan: 1218
-  match:
-    engine: tensorrt
-    fields:
-      tensorrt.max_batch_size:
-        present: true
-  kwargs_positive:
-    max_batch_size: x
-  kwargs_negative:
-    max_batch_size: null
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: f'max_batch_size [{self.max_batch_size}] is greater than build_config.max_batch_size
-    [{self.build_config.max_batch_size}] in build_config'
-  references:
-  - llmapi/llm_args.py:1218 (tensorrt_llm.BaseLlmArgs.validate_build_config_with_runtime_params)
-  added_by: static_miner
-  added_at: '2026-04-26'
 - id: tensorrt_raises_max_ngram_size_le_0_positive_values
   engine: tensorrt
   library: tensorrt_llm
@@ -302,36 +245,6 @@ rules:
   message_template: f'Value must be positive, got {v}'
   references:
   - llmapi/llm_args.py:577 (tensorrt_llm.LookaheadDecodingConfig.validate_positive_values)
-  added_by: static_miner
-  added_at: '2026-04-26'
-- id: tensorrt_raises_max_num_tokens_set_True_build_config_with_runtime_params
-  engine: tensorrt
-  library: tensorrt_llm
-  rule_under_test: BaseLlmArgs.validate_build_config_with_runtime_params raises when max_num_tokens present
-    True (via raise ValueError)
-  severity: error
-  native_type: tensorrt_llm.BaseLlmArgs
-  miner_source:
-    path: llmapi/llm_args.py
-    method: validate_build_config_with_runtime_params
-    line_at_scan: 1223
-  match:
-    engine: tensorrt
-    fields:
-      tensorrt.max_num_tokens:
-        present: true
-  kwargs_positive:
-    max_num_tokens: x
-  kwargs_negative:
-    max_num_tokens: null
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: f'max_num_tokens [{self.max_num_tokens}] is greater than build_config.max_num_tokens
-    [{self.build_config.max_num_tokens}] in build_config'
-  references:
-  - llmapi/llm_args.py:1223 (tensorrt_llm.BaseLlmArgs.validate_build_config_with_runtime_params)
   added_by: static_miner
   added_at: '2026-04-26'
 - id: tensorrt_raises_max_verification_set_size_le_0_positive_values
