@@ -54,6 +54,10 @@ concurrency:
 
 jobs:
   refresh:
+    # Skip runs triggered by the bot's own commit-back. Belt-and-braces with
+    # the deterministic LLENERGY_DISCOVERY_FROZEN_AT anchor below: even if a
+    # diff sneaks through, the workflow won't re-fire on its own push.
+    if: github.actor != 'llem-ci-bot[bot]'
     runs-on: self-hosted
     timeout-minutes: 90
     steps:
@@ -100,7 +104,30 @@ jobs:
           fi
           echo "engines=$ENGINES" >> "$GITHUB_OUTPUT"
 
+      - name: Compute stable discovery anchor
+        id: anchor
+        # Pin the discovered_at field to the author date of the most recent
+        # commit touching any INPUT path (Dockerfiles, the discovery script,
+        # the orchestrator). Stable across the workflow's own commit-back
+        # (which only touches the output JSON), so re-runs on unchanged
+        # source emit byte-identical envelopes. Without this, every re-run
+        # emits a fresh wallclock timestamp, git diff picks it up, the
+        # commit-back fires, and the synchronize loops. Mirrors
+        # invariant-miner.yml's vendor anchor pattern.
+        run: |
+          PATHS=(
+            "docker/Dockerfile.vllm"
+            "docker/Dockerfile.tensorrt"
+            "docker/Dockerfile.transformers"
+            "scripts/discover_engine_schemas.py"
+            "scripts/refresh_discovered_schemas.sh"
+          )
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
       - name: Run schema refresh
+        env:
+          LLENERGY_DISCOVERY_FROZEN_AT: ${{ steps.anchor.outputs.date }}
         # Behaviour: discover_engine_schemas.py prints "[engine] SKIPPED (not
         # importable): ..." to stderr when a library import fails on the
         # current host (e.g. tensorrt's libnvinfer.so.10 missing on a runner
