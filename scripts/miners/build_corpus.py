@@ -236,13 +236,38 @@ def _provenance_rank(added_by: str) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _canonicalise_numbers(value: Any) -> Any:
+    """Coerce ints (excluding bool) to float for fingerprint purposes.
+
+    Predicate thresholds derived independently by the static and dynamic
+    miners can differ in numeric type — the static miner reads literals
+    from source (``0.0``), the dynamic miner emits int probes (``0``).
+    Both encode the same constraint. ``canonical_serialise`` preserves the
+    int/float distinction (``json.dumps(0)`` -> ``"0"``;
+    ``json.dumps(0.0)`` -> ``"0.0"``), which would split the cross-
+    validation safety net. Pre-canonicalise here, isolated from global
+    config hashing (which depends on type-stable Pydantic-validated input).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return float(value)
+    if isinstance(value, dict):
+        return {k: _canonicalise_numbers(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonicalise_numbers(v) for v in value]
+    return value
+
+
 def fingerprint_rule(rule: dict[str, Any]) -> bytes:
     """Return the canonical-serialised fingerprint bytes for a rule dict.
 
     Two rules with identical fingerprints are the same constraint discovered
     by two independent paths and get merged. The fingerprint uses
     :func:`canonical_serialise` so float jitter, dict-key ordering, and
-    NaN don't break dedup.
+    NaN don't break dedup. Numeric thresholds are int/float-canonicalised
+    via :func:`_canonicalise_numbers` so static and dynamic miners agree
+    on ``0`` vs ``0.0``.
 
     The fingerprint deliberately excludes ``id`` (extractors should already
     agree on deterministic ids, but a one-character drift shouldn't break
@@ -256,7 +281,7 @@ def fingerprint_rule(rule: dict[str, Any]) -> bytes:
         {
             "engine": rule.get("engine"),
             "severity": rule.get("severity"),
-            "match_fields": fields or {},
+            "match_fields": _canonicalise_numbers(fields or {}),
         }
     )
 
