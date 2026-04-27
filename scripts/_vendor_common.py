@@ -53,6 +53,19 @@ TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST: frozenset[str] = _DEFAULT_PRIVATE_FIELD_AL
     }
 )
 
+TENSORRT_PRIVATE_FIELD_ALLOWLIST: frozenset[str] = _DEFAULT_PRIVATE_FIELD_ALLOWLIST | frozenset(
+    {
+        # TRT-LLM `*LlmArgs` populate a handful of private bookkeeping fields
+        # during `model_validator(mode='after')` passes; they are not
+        # user-facing normalisations and would pollute the silent-normalisation
+        # diff with non-deterministic state on every vendor run.
+        "_parallel_config",
+        "_speculative_config",
+        "_quant_config",
+        "_build_config",
+    }
+)
+
 
 # ---------------------------------------------------------------------------
 # Observation dataclasses
