@@ -1,9 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "enabledManagers": ["dockerfile", "custom.regex"],
+  "enabledManagers": ["dockerfile", "custom.regex", "pep621", "github-actions"],
   "dockerfile": {
     "fileMatch": ["docker/Dockerfile\\..*"]
+  },
+  "pep621": {
+    "fileMatch": ["(^|/)pyproject\\.toml$"]
   },
   "customManagers": [
     {
@@ -11,6 +14,20 @@
       "fileMatch": ["docker/Dockerfile\\.transformers$"],
       "matchStrings": ["ARG TRANSFORMERS_VERSION=(?<currentValue>\\S+)"],
       "depNameTemplate": "transformers",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["docker/Dockerfile\\.vllm$"],
+      "matchStrings": ["ARG VLLM_VERSION=v?(?<currentValue>\\S+)"],
+      "depNameTemplate": "vllm",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["docker/Dockerfile\\.tensorrt$"],
+      "matchStrings": ["ARG TRTLLM_VERSION=(?<currentValue>\\S+)"],
+      "depNameTemplate": "tensorrt-llm",
       "datasourceTemplate": "pypi"
     }
   ],
@@ -43,8 +60,27 @@
       "labels": ["renovate", "engine-transformers"],
       "automerge": false,
       "stabilityDays": 3
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["vllm"],
+      "labels": ["renovate", "engine-vllm"],
+      "automerge": false,
+      "stabilityDays": 3
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["tensorrt-llm"],
+      "labels": ["renovate", "engine-tensorrt"],
+      "automerge": false,
+      "stabilityDays": 3
     }
   ],
   "schedule": ["before 9am on Monday"],
+  "prConcurrentLimit": 3,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security", "renovate"]
+  },
   "labels": ["renovate"]
 }
