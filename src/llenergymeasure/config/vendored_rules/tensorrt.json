@@ -4,8 +4,8 @@
   "engine_version": "0.21.0",
   "image_ref": "llenergymeasure:tensorrt-0.21.0",
   "base_image_ref": "nvcr.io/nvidia/tensorrt-llm/release:0.21.0",
-  "vendored_at": "2026-04-27T18:16:44+02:00",
-  "vendor_commit": "1672962eb4f635bc2f6b21db75696b0b5215a3d3",
+  "vendored_at": "2026-04-27T18:28:14+02:00",
+  "vendor_commit": "d70ec93f24faaaed630a7d4bc782faf658f10ac4",
   "cases": [
     {
       "id": "tensorrt_basellmargs_load_format_in_2_values",
