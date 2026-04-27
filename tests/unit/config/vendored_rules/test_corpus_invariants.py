@@ -65,9 +65,12 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.sampling.eta_cutoff",
         # Single-beam dormancy.
         "transformers.sampling.early_stopping",
-        "transformers.sampling.num_beam_groups",
-        "transformers.sampling.diversity_penalty",
         "transformers.sampling.length_penalty",
+        # Note: num_beam_groups + diversity_penalty validations were softened
+        # in transformers 4.57.x (error → dormant_announced or no_op). The
+        # vendor-CI gate quarantines the corpus rules that previously claimed
+        # error severity. Coverage loss tracked separately; do NOT re-add
+        # without first confirming the library re-introduced enforcement.
         # No-return-dict dormancy.
         "transformers.sampling.output_scores",
         "transformers.sampling.output_attentions",
@@ -92,7 +95,9 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
         "transformers.llm_int8_skip_modules",
         "transformers.llm_int8_enable_fp32_cpu_offload",
         "transformers.llm_int8_has_fp16_weight",
-        "transformers.bnb_4bit_compute_dtype",
+        # Note: transformers.bnb_4bit_compute_dtype — vendor-CI quarantined
+        # the type-check rule under 4.57.3. Coverage loss tracked in a
+        # follow-up alongside num_beam_groups / diversity_penalty.
         "transformers.bnb_4bit_quant_type",
         "transformers.bnb_4bit_use_double_quant",
     )
@@ -106,8 +111,10 @@ def test_corpus_covers_required_invariants(transformers_corpus) -> None:
     # invariant) and the (num_beams, num_return_sequences) pair (the
     # @field_ref-tightened greedy-rejects predicate).
     cross_field_pairs = (
-        ("transformers.sampling.num_beams", "transformers.sampling.num_beam_groups"),
-        ("transformers.sampling.num_beam_groups", "transformers.sampling.diversity_penalty"),
+        # Note: (num_beams, num_beam_groups) and (num_beam_groups,
+        # diversity_penalty) cross-field rules were quarantined in 4.57.x
+        # along with the single-field dormancy rules; see required_fields
+        # comment above.
         ("transformers.sampling.num_beams", "transformers.sampling.num_return_sequences"),
     )
     missing_pairs = [

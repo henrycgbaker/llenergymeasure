@@ -1,47 +1,8 @@
 schema_version: 1.0.0
 engine: transformers
-engine_version: 4.56.0
-mined_at: '2026-04-25T18:01:18Z'
+engine_version: 4.57.3
+mined_at: '2026-04-27T14:01:07Z'
 rules:
-- id: transformers_beam_search_diversity_penalty_eq_0p0
-  engine: transformers
-  library: transformers
-  rule_under_test: GenerationConfig.__init__ flags `diversity_penalty` (diversity penalty eq 0p0)
-  severity: error
-  native_type: transformers.GenerationConfig
-  miner_source:
-    path: transformers/generation/configuration_utils.py
-    method: __init__
-    line_at_scan: 380
-  match:
-    engine: transformers
-    fields:
-      transformers.sampling.num_beams:
-        '>': 1
-      transformers.sampling.num_beam_groups:
-        '>': 1
-      transformers.sampling.diversity_penalty: 0.0
-  kwargs_positive:
-    num_beams: 2
-    num_beam_groups: 2
-    diversity_penalty: 0.0
-    early_stopping: false
-  kwargs_negative:
-    num_beams: 1
-    num_beam_groups: 1
-    diversity_penalty: 0.0
-    early_stopping: false
-  expected_outcome: &id001
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: '`diversity_penalty` is not 0.0 or `num_beam_groups` is not 1, triggering group beam
-    search. In this generation mode, `diversity_penalty` should be greater than `0.0`, otherwise your
-    groups will be identical.'
-  references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: dynamic_miner
-  added_at: '2026-04-25'
 - id: transformers_beam_search_num_beams_eq_1
   engine: transformers
   library: transformers
@@ -51,7 +12,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 361
+    line_at_scan: 345
   match:
     engine: transformers
     fields:
@@ -69,46 +30,14 @@ rules:
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
-    normalised_fields: &id002 []
+    normalised_fields: &id001 []
   message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `True` -- this flag
     is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
   conflict_note: 'id: dynamic_miner -> ''transformers_beam_search_num_beams_eq_1''; dynamic_miner -> ''transformers_early_stopping_type_num_beams_eq_1'''
-- id: transformers_beam_search_num_beams_not_divisible_by_num_beam_groups
-  engine: transformers
-  library: transformers
-  rule_under_test: GenerationConfig.__init__ flags `num_beams` (num beams not divisible by num beam groups)
-  severity: error
-  native_type: transformers.GenerationConfig
-  miner_source:
-    path: transformers/generation/configuration_utils.py
-    method: __init__
-    line_at_scan: 361
-  match:
-    engine: transformers
-    fields:
-      transformers.sampling.num_beams:
-        not_divisible_by: '@num_beam_groups'
-  kwargs_positive:
-    num_beams: 2
-    num_beam_groups: 3
-    diversity_penalty: 0.0
-    early_stopping: false
-  kwargs_negative:
-    num_beams: 2
-    num_beam_groups: 1
-    diversity_penalty: 0.0
-    early_stopping: false
-  expected_outcome: *id001
-  message_template: '`diversity_penalty` is not 0.0 or `num_beam_groups` is not 1, triggering group beam
-    search. In this generation mode, `num_beams` should be divisible by `num_beam_groups`'
-  references:
-  - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
-  added_by: dynamic_miner
-  added_at: '2026-04-25'
 - id: transformers_cache_choice_cache_implementation_not_in_allowlist
   engine: transformers
   library: transformers
@@ -119,7 +48,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 366
+    line_at_scan: 349
   match:
     engine: transformers
     fields:
@@ -134,14 +63,17 @@ rules:
   kwargs_negative:
     cache_implementation: null
     use_cache: true
-  expected_outcome: *id001
+  expected_outcome: &id002
+    outcome: error
+    emission_channel: none
+    normalised_fields: []
   message_template: 'Invalid `cache_implementation` (nonsense). Choose one of: (''static'', ''offloaded_static'',
     ''sliding_window'', ''hybrid'', ''hybrid_chunked'', ''offloaded_hybrid'', ''offloaded_hybrid_chunked'',
     ''dynamic'', ''dynamic_full'', ''offloaded'', ''quantized'')'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_cache_choice_use_cache_eq_false
   engine: transformers
   library: transformers
@@ -151,7 +83,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 365
+    line_at_scan: 348
   match:
     engine: transformers
     fields:
@@ -165,13 +97,13 @@ rules:
   expected_outcome: &id003
     outcome: dormant_announced
     emission_channel: logger_warning_once
-    normalised_fields: *id002
+    normalised_fields: *id001
   message_template: You have set `use_cache` to `False`, but cache_implementation is set to static. cache_implementation
     will have no effect.
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_compile_config_type_compile_config_exceeds_zero
   engine: transformers
   library: transformers
@@ -181,7 +113,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 437
+    line_at_scan: 417
   match:
     engine: transformers
     fields:
@@ -191,13 +123,13 @@ rules:
     compile_config: 42
   kwargs_negative:
     compile_config: null
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: You provided `compile_config` as an instance of <class 'int'>, but it must be an instance
     of `CompileConfig`.
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_compile_config_type_compile_config_type_not_in_CompileConfig
   engine: transformers
   library: transformers
@@ -207,7 +139,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 437
+    line_at_scan: 417
   match:
     engine: transformers
     fields:
@@ -219,46 +151,13 @@ rules:
     compile_config: oops
   kwargs_negative:
     compile_config: null
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: You provided `compile_config` as an instance of <class 'str'>, but it must be an instance
     of `CompileConfig`.
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
-- id: transformers_dormant_diversity_penalty_ne_0_0
-  engine: transformers
-  library: transformers
-  rule_under_test: 'GenerationConfig.minor_issues[key]_=_msg: marks dormant when num_beams == 1 AND diversity_penalty
-    present True AND diversity_penalty != 0.0'
-  severity: dormant
-  native_type: transformers.GenerationConfig
-  miner_source:
-    path: transformers/generation/configuration_utils.py
-    method: validate
-    line_at_scan: 636
-  match:
-    engine: transformers
-    fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.diversity_penalty:
-        '!=': 0.0
-        present: true
-  kwargs_positive:
-    num_beams: 1
-    diversity_penalty: true
-  kwargs_negative:
-    num_beams: 1
-    diversity_penalty: false
-  expected_outcome:
-    outcome: dormant_announced
-    emission_channel: logger_warning_once
-    normalised_fields: []
-  message_template: single_beam_wrong_parameter_msg.format(flag_name='diversity_penalty', flag_value=self.diversity_penalty)
-  references:
-  - transformers/generation/configuration_utils.py:636 (transformers.GenerationConfig.validate)
-  added_by: static_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_dormant_early_stopping_set_true
   engine: transformers
   library: transformers
@@ -269,7 +168,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 628
+    line_at_scan: 606
   match:
     engine: transformers
     fields:
@@ -288,7 +187,7 @@ rules:
     normalised_fields: []
   message_template: single_beam_wrong_parameter_msg.format(flag_name='early_stopping', flag_value=self.early_stopping)
   references:
-  - transformers/generation/configuration_utils.py:628 (transformers.GenerationConfig.validate)
+  - transformers/generation/configuration_utils.py:606 (transformers.GenerationConfig.validate)
   added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
@@ -303,7 +202,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 613
+    line_at_scan: 591
   match:
     engine: transformers
     fields:
@@ -320,7 +219,7 @@ rules:
     normalised_fields: []
   message_template: greedy_wrong_parameter_msg.format(flag_name='epsilon_cutoff', flag_value=self.epsilon_cutoff)
   references:
-  - transformers/generation/configuration_utils.py:613 (transformers.GenerationConfig.validate)
+  - transformers/generation/configuration_utils.py:591 (transformers.GenerationConfig.validate)
   added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
@@ -335,7 +234,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 617
+    line_at_scan: 595
   match:
     engine: transformers
     fields:
@@ -352,7 +251,7 @@ rules:
     normalised_fields: []
   message_template: greedy_wrong_parameter_msg.format(flag_name='eta_cutoff', flag_value=self.eta_cutoff)
   references:
-  - transformers/generation/configuration_utils.py:617 (transformers.GenerationConfig.validate)
+  - transformers/generation/configuration_utils.py:595 (transformers.GenerationConfig.validate)
   added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
@@ -366,7 +265,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 355
+    line_at_scan: 339
   match:
     engine: transformers
     fields:
@@ -378,12 +277,12 @@ rules:
   kwargs_negative:
     early_stopping: false
     num_beams: 1
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_early_stopping_type_early_stopping_not_in_allowlist
   engine: transformers
   library: transformers
@@ -393,7 +292,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 355
+    line_at_scan: 339
   match:
     engine: transformers
     fields:
@@ -409,12 +308,12 @@ rules:
   kwargs_negative:
     early_stopping: false
     num_beams: 1
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: '`early_stopping` must be a boolean or ''never'', but is sometimes.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_early_stopping_type_early_stopping_type_not_in_bool_or_int_or_str
   engine: transformers
   library: transformers
@@ -425,7 +324,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 355
+    line_at_scan: 339
   match:
     engine: transformers
     fields:
@@ -441,12 +340,12 @@ rules:
   kwargs_negative:
     early_stopping: false
     num_beams: 1
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: '`early_stopping` must be a boolean or ''never'', but is 1.5.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_greedy_strips_epsilon_cutoff
   engine: transformers
   library: transformers
@@ -457,7 +356,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 378
+    line_at_scan: 361
   match:
     engine: transformers
     fields:
@@ -479,9 +378,9 @@ rules:
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `epsilon_cutoff`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~378)
+  - transformers.GenerationConfig.validate() (line ~361)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_greedy_strips_eta_cutoff
   engine: transformers
   library: transformers
@@ -492,7 +391,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 379
+    line_at_scan: 362
   match:
     engine: transformers
     fields:
@@ -514,9 +413,9 @@ rules:
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `eta_cutoff`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~379)
+  - transformers.GenerationConfig.validate() (line ~362)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_greedy_strips_min_p
   engine: transformers
   library: transformers
@@ -527,7 +426,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 376
+    line_at_scan: 359
   match:
     engine: transformers
     fields:
@@ -547,9 +446,9 @@ rules:
   message_template: '`do_sample` is set to `False`. However, `min_p` is set to `{declared_value}` -- this
     flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `min_p`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~376)
+  - transformers.GenerationConfig.validate() (line ~359)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_greedy_strips_temperature
   engine: transformers
   library: transformers
@@ -560,7 +459,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 373
+    line_at_scan: 356
   match:
     engine: transformers
     fields:
@@ -582,9 +481,9 @@ rules:
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `temperature`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~373)
+  - transformers.GenerationConfig.validate() (line ~356)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_greedy_strips_top_k
   engine: transformers
   library: transformers
@@ -595,7 +494,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 374
+    line_at_scan: 357
   match:
     engine: transformers
     fields:
@@ -616,9 +515,9 @@ rules:
   message_template: '`do_sample` is set to `False`. However, `top_k` is set to `{declared_value}` -- this
     flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~374)
+  - transformers.GenerationConfig.validate() (line ~357)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_greedy_strips_top_p
   engine: transformers
   library: transformers
@@ -629,7 +528,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 375
+    line_at_scan: 358
   match:
     engine: transformers
     fields:
@@ -650,9 +549,9 @@ rules:
   message_template: '`do_sample` is set to `False`. However, `top_p` is set to `{declared_value}` -- this
     flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~375)
+  - transformers.GenerationConfig.validate() (line ~358)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_greedy_strips_typical_p
   engine: transformers
   library: transformers
@@ -663,7 +562,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 377
+    line_at_scan: 360
   match:
     engine: transformers
     fields:
@@ -685,9 +584,9 @@ rules:
     -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset
     `typical_p`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~377)
+  - transformers.GenerationConfig.validate() (line ~360)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_negative_pad_token_id
   engine: transformers
   library: transformers
@@ -697,7 +596,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 416
+    line_at_scan: 396
   match:
     engine: transformers
     fields:
@@ -710,14 +609,14 @@ rules:
   expected_outcome:
     outcome: dormant_announced
     emission_channel: logger_warning_once
-    normalised_fields: *id002
+    normalised_fields: *id001
   message_template: '`pad_token_id` should be positive but got -1. This will cause errors when batch generating,
     if there is padding. Please set `pad_token_id` explicitly as `model.generation_config.pad_token_id=PAD_TOKEN_ID`
     to avoid errors in generation'
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
   conflict_note: 'id: dynamic_miner -> ''transformers_negative_pad_token_id''; dynamic_miner -> ''transformers_output_token_ids_pad_token_id_lt_zero'''
 - id: transformers_no_return_dict_strips_output_attentions
   engine: transformers
@@ -729,7 +628,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 409
+    line_at_scan: 389
   match:
     engine: transformers
     fields:
@@ -750,9 +649,9 @@ rules:
   message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_attentions` is. When
     `return_dict_in_generate` is not `True`, `output_attentions` is ignored.'
   references:
-  - transformers.GenerationConfig.validate() (line ~409)
+  - transformers.GenerationConfig.validate() (line ~389)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_no_return_dict_strips_output_hidden_states
   engine: transformers
   library: transformers
@@ -763,7 +662,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 410
+    line_at_scan: 390
   match:
     engine: transformers
     fields:
@@ -784,9 +683,9 @@ rules:
   message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_hidden_states` is. When
     `return_dict_in_generate` is not `True`, `output_hidden_states` is ignored.'
   references:
-  - transformers.GenerationConfig.validate() (line ~410)
+  - transformers.GenerationConfig.validate() (line ~390)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_no_return_dict_strips_output_scores
   engine: transformers
   library: transformers
@@ -797,7 +696,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 411
+    line_at_scan: 391
   match:
     engine: transformers
     fields:
@@ -818,9 +717,9 @@ rules:
   message_template: '`return_dict_in_generate` is NOT set to `True`, but `output_scores` is. When `return_dict_in_generate`
     is not `True`, `output_scores` is ignored.'
   references:
-  - transformers.GenerationConfig.validate() (line ~411)
+  - transformers.GenerationConfig.validate() (line ~391)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_num_return_vs_beams_do_sample_eq_false_and_num_beams_eq_1
   engine: transformers
   library: transformers
@@ -830,7 +729,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 360
+    line_at_scan: 344
   match:
     engine: transformers
     fields:
@@ -846,13 +745,13 @@ rules:
     num_beams: 1
     num_return_sequences: 1
     do_sample: false
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: Greedy methods without beam search do not support `num_return_sequences` different
     than 1 (got 2).
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_num_return_vs_beams_num_beams_lt_num_return_sequences
   engine: transformers
   library: transformers
@@ -862,7 +761,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 361
+    line_at_scan: 345
   match:
     engine: transformers
     fields:
@@ -876,12 +775,12 @@ rules:
     num_beams: 1
     num_return_sequences: 4
     do_sample: true
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_num_return_vs_beams_num_beams_not_divisible_by_num_return_sequences
   engine: transformers
   library: transformers
@@ -892,7 +791,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 361
+    line_at_scan: 345
   match:
     engine: transformers
     fields:
@@ -906,12 +805,12 @@ rules:
     num_beams: 1
     num_return_sequences: 4
     do_sample: true
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: '`num_return_sequences` (4) has to be smaller or equal to `num_beams` (2).'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_output_token_ids_max_new_tokens_le_zero
   engine: transformers
   library: transformers
@@ -921,7 +820,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 351
+    line_at_scan: 335
   match:
     engine: transformers
     fields:
@@ -935,12 +834,12 @@ rules:
     max_new_tokens: 1
     min_new_tokens: -1
     pad_token_id: 0
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_output_token_ids_max_new_tokens_not_in_allowlist
   engine: transformers
   library: transformers
@@ -950,7 +849,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 351
+    line_at_scan: 335
   match:
     engine: transformers
     fields:
@@ -967,12 +866,12 @@ rules:
     max_new_tokens: 1
     min_new_tokens: -1
     pad_token_id: 0
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: '`max_new_tokens` must be greater than 0, but is -1.'
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_output_token_ids_pad_token_id_not_in_allowlist
   engine: transformers
   library: transformers
@@ -982,7 +881,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 416
+    line_at_scan: 396
   match:
     engine: transformers
     fields:
@@ -1006,37 +905,7 @@ rules:
   references:
   - "transformers.GenerationConfig.validate() \u2014 observed via validate(strict=True)"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
-- id: transformers_raises_bnb_4bit_compute_dtype_not_type_dtype
-  engine: transformers
-  library: bitsandbytes
-  rule_under_test: 'BitsAndBytesConfig.raise_TypeError: raises when bnb_4bit_compute_dtype present True
-    AND bnb_4bit_compute_dtype type_is_not dtype'
-  severity: error
-  native_type: transformers.BitsAndBytesConfig
-  miner_source:
-    path: transformers/utils/quantization_config.py
-    method: post_init
-    line_at_scan: 560
-  match:
-    engine: transformers
-    fields:
-      transformers.bnb_4bit_compute_dtype:
-        type_is_not: dtype
-        present: true
-  kwargs_positive:
-    bnb_4bit_compute_dtype: true
-  kwargs_negative:
-    bnb_4bit_compute_dtype: null
-  expected_outcome:
-    outcome: error
-    emission_channel: none
-    normalised_fields: []
-  message_template: bnb_4bit_compute_dtype must be torch.dtype
-  references:
-  - transformers/utils/quantization_config.py:560 (transformers.BitsAndBytesConfig.post_init)
-  added_by: static_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_raises_bnb_4bit_quant_type_not_type_str
   engine: transformers
   library: bitsandbytes
@@ -1104,7 +973,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 577
+    line_at_scan: 561
   match:
     engine: transformers
     fields:
@@ -1122,7 +991,7 @@ rules:
   message_template: f'You provided `compile_config` as an instance of {type(self.compile_config)}, but
     it must be an instance of `CompileConfig`.'
   references:
-  - transformers/generation/configuration_utils.py:577 (transformers.GenerationConfig.validate)
+  - transformers/generation/configuration_utils.py:561 (transformers.GenerationConfig.validate)
   added_by: static_miner
   added_at: '2026-04-25'
 - id: transformers_raises_llm_int8_enable_fp32_cpu_offload_not_type_bool
@@ -1307,7 +1176,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 687
+    line_at_scan: 618
   match:
     engine: transformers
     fields:
@@ -1327,45 +1196,11 @@ rules:
   message_template: f'Greedy methods without beam search do not support `num_return_sequences` different
     than 1 (got {self.num_return_sequences}).'
   references:
-  - transformers/generation/configuration_utils.py:687 (transformers.GenerationConfig.validate)
+  - transformers/generation/configuration_utils.py:618 (transformers.GenerationConfig.validate)
   added_by: static_miner
   added_at: '2026-04-25'
   walker_notes:
   - 'dropped sub-clauses: self.do_sample is False'
-- id: transformers_single_beam_strips_diversity_penalty
-  engine: transformers
-  library: transformers
-  rule_under_test: GenerationConfig.validate() records dormant `diversity_penalty` when num_beams=1 and
-    `diversity_penalty` is set
-  severity: dormant
-  native_type: transformers.GenerationConfig
-  miner_source:
-    path: transformers/generation/configuration_utils.py
-    method: validate
-    line_at_scan: 380
-  match:
-    engine: transformers
-    fields:
-      transformers.sampling.num_beams: 1
-      transformers.sampling.diversity_penalty:
-        present: true
-        not_equal: 0.0
-  kwargs_positive:
-    num_beams: 1
-    diversity_penalty: 0.5
-  kwargs_negative:
-    num_beams: 4
-    diversity_penalty: 0.5
-  expected_outcome:
-    outcome: dormant_announced
-    emission_channel: logger_warning_once
-    normalised_fields: []
-  message_template: '`num_beams` is set to 1. However, `diversity_penalty` is set to `{declared_value}`
-    -- this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `diversity_penalty`.'
-  references:
-  - transformers.GenerationConfig.validate() (line ~380)
-  added_by: dynamic_miner
-  added_at: '2026-04-25'
 - id: transformers_single_beam_strips_early_stopping
   engine: transformers
   library: transformers
@@ -1376,7 +1211,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 355
+    line_at_scan: 339
   match:
     engine: transformers
     fields:
@@ -1397,9 +1232,9 @@ rules:
   message_template: '`num_beams` is set to 1. However, `early_stopping` is set to `{declared_value}` --
     this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `early_stopping`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~355)
+  - transformers.GenerationConfig.validate() (line ~339)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_single_beam_strips_length_penalty
   engine: transformers
   library: transformers
@@ -1410,7 +1245,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: validate
-    line_at_scan: 383
+    line_at_scan: 365
   match:
     engine: transformers
     fields:
@@ -1431,9 +1266,9 @@ rules:
   message_template: '`num_beams` is set to 1. However, `length_penalty` is set to `{declared_value}` --
     this flag is only used in beam-based generation modes. You should set `num_beams>1` or unset `length_penalty`.'
   references:
-  - transformers.GenerationConfig.validate() (line ~383)
+  - transformers.GenerationConfig.validate() (line ~365)
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
 - id: transformers_watermarking_type_watermarking_config_type_not_in_WatermarkingConfig
   engine: transformers
   library: transformers
@@ -1444,7 +1279,7 @@ rules:
   miner_source:
     path: transformers/generation/configuration_utils.py
     method: __init__
-    line_at_scan: 401
+    line_at_scan: 381
   match:
     engine: transformers
     fields:
@@ -1456,10 +1291,10 @@ rules:
     watermarking_config: 42
   kwargs_negative:
     watermarking_config: null
-  expected_outcome: *id001
+  expected_outcome: *id002
   message_template: transformers.generation.configuration_utils.WatermarkingConfig() argument after **
     must be a mapping, not int
   references:
   - "transformers.GenerationConfig \u2014 observed via construction-time ValueError"
   added_by: dynamic_miner
-  added_at: '2026-04-25'
+  added_at: '2026-04-27'
