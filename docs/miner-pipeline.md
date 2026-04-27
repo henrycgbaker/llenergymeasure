@@ -414,7 +414,7 @@ Library version bumps trigger corpus regeneration automatically.
   │  or PyPI version pin in requirements file                         │
   │               │                                                   │
   │               ▼                                                   │
-  │  invariant-miner.yml fires                                        │
+  │  Stage 1: auto-mine.yml fires (mining)                            │
   │  (guarded: only Renovate PRs touching engine version files)       │
   │               │                                                   │
   │         ┌─────┴─────────────────────────────┐                    │
@@ -428,7 +428,14 @@ Library version bumps trigger corpus regeneration automatically.
   │         │                                   │                    │
   │         └─────────────┬─────────────────────┘                    │
   │                       ▼                                           │
-  │         build_corpus.py + vendor_rules.py run                    │
+  │         build_corpus.py merges staging files                      │
+  │         → configs/validation_rules/{engine}.yaml                  │
+  │                       │                                           │
+  │                       ▼                                           │
+  │  Stage 2: invariant-miner.yml fires (vendor gate)                 │
+  │                       │                                           │
+  │                       ▼                                           │
+  │         vendor_rules.py replays rules against live library        │
   │         (inside Docker container for engine)                      │
   │                       │                                           │
   │                       ▼                                           │
@@ -505,4 +512,4 @@ The templates NOT adopted from Daikon's full library: linear arithmetic ternary 
 - [parameter-discovery.md](parameter-discovery.md) - runtime validation pipeline
 - [research-context.md](research-context.md) - academic positioning
 - [engines.md](engines.md) - engine configuration reference
-- [schema-refresh.md](schema-refresh.md) - Renovate-driven schema refresh
+- [schema-refresh.md](schema-refresh.md) - parameter-discovery pipeline (Renovate-driven schema refresh)
