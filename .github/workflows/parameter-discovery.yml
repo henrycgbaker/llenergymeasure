@@ -54,10 +54,6 @@ concurrency:
 
 jobs:
   refresh:
-    # Skip runs triggered by the bot's own commit-back. Belt-and-braces with
-    # the deterministic LLENERGY_DISCOVERY_FROZEN_AT anchor below: even if a
-    # diff sneaks through, the workflow won't re-fire on its own push.
-    if: github.actor != 'llem-ci-bot[bot]'
     runs-on: self-hosted
     timeout-minutes: 90
     steps:
