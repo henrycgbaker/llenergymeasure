@@ -35,7 +35,7 @@ llem exposes engine parameters to users through hand-authored Pydantic models. T
 
 `scripts/discover_*.py` introspects each engine's public Python API (e.g. `inspect.signature(vllm.LLM.__init__)`, `inspect.signature(AutoModelForCausalLM.from_pretrained)`) and writes the result to `src/llenergymeasure/config/discovered_schemas/{engine}.json`.
 
-These JSON files are the ground truth for "what parameters does this engine version accept". They are vendored into the repo and regenerated via the schema-refresh pipeline when an engine version bumps (see [schema-refresh.md](schema-refresh.md)).
+These JSON files are the ground truth for "what parameters does this engine version accept". They are vendored into the repo and regenerated via the parameter-discovery pipeline when an engine version bumps (see [schema-refresh.md](schema-refresh.md)).
 
 ---
 
@@ -92,5 +92,5 @@ These are listed in `LLEM_NATIVE_FIELDS` in the drift checker. Each entry suppre
 ## See also
 
 - [parameter-discovery.md](parameter-discovery.md) - config validation pipeline (how invalid combinations are caught)
-- [schema-refresh.md](schema-refresh.md) - Renovate-driven schema refresh
+- [schema-refresh.md](schema-refresh.md) - parameter-discovery pipeline (Renovate-driven schema refresh)
 - [engines.md](engines.md) - engine configuration reference

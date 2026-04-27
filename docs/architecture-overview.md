@@ -151,7 +151,7 @@ The invariant miner pipeline lives in `scripts/miners/` - it is a build-time too
   Renovate opens PR bumping Dockerfile ARG
                │
                ▼
-  CI fires invariant-miner.yml
+  Stage 1: auto-mine.yml fires (mining)
                │
                ├──► static miner runs (GH-hosted runner, CPU only)
                │
@@ -163,6 +163,10 @@ The invariant miner pipeline lives in `scripts/miners/` - it is a build-time too
   build_corpus.py merges staging files
   (dedup by fingerprint; static miner wins on match.fields,
    dynamic miner wins on message_template)
+  → produces configs/validation_rules/{engine}.yaml   (YAML corpus)
+               │
+               ▼
+  Stage 2: invariant-miner.yml fires (vendor gate)
                │
                ▼
   vendor_rules.py replays every rule against the live library
@@ -172,7 +176,6 @@ The invariant miner pipeline lives in `scripts/miners/` - it is a build-time too
                ├──► divergent rules quarantined to _failed_validation_*.yaml
                │
                └──► confirmed rules written to:
-                    configs/validation_rules/{engine}.yaml   (YAML corpus)
                     src/.../vendored_rules/{engine}.json     (vendored JSON)
                │
                ▼
@@ -277,4 +280,4 @@ The trade-off is staleness risk: the corpus must be regenerated when the engine 
 - [research-context.md](research-context.md) - academic positioning
 - [engines.md](engines.md) - engine configuration reference
 - [methodology.md](methodology.md) - energy measurement methodology
-- [schema-refresh.md](schema-refresh.md) - Renovate-driven schema refresh pipeline
+- [schema-refresh.md](schema-refresh.md) - parameter-discovery pipeline (Renovate-driven schema refresh)

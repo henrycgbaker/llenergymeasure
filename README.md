@@ -72,7 +72,7 @@ See [Installation](docs/installation.md) for system requirements, Docker setup, 
 | [Validation Rule Corpus Format](docs/validation-rule-corpus.md) | YAML schema reference for corpus rules |
 | [Extending the Miner](docs/extending-miners.md) | How to add a new engine to the invariant miner |
 | [Research Context](docs/research-context.md) | Academic positioning: Daikon, Houdini, NeuRI, and what is novel |
-| [Schema Refresh Pipeline](docs/schema-refresh.md) | Renovate-driven engine schema refresh |
+| [Parameter Discovery Pipeline](docs/schema-refresh.md) | Renovate-driven engine schema refresh |
 
 ---
 

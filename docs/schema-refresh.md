@@ -1,4 +1,4 @@
-# Schema Refresh Pipeline
+# Parameter Discovery Pipeline
 
 Engine parameter schemas are vendored as JSON files in
 `src/llenergymeasure/config/discovered_schemas/`. When an upstream engine
@@ -24,7 +24,7 @@ e.g. ARG VLLM_VERSION=v0.7.3 -> v0.8.0
                       |
                       v
 parameter-discovery.yml auto-fires
-(guarded: only for renovate[bot] PRs touching Dockerfiles)
+(guarded: only for Renovate-bot PRs touching Dockerfiles)
                       |
                       v
 +------------------------------------------+
