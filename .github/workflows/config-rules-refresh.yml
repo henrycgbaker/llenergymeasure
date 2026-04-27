@@ -144,23 +144,14 @@ jobs:
         id: vendor
         env:
           LLENERGY_VENDOR_FROZEN_AT: ${{ steps.anchor.outputs.date }}
-        # NOTE: --fail-on-divergence temporarily removed — see #424.
-        # The corpus is currently stale against live transformers
-        # (transformers shipped a wholesale dormant→error flip). The
-        # gate is restored once the vLLM + TRT-LLM miners ship and the
-        # corpus is regenerated. Until then this step still records
-        # divergences into the JSON output (informational), commits the
-        # regenerated JSON back to the PR, and posts a diff comment —
-        # it just no longer fails the build.
         run: |
-          set +e
           uv run python scripts/vendor_rules.py \
             --engine transformers \
             --corpus "${CORPUS_DIR}/transformers.yaml" \
             --out "${VENDORED_DIR}/transformers.json" \
-            --vendor-commit "${{ steps.anchor.outputs.sha }}"
-          echo "vendor_exit=$?" >> "$GITHUB_OUTPUT"
-          set -e
+            --vendor-commit "${{ steps.anchor.outputs.sha }}" \
+            --fail-on-divergence
+          echo "vendor_exit=0" >> "$GITHUB_OUTPUT"
 
       - name: Classify diff
         id: diff

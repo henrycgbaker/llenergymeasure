@@ -15,7 +15,7 @@
 # ============================================================
 ARG PYTORCH_VERSION=2.5.1-cuda12.4-cudnn9-runtime
 ARG PYTORCH_DEVEL_VERSION=2.5.1-cuda12.4-cudnn9-devel
-ARG TRANSFORMERS_VERSION=5.5.4
+ARG TRANSFORMERS_VERSION=4.57.3
 
 # Build stage: compile flash-attn FA2 + FA3 (needs nvcc from devel image)
 # FA2 = standard flash-attn pip package.
