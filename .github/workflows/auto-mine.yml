@@ -16,15 +16,29 @@ name: Auto-Mine — Generate Validation Rules
 #
 # Per-engine runner choice:
 #   mine-transformers : ubuntu-latest GH-hosted runner (CPU-safe import)
-#   mine-vllm         : ubuntu-latest GH-hosted runner. The vLLM miners
-#                       deliberately avoid EngineArgs.create_engine_config()
-#                       and other CUDA-context paths (see vllm_dynamic_miner.py
-#                       docstring §6); confirmed by PR #444's successful
-#                       ubuntu-latest run. Distinct from invariant-miner.yml's
-#                       vendor-vllm job, which DOES hit CUDA paths during rule
-#                       replay and must run inside the vLLM Docker image.
+#   mine-vllm         : self-hosted GPU runner inside llenergymeasure:vllm.
+#                       The vLLM miners are CPU-safe by construction (they
+#                       avoid EngineArgs.create_engine_config() and other
+#                       CUDA-context paths — see vllm_dynamic_miner.py
+#                       docstring §6) and PR #444 proved they import cleanly
+#                       against vllm's own published constraints. They DO
+#                       NOT import cleanly under the unified uv.lock that the
+#                       repo uses on ubuntu-latest: tensorrt-llm 0.21.0's
+#                       transitive constraints cascade into the vllm extra's
+#                       torch/torchvision resolution and break vllm at import
+#                       time (`operator torchvision::nms does not exist`).
+#                       See #437 (parent dependency-isolation issue) and
+#                       #464 for the full empirical trail. Pivoting to the
+#                       vLLM Docker image side-steps the unified-lock problem
+#                       and aligns with vendor-vllm's runtime env.
 #   mine-tensorrt     : self-hosted GPU runner inside llenergymeasure:tensorrt
-#                       (TRT-LLM 0.21.0 loads CUDA bindings on import)
+#                       (TRT-LLM 0.21.0 loads CUDA bindings on import). The
+#                       NGC image already carries the tensorrt_llm Python
+#                       source as part of the installed package — the workflow
+#                       symlinks it into the miner's expected default path
+#                       (/tmp/trt-llm-0.21.0/tensorrt_llm) before invoking
+#                       build_corpus, so no separate tarball extraction is
+#                       needed. Closes #463.
 #
 # Determinism note:
 #   build_corpus.py and every miner read LLENERGY_MINER_FROZEN_AT from the env
@@ -231,15 +245,21 @@ jobs:
           fi
 
   mine-vllm:
-    # vLLM miners are CPU-safe by design (they avoid EngineArgs.create_engine_config()
-    # and other CUDA-context paths — see vllm_dynamic_miner.py docstring §6).
-    # PR #444 confirmed empirically that the full mine + corpus build runs on
-    # ubuntu-latest. This is distinct from invariant-miner.yml's vendor-vllm
-    # job, which replays kwargs against live config classes and DOES hit CUDA
-    # paths the miners deliberately avoid.
+    # The vLLM miners are CPU-safe by construction (they avoid
+    # EngineArgs.create_engine_config() and other CUDA-context paths — see
+    # vllm_dynamic_miner.py docstring §6) but cannot run against the repo's
+    # unified uv.lock on ubuntu-latest: tensorrt-llm 0.21.0's transitive
+    # constraints cascade into the vllm extra's torch/torchvision resolution
+    # and break `from vllm import ...` at import time (`operator
+    # torchvision::nms does not exist`). PR #459 surfaced this empirically.
+    #
+    # Pivot: run the miner inside the llenergymeasure:vllm Docker image on
+    # the project's self-hosted GPU runner, mirroring invariant-miner.yml's
+    # vendor-vllm job. The image carries vLLM's own published torch/vllm
+    # combo, so the miners import cleanly. Closes #464.
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    runs-on: self-hosted
+    timeout-minutes: 60
     steps:
       - name: Mint llem-ci-bot App token
         id: app-token
@@ -249,6 +269,14 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
+      - name: Clean workspace (fix root-owned files from prior Docker runs)
+        # Mirror gpu-ci.yml: container-written artefacts persist as root-owned
+        # on the self-hosted runner and break subsequent checkouts otherwise.
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
@@ -256,16 +284,34 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          # vLLM wheels are large; per-engine cache key keeps reuse high.
-          cache-suffix: auto-mine-vllm-3.12
-          python-version: "3.12"
+      - name: Resolve vLLM version
+        id: version
+        run: |
+          VER=$(grep -oE '^ARG[[:space:]]+VLLM_VERSION=[^[:space:]]+' \
+                  docker/Dockerfile.vllm | head -1 | cut -d= -f2-)
+          if [[ -z "$VER" ]]; then
+            echo "Could not extract VLLM_VERSION from Dockerfile.vllm" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:vllm-${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Install dependencies
-        run: uv sync --dev --extra vllm
+      - name: Build or reuse vLLM image
+        # Build only if the version-tagged image is missing - the runner's
+        # Docker layer cache makes the FROM vllm/vllm-openai:VER step a no-op
+        # when the upstream tag is unchanged, so this is a cheap check.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "Building $IMAGE from docker/Dockerfile.vllm..."
+            docker build \
+              -f docker/Dockerfile.vllm \
+              -t "$IMAGE" \
+              --build-arg VLLM_VERSION="${{ steps.version.outputs.version }}" \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
 
       - name: Save current YAML for diffing
         run: |
@@ -295,11 +341,28 @@ jobs:
           DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
           echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
 
-      - name: Re-mine vllm corpus
+      - name: Re-mine vllm corpus inside container
         env:
-          LLENERGY_MINER_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
         run: |
-          uv run python -m scripts.miners.build_corpus --engine vllm
+          docker run --rm --gpus all \
+            -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts.miners.build_corpus --engine vllm
+
+      - name: Fix container-written file ownership
+        # build_corpus.py wrote the YAML as root inside the container; reclaim
+        # ownership so subsequent steps (git add, commit) can read it.
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
 
       - name: Classify YAML diff
         id: diff
@@ -466,6 +529,15 @@ jobs:
         # job — required so libtensorrt_llm.so resolves CUDA 12.4+ symbols
         # against the bundled NGC compat libs on hosts whose driver predates
         # the NGC image's CUDA target. See docker/Dockerfile.tensorrt.
+        #
+        # Source-root symlink rationale (closes #463):
+        # tensorrt_static_miner walks the tensorrt_llm 0.21.0 Python source
+        # tree and defaults to /tmp/trt-llm-0.21.0/tensorrt_llm. The NGC
+        # image already ships that source as part of the installed
+        # tensorrt_llm package, so we resolve its location with
+        # `tensorrt_llm.__file__` and symlink it into the miner's expected
+        # default path before invoking build_corpus. No tarball extraction
+        # required, no build_corpus.py changes required.
         run: |
           docker run --rm --gpus all \
             -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
@@ -473,9 +545,19 @@ jobs:
             -e PYTHONDONTWRITEBYTECODE=1 \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
-            --entrypoint python3 \
+            --entrypoint bash \
             "$IMAGE" \
-            -m scripts.miners.build_corpus --engine tensorrt
+            -c '
+              set -euo pipefail
+              SRC=$(python3 -c "import tensorrt_llm, pathlib; print(pathlib.Path(tensorrt_llm.__file__).parent)")
+              if [[ -z "$SRC" || ! -d "$SRC" ]]; then
+                echo "Could not locate installed tensorrt_llm package source" >&2
+                exit 1
+              fi
+              mkdir -p /tmp/trt-llm-0.21.0
+              ln -sfn "$SRC" /tmp/trt-llm-0.21.0/tensorrt_llm
+              python3 -m scripts.miners.build_corpus --engine tensorrt
+            '
 
       - name: Fix container-written file ownership
         # build_corpus.py wrote the YAML as root inside the container; reclaim
