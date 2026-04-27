@@ -394,8 +394,9 @@ def test_landmark_checks_raise_on_missing():
 ```
 
 2. Set the runner tier:
-   - CPU-safe imports (`import myenginelib` works without CUDA): add to the GH-hosted job.
-   - CUDA-aware import required: add to the self-hosted GPU runner job.
+   - CPU-safe import AND clean resolution under the repo's unified `uv.lock` (e.g. transformers): add to the GH-hosted `ubuntu-latest` job with `uv sync --extra <engine>`.
+   - CPU-safe import but unified-lock resolution breaks the engine (e.g. vLLM, where tensorrt-llm 0.21.0's transitive constraints corrupt vllm's torch/torchvision; #437): add to the self-hosted GPU runner inside the engine's published Docker image, mirroring `mine-vllm` in `auto-mine.yml`.
+   - CUDA-aware import required (e.g. TRT-LLM): add to the self-hosted GPU runner inside the engine's Docker image, mirroring `mine-tensorrt`.
 
 3. Add the engine's Dockerfile to the vendor-rules step so `vendor_rules.py` can replay rules inside the engine's container.
 

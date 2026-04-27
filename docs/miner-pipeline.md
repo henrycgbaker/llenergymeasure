@@ -417,16 +417,18 @@ Library version bumps trigger corpus regeneration automatically.
   │  Stage 1: auto-mine.yml fires (mining)                            │
   │  (guarded: only Renovate PRs touching engine version files)       │
   │               │                                                   │
-  │         ┌─────┴─────────────────────────────┐                    │
-  │         ▼                                   ▼                    │
-  │  GH-hosted runner                   Self-hosted GPU runner       │
-  │  - transformers static miner        - TRT-LLM static miner       │
-  │  - transformers dynamic miner       (CUDA-aware import required)  │
-  │  - vLLM static miner                                              │
-  │  - vLLM dynamic miner                                             │
-  │  (CPU-safe imports confirmed)                                     │
-  │         │                                   │                    │
-  │         └─────────────┬─────────────────────┘                    │
+  │         ┌─────┴─────────────────┬────────────────────────┐        │
+  │         ▼                       ▼                        ▼        │
+  │  GH-hosted runner       Self-hosted GPU runner   Self-hosted GPU  │
+  │  (ubuntu-latest)        inside vllm/vllm-openai  inside           │
+  │  - transformers          Docker image            llenergymeasure: │
+  │    static miner         - vLLM static miner     tensorrt image    │
+  │  - transformers         - vLLM dynamic miner    - TRT-LLM static  │
+  │    dynamic miner        (Docker isolates from    miner (CUDA-     │
+  │  (uv sync --extra        unified uv.lock; #437)  aware import     │
+  │   transformers)                                  required)        │
+  │         │                       │                        │        │
+  │         └───────────────────────┴────────────────────────┘        │
   │                       ▼                                           │
   │         build_corpus.py merges staging files                      │
   │         → configs/validation_rules/{engine}.yaml                  │
@@ -469,14 +471,15 @@ The update workflow:
 
 ## Two-tier CI
 
-Miners run on two runner tiers based on their import requirements.
+Miners run on two runner tiers. The choice is driven both by import requirements and by whether the miner can resolve cleanly against the repo's unified `uv.lock`.
 
-| Tier | Runner | What runs |
-|------|--------|-----------|
-| GH-hosted | `ubuntu-latest` | All static miners (pure file I/O); transformers + vLLM dynamic miners (CPU-safe imports confirmed) |
-| Self-hosted | GPU runner (closes issue #389) | TRT-LLM static miner (requires CUDA-aware `import tensorrt_llm`); the TRT-LLM Docker image `llenergymeasure:tensorrt` at pin v0.21.0 is the runtime |
+| Tier | Runner | Image | What runs |
+|------|--------|-------|-----------|
+| GH-hosted | `ubuntu-latest` | host (`uv sync --extra transformers`) | transformers static + dynamic miners (CPU-safe import; resolves cleanly under unified lock) |
+| Self-hosted | GPU runner (closes issue #389) | `vllm/vllm-openai:${VLLM_VERSION}` | vLLM static + dynamic miners (CPU-safe imports, but unified `uv.lock` cascades tensorrt-llm 0.21.0 constraints into vllm's torch/torchvision and breaks `import vllm`; #437, #464). Docker isolates the miner against vLLM's own published torch/vllm combo. |
+| Self-hosted | GPU runner | `llenergymeasure:tensorrt-${TRTLLM_VERSION}` | TRT-LLM static miner (CUDA-aware `import tensorrt_llm`). The NGC-derived image carries the `tensorrt_llm` Python source as part of the installed package; the workflow symlinks it into the miner's expected default path before invoking `build_corpus`. |
 
-TRT-LLM is pinned at v0.21.0 (CUDA 12.6.x) because v1.x requires CUDA 13.x, which is not available on the current A100 (SM80) runner fleet.
+Pivoting vLLM and TRT-LLM into Docker on the self-hosted runner mirrors the project's broader principle that engine-touching activity runs inside the same image the user's multi-backend orchestration uses (multi-backend without Docker is a hard error). TRT-LLM is pinned at v0.21.0 (CUDA 12.6.x) because v1.x requires CUDA 13.x, which is not available on the current A100 (SM80) runner fleet.
 
 ---
 

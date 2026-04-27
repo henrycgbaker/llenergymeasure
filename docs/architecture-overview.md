@@ -153,9 +153,14 @@ The invariant miner pipeline lives in `scripts/miners/` - it is a build-time too
                ▼
   Stage 1: auto-mine.yml fires (mining)
                │
-               ├──► static miner runs (GH-hosted runner, CPU only)
+               ├──► transformers miners run (GH-hosted ubuntu-latest, uv sync)
                │
-               ├──► dynamic miner runs (GH-hosted runner)
+               ├──► vLLM miners run (self-hosted GPU runner, inside the
+               │    vllm/vllm-openai Docker image — Docker isolates from
+               │    the unified uv.lock, see #437/#464)
+               │
+               ├──► TRT-LLM miner runs (self-hosted GPU runner, inside the
+               │    llenergymeasure:tensorrt image; CUDA-aware import)
                │
                ├──► lift modules run (pydantic / msgspec / dataclass)
                │
