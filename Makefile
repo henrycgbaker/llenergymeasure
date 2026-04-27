@@ -129,13 +129,13 @@ check-docs: docs-check
 # Usage: make discover-schema ENGINE=vllm
 discover-schema:
 	@test -n "$(ENGINE)" || (echo "Usage: make discover-schema ENGINE={vllm|tensorrt|transformers}" && exit 1)
-	./scripts/update_engine_schema.sh $(ENGINE)
+	./scripts/refresh_discovered_schemas.sh $(ENGINE)
 
 # Rediscover all three engine schemas in sequence.
 discover-schemas-all:
-	./scripts/update_engine_schema.sh vllm
-	./scripts/update_engine_schema.sh tensorrt
-	./scripts/update_engine_schema.sh transformers
+	./scripts/refresh_discovered_schemas.sh vllm
+	./scripts/refresh_discovered_schemas.sh tensorrt
+	./scripts/refresh_discovered_schemas.sh transformers
 
 docs-check:
 	@uv run python scripts/generate_config_docs.py > /dev/null
