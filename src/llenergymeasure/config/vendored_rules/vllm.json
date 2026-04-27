@@ -1,0 +1,1466 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "vllm",
+  "engine_version": "0.7.3",
+  "image_ref": "llenergymeasure:vllm-v0.7.3",
+  "base_image_ref": "vllm/vllm-openai:v0.7.3",
+  "vendored_at": "2026-04-27T23:39:01+02:00",
+  "vendor_commit": "408ea494d9ce8bea5a6c4024a37b97e142e3ff1b",
+  "cases": [
+    {
+      "id": "vllm_cacheconfig_cache_dtype_in_7_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'gpu_memory_utilization', and 'swap_space'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_cpu_offload_gb_ge_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 4 required positional arguments: 'block_size', 'gpu_memory_utilization', 'swap_space', and 'cache_dtype'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_gpu_memory_utilization_gt_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'swap_space', and 'cache_dtype'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_gpu_memory_utilization_le_1",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'swap_space', and 'cache_dtype'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_kv_offloading_backend_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'kv_offloading_backend'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_mamba_block_size_gt_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_block_size'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_mamba_cache_dtype_in_3_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_cache_dtype'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_mamba_cache_mode_in_3_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_cache_mode'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_mamba_ssm_cache_dtype_in_3_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_ssm_cache_dtype'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_prefix_caching_hash_algo_in_4_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'prefix_caching_hash_algo'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_cacheconfig_swap_space_ge_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'gpu_memory_utilization', and 'cache_dtype'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_compilationconfig_compile_cache_save_format_in_2_values",
+      "outcome": "no_op",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "positive_confirmed": false,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_compilationconfig_dormant_backend_eq",
+      "outcome": "no_op",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "positive_confirmed": false,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_eplbconfig_num_redundant_experts_ge_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'EPLBConfig'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_eplbconfig_policy_in_1_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'EPLBConfig'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_eplbconfig_raises_log_balancedness_interval_le_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'EPLBConfig'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_loraconfig_dormant_max_cpu_loras_unset_true",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 2 required positional arguments: 'max_lora_rank' and 'max_loras'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_loraconfig_lora_dtype_in_3_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 2 required positional arguments: 'max_lora_rank' and 'max_loras'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_loraconfig_max_lora_rank_in_9_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 1 required positional argument: 'max_loras'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_loraconfig_max_loras_ge_1",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 1 required positional argument: 'max_lora_rank'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_modelconfig_convert_in_4_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'convert'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_modelconfig_logprobs_mode_in_4_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'logprobs_mode'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_modelconfig_mm_encoder_tp_mode_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'mm_encoder_tp_mode'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_modelconfig_mm_processor_cache_type_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'mm_processor_cache_type'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_modelconfig_runner_in_4_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'runner'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_multimodalconfig_mm_processor_cache_gb_ge_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "MultiModalConfig.__init__() got an unexpected keyword argument 'mm_processor_cache_gb'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_multimodalconfig_video_pruning_rate_ge_0p0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "MultiModalConfig.__init__() got an unexpected keyword argument 'video_pruning_rate'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_multimodalconfig_video_pruning_rate_lt_1p0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "MultiModalConfig.__init__() got an unexpected keyword argument 'video_pruning_rate'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig__api_process_count_gt_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument '_api_process_count'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig__api_process_rank_ge_neg1",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument '_api_process_rank'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig_all2all_backend_in_7_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'all2all_backend'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig_data_parallel_backend_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'data_parallel_backend'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig_dormant_all2all_backend_eq_pplx",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'all2all_backend'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig_dormant_data_parallel_rank_set_true",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'data_parallel_rank'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig_expert_placement_strategy_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'expert_placement_strategy'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig_raises_api_process_rank_ge_ref_api_process_count",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument '_api_process_count'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_parallelconfig_raises_data_parallel_external_lb_set_true",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'data_parallel_size'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_poolerconfig_seq_pooling_type_in_3_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "PoolerConfig.__init__() got an unexpected keyword argument 'seq_pooling_type'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_poolerconfig_tok_pooling_type_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "PoolerConfig.__init__() got an unexpected keyword argument 'tok_pooling_type'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_sampling_token_counts_max_tokens_lt_min_tokens",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "min_tokens must be less than or equal to max_tokens=1, got 5."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_samplingparams_dormant_bad_words_unset_true",
+      "outcome": "dormant_silent",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {
+        "bad_words": {
+          "declared": null,
+          "observed": []
+        }
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_samplingparams_dormant_seed_eq_neg1",
+      "outcome": "dormant_silent",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {
+        "seed": {
+          "declared": -1,
+          "observed": null
+        }
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "TypeError",
+        "message": "Unexpected keyword argument 'skip_reading_prefix_cache'"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "vllm_samplingparams_raises_min_tokens_gt_ref_max_tokens",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "min_tokens must be less than or equal to max_tokens=1, got 2."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_samplingparams_raises_min_tokens_lt_0",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "min_tokens must be greater than or equal to 0, got -1."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_samplingparams_raises_n_lt_1",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "n must be at least 1, got 0."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_samplingparams_raises_n_not_type_int",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "n must be an int, but is of type <class 'str'>"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_samplingparams_raises_top_k_lt_neg1",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValueError",
+        "message": "top_k must be -1 (disable), or at least 1, got -2."
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "vllm_structuredoutputsconfig_backend_in_5_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'StructuredOutputsConfig'"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    }
+  ],
+  "divergences": [
+    {
+      "rule_id": "vllm_cacheconfig_cache_dtype_in_7_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_cache_dtype_in_7_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'gpu_memory_utilization', and 'swap_space'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_cpu_offload_gb_ge_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_cpu_offload_gb_ge_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 4 required positional arguments: 'block_size', 'gpu_memory_utilization', 'swap_space', and 'cache_dtype'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_gpu_memory_utilization_gt_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_gpu_memory_utilization_gt_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'swap_space', and 'cache_dtype'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_gpu_memory_utilization_le_1",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_gpu_memory_utilization_le_1",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'swap_space', and 'cache_dtype'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_kv_offloading_backend_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_kv_offloading_backend_in_2_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'kv_offloading_backend'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_block_size_gt_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_block_size_gt_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_block_size'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_cache_dtype_in_3_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_cache_dtype_in_3_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_cache_dtype'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_cache_mode_in_3_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_cache_mode_in_3_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_cache_mode'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_ssm_cache_dtype_in_3_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_mamba_ssm_cache_dtype_in_3_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'mamba_ssm_cache_dtype'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_prefix_caching_hash_algo_in_4_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_prefix_caching_hash_algo_in_4_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() got an unexpected keyword argument 'prefix_caching_hash_algo'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_cacheconfig_swap_space_ge_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_cacheconfig_swap_space_ge_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "CacheConfig.__init__() missing 3 required positional arguments: 'block_size', 'gpu_memory_utilization', and 'cache_dtype'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_compilationconfig_compile_cache_save_format_in_2_values",
+      "field": "outcome",
+      "expected": "error",
+      "observed": "no_op"
+    },
+    {
+      "rule_id": "vllm_compilationconfig_compile_cache_save_format_in_2_values",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_compilationconfig_compile_cache_save_format_in_2_values",
+      "field": "kwargs_positive",
+      "expected": "raises",
+      "observed": "no_op",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "vllm_compilationconfig_dormant_backend_eq",
+      "field": "outcome",
+      "expected": "dormant_silent",
+      "observed": "no_op"
+    },
+    {
+      "rule_id": "vllm_compilationconfig_dormant_backend_eq",
+      "field": "normalised_fields",
+      "expected": [
+        "backend"
+      ],
+      "observed": []
+    },
+    {
+      "rule_id": "vllm_compilationconfig_dormant_backend_eq",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_compilationconfig_dormant_backend_eq",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "no_op",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "vllm_eplbconfig_num_redundant_experts_ge_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_eplbconfig_num_redundant_experts_ge_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'EPLBConfig'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_eplbconfig_policy_in_1_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_eplbconfig_policy_in_1_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'EPLBConfig'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_eplbconfig_raises_log_balancedness_interval_le_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_eplbconfig_raises_log_balancedness_interval_le_0",
+      "field": "message_template",
+      "expected": "log_balancedness_interval must be greater than 0.",
+      "observed": "module 'vllm.config' has no attribute 'EPLBConfig'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "vllm_eplbconfig_raises_log_balancedness_interval_le_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'EPLBConfig'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_loraconfig_dormant_max_cpu_loras_unset_true",
+      "field": "outcome",
+      "expected": "dormant_silent",
+      "observed": "error"
+    },
+    {
+      "rule_id": "vllm_loraconfig_dormant_max_cpu_loras_unset_true",
+      "field": "normalised_fields",
+      "expected": [
+        "max_cpu_loras"
+      ],
+      "observed": []
+    },
+    {
+      "rule_id": "vllm_loraconfig_dormant_max_cpu_loras_unset_true",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_loraconfig_dormant_max_cpu_loras_unset_true",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_loraconfig_dormant_max_cpu_loras_unset_true",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "vllm_loraconfig_dormant_max_cpu_loras_unset_true",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 2 required positional arguments: 'max_lora_rank' and 'max_loras'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_loraconfig_lora_dtype_in_3_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_loraconfig_lora_dtype_in_3_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 2 required positional arguments: 'max_lora_rank' and 'max_loras'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_loraconfig_max_lora_rank_in_9_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_loraconfig_max_lora_rank_in_9_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 1 required positional argument: 'max_loras'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_loraconfig_max_loras_ge_1",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_loraconfig_max_loras_ge_1",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "LoRAConfig.__init__() missing 1 required positional argument: 'max_lora_rank'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_modelconfig_convert_in_4_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_modelconfig_convert_in_4_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'convert'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_modelconfig_logprobs_mode_in_4_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_modelconfig_logprobs_mode_in_4_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'logprobs_mode'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_modelconfig_mm_encoder_tp_mode_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_modelconfig_mm_encoder_tp_mode_in_2_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'mm_encoder_tp_mode'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_modelconfig_mm_processor_cache_type_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_modelconfig_mm_processor_cache_type_in_2_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'mm_processor_cache_type'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_modelconfig_runner_in_4_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_modelconfig_runner_in_4_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ModelConfig.__init__() got an unexpected keyword argument 'runner'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_multimodalconfig_mm_processor_cache_gb_ge_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_multimodalconfig_mm_processor_cache_gb_ge_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "MultiModalConfig.__init__() got an unexpected keyword argument 'mm_processor_cache_gb'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_multimodalconfig_video_pruning_rate_ge_0p0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_multimodalconfig_video_pruning_rate_ge_0p0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "MultiModalConfig.__init__() got an unexpected keyword argument 'video_pruning_rate'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_multimodalconfig_video_pruning_rate_lt_1p0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_multimodalconfig_video_pruning_rate_lt_1p0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "MultiModalConfig.__init__() got an unexpected keyword argument 'video_pruning_rate'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig__api_process_count_gt_0",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig__api_process_count_gt_0",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument '_api_process_count'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig__api_process_rank_ge_neg1",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig__api_process_rank_ge_neg1",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument '_api_process_rank'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_all2all_backend_in_7_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_all2all_backend_in_7_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'all2all_backend'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_data_parallel_backend_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_data_parallel_backend_in_2_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'data_parallel_backend'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_all2all_backend_eq_pplx",
+      "field": "outcome",
+      "expected": "dormant_silent",
+      "observed": "error"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_all2all_backend_eq_pplx",
+      "field": "normalised_fields",
+      "expected": [
+        "all2all_backend"
+      ],
+      "observed": []
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_all2all_backend_eq_pplx",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_all2all_backend_eq_pplx",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_all2all_backend_eq_pplx",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_all2all_backend_eq_pplx",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'all2all_backend'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_data_parallel_rank_set_true",
+      "field": "outcome",
+      "expected": "dormant_silent",
+      "observed": "error"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_data_parallel_rank_set_true",
+      "field": "normalised_fields",
+      "expected": [
+        "data_parallel_rank"
+      ],
+      "observed": []
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_data_parallel_rank_set_true",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_data_parallel_rank_set_true",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_data_parallel_rank_set_true",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_dormant_data_parallel_rank_set_true",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'data_parallel_rank'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_expert_placement_strategy_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_expert_placement_strategy_in_2_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'expert_placement_strategy'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_raises_api_process_rank_ge_ref_api_process_count",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_raises_api_process_rank_ge_ref_api_process_count",
+      "field": "message_template",
+      "expected": "Invalid value of `_api_process_rank`. Expected to be `-1` or `[0, ",
+      "observed": "ParallelConfig.__init__() got an unexpected keyword argument '_api_process_count'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_raises_api_process_rank_ge_ref_api_process_count",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument '_api_process_count'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_raises_data_parallel_external_lb_set_true",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_parallelconfig_raises_data_parallel_external_lb_set_true",
+      "field": "message_template",
+      "expected": "data_parallel_external_lb can only be set when data_parallel_size > 1",
+      "observed": "ParallelConfig.__init__() got an unexpected keyword argument 'data_parallel_size'",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "vllm_parallelconfig_raises_data_parallel_external_lb_set_true",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "ParallelConfig.__init__() got an unexpected keyword argument 'data_parallel_size'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_poolerconfig_seq_pooling_type_in_3_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_poolerconfig_seq_pooling_type_in_3_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "PoolerConfig.__init__() got an unexpected keyword argument 'seq_pooling_type'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_poolerconfig_tok_pooling_type_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_poolerconfig_tok_pooling_type_in_2_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "PoolerConfig.__init__() got an unexpected keyword argument 'tok_pooling_type'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_bad_words_unset_true",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_bad_words_unset_true",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "'int' object is not iterable"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+      "field": "outcome",
+      "expected": "dormant_silent",
+      "observed": "error"
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+      "field": "normalised_fields",
+      "expected": [
+        "skip_reading_prefix_cache"
+      ],
+      "observed": []
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "vllm_samplingparams_dormant_skip_reading_prefix_cache_unset_true",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "TypeError",
+        "message": "Unexpected keyword argument 'skip_reading_prefix_cache'"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "vllm_samplingparams_raises_top_k_lt_neg1",
+      "field": "message_template",
+      "expected": "top_k must be 0 (disable), or at least 1, got ",
+      "observed": "top_k must be -1 (disable), or at least 1, got -2.",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "vllm_structuredoutputsconfig_backend_in_5_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "vllm_structuredoutputsconfig_backend_in_5_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "AttributeError",
+        "message": "module 'vllm.config' has no attribute 'StructuredOutputsConfig'"
+      },
+      "check_failed": "negative_does_not_raise"
+    }
+  ]
+}
