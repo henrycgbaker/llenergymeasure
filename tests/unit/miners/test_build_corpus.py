@@ -185,6 +185,23 @@ class TestFingerprint:
         rule_b = _ast_rule(severity="warn")
         assert build_corpus.fingerprint_rule(rule_a) != build_corpus.fingerprint_rule(rule_b)
 
+    def test_fingerprint_collapses_int_and_float_thresholds(self) -> None:
+        # Static miners read literals from source (`0.0` -> float); dynamic
+        # miners emit Python int probes (`0` -> int). Same constraint, two
+        # numeric types. Without canonicalisation the cross-validation safety
+        # net would split a single library invariant into two corpus rules.
+        rule_int = _ast_rule(fields={"vllm.sampling.repetition_penalty": {"<=": 0}})
+        rule_float = _ast_rule(fields={"vllm.sampling.repetition_penalty": {"<=": 0.0}})
+        assert build_corpus.fingerprint_rule(rule_int) == build_corpus.fingerprint_rule(rule_float)
+
+    def test_fingerprint_preserves_bool_distinct_from_int(self) -> None:
+        # Bool must NOT collapse into int despite ``True == 1``: a rule that
+        # fires on ``do_sample is True`` is semantically different from one
+        # that fires on ``num_beams == 1``.
+        rule_bool = _ast_rule(fields={"transformers.sampling.do_sample": True})
+        rule_int = _ast_rule(fields={"transformers.sampling.do_sample": 1})
+        assert build_corpus.fingerprint_rule(rule_bool) != build_corpus.fingerprint_rule(rule_int)
+
 
 # ---------------------------------------------------------------------------
 # Merge: cross-validation
