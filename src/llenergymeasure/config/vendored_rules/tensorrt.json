@@ -1,0 +1,987 @@
+{
+  "schema_version": "1.0.0",
+  "engine": "tensorrt",
+  "engine_version": "0.21.0",
+  "image_ref": "llenergymeasure:tensorrt-0.21.0",
+  "base_image_ref": "nvcr.io/nvidia/tensorrt-llm/release:0.21.0",
+  "vendored_at": "2026-04-27T18:16:44+02:00",
+  "vendor_commit": "1672962eb4f635bc2f6b21db75696b0b5215a3d3",
+  "cases": [
+    {
+      "id": "tensorrt_basellmargs_load_format_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nload_format\n  Input should be 'auto' or 'dummy' [type=literal_error, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/literal_error"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_basellmargs_tokenizer_mode_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\ntokenizer_mode\n  Input should be 'auto' or 'slow' [type=literal_error, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/literal_error"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_batching_type_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nbatching_type\n  Input should be 'STATIC' or 'INFLIGHT' [type=enum, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/enum"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_calibconfig_device_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for CalibConfig\ndevice\n  Input should be 'cuda' or 'cpu' [type=literal_error, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/literal_error"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "tensorrt_capacity_scheduler_policy_in_3_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\ncapacity_scheduler_policy\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/extra_forbidden"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_context_chunking_policy_in_2_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\ncontext_chunking_policy\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/extra_forbidden"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [
+        "Use tensor_parallel_size/pipeline_parallel_size/xxx_parallel_size instead."
+      ],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Value error, Invalid build_cache_config: x [type=value_error, input_value={'enable_build_cache': 'x...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_raises_max_ngram_size_le_0_positive_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for LookaheadDecodingConfig\nmax_ngram_size\n  Value error, Value must be positive, got 0 [type=value_error, input_value=0, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "tensorrt_raises_max_verification_set_size_le_0_positive_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for LookaheadDecodingConfig\nmax_verification_set_size\n  Value error, Value must be positive, got 0 [type=value_error, input_value=0, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "tensorrt_raises_max_window_size_le_0_positive_values",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for LookaheadDecodingConfig\nmax_window_size\n  Value error, Value must be positive, got 0 [type=value_error, input_value=0, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": true
+    },
+    {
+      "id": "tensorrt_raises_model_not_type_model",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "2 validation errors for TrtLlmArgs\nmodel.str\n  Input should be a valid string [type=string_type, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nmodel.lax-or-strict[lax=union[json-or-python[json=function-after[path_validator(), str],python=is-instance[Path]],function-after[path_validator(), str]],strict=json-or-python[json=function-after[path_validator(), str],python=is-instance[Path]]]\n  Input is not a valid path for <class 'pathlib.Path'> [type=path_type, input_value=1, input_type=int]"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_raises_speculative_config_set_True_speculative_config",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "6 validation errors for TrtLlmArgs\nspeculative_config.LookaheadDecodingConfig\n  Input should be a valid dictionary or instance of LookaheadDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.MedusaDecodingConfig\n  Input should be a valid dictionary or instance of MedusaDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.EagleDecodingConfig\n  Input should be a valid dictionary or instance of EagleDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.MTPDecodingConfig\n  Input should be a valid dictionary or instance of MTPDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.NGramDecodingConfig\n  Input should be a valid dictionary or instance of NGramDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.DraftTargetDecodingConfig\n  Input should be a valid dictionary or instance of DraftTargetDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type"
+      },
+      "positive_confirmed": true,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "2 validation errors for TrtLlmArgs\nenable_lora\n  Input should be a valid boolean, unable to interpret input [type=bool_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/bool_parsing\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Assertion failed, build_config is not initialized: x [type=assertion_error, input_value={'backend': '__static_min...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/assertion_error"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_batch_size\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_beam_width\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_beam_width\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_input_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_input_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "2 validation errors for TrtLlmArgs\nmax_lora_rank\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_num_tokens\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_seq_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    },
+    {
+      "id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "outcome": "error",
+      "emission_channel": "none",
+      "observed_messages": [],
+      "observed_silent_normalisations": {},
+      "observed_exception": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nmax_seq_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing"
+      },
+      "positive_confirmed": false,
+      "negative_confirmed": false
+    }
+  ],
+  "divergences": [
+    {
+      "rule_id": "tensorrt_basellmargs_load_format_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_basellmargs_load_format_in_2_values",
+      "field": "message_template",
+      "expected": "`load_format` must be one of ['auto', 'dummy']",
+      "observed": "1 validation error for TrtLlmArgs\nload_format\n  Input should be 'auto' or 'dummy' [type=literal_error, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/literal_error",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_basellmargs_tokenizer_mode_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_basellmargs_tokenizer_mode_in_2_values",
+      "field": "message_template",
+      "expected": "`tokenizer_mode` must be one of ['auto', 'slow']",
+      "observed": "1 validation error for TrtLlmArgs\ntokenizer_mode\n  Input should be 'auto' or 'slow' [type=literal_error, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/literal_error",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_batching_type_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_batching_type_in_2_values",
+      "field": "message_template",
+      "expected": "`batching_type` must be one of BatchingType members: ['STATIC', 'INFLIGHT']",
+      "observed": "1 validation error for TrtLlmArgs\nbatching_type\n  Input should be 'STATIC' or 'INFLIGHT' [type=enum, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/enum",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_calibconfig_device_in_2_values",
+      "field": "message_template",
+      "expected": "`device` must be one of ['cuda', 'cpu']",
+      "observed": "1 validation error for CalibConfig\ndevice\n  Input should be 'cuda' or 'cpu' [type=literal_error, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/literal_error",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_capacity_scheduler_policy_in_3_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_capacity_scheduler_policy_in_3_values",
+      "field": "message_template",
+      "expected": "`capacity_scheduler_policy` must be one of CapacitySchedulerPolicy members: ['MAX_UTILIZATION', 'GUARANTEED_NO_EVICT', 'STATIC_BATCH']",
+      "observed": "1 validation error for TrtLlmArgs\ncapacity_scheduler_policy\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/extra_forbidden",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_capacity_scheduler_policy_in_3_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\ncapacity_scheduler_policy\n  Extra inputs are not permitted [type=extra_forbidden, input_value='MAX_UTILIZATION', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/extra_forbidden"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_context_chunking_policy_in_2_values",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_context_chunking_policy_in_2_values",
+      "field": "message_template",
+      "expected": "`context_chunking_policy` must be one of ContextChunkingPolicy members: ['FIRST_COME_FIRST_SERVED', 'EQUAL_PROGRESS']",
+      "observed": "1 validation error for TrtLlmArgs\ncontext_chunking_policy\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<invalid_static_miner_probe>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/extra_forbidden",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_context_chunking_policy_in_2_values",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\ncontext_chunking_policy\n  Extra inputs are not permitted [type=extra_forbidden, input_value='FIRST_COME_FIRST_SERVED', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/extra_forbidden"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_raises_enable_build_cache_not_type_buildcacheconfig_enable_build_cache",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Value error, Invalid build_cache_config: x_neg [type=value_error, input_value={'enable_build_cache': 'x...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_raises_model_not_type_model",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_raises_model_not_type_model",
+      "field": "message_template",
+      "expected": "Invalid model: ",
+      "observed": "2 validation errors for TrtLlmArgs\nmodel.str\n  Input should be a valid string [type=string_type, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_type\nmodel.lax-or-strict[lax=union[json-or-python[json=function-after[path_validator(), str],python=is-instance[Path]],function-after[path_validator(), str]],strict=json-or-python[json=function-after[path_validator(), str],python=is-instance[Path]]]\n  Input is not a valid path for <class 'pathlib.Path'> [type=path_type, input_value=1, input_type=int]",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_raises_speculative_config_set_True_speculative_config",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_raises_speculative_config_set_True_speculative_config",
+      "field": "message_template",
+      "expected": "Speculative config type not recognized: ",
+      "observed": "6 validation errors for TrtLlmArgs\nspeculative_config.LookaheadDecodingConfig\n  Input should be a valid dictionary or instance of LookaheadDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.MedusaDecodingConfig\n  Input should be a valid dictionary or instance of MedusaDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.EagleDecodingConfig\n  Input should be a valid dictionary or instance of EagleDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.MTPDecodingConfig\n  Input should be a valid dictionary or instance of MTPDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.NGramDecodingConfig\n  Input should be a valid dictionary or instance of NGramDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type\nspeculative_config.DraftTargetDecodingConfig\n  Input should be a valid dictionary or instance of DraftTargetDecodingConfig [type=model_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/model_type",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "field": "message_template",
+      "expected": "enable_lora is ignored when lora_config is provided for ",
+      "observed": "2 validation errors for TrtLlmArgs\nenable_lora\n  Input should be a valid boolean, unable to interpret input [type=bool_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/bool_parsing\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_backend_in_lora_config_consistency",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "2 validation errors for TrtLlmArgs\nenable_lora\n  Input should be a valid boolean, unable to interpret input [type=bool_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/bool_parsing\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_build_config_set_True_model_format_misc",
+      "field": "message_template",
+      "expected": "The build_config is ignored for model format of TLLM_ENGINE.",
+      "observed": "1 validation error for TrtLlmArgs\n  Assertion failed, build_config is not initialized: x [type=assertion_error, input_value={'backend': '__static_min...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/assertion_error",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_lora_config_set_True_lora_config_consistency",
+      "field": "message_template",
+      "expected": "max_loras is ignored when lora_config is provided.",
+      "observed": "1 validation error for TrtLlmArgs\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "field": "message_template",
+      "expected": " from build_config",
+      "observed": "1 validation error for TrtLlmArgs\nmax_batch_size\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_batch_size_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Assertion failed, build_config is not initialized: x [type=assertion_error, input_value={'backend': 'pytorch', 'b...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/assertion_error"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_build_config_with_runtime_params",
+      "field": "message_template",
+      "expected": "] is overridden by build_config.max_beam_width [",
+      "observed": "1 validation error for TrtLlmArgs\nmax_beam_width\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "field": "message_template",
+      "expected": " from build_config",
+      "observed": "1 validation error for TrtLlmArgs\nmax_beam_width\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_beam_width_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Assertion failed, build_config is not initialized: x [type=assertion_error, input_value={'backend': 'pytorch', 'b...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/assertion_error"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_build_config_with_runtime_params",
+      "field": "message_template",
+      "expected": "] is overridden by build_config.max_input_len [",
+      "observed": "1 validation error for TrtLlmArgs\nmax_input_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "message_template",
+      "expected": " from build_config",
+      "observed": "1 validation error for TrtLlmArgs\nmax_input_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_input_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Assertion failed, build_config is not initialized: x [type=assertion_error, input_value={'backend': 'pytorch', 'b...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/assertion_error"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "field": "message_template",
+      "expected": "max_lora_rank is ignored when lora_config is provided.",
+      "observed": "2 validation errors for TrtLlmArgs\nmax_lora_rank\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_lora_rank_set_True_lora_config_consistency",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\nlora_config\n  Input should be a dictionary or an instance of LoraConfig [type=dataclass_type, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/dataclass_type"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "field": "message_template",
+      "expected": " from build_config",
+      "observed": "1 validation error for TrtLlmArgs\nmax_num_tokens\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_num_tokens_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Assertion failed, build_config is not initialized: x [type=assertion_error, input_value={'backend': 'pytorch', 'b...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/assertion_error"
+      },
+      "check_failed": "negative_does_not_raise"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_build_config_with_runtime_params",
+      "field": "message_template",
+      "expected": "] is overridden by build_config.max_seq_len [",
+      "observed": "1 validation error for TrtLlmArgs\nmax_seq_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "outcome",
+      "expected": "warn",
+      "observed": "error"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "emission_channel",
+      "expected": "logger_warning",
+      "observed": "none"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "positive_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "negative_confirmed",
+      "expected": true,
+      "observed": false
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_positive",
+      "expected": "emits_warning_or_announce",
+      "observed": "error",
+      "check_failed": "positive_raises"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "message_template",
+      "expected": " from build_config",
+      "observed": "1 validation error for TrtLlmArgs\nmax_seq_len\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='x', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/int_parsing",
+      "check_failed": "message_template_match"
+    },
+    {
+      "rule_id": "tensorrt_warns_max_seq_len_set_True_set_runtime_knobs_from_build_config",
+      "field": "kwargs_negative",
+      "expected": "does_not_raise",
+      "observed": {
+        "type": "ValidationError",
+        "message": "1 validation error for TrtLlmArgs\n  Assertion failed, build_config is not initialized: x [type=assertion_error, input_value={'backend': 'pytorch', 'b...gate-model-placeholder'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/assertion_error"
+      },
+      "check_failed": "negative_does_not_raise"
+    }
+  ]
+}

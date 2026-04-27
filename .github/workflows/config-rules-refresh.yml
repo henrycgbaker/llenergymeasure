@@ -8,6 +8,12 @@ name: Config Rules Refresh
 # Sibling of schema-refresh.yml (parameter-discovery). Same shape, same
 # commit-back + labelling + PR-comment pattern, different artifact kind.
 #
+# Two-tier CI per .product/designs/invariant-miner-design-2026-04-26.md §6:
+#   - vendor-transformers : ubuntu-latest GH-hosted runner (CPU-safe import)
+#   - vendor-tensorrt     : self-hosted GPU runner inside the
+#                           llenergymeasure:tensorrt Docker image
+#                           (TRT-LLM 0.21.0 needs CUDA-aware env)
+#
 # Trigger paths (auto):
 #   - docker/Dockerfile.{engine}        (Renovate-driven image bumps)
 #   - configs/validation_rules/{engine}.yaml
@@ -35,6 +41,7 @@ on:
         type: choice
         options:
           - transformers
+          - tensorrt
           - all
       pr_number:
         description: "PR number to comment on and label (optional)"
@@ -223,3 +230,216 @@ jobs:
         if: steps.vendor.outputs.vendor_exit != '0'
         run: |
           echo "::warning::Rules diverge from declared expected_outcome — see ${VENDORED_DIR}/transformers.json > .divergences[]. Tracking re-enable in #424."
+
+  vendor-tensorrt:
+    # TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA bindings on
+    # import), so the vendor gate runs inside the llenergymeasure:tensorrt
+    # Docker image on the project's self-hosted GPU runner. Closes #435.
+    #
+    # Path filters on the pull_request trigger restrict which PRs fire this
+    # workflow; workflow_dispatch always runs when explicitly invoked. The
+    # job runs whenever the workflow fires - the GPU runner is shared infra
+    # and the image is layer-cached, so the marginal cost is small. Per-engine
+    # path-filter scoping is tracked in #382.
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Mirrors the transformers job's token strategy. Skipped on fork PRs
+        # (secrets unavailable); workflow still runs read-only there.
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Clean workspace (fix root-owned files from prior Docker runs)
+        # Mirror gpu-ci.yml: container-written artefacts persist as root-owned
+        # on the self-hosted runner and break subsequent checkouts otherwise.
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Resolve TRT-LLM version
+        id: version
+        run: |
+          VER=$(grep -oE '^ARG[[:space:]]+TRTLLM_VERSION=[^[:space:]]+' \
+                  docker/Dockerfile.tensorrt | head -1 | cut -d= -f2-)
+          if [[ -z "$VER" ]]; then
+            echo "Could not extract TRTLLM_VERSION from Dockerfile.tensorrt" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build or reuse TRT-LLM image
+        # Build only if the version-tagged image is missing - the runner's
+        # Docker layer cache makes the FROM nvcr.io/.../release:VER step a
+        # no-op when the NGC tag is unchanged, so this is a cheap check.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "Building $IMAGE from docker/Dockerfile.tensorrt..."
+            docker build \
+              -f docker/Dockerfile.tensorrt \
+              -t "$IMAGE" \
+              --build-arg TRTLLM_VERSION="${{ steps.version.outputs.version }}" \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
+
+      - name: Save current vendored JSON for diffing
+        id: save_old
+        run: |
+          OLD_JSON="${VENDORED_DIR}/tensorrt.json"
+          mkdir -p /tmp/rules-diff
+          if [[ -f "$OLD_JSON" ]]; then
+            cp "$OLD_JSON" /tmp/rules-diff/tensorrt.old.json
+          else
+            echo '{"cases":[],"divergences":[]}' > /tmp/rules-diff/tensorrt.old.json
+          fi
+
+      - name: Compute stable vendor anchor
+        id: anchor
+        # Mirror the transformers anchor: pin the envelope to the SHA + author
+        # date of the most recent commit touching any INPUT path. Stable across
+        # the workflow's own commit-back so re-runs on unchanged source emit
+        # byte-identical envelopes.
+        run: |
+          PATHS=(
+            "docker/Dockerfile.tensorrt"
+            "configs/validation_rules/tensorrt.yaml"
+            "scripts/vendor_rules.py"
+            "scripts/_vendor_common.py"
+            "scripts/miners/tensorrt_miner.py"
+            "scripts/miners/tensorrt_static_miner.py"
+            "scripts/miners/_base.py"
+            "scripts/update_engine_rules.sh"
+          )
+          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Re-vendor tensorrt rules inside container
+        id: vendor
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_SHA: ${{ steps.anchor.outputs.sha }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
+        # NOTE: --fail-on-divergence intentionally OMITTED for the first
+        # operational run of the gate. Issue #435 expects to surface drift -
+        # PR #434 shipped the corpus with --skip-validation, and the gate's
+        # first observation is informational while we triage how to bring the
+        # corpus into alignment with live Pydantic validation behaviour.
+        # LD_LIBRARY_PATH override: the NGC image's bundled CUDA compat libs
+        # must precede the host driver bind-mount path so libtensorrt_llm.so
+        # resolves CUDA 12.4+ symbols against the bundled library on hosts
+        # whose driver predates the NGC image's CUDA target. See
+        # docker/Dockerfile.tensorrt for the full rationale.
+        run: |
+          set +e
+          docker run --rm --gpus all \
+            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
+            -e LLENERGY_VENDOR_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            scripts/vendor_rules.py \
+              --engine tensorrt \
+              --corpus "${CORPUS_DIR}/tensorrt.yaml" \
+              --out "${VENDORED_DIR}/tensorrt.json" \
+              --image-ref "$IMAGE" \
+              --base-image-ref "nvcr.io/nvidia/tensorrt-llm/release:${{ steps.version.outputs.version }}" \
+              --vendor-commit "${ANCHOR_SHA}"
+          echo "vendor_exit=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Fix container-written file ownership
+        # vendor_rules.py wrote the JSON as root inside the container; reclaim
+        # ownership so subsequent steps (git add, commit) can read it.
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+
+      - name: Classify diff
+        id: diff
+        run: |
+          mkdir -p /tmp/rules-diff
+          set +e
+          python3 scripts/diff_rules.py \
+            /tmp/rules-diff/tensorrt.old.json \
+            "${VENDORED_DIR}/tensorrt.json" \
+            --out /tmp/rules-diff/tensorrt.md \
+            --title "TensorRT-LLM rules diff"
+          DIFF_EXIT=$?
+          set -e
+          echo "is_breaking=$([[ $DIFF_EXIT -eq 1 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit regenerated rule-observations JSON
+        # Mirror the transformers commit-back: even when divergence was
+        # detected the regenerated JSON is more actionable when paired with
+        # the diff comment. Skipped for forks and when no App token minted.
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add "${VENDORED_DIR}/tensorrt.json"
+
+          if git diff --cached --quiet; then
+            echo "No vendored JSON changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(config): refresh tensorrt rule-observations"
+          git push --force-with-lease
+
+      - name: Post diff comment
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number available, skipping comment."
+            exit 0
+          fi
+          if [[ -f /tmp/rules-diff/tensorrt.md ]]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/rules-diff/tensorrt.md
+          fi
+
+      - name: Apply label
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.is_breaking }}" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "rules-breaking" --remove-label "rules-safe" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --add-label "rules-safe" --remove-label "rules-breaking" 2>/dev/null || true
+          fi
+
+      - name: Note divergence (non-fatal — first operational run, see #435)
+        if: steps.vendor.outputs.vendor_exit != '0'
+        run: |
+          echo "::warning::TensorRT-LLM rules diverge from declared expected_outcome — see ${VENDORED_DIR}/tensorrt.json > .divergences[]. First operational gate run for this corpus; --fail-on-divergence will be re-enabled once the corpus is brought into alignment with live Pydantic validation."

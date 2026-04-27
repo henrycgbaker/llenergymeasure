@@ -43,6 +43,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from scripts._vendor_common import (  # noqa: E402  (late import after sys.path)
+    TENSORRT_PRIVATE_FIELD_ALLOWLIST,
     TRANSFORMERS_PRIVATE_FIELD_ALLOWLIST,
     CaptureBuffers,
     CaseResult,
@@ -175,8 +176,85 @@ def _construct_generic(native_type: str, kwargs: dict[str, Any]) -> Any:
     return cls(**kwargs)
 
 
+# ---------------------------------------------------------------------------
+# TensorRT-LLM runner
+# ---------------------------------------------------------------------------
+#
+# Runs inside the ``llenergymeasure:tensorrt`` Docker image on the self-hosted
+# GPU runner — TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA
+# bindings on import), so this codepath is only exercised in CI by the
+# ``vendor-tensorrt`` job in ``.github/workflows/config-rules-refresh.yml``.
+#
+# The static miner emits short-form ``native_type`` values (``tensorrt_llm.X``)
+# matching the AST symbol it walked. Map those to the deep import paths inside
+# the library, and substitute ``BaseLlmArgs`` -> ``TrtLlmArgs`` because
+# ``BaseLlmArgs`` is the abstract parent and rules tagged on it apply to
+# inherited fields on the concrete subclass.
+
+_TRTLLM_NATIVE_TYPE_MAP: dict[str, str] = {
+    "tensorrt_llm.BaseLlmArgs": "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
+    "tensorrt_llm.TrtLlmArgs": "tensorrt_llm.llmapi.llm_args.TrtLlmArgs",
+    "tensorrt_llm.LookaheadDecodingConfig": (
+        "tensorrt_llm.llmapi.llm_args.LookaheadDecodingConfig"
+    ),
+    "tensorrt_llm.CalibConfig": "tensorrt_llm.llmapi.llm_args.CalibConfig",
+}
+
+# ``BaseLlmArgs`` / ``TrtLlmArgs`` declare ``model`` as a required field. The
+# corpus's ``kwargs_positive`` / ``kwargs_negative`` only carry the field under
+# test, so without an injected default Pydantic raises a "model: field
+# required" error before any rule-relevant validator runs. The placeholder is
+# never resolved to a real checkpoint - construction stops at validator-pass
+# time on either the rule's positive raise (intended) or the negative success
+# (intended), both before the loader would try to read from disk.
+_TRTLLM_LLMARGS_TYPES: frozenset[str] = frozenset(
+    {"tensorrt_llm.BaseLlmArgs", "tensorrt_llm.TrtLlmArgs"}
+)
+_TRTLLM_MODEL_PLACEHOLDER = "/tmp/llem-vendor-gate-model-placeholder"
+
+
+def _run_tensorrt(
+    native_type: str, kwargs: dict[str, Any], *, strict_validate: bool
+) -> CaptureBuffers:
+    """Execute one TRT-LLM rule's kwargs through the live library.
+
+    ``strict_validate`` is accepted for parity with the transformers runner
+    but is not consulted - TRT-LLM has no `.validate(strict=...)` analogue;
+    the constructor itself runs all `model_validator` passes.
+    """
+    del strict_validate  # signature parity only
+    logger_names = (
+        "tensorrt_llm",
+        "tensorrt_llm.llmapi",
+        "tensorrt_llm.llmapi.llm_args",
+    )
+    return run_case(
+        lambda: _construct_trtllm(native_type, kwargs),
+        logger_names=logger_names,
+        private_allowlist=TENSORRT_PRIVATE_FIELD_ALLOWLIST,
+    )
+
+
+def _construct_trtllm(native_type: str, kwargs: dict[str, Any]) -> Any:
+    """Construct a TRT-LLM type by short native_type name.
+
+    Maps short names to deep import paths via :data:`_TRTLLM_NATIVE_TYPE_MAP`
+    and injects the required ``model`` placeholder for ``*LlmArgs`` types
+    when the corpus kwargs don't set it.
+    """
+    actual = _TRTLLM_NATIVE_TYPE_MAP.get(native_type, native_type)
+    module_path, _, class_name = actual.rpartition(".")
+    module = __import__(module_path, fromlist=[class_name])
+    cls = getattr(module, class_name)
+    use_kwargs = dict(kwargs)
+    if native_type in _TRTLLM_LLMARGS_TYPES and "model" not in use_kwargs:
+        use_kwargs["model"] = _TRTLLM_MODEL_PLACEHOLDER
+    return cls(**use_kwargs)
+
+
 _ENGINE_RUNNERS = {
     "transformers": _run_transformers,
+    "tensorrt": _run_tensorrt,
 }
 
 
@@ -588,6 +666,17 @@ def _resolve_engine_version(engine: str) -> str:
         except ImportError as exc:
             raise VendorEngineNotImportable(
                 "transformers is not importable in this environment"
+            ) from exc
+    if engine == "tensorrt":
+        try:
+            import tensorrt_llm  # type: ignore
+
+            return tensorrt_llm.__version__
+        except ImportError as exc:
+            raise VendorEngineNotImportable(
+                "tensorrt_llm is not importable in this environment "
+                "(expected when running outside the llenergymeasure:tensorrt "
+                "Docker image on a GPU host)"
             ) from exc
     return "unknown"
 
