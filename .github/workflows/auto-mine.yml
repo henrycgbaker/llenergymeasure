@@ -245,18 +245,9 @@ jobs:
           fi
 
   mine-vllm:
-    # The vLLM miners are CPU-safe by construction (they avoid
-    # EngineArgs.create_engine_config() and other CUDA-context paths — see
-    # vllm_dynamic_miner.py docstring §6) but cannot run against the repo's
-    # unified uv.lock on ubuntu-latest: tensorrt-llm 0.21.0's transitive
-    # constraints cascade into the vllm extra's torch/torchvision resolution
-    # and break `from vllm import ...` at import time (`operator
-    # torchvision::nms does not exist`). PR #459 surfaced this empirically.
-    #
-    # Pivot: run the miner inside the llenergymeasure:vllm Docker image on
-    # the project's self-hosted GPU runner, mirroring invariant-miner.yml's
-    # vendor-vllm job. The image carries vLLM's own published torch/vllm
-    # combo, so the miners import cleanly. Closes #464.
+    # Runner + image rationale (unified-lock import failure, Docker pivot,
+    # closes #464): see file-level header above. Mirrors invariant-miner.yml's
+    # vendor-vllm job.
     if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
     runs-on: self-hosted
     timeout-minutes: 60
