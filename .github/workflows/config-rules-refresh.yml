@@ -10,15 +10,22 @@ name: Config Rules Refresh
 #
 # Two-tier CI per .product/designs/invariant-miner-design-2026-04-26.md §6:
 #   - vendor-transformers : ubuntu-latest GH-hosted runner (CPU-safe import)
+#   - vendor-vllm         : ubuntu-latest GH-hosted runner (CPU-safe import
+#                           on Ampere — see vllm_dynamic_miner.py docstring
+#                           and .product/research/miners-redo/research-vllm-
+#                           extractor-2026-04-26.md §6; PR #444 confirmed)
 #   - vendor-tensorrt     : self-hosted GPU runner inside the
 #                           llenergymeasure:tensorrt Docker image
 #                           (TRT-LLM 0.21.0 needs CUDA-aware env)
 #
 # Trigger paths (auto):
-#   - docker/Dockerfile.{engine}        (Renovate-driven image bumps)
-#   - configs/validation_rules/{engine}.yaml
+#   - docker/Dockerfile.{engine}        (Renovate-driven image bumps,
+#                                        e.g. Dockerfile.vllm)
+#   - configs/validation_rules/{engine}.yaml  (e.g. vllm.yaml)
 #   - scripts/vendor_rules.py
-#   - scripts/miners/{engine}_miner.py
+#   - scripts/miners/{engine}_miner.py        (covered by scripts/miners/*.py
+#                                              glob: vllm_static_miner.py,
+#                                              vllm_dynamic_miner.py, etc.)
 #   - scripts/_vendor_common.py
 #
 # Trigger (manual): workflow_dispatch with explicit engine choice.
@@ -41,6 +48,7 @@ on:
         type: choice
         options:
           - transformers
+          - vllm
           - tensorrt
           - all
       pr_number:
@@ -230,6 +238,181 @@ jobs:
         if: steps.vendor.outputs.vendor_exit != '0'
         run: |
           echo "::warning::Rules diverge from declared expected_outcome — see ${VENDORED_DIR}/transformers.json > .divergences[]. Tracking re-enable in #424."
+
+  vendor-vllm:
+    # vLLM is CPU-importable on Ampere (see vllm_dynamic_miner.py docstring
+    # and .product/research/miners-redo/research-vllm-extractor-2026-04-26.md
+    # §6; PR #444 confirmed CI runs on ubuntu-latest), so this gate runs on
+    # the GH-hosted runner just like vendor-transformers. Closes #445.
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Short-lived (~1 hour) GitHub App token. Events it produces
+        # (commits, PR comments, label edits) are NOT subject to the
+        # default GITHUB_TOKEN recursive-workflow-protection gate, so
+        # the commit-back below can legitimately trigger subsequent
+        # CI runs. Skipped on fork PRs (secrets are not exposed there)
+        # so the workflow still runs read-only for external contributors.
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          # vLLM wheels are large; isolated cache prevents the transformers
+          # cache key from getting polluted by vllm-specific install state.
+          cache-suffix: vendor-rules-vllm-3.12
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --dev --extra vllm
+
+      - name: Save current vendored JSON for diffing
+        id: save_old
+        run: |
+          OLD_JSON="${VENDORED_DIR}/vllm.json"
+          mkdir -p /tmp/rules-diff
+          if [[ -f "$OLD_JSON" ]]; then
+            cp "$OLD_JSON" /tmp/rules-diff/vllm.old.json
+          else
+            echo '{"cases":[],"divergences":[]}' > /tmp/rules-diff/vllm.old.json
+          fi
+
+      - name: Run fixpoint test against corpus
+        run: |
+          uv run python -c "
+          import yaml
+          from scripts.miners._fixpoint_test import fixpoint_test_corpus
+          corpus = yaml.safe_load(open('${CORPUS_DIR}/vllm.yaml'))
+          fixpoint_test_corpus(corpus)
+          print('fixpoint test passed')
+          "
+
+      - name: Compute stable vendor anchor
+        id: anchor
+        # Pin the vendor envelope to the SHA + author date of the most
+        # recent commit that touched any INPUT path. Stable across the
+        # workflow's own commit-back (which only touches the output JSON),
+        # so re-runs produce byte-identical envelopes on unchanged source.
+        # Without this, every re-run emits fresh `vendor_commit` +
+        # `vendored_at` fields, git diff picks them up, commit-back fires,
+        # and the synchronize loops.
+        run: |
+          PATHS=(
+            "docker/Dockerfile.vllm"
+            "configs/validation_rules/vllm.yaml"
+            "scripts/vendor_rules.py"
+            "scripts/_vendor_common.py"
+            "scripts/miners/vllm_static_miner.py"
+            "scripts/miners/vllm_dynamic_miner.py"
+            "scripts/miners/_fixpoint_test.py"
+            "scripts/miners/_base.py"
+            "scripts/miners/_pydantic_lift.py"
+            "scripts/miners/_msgspec_lift.py"
+            "scripts/update_engine_rules.sh"
+          )
+          SHA=$(git log -1 --format=%H -- "${PATHS[@]}")
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "sha=${SHA:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Re-vendor vllm rules
+        id: vendor
+        env:
+          LLENERGY_VENDOR_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+        run: |
+          uv run python scripts/vendor_rules.py \
+            --engine vllm \
+            --corpus "${CORPUS_DIR}/vllm.yaml" \
+            --out "${VENDORED_DIR}/vllm.json" \
+            --vendor-commit "${{ steps.anchor.outputs.sha }}" \
+            --fail-on-divergence
+          echo "vendor_exit=0" >> "$GITHUB_OUTPUT"
+
+      - name: Classify diff
+        id: diff
+        run: |
+          mkdir -p /tmp/rules-diff
+          set +e
+          uv run python scripts/diff_rules.py \
+            /tmp/rules-diff/vllm.old.json \
+            "${VENDORED_DIR}/vllm.json" \
+            --out /tmp/rules-diff/vllm.md \
+            --title "vLLM rules diff"
+          DIFF_EXIT=$?
+          set -e
+          echo "is_breaking=$([[ $DIFF_EXIT -eq 1 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit regenerated rule-observations JSON
+        # Runs even when vendor detected divergence — the diff comment is
+        # more actionable when paired with the exact regenerated JSON on
+        # the PR branch. Skipped for forks (App token isn't minted there)
+        # and when no App token was provided.
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add "${VENDORED_DIR}/vllm.json"
+
+          if git diff --cached --quiet; then
+            echo "No vendored JSON changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(config): refresh vllm rule-observations"
+          # --force-with-lease guards against clobbering a concurrent push
+          # from the PR author. On stale-ref failure the workflow exits
+          # non-zero and a rerun picks up the latest state.
+          git push --force-with-lease
+
+      - name: Post diff comment
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number available, skipping comment."
+            exit 0
+          fi
+          if [[ -f /tmp/rules-diff/vllm.md ]]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/rules-diff/vllm.md
+          fi
+
+      - name: Apply label
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.is_breaking }}" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "rules-breaking" --remove-label "rules-safe" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --add-label "rules-safe" --remove-label "rules-breaking" 2>/dev/null || true
+          fi
+
+      - name: Note divergence (non-fatal — see #424)
+        if: steps.vendor.outputs.vendor_exit != '0'
+        run: |
+          echo "::warning::Rules diverge from declared expected_outcome — see ${VENDORED_DIR}/vllm.json > .divergences[]. Tracking re-enable in #424."
 
   vendor-tensorrt:
     # TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA bindings on
