@@ -371,6 +371,36 @@ class TestStability:
         second = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
         assert first == second
 
+    def test_frozen_at_env_overrides_mined_at(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Contract relied on by .github/workflows/auto-mine.yml: when
+        # LLENERGY_MINER_FROZEN_AT is set, the merged envelope's ``mined_at``
+        # MUST equal that exact value, regardless of staging timestamps. This
+        # is the anchor that keeps re-runs on unchanged source byte-identical
+        # — without it the workflow's commit-back synchronize-loops.
+        staging = tmp_path / "_staging"
+        _write_staging(
+            staging,
+            "transformers_static_miner.yaml",
+            _envelope([_ast_rule()], engine_version="4.56.0"),
+        )
+        _write_staging(
+            staging, "transformers_dynamic_miner.yaml", _envelope([_introspection_rule()])
+        )
+
+        frozen = "2026-04-23T12:34:56+00:00"
+        monkeypatch.setenv("LLENERGY_MINER_FROZEN_AT", frozen)
+        text = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
+        doc = yaml.safe_load(text)
+        assert doc["mined_at"] == frozen
+
+        # And: two runs at the same anchor produce byte-identical YAML even when
+        # the staging envelopes' own mined_at fields differ (the workflow's
+        # anchor step computes once per run).
+        second = build_corpus.build_corpus_text("transformers", tmp_path, skip_validation=True)
+        assert text == second
+
     def test_rules_sorted_alphabetically_by_id(self, tmp_path: Path) -> None:
         staging = tmp_path / "_staging"
         _write_staging(

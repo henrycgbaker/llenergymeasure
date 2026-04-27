@@ -163,14 +163,15 @@ jobs:
           NEW_YAML="${CORPUS_DIR}/transformers.yaml"
           OLD_YAML="/tmp/auto-mine-diff/transformers.old.yaml"
           if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            CHANGED=false
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            CHANGED=true
           fi
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
           {
             echo "## Auto-Mine — transformers corpus diff"
             echo
-            if [[ "$(diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; echo $?)" == "0" ]]; then
+            if [[ "$CHANGED" == "false" ]]; then
               echo "_No changes to \`${NEW_YAML}\`._"
             else
               echo '```diff'
@@ -306,14 +307,15 @@ jobs:
           NEW_YAML="${CORPUS_DIR}/vllm.yaml"
           OLD_YAML="/tmp/auto-mine-diff/vllm.old.yaml"
           if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            CHANGED=false
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            CHANGED=true
           fi
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
           {
             echo "## Auto-Mine — vllm corpus diff"
             echo
-            if [[ "$(diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; echo $?)" == "0" ]]; then
+            if [[ "$CHANGED" == "false" ]]; then
               echo "_No changes to \`${NEW_YAML}\`._"
             else
               echo '```diff'
@@ -490,14 +492,15 @@ jobs:
           NEW_YAML="${CORPUS_DIR}/tensorrt.yaml"
           OLD_YAML="/tmp/auto-mine-diff/tensorrt.old.yaml"
           if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            CHANGED=false
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            CHANGED=true
           fi
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
           {
             echo "## Auto-Mine — tensorrt corpus diff"
             echo
-            if [[ "$(diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; echo $?)" == "0" ]]; then
+            if [[ "$CHANGED" == "false" ]]; then
               echo "_No changes to \`${NEW_YAML}\`._"
             else
               echo '```diff'
