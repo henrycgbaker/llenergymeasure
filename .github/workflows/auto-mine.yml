@@ -1,0 +1,555 @@
+name: Auto-Mine — Generate Validation Rules
+
+# Stage 1 of the invariant-miner pipeline. Re-runs the per-engine miners +
+# corpus builder when any input under their reach changes (Dockerfile bumps,
+# miner module edits, lift modules, refresh helper). Each matrix cell
+# regenerates configs/validation_rules/{engine}.yaml in place and bot-commits
+# the regenerated YAML back to the PR branch when the diff is non-empty.
+#
+# After bot writeback, invariant-miner.yml (Stage 2 vendor gate) auto-fires on
+# the new YAML commit and re-validates the regenerated corpus against the live
+# library. The Stage 1 / Stage 2 split preserves the trust seam: reviewers see
+# the YAML diff (rule additions / drops / mutations) BEFORE the JSON gate runs,
+# so a miner refactor that silently drops rules is visible on the PR.
+#
+# Closes #393.
+#
+# Per-engine runner choice:
+#   mine-transformers : ubuntu-latest GH-hosted runner (CPU-safe import)
+#   mine-vllm         : ubuntu-latest GH-hosted runner. The vLLM miners
+#                       deliberately avoid EngineArgs.create_engine_config()
+#                       and other CUDA-context paths (see vllm_dynamic_miner.py
+#                       docstring §6); confirmed by PR #444's successful
+#                       ubuntu-latest run. Distinct from invariant-miner.yml's
+#                       vendor-vllm job, which DOES hit CUDA paths during rule
+#                       replay and must run inside the vLLM Docker image.
+#   mine-tensorrt     : self-hosted GPU runner inside llenergymeasure:tensorrt
+#                       (TRT-LLM 0.21.0 loads CUDA bindings on import)
+#
+# Determinism note:
+#   build_corpus.py and every miner read LLENERGY_MINER_FROZEN_AT from the env
+#   and use it as the YAML's ``mined_at`` field. The anchor below pins that
+#   value to the author date of the most recent commit touching any INPUT path.
+#   Stable across the workflow's own commit-back so re-runs on unchanged source
+#   emit byte-identical YAML and do not synchronize-loop. This determinism
+#   alone is the loop-prevention contract — there is intentionally NO
+#   github.actor guard against the bot identity (per #455: such guards break
+#   the auto-mine -> invariant-miner chain because Stage 2 must fire on the
+#   bot's writeback commit).
+#
+# Trigger paths (auto): files whose changes invalidate the mined corpus.
+#   - docker/Dockerfile.*               (Renovate-driven library bumps)
+#   - scripts/miners/*.py               (miner modules + lift helpers + base)
+#   - scripts/refresh_invariant_rules.sh
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "docker/Dockerfile.*"
+      - "scripts/miners/*.py"
+      - "scripts/refresh_invariant_rules.sh"
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: "Engine to re-mine"
+        required: true
+        type: choice
+        options:
+          - transformers
+          - vllm
+          - tensorrt
+          - all
+      pr_number:
+        description: "PR number to comment on and label (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  # Known race with bot writebacks per #454; accepted at this layer — fix is
+  # tracked separately, not here.
+  group: auto-mine-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CORPUS_DIR: configs/validation_rules
+
+jobs:
+  mine-transformers:
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'transformers' || inputs.engine == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Mint llem-ci-bot App token
+        # Short-lived (~1 hour) GitHub App token. Events it produces (commits,
+        # PR comments, label edits) are NOT subject to the default
+        # GITHUB_TOKEN recursive-workflow-protection gate, so the commit-back
+        # below can legitimately trigger Stage 2 (invariant-miner.yml).
+        # Skipped on fork PRs (secrets are not exposed there) so the workflow
+        # still runs read-only for external contributors.
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: auto-mine-transformers-3.12
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --dev --extra transformers
+
+      - name: Save current YAML for diffing
+        run: |
+          mkdir -p /tmp/auto-mine-diff
+          OLD_YAML="${CORPUS_DIR}/transformers.yaml"
+          if [[ -f "$OLD_YAML" ]]; then
+            cp "$OLD_YAML" /tmp/auto-mine-diff/transformers.old.yaml
+          else
+            : > /tmp/auto-mine-diff/transformers.old.yaml
+          fi
+
+      - name: Compute stable mining anchor
+        id: anchor
+        # Pin the YAML's mined_at to the author date of the most recent commit
+        # touching any INPUT path. Stable across the workflow's own commit-back
+        # (which only touches the output YAML), so re-runs on unchanged source
+        # emit byte-identical envelopes. Without this, every re-run emits a
+        # fresh wallclock timestamp, git diff picks it up, the commit-back
+        # fires, and the synchronize loops. Mirrors invariant-miner.yml's
+        # vendor anchor and parameter-discovery.yml's discovery anchor.
+        run: |
+          PATHS=(
+            "docker/Dockerfile.transformers"
+            "scripts/miners/transformers_static_miner.py"
+            "scripts/miners/transformers_dynamic_miner.py"
+            "scripts/miners/transformers_miner.py"
+            "scripts/miners/build_corpus.py"
+            "scripts/miners/_base.py"
+            "scripts/miners/_pydantic_lift.py"
+            "scripts/miners/_msgspec_lift.py"
+            "scripts/miners/_dataclass_lift.py"
+            "scripts/miners/_fixpoint_test.py"
+            "scripts/refresh_invariant_rules.sh"
+          )
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Re-mine transformers corpus
+        env:
+          LLENERGY_MINER_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+        run: |
+          uv run python -m scripts.miners.build_corpus --engine transformers
+
+      - name: Classify YAML diff
+        id: diff
+        run: |
+          NEW_YAML="${CORPUS_DIR}/transformers.yaml"
+          OLD_YAML="/tmp/auto-mine-diff/transformers.old.yaml"
+          if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
+            CHANGED=false
+          else
+            CHANGED=true
+          fi
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Auto-Mine — transformers corpus diff"
+            echo
+            if [[ "$CHANGED" == "false" ]]; then
+              echo "_No changes to \`${NEW_YAML}\`._"
+            else
+              echo '```diff'
+              diff -u "$OLD_YAML" "$NEW_YAML" | head -n 400 || true
+              echo '```'
+            fi
+          } > /tmp/auto-mine-diff/transformers.md
+
+      - name: Commit regenerated YAML
+        # Skipped for forks (App token isn't minted there) and when no App
+        # token was provided. Mirrors invariant-miner.yml's commit-back.
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add "${CORPUS_DIR}/transformers.yaml"
+
+          if git diff --cached --quiet; then
+            echo "No corpus changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(corpus): re-mine transformers validation rules"
+          # --force-with-lease guards against clobbering a concurrent push
+          # from the PR author. On stale-ref failure the workflow exits
+          # non-zero and a rerun picks up the latest state.
+          git push --force-with-lease
+
+      - name: Post diff comment
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number available, skipping comment."
+            exit 0
+          fi
+          if [[ -f /tmp/auto-mine-diff/transformers.md ]]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/auto-mine-diff/transformers.md
+          fi
+
+      - name: Apply label
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.changed }}" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "corpus-changed" --remove-label "corpus-stable" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --add-label "corpus-stable" --remove-label "corpus-changed" 2>/dev/null || true
+          fi
+
+  mine-vllm:
+    # vLLM miners are CPU-safe by design (they avoid EngineArgs.create_engine_config()
+    # and other CUDA-context paths — see vllm_dynamic_miner.py docstring §6).
+    # PR #444 confirmed empirically that the full mine + corpus build runs on
+    # ubuntu-latest. This is distinct from invariant-miner.yml's vendor-vllm
+    # job, which replays kwargs against live config classes and DOES hit CUDA
+    # paths the miners deliberately avoid.
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'vllm' || inputs.engine == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Mint llem-ci-bot App token
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          # vLLM wheels are large; per-engine cache key keeps reuse high.
+          cache-suffix: auto-mine-vllm-3.12
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --dev --extra vllm
+
+      - name: Save current YAML for diffing
+        run: |
+          mkdir -p /tmp/auto-mine-diff
+          OLD_YAML="${CORPUS_DIR}/vllm.yaml"
+          if [[ -f "$OLD_YAML" ]]; then
+            cp "$OLD_YAML" /tmp/auto-mine-diff/vllm.old.yaml
+          else
+            : > /tmp/auto-mine-diff/vllm.old.yaml
+          fi
+
+      - name: Compute stable mining anchor
+        id: anchor
+        run: |
+          PATHS=(
+            "docker/Dockerfile.vllm"
+            "scripts/miners/vllm_static_miner.py"
+            "scripts/miners/vllm_dynamic_miner.py"
+            "scripts/miners/build_corpus.py"
+            "scripts/miners/_base.py"
+            "scripts/miners/_pydantic_lift.py"
+            "scripts/miners/_msgspec_lift.py"
+            "scripts/miners/_dataclass_lift.py"
+            "scripts/miners/_fixpoint_test.py"
+            "scripts/refresh_invariant_rules.sh"
+          )
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Re-mine vllm corpus
+        env:
+          LLENERGY_MINER_FROZEN_AT: ${{ steps.anchor.outputs.date }}
+        run: |
+          uv run python -m scripts.miners.build_corpus --engine vllm
+
+      - name: Classify YAML diff
+        id: diff
+        run: |
+          NEW_YAML="${CORPUS_DIR}/vllm.yaml"
+          OLD_YAML="/tmp/auto-mine-diff/vllm.old.yaml"
+          if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
+            CHANGED=false
+          else
+            CHANGED=true
+          fi
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Auto-Mine — vllm corpus diff"
+            echo
+            if [[ "$CHANGED" == "false" ]]; then
+              echo "_No changes to \`${NEW_YAML}\`._"
+            else
+              echo '```diff'
+              diff -u "$OLD_YAML" "$NEW_YAML" | head -n 400 || true
+              echo '```'
+            fi
+          } > /tmp/auto-mine-diff/vllm.md
+
+      - name: Commit regenerated YAML
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add "${CORPUS_DIR}/vllm.yaml"
+
+          if git diff --cached --quiet; then
+            echo "No corpus changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(corpus): re-mine vllm validation rules"
+          git push --force-with-lease
+
+      - name: Post diff comment
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number available, skipping comment."
+            exit 0
+          fi
+          if [[ -f /tmp/auto-mine-diff/vllm.md ]]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/auto-mine-diff/vllm.md
+          fi
+
+      - name: Apply label
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.changed }}" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "corpus-changed" --remove-label "corpus-stable" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --add-label "corpus-stable" --remove-label "corpus-changed" 2>/dev/null || true
+          fi
+
+  mine-tensorrt:
+    # TRT-LLM 0.21.0 cannot be imported on a CPU host (loads CUDA bindings on
+    # import), so the miners run inside llenergymeasure:tensorrt on the
+    # project's self-hosted GPU runner. Mirrors invariant-miner.yml's
+    # vendor-tensorrt pattern.
+    if: github.event_name != 'workflow_dispatch' || inputs.engine == 'tensorrt' || inputs.engine == 'all'
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - name: Mint llem-ci-bot App token
+        id: app-token
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Clean workspace (fix root-owned files from prior Docker runs)
+        # Mirror gpu-ci.yml: container-written artefacts persist as root-owned
+        # on the self-hosted runner and break subsequent checkouts otherwise.
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "find /workspace -not -user $(id -u) -delete 2>/dev/null || true"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Resolve TRT-LLM version
+        id: version
+        run: |
+          VER=$(grep -oE '^ARG[[:space:]]+TRTLLM_VERSION=[^[:space:]]+' \
+                  docker/Dockerfile.tensorrt | head -1 | cut -d= -f2-)
+          if [[ -z "$VER" ]]; then
+            echo "Could not extract TRTLLM_VERSION from Dockerfile.tensorrt" >&2
+            exit 1
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "image=llenergymeasure:tensorrt-${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build or reuse TRT-LLM image
+        # Build only if the version-tagged image is missing - the runner's
+        # Docker layer cache makes the FROM nvcr.io/.../release:VER step a
+        # no-op when the NGC tag is unchanged, so this is a cheap check.
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "Building $IMAGE from docker/Dockerfile.tensorrt..."
+            docker build \
+              -f docker/Dockerfile.tensorrt \
+              -t "$IMAGE" \
+              --build-arg TRTLLM_VERSION="${{ steps.version.outputs.version }}" \
+              .
+          else
+            echo "Reusing cached $IMAGE."
+          fi
+
+      - name: Save current YAML for diffing
+        run: |
+          mkdir -p /tmp/auto-mine-diff
+          OLD_YAML="${CORPUS_DIR}/tensorrt.yaml"
+          if [[ -f "$OLD_YAML" ]]; then
+            cp "$OLD_YAML" /tmp/auto-mine-diff/tensorrt.old.yaml
+          else
+            : > /tmp/auto-mine-diff/tensorrt.old.yaml
+          fi
+
+      - name: Compute stable mining anchor
+        id: anchor
+        run: |
+          PATHS=(
+            "docker/Dockerfile.tensorrt"
+            "scripts/miners/tensorrt_static_miner.py"
+            "scripts/miners/tensorrt_miner.py"
+            "scripts/miners/build_corpus.py"
+            "scripts/miners/_base.py"
+            "scripts/miners/_pydantic_lift.py"
+            "scripts/miners/_msgspec_lift.py"
+            "scripts/miners/_dataclass_lift.py"
+            "scripts/miners/_fixpoint_test.py"
+            "scripts/refresh_invariant_rules.sh"
+          )
+          DATE=$(git log -1 --format=%aI -- "${PATHS[@]}")
+          echo "date=${DATE:-$(date -u -Iseconds)}" >> "$GITHUB_OUTPUT"
+
+      - name: Re-mine tensorrt corpus inside container
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          ANCHOR_DATE: ${{ steps.anchor.outputs.date }}
+        # LD_LIBRARY_PATH override matches invariant-miner.yml's vendor-tensorrt
+        # job — required so libtensorrt_llm.so resolves CUDA 12.4+ symbols
+        # against the bundled NGC compat libs on hosts whose driver predates
+        # the NGC image's CUDA target. See docker/Dockerfile.tensorrt.
+        run: |
+          docker run --rm --gpus all \
+            -e LD_LIBRARY_PATH="/usr/local/cuda/compat/lib.real:/usr/local/cuda/compat/lib:/usr/local/tensorrt/lib" \
+            -e LLENERGY_MINER_FROZEN_AT="${ANCHOR_DATE}" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            --entrypoint python3 \
+            "$IMAGE" \
+            -m scripts.miners.build_corpus --engine tensorrt
+
+      - name: Fix container-written file ownership
+        # build_corpus.py wrote the YAML as root inside the container; reclaim
+        # ownership so subsequent steps (git add, commit) can read it.
+        if: always()
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/workspace \
+            alpine sh -c "chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true"
+
+      - name: Classify YAML diff
+        id: diff
+        run: |
+          NEW_YAML="${CORPUS_DIR}/tensorrt.yaml"
+          OLD_YAML="/tmp/auto-mine-diff/tensorrt.old.yaml"
+          if diff -q "$OLD_YAML" "$NEW_YAML" >/dev/null 2>&1; then
+            CHANGED=false
+          else
+            CHANGED=true
+          fi
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Auto-Mine — tensorrt corpus diff"
+            echo
+            if [[ "$CHANGED" == "false" ]]; then
+              echo "_No changes to \`${NEW_YAML}\`._"
+            else
+              echo '```diff'
+              diff -u "$OLD_YAML" "$NEW_YAML" | head -n 400 || true
+              echo '```'
+            fi
+          } > /tmp/auto-mine-diff/tensorrt.md
+
+      - name: Commit regenerated YAML
+        if: steps.app-token.outputs.token != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name  "llem-ci-bot[bot]"
+          git config user.email "${{ secrets.APP_ID }}+llem-ci-bot[bot]@users.noreply.github.com"
+
+          git add "${CORPUS_DIR}/tensorrt.yaml"
+
+          if git diff --cached --quiet; then
+            echo "No corpus changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(corpus): re-mine tensorrt validation rules"
+          git push --force-with-lease
+
+      - name: Post diff comment
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number available, skipping comment."
+            exit 0
+          fi
+          if [[ -f /tmp/auto-mine-diff/tensorrt.md ]]; then
+            gh pr comment "$PR_NUMBER" --body-file /tmp/auto-mine-diff/tensorrt.md
+          fi
+
+      - name: Apply label
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr_number }}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            exit 0
+          fi
+          if [[ "${{ steps.diff.outputs.changed }}" == "true" ]]; then
+            gh pr edit "$PR_NUMBER" --add-label "corpus-changed" --remove-label "corpus-stable" 2>/dev/null || true
+          else
+            gh pr edit "$PR_NUMBER" --add-label "corpus-stable" --remove-label "corpus-changed" 2>/dev/null || true
+          fi
