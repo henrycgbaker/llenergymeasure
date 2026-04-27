@@ -101,7 +101,20 @@ jobs:
           echo "engines=$ENGINES" >> "$GITHUB_OUTPUT"
 
       - name: Run schema refresh
+        # Behaviour: discover_engine_schemas.py prints "[engine] SKIPPED (not
+        # importable): ..." to stderr when a library import fails on the
+        # current host (e.g. tensorrt's libnvinfer.so.10 missing on a runner
+        # without GPU bindings). The Python script treats SKIPPED as
+        # informational; the bash orchestrator must mirror that — historically
+        # this loop unconditionally exited 1 on non-zero, breaking developer
+        # PRs that run on hosts where one engine isn't importable. Track
+        # succeeded vs skipped vs failed; only error if every engine failed
+        # outright (no successes, no skips).
         run: |
+          set +e
+          declare -a SUCCEEDED=()
+          declare -a SKIPPED=()
+          declare -a FAILED=()
           for engine in ${{ steps.engines.outputs.engines }}; do
             echo "::group::Refreshing $engine schema"
 
@@ -113,14 +126,37 @@ jobs:
               echo '{}' > "/tmp/${engine}_old.json"
             fi
 
-            # Run discovery.
-            ./scripts/refresh_discovered_schemas.sh "$engine" || {
+            # Capture combined output so we can distinguish skip from failure.
+            OUTPUT=$(./scripts/refresh_discovered_schemas.sh "$engine" 2>&1)
+            RC=$?
+            echo "$OUTPUT"
+            if [[ $RC -eq 0 ]]; then
+              SUCCEEDED+=("$engine")
+            elif echo "$OUTPUT" | grep -q "SKIPPED (not importable)"; then
+              echo "::warning::Discovery skipped for $engine (not importable on this host)"
+              SKIPPED+=("$engine")
+            else
               echo "::error::Discovery failed for $engine"
-              exit 1
-            }
+              FAILED+=("$engine")
+            fi
 
             echo "::endgroup::"
           done
+          set -e
+
+          echo "Schema refresh summary: succeeded=${SUCCEEDED[*]:-none} skipped=${SKIPPED[*]:-none} failed=${FAILED[*]:-none}"
+
+          # Genuine failures always block.
+          if [[ ${#FAILED[@]} -gt 0 ]]; then
+            echo "::error::One or more engines failed outright: ${FAILED[*]}"
+            exit 1
+          fi
+          # All-skipped, no successes => block too (something is structurally
+          # wrong with the runner; nothing got refreshed).
+          if [[ ${#SUCCEEDED[@]} -eq 0 ]]; then
+            echo "::error::No engines succeeded — all skipped: ${SKIPPED[*]}"
+            exit 1
+          fi
 
       - name: Diff and classify changes
         id: diff
