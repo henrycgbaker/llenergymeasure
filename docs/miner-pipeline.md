@@ -531,13 +531,13 @@ The Phase B.6 forced E2E run on PR #459 (`renovate/transformers-4.x`, transforme
 - **All three workflows fire on a single Renovate-authored Dockerfile bump.** No actor-gate intervention; path filters alone are sufficient.
 - **Stage 1 → Stage 2 chain validation works as designed.** auto-mine writes YAML at `96d811fb`; invariant-miner re-fires at `fb473a22` against the new YAML. The trust seam (YAML diff visible to reviewers before JSON gate runs) is exercised end-to-end.
 - **App-token + `--force-with-lease` writebacks succeed across all three workflows** without recursion-guard issues.
-- **Determinism holds.** Of the ~14 bot comments posted across the cycle, 8 were "No changes" after subsequent runs — proving the `LLENERGY_*_FROZEN_AT` env-var contracts produce reproducible outputs once the corpus has converged.
+- **Determinism holds.** Of the ~14 bot comments posted across the cycle, 8 were "No changes" after subsequent runs - proving the `LLENERGY_*_FROZEN_AT` env-var contracts produce reproducible outputs once the corpus has converged.
 - **Self-hosted GPU runner serialisation is observable.** The vLLM vendor gate (`75d4c0c1`) was queued behind vendor-tensorrt and arrived after the transformers chain had already converged.
 
 **What did not work on this PR (separate blockers, not chain-validation failures):**
 
-- `mine-vllm` — Dockerfile.vllm ARG (v0.7.3) is outside the vLLM miner's `TESTED_AGAINST_VERSIONS` envelope (`>=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468–#471).
-- `mine-tensorrt` — runtime-symlink script bug inside the NGC container (#472).
+- `mine-vllm` - Dockerfile.vllm ARG (v0.7.3) is outside the vLLM miner's `TESTED_AGAINST_VERSIONS` envelope (`>=0.17,<0.18`); raised `MinerVersionMismatchError` as designed. Resolution requires the per-engine version-bundle work (#468-#471).
+- `mine-tensorrt` - runtime-symlink script bug inside the NGC container (#472).
 
 Both are tracked as engine-specific follow-ups; neither invalidates the chain-validation outcome.
 
@@ -545,11 +545,11 @@ For the full closure summary and bot-comment audit, see PR #459's final comment 
 
 ### Status: #394 (check-vs-commit semantics)
 
-Issue #394 raised the question of whether Stage 2's bot writeback should commit the vendored JSON back to the PR or merely check it (a "check-only" mode without a writeback). At the time of writing the simplification looked attractive — the YAML at Stage 1 already serves the trust-seam role.
+Issue #394 raised the question of whether Stage 2's bot writeback should commit the vendored JSON back to the PR or merely check it (a "check-only" mode without a writeback). At the time of writing the simplification looked attractive - the YAML at Stage 1 already serves the trust-seam role.
 
 Status note as of Phase C closure:
 
-- The runtime currently reads the vendored JSON via `_apply_vendored_rules` in `src/llenergymeasure/config/models.py` (search for `_get_rules_loader().load_rules`). Removing the JSON commit-back without first migrating the runtime path would break runtime validation.
+- The runtime currently reads the vendored JSON via `_apply_vendored_rules` in `src/llenergymeasure/config/models.py` (which calls `_get_rules_loader().load_rules`). Removing the JSON commit-back without first migrating the runtime path would break runtime validation.
 - This makes the blast radius of #394's proposed simplification larger than the issue thread implied. A clean resolution depends on the Docker-only target architecture being settled first (#467), since the JSON consumption pattern is a function of how the runtime resolves rules at experiment-run time.
 - Cross-references: #394 (the original check-vs-commit question), #467 (Docker-only architecture that affects the runtime side), #393 (the auto-mine automation gap, partially closed by Phase B.4).
 
