@@ -480,6 +480,64 @@ Both static and dynamic miners err toward recall. The vendor-CI gate is the prun
 
 ---
 
+## Failure modes when libraries evolve
+
+When Renovate bumps an engine library, the miner pipeline must catch behavioural drift before stale rules ship. Failures fall into three categories: loud failures caught by the miner pipeline at mining time, loud failures caught by the vendor gate at validation time, and one silent failure mode the YAML/JSON split was specifically designed to make visible.
+
+### Loud failures caught by the miner pipeline
+
+The miner pipeline's import-time contract (Step 1 above) raises hard CI errors when the library has drifted out of the envelope the miner was written against:
+
+- **`MinerVersionMismatchError`** — installed library version is outside the miner's `TESTED_AGAINST_VERSIONS` `SpecifierSet`. Forces the maintainer to read release notes and either widen the envelope or update the miner to match new validator semantics.
+  - Example: vLLM 0.7.3 against a miner with `TESTED_AGAINST_VERSIONS = SpecifierSet(">=0.17,<0.18")` raises `MinerVersionMismatchError` at import. Observed empirically on PR #459's `mine-vllm` job.
+
+- **`MinerLandmarkMissingError`** — an expected class or method symbol is no longer present in the library source. Catches refactors where a class was renamed, moved to a different module, or an API was deprecated and removed.
+  - Example: a hypothetical vLLM release dropping `vllm.sampling_params.StructuredOutputsParams` would raise `MinerLandmarkMissingError` at the landmark-check step before any AST walking begins.
+
+- **`ImportError` / `AttributeError`** — propagated raw if the miner uses a library symbol that has been refactored without a landmark guard. The fail-loud principle requires letting these propagate; never wrap landmark imports in a `try/except` that returns `[]`. The Haiku-era TRT-LLM extractor was reverted in #423 specifically because it caught `ImportError` and silently degraded.
+
+These three errors all surface as red CI on the Renovate PR, blocking merge until the miner is updated.
+
+### Loud failures caught by the vendor gate
+
+After mining completes and a YAML corpus is written, `vendor_rules.py --fail-on-divergence` replays each rule's `kwargs_positive` and `kwargs_negative` against the live library inside the engine's Docker container:
+
+- **`--fail-on-divergence`** flips the vendor gate to non-zero exit when an existing rule's declared `expected_outcome` no longer matches the library's actual behaviour. This catches three distinct kinds of behavioural drift:
+  1. The library changed its validation behaviour for an existing rule (e.g. relaxed a numeric bound, changed an error type).
+  2. The library dropped a rule entirely (the constraint no longer fires).
+  3. The library added a new constraint path that the existing rule's `kwargs_negative` example now happens to trip.
+
+All three engines (transformers, vLLM, TRT-LLM) have `--fail-on-divergence` operational as of Phase A (#445). Gate-breaking divergences are P0 incidents — they block the Renovate PR from merging.
+
+### Silent failure: recall regression
+
+The vendor gate above validates the rules that *exist* in the corpus. It cannot tell you about rules that *should* exist but no longer do, because the miner regressed and stopped finding them.
+
+Concrete scenario: a refactor in `_pydantic_lift.py` changes how it walks `FieldInfo.metadata`, and the lift now finds 12 rules where it previously found 30. The 18 lost rules silently disappear from the corpus.
+
+- The vendor gate runs only on the 12 surviving rules — every one of them passes.
+- CI is green.
+- The Renovate PR merges with a corpus that has 60% the recall it had before.
+- Users hitting the lost validations get no constraint check at runtime.
+
+**Mitigation: the Stage 1 / Stage 2 split (the trust seam).**
+
+Stage 1 (`auto-mine.yml`) regenerates the YAML corpus and the bot writes the new YAML to the PR branch as a commit. Stage 2 (`invariant-miner.yml`) only runs the vendor gate against the YAML.
+
+Because Stage 1 commits the YAML *before* Stage 2 runs, the YAML diff is reviewable in the PR. A miner refactor that silently drops 18 rules shows up as 18 deletions in the YAML diff — a maintainer reading the PR notices the regression before the JSON gate's green tick lands.
+
+This is the reason the pipeline is split into two stages instead of being unified into one workflow that mines + vendors + commits a single artefact. The split forces YAML-diff visibility *before* the JSON gate's authority is exercised. Cross-reference: #450 (trust seam architecture decision), #465 (auto-mine writeback contract).
+
+### Tooling for diagnosis
+
+The fail-loud envelope and the YAML diff together cover the failure modes that trip on a routine library bump. Three planned tools extend this for harder cases:
+
+- **Pre-mining envelope check (#469).** Verifies the installed library version is inside `TESTED_AGAINST_VERSIONS` *before* CI invests effort in mining. Today the check happens at miner import time, which is fine but late — if mining takes 5 minutes and the version is wrong, the maintainer waits 5 minutes to find out.
+- **Compat-matrix sweep (#470).** Runs the miner against every library version in a declared support range and reports per-version `(rule_count, divergences, errors)`. Surfaces "this miner mostly works on the new version but loses 3 rules" before a Renovate PR ever opens.
+- **Coordinated bump command `llem bump-engine` (#471).** A single CLI entry point that updates the Dockerfile ARG, regenerates the corpus, runs the vendor gate, and reports the diff in one local invocation — used by maintainers handling library bumps that need manual intervention (e.g. `MinerVersionMismatchError` resolution).
+
+---
+
 ## Common mistakes
 
 | Mistake | Consequence | Fix |
