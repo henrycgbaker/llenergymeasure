@@ -9,4 +9,4 @@ schema_version: 1
 engine: vllm
 library:
   pep503_name: vllm
-  current_version: "0.19.1"
+  current_version: "0.28.0"
