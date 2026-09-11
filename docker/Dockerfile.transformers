@@ -46,7 +46,7 @@ ARG INSTALL_FA3=true
 FROM pytorch/pytorch:${PYTORCH_DEVEL_VERSION} AS builder
 ARG FLASH_ATTN_VERSION
 ARG INSTALL_FA3
-COPY --from=ghcr.io/astral-sh/uv:0.12.2 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.13 /uv /usr/local/bin/uv
 ENV TORCH_CUDA_ARCH_LIST="8.0;9.0+PTX"
 
 # Make apt resilient to transient Ubuntu mirror flakes (3 build failures
@@ -106,7 +106,7 @@ RUN mkdir /flash-attn-staging && \
 # Runtime stage
 FROM pytorch/pytorch:${PYTORCH_VERSION} AS runtime
 
-COPY --from=ghcr.io/astral-sh/uv:0.12.2 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.13 /uv /usr/local/bin/uv
 
 # Suppress hardlink warnings when cache mount is on a different filesystem
 ENV UV_LINK_MODE=copy
