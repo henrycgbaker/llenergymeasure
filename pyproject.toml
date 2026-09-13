@@ -66,7 +66,7 @@ dev = [
     # Backs scripts/engine_producers/regen_engine_configs.py. Pinned exactly:
     # the generated config.py is byte-compared in CI, and the generator's
     # output formatting is version-sensitive.
-    "datamodel-code-generator==0.72.1",
+    "datamodel-code-generator==0.80.0",
     # Differential test oracle for the optimiser's Pareto/hypervolume maths.
     # Dev-only on purpose: moocore is LGPL-2.1-or-later, so it must never
     # appear in the core dependencies or in any runtime extra - nothing that
